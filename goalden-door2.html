@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Goalden — your full plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Figtree:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1C3A2D;--ink2:#274A3A;--paper:#F1EEE3;
+  --gold:#C9A455;--red:#A03A22;--dim:#8A9389;--ok:#3D7A4F;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}}
+
+/* --- chrome --- */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 8px;flex-shrink:0}
+.brand{font-family:'Newsreader',serif;font-weight:700;font-size:18px;color:var(--gold);text-decoration:none;display:inline-block}
+.brand span{font-weight:400;font-style:italic;font-size:13px;color:rgba(241,238,227,.6);margin-left:6px}
+.backbtn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(241,238,227,.2);background:transparent;color:var(--paper);font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s}
+.assumpbtn{width:30px;height:30px;border-radius:50%;border:1px solid rgba(201,164,85,.5);background:rgba(201,164,85,.12);color:var(--gold);font-family:'Newsreader',serif;font-style:italic;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s}
+.assumpbtn.show{opacity:1;pointer-events:auto}
+.backbtn.show{opacity:1;pointer-events:auto}
+.progress-track{padding:2px 20px 14px;flex-shrink:0;display:flex;flex-direction:column;gap:5px}
+.progress-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase}
+.progress-bar-wrap{height:4px;background:rgba(241,238,227,.12);border-radius:2px;overflow:hidden}
+.progress-bar{height:100%;background:var(--gold);border-radius:2px;transition:width .35s ease;width:0%}
+
+/* --- stage --- */
+.stage{flex:1;position:relative;overflow:hidden}
+.screen{position:absolute;inset:0;padding:6px 22px 22px;display:flex;flex-direction:column;opacity:0;transform:translateX(20px);pointer-events:none;transition:opacity .28s ease,transform .28s ease;min-height:0}
+/* Switching to position:relative here (needed so the active screen takes
+   up real layout space) silently drops the height that inset:0 was
+   providing — position:relative doesn't size an element, it only offsets
+   it. Without an explicit height, a screen with enough content (extra
+   sliders, an optional field, etc.) just grows past .stage's box, and
+   .stage's overflow:hidden clips the excess with no scrollbar in sight —
+   the exact "have to zoom out to reach the button" bug. height:100% pins
+   it back to .stage's real, bounded height so .qbody's own overflow-y:auto
+   actually has something to scroll within. */
+.screen.active{opacity:1;transform:translateX(0);pointer-events:auto;position:relative;height:100%;min-height:0}
+
+/* --- typography --- */
+.eyebrow{font-family:'Spline Sans Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:9px}
+.qtitle{font-family:'Newsreader',serif;font-weight:600;font-size:clamp(20px,6.5vw,28px);line-height:1.2;color:var(--paper);margin-bottom:7px}
+.qsub{font-size:13.5px;color:rgba(241,238,227,.6);margin-bottom:20px;line-height:1.5;max-width:38ch}
+.qbody{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:11px;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+
+/* --- option cards --- */
+.opt{background:rgba(241,238,227,.06);border:1.5px solid rgba(241,238,227,.13);border-radius:3px 15px 15px 15px;padding:16px 17px;cursor:pointer;transition:all .17s;text-align:left}
+.opt:active{transform:scale(.98)}
+.opt.sel{background:rgba(201,164,85,.16);border-color:var(--gold)}
+.opt-main{font-size:14.5px;color:var(--paper);line-height:1.35}
+.opt-tag{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim);margin-top:3px}
+
+/* --- country grid --- */
+.country-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.ccrd{background:rgba(241,238,227,.06);border:1.5px solid rgba(241,238,227,.13);border-radius:6px 18px 6px 18px;padding:22px 12px;text-align:center;cursor:pointer;transition:all .17s}
+.ccrd.sel{background:rgba(201,164,85,.16);border-color:var(--gold)}
+.cf{width:44px;height:44px;border-radius:50%;background:rgba(201,164,85,.14);border:1px solid rgba(201,164,85,.3);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-family:'Newsreader',serif;font-size:22px;color:var(--gold)}
+.cn{font-family:'Newsreader',serif;font-size:16px;font-weight:600;color:var(--paper)}
+.cc{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);margin-top:2px}
+
+/* --- number input --- */
+.num-row{display:flex;align-items:baseline;gap:6px;padding:14px 0;border-bottom:2px solid rgba(241,238,227,.18);margin-bottom:16px}
+.value-slider{margin:2px 0 14px}
+.value-slider input[type=range]{width:100%;accent-color:var(--gold);height:22px;cursor:pointer}
+.value-slider-labels{display:flex;justify-content:space-between;font-family:monospace;font-size:10px;color:var(--dim);margin-top:2px}
+.chips-label{font-family:monospace;font-size:10px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin:2px 0 8px}
+.np{font-family:'Newsreader',serif;font-size:24px;color:var(--gold)}
+.ni{flex:1;background:transparent;border:none;outline:none;color:var(--paper);font-family:'Newsreader',serif;font-size:36px;font-weight:600;-moz-appearance:textfield}
+.ni::-webkit-outer-spin-button,.ni::-webkit-inner-spin-button{-webkit-appearance:none}
+.ns{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--dim)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.chip{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--paper);background:rgba(241,238,227,.08);border:1px solid rgba(241,238,227,.16);padding:8px 13px;border-radius:3px;cursor:pointer;transition:all .14s}
+.chip.sel{background:var(--gold);border-color:var(--gold);color:var(--ink)}
+.err{color:#E8977A;font-size:12px;font-family:'Spline Sans Mono',monospace;min-height:16px;margin-top:8px}
+
+/* --- two-column form --- */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fblock label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px}
+.fblock .num-row{margin-bottom:10px}
+
+/* --- CTA --- */
+.cta-zone{padding:12px 0 2px;flex-shrink:0}
+.cta{width:100%;background:var(--gold);color:var(--ink);border:none;border-radius:9px;font-family:'Figtree',sans-serif;font-weight:700;font-size:15.5px;padding:16px;cursor:pointer;transition:transform .12s,opacity .2s}
+.cta:active{transform:scale(.98)}
+.cta:disabled{opacity:.3;pointer-events:none}
+.cta-ghost{width:100%;background:transparent;color:rgba(241,238,227,.5);border:1px solid rgba(241,238,227,.15);border-radius:13px;font-family:'Figtree',sans-serif;font-size:14px;padding:12px;cursor:pointer;margin-top:10px;transition:opacity .15s}
+
+/* --- profile reveal --- */
+.profile-card{border-radius:3px 20px 20px 20px;padding:24px;margin-bottom:20px;position:relative;overflow:hidden}
+.profile-card::before{content:'';position:absolute;inset:0;opacity:.12}
+.pc-conservative    {background:#1C4D5A;border:1.5px solid #4A90A4}
+.pc-mod_conservative{background:#1E3D2E;border:1.5px solid #5B8F6E}
+.pc-moderate        {background:#2E2A1A;border:1.5px solid #C9A455}
+.pc-mod_aggressive  {background:#2A2010;border:1.5px solid #9B7C3A}
+.pc-aggressive      {background:#2D1410;border:1.5px solid #A03A22}
+.pc-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(241,238,227,.65);margin-bottom:6px}
+.pc-name{font-family:'Newsreader',serif;font-weight:700;font-size:28px;color:var(--paper);margin-bottom:4px}
+.pc-tagline{font-family:'Newsreader',serif;font-size:15px;font-style:italic;color:rgba(241,238,227,.75);margin-bottom:14px}
+.pc-desc{font-size:13.5px;color:rgba(241,238,227,.7);line-height:1.55}
+.score-row{display:flex;gap:0;margin-bottom:18px}
+.score-block{flex:1;padding:14px 16px;background:rgba(241,238,227,.05);border:1px solid rgba(241,238,227,.1);text-align:center}
+.score-block:first-child{border-radius:12px 0 0 12px;border-right:none}
+.score-block:last-child{border-radius:0 12px 12px 0}
+.score-num{font-family:'Newsreader',serif;font-size:30px;font-weight:700;color:var(--gold);display:block}
+.score-sub{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.lower-note{font-size:12.5px;color:rgba(241,238,227,.55);background:rgba(241,238,227,.05);border-radius:8px;padding:10px 12px;margin-bottom:18px;border-left:2px solid var(--gold);line-height:1.5}
+
+/* --- term chips --- */
+.term{border-bottom:1px dashed rgba(201,164,85,.65);cursor:pointer;position:relative;display:inline}
+.term-tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink2);border:1px solid rgba(201,164,85,.3);border-radius:9px;padding:8px 12px;font-size:11.5px;color:rgba(241,238,227,.85);z-index:10;pointer-events:none;width:200px;line-height:1.45;font-style:normal;font-family:'Figtree',sans-serif}
+.term.open .term-tip{display:block}
+
+/* --- goal pills on hub screen --- */
+.goal-hub{display:flex;flex-direction:column;gap:11px}
+.goal-pill{background:rgba(241,238,227,.06);border:1.5px solid rgba(241,238,227,.13);border-radius:4px 14px 14px 14px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.gp-actions{display:flex;gap:6px;flex-shrink:0}
+.gp-iconbtn{width:30px;height:30px;border-radius:8px;border:1px solid rgba(241,238,227,.16);background:rgba(241,238,227,.04);color:rgba(241,238,227,.5);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:6px;transition:all .15s}
+.gp-iconbtn:hover{color:var(--paper);border-color:rgba(241,238,227,.3)}
+.gp-iconbtn svg{width:100%;height:100%}
+.goal-pill.done{border-color:var(--ok)}
+.gp-left .gp-label{font-family:'Newsreader',serif;font-size:15px;color:var(--paper)}
+.gp-left .gp-tag{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);margin-top:2px}
+.gp-right{font-family:'Newsreader',serif;font-size:16px;color:var(--gold);font-weight:600;text-align:right}
+.gp-right .gp-sip{font-size:12px;color:var(--dim);display:block;margin-top:1px}
+.add-goal-btn{background:rgba(241,238,227,.06);border:1.5px dashed rgba(241,238,227,.2);border-radius:13px;padding:15px;text-align:center;cursor:pointer;font-size:14px;color:rgba(241,238,227,.55);transition:all .15s}
+.add-goal-btn:active{transform:scale(.98)}
+
+/* --- goal type mini grid --- */
+.mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mg{background:rgba(241,238,227,.06);border:1.5px solid rgba(241,238,227,.13);border-radius:4px 14px 4px 14px;padding:14px;text-align:center;cursor:pointer;transition:all .17s}
+.mg.sel{background:rgba(201,164,85,.16);border-color:var(--gold)}
+.mg-icon{width:24px;height:24px;display:block;margin-bottom:8px;color:var(--gold)}
+.mg-icon svg{width:100%;height:100%}
+.mg-name{font-size:13.5px;font-weight:600;color:var(--paper)}
+.mg-note{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);margin-top:3px}
+
+/* --- plan results --- */
+.plan-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.section-head{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:20px 0 10px}
+.goal-row{display:flex;justify-content:space-between;align-items:flex-start;padding:13px 15px;background:rgba(241,238,227,.05);border-radius:3px 13px 13px 13px;margin-bottom:0}
+.goal-row-wrap{margin-bottom:10px}
+.inst-toggle{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(241,238,227,.45);padding:8px 15px 4px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.inst-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.inst-panel.open{max-height:900px}
+.inst-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 2px 4px}
+.inst-card{background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.12);border-radius:3px 10px 10px 10px;padding:11px 12px}
+.inst-name{font-family:'Newsreader',serif;font-size:13.5px;color:var(--paper);line-height:1.3;margin-bottom:3px}
+.inst-rate{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--gold);margin-bottom:5px}
+.inst-why{font-size:11px;color:rgba(241,238,227,.55);line-height:1.4}
+.inst-risk{display:inline-block;font-family:monospace;font-size:9px;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:2px 7px 7px 7px;margin-bottom:6px}
+.inst-risk.low{background:rgba(61,122,79,.18);color:#8FC79E}
+.inst-risk.mod{background:rgba(201,164,85,.18);color:var(--gold)}
+.inst-risk.high{background:rgba(160,58,34,.18);color:#E8977A}
+.inst-note{font-size:12px;color:rgba(241,238,227,.6);line-height:1.6;padding:10px 12px;margin:8px 2px 2px;background:rgba(241,238,227,.04);border-left:2px solid rgba(241,238,227,.2);border-radius:0 8px 8px 0}
+.inst-note.warn{border-left-color:var(--gold);background:rgba(201,164,85,.08)}
+.inst-note.stretch{border-left-color:#8FC79E;background:rgba(61,122,79,.1)}
+.inst-note b{color:var(--paper)}
+.gr-left .gr-name{font-family:'Newsreader',serif;font-size:15px;color:var(--paper)}
+.gr-left .gr-meta{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);margin-top:3px;line-height:1.5}
+.gr-right{text-align:right}
+.gr-sip{font-family:'Newsreader',serif;font-size:16px;color:var(--gold);font-weight:600}
+.gr-corpus{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);margin-top:2px}
+.plan-divider{border:none;border-top:1px solid rgba(241,238,227,.14);margin:10px 0}
+.plan-total{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:11px;margin-bottom:10px}
+.plan-total.ok {background:rgba(61,122,79,.2);border:1px solid rgba(61,122,79,.5)}
+.plan-total.warn{background:rgba(169,139,69,.18);border:1px solid rgba(201,164,85,.4)}
+.plan-total.gap {background:rgba(160,58,34,.2);border:1px solid rgba(160,58,34,.5)}
+.pt-label{font-size:14px;color:var(--paper)}
+.pt-value{font-family:'Newsreader',serif;font-size:17px;font-weight:600;color:var(--paper)}
+.gap-card{background:rgba(241,238,227,.05);border:1px solid rgba(201,164,85,.3);border-left:3px solid var(--gold);border-radius:11px;padding:14px;margin:12px 0}
+.gap-card h4{font-family:'Newsreader',serif;font-size:15px;color:var(--paper);margin-bottom:8px}
+.gap-card p{font-size:13px;color:rgba(241,238,227,.7);line-height:1.55}
+.rate-badge{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:10px;background:rgba(201,164,85,.18);border:1px solid rgba(201,164,85,.35);border-radius:4px;padding:2px 7px;color:var(--gold);margin-left:6px}
+.assump-toggle{font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:rgba(241,238,227,.45);text-align:center;padding:10px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;margin-top:6px}
+.schedule-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:10.5px}
+.schedule-table th{text-align:right;padding:6px 6px;color:rgba(241,238,227,.45);font-weight:500;border-bottom:1px solid rgba(241,238,227,.15)}
+.schedule-table th:first-child,.schedule-table td:first-child{text-align:left}
+.schedule-table td{text-align:right;padding:5px 6px;color:rgba(241,238,227,.7);border-bottom:1px solid rgba(241,238,227,.06)}
+.schedule-scroll{max-height:260px;overflow-y:auto;border-radius:8px;margin:6px 0 4px}
+.tog-caret{display:inline-block;vertical-align:-1px;margin-right:6px;transition:transform .25s ease}
+.inst-toggle.open .tog-caret{transform:rotate(180deg)}
+.assump-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.assump-panel.open{max-height:600px}
+.assump-inner{padding:4px 2px 16px;font-size:12px;color:rgba(241,238,227,.6);line-height:1.75}
+.assump-inner b{color:var(--paper)}
+.restart-row{padding:8px 0 28px;text-align:center}
+.restart-row button{background:none;border:1px solid rgba(241,238,227,.18);color:rgba(241,238,227,.6);font-family:'Spline Sans Mono',monospace;font-size:11.5px;padding:10px 20px;border-radius:3px;cursor:pointer}
+.save-row{display:flex;gap:10px;margin-top:22px}
+.save-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(241,238,227,.06);border:1px solid rgba(241,238,227,.18);color:rgba(241,238,227,.75);font-family:'Figtree',sans-serif;font-size:13px;font-weight:500;padding:12px;border-radius:6px 12px 12px 12px;cursor:pointer;transition:all .15s}
+.save-btn:hover{background:rgba(241,238,227,.1);color:var(--paper)}
+.save-btn svg{width:16px;height:16px;flex-shrink:0}
+.save-note{font-size:11.5px;color:rgba(241,238,227,.45);text-align:center;padding:10px 20px 0;line-height:1.5}
+svg.chart{width:100%;height:auto;display:block}
+.gr-chart-card{background:rgba(241,238,227,.035);border:1px solid rgba(241,238,227,.09);border-radius:10px;padding:10px 10px 4px;margin-top:8px}
+.gr-chart-cap{font-family:monospace;font-size:10px;color:var(--dim);padding:0 2px 6px}
+.gr-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:520px){.gr-chart-row{grid-template-columns:1fr}}
+.alloc-card{background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.1);border-radius:13px;padding:16px 16px 14px;margin-bottom:16px}
+.alloc-flex{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin:12px 0 14px}
+.alloc-legend{flex:1;min-width:140px}
+.alloc-row{display:flex;align-items:center;gap:8px;padding:5px 0}
+.alloc-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.alloc-name{flex:1;font-size:13px;color:rgba(241,238,227,.8)}
+.alloc-pct{font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--paper);font-weight:600}
+.alloc-return-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:12px;border-top:1px solid rgba(241,238,227,.1)}
+.alloc-return-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.04em;margin-bottom:3px}
+.alloc-return-value{font-family:'Newsreader',serif;font-size:19px;font-weight:600;color:var(--paper)}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <button class="backbtn" id="backBtn">←</button>
+  <a href="index.html" class="brand">Goalden<span>full plan</span></a>
+  <button class="assumpbtn" id="assumpBtn" aria-label="View assumptions" title="What assumptions are we using?">i</button>
+</div>
+<div class="progress-track" id="progressTrack">
+  <div class="progress-label" id="progressLabel"></div>
+  <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+</div>
+<div class="stage" id="stage"></div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   ENGINE — same functions as goalden.html, copy-pasted verbatim
+   ===================================================================== */
+function inflateExpense(amt,phases,f){if(f===undefined)f=1;for(const p of phases)amt*=Math.pow(1+p.rate,p.years);return amt*f}
+function realRate(r,i){return(1+r)/(1+i)-1}
+function corpusRequired(rate,years,w,due){if(rate===0)return w*years;let pv=w*(1-Math.pow(1+rate,-years))/rate;return due?pv*(1+rate):pv}
+function solveSIP(rate,periods,fv,due){if(rate===0)return fv/periods;let f=(Math.pow(1+rate,periods)-1)/rate;return fv/(due?f*(1+rate):f)}
+function effectiveMonthlyRate(r){return Math.pow(1+r,1/12)-1}
+function accumulationSchedule(o){const rows=[];let bal=o.opening||0;for(let i=1;i<=o.years;i++){let c=o.due?(bal+o.sip)*(1+o.rate):(bal*(1+o.rate)+o.sip);rows.push({period:i,closeBal:c});bal=c;}return{rows,finalBalance:bal}}
+function drawdownSchedule(opts){const rows=[];let bal=opts.openingCorpus;let w=opts.firstWithdrawal;for(let yr=1;yr<=opts.years;yr++){let close;if(opts.due){const baw=bal-w;close=baw+baw*opts.nominalRate;}else{close=(bal+bal*opts.nominalRate)-w;}rows.push({year:yr,openBal:bal,withdrawal:w,closeBal:Math.max(0,close)});bal=close;w*=(1+opts.inflation);}return rows}
+
+/* =====================================================================
+   CONFIG
+   ===================================================================== */
+const C = {
+  IN:{code:'IN',name:'India',sym:'₹',
+    d:{inflation:.06,eduInflation:.10,debt:.07,hybrid:.10,equity:.12,postRet:.09,lifeExp:78},
+    goalInflation:{house:.075,car:.05,wedding:.07,travel:.05},
+    expChips:[25000,50000,75000,100000],feeChips:[50000,100000,200000,500000],
+    amtChips:[500000,1000000,2500000,5000000],yrChips:[3,5,7,10,15],
+    instruments:[
+      {id:'liquid',name:'Savings account / liquid fund',band:{min:.035,max:.06},why:'Emergency fund and near-term goals: capital safety over return'},
+      {id:'fd',name:'Bank fixed deposit',band:{min:.06,max:.075},why:'Known short-term goal, no market risk tolerance'},
+      {id:'debtfund',name:'Short-duration debt fund',band:{min:.065,max:.08},why:'Slightly better post-tax outcome than FD for higher tax slabs, some NAV movement'},
+      {id:'hybrid',name:'Balanced advantage / hybrid fund',band:{min:.09,max:.11},why:'Medium goals where some equity upside is wanted without full equity swings'},
+      {id:'equityindex',name:'Index / flexi-cap equity fund',band:{min:.11,max:.14},why:'Long-horizon core holding: compounding needs time to work'},
+      {id:'elss',name:'ELSS (tax-saving equity fund)',band:{min:.11,max:.13},why:'Old-regime taxpayers wanting equity exposure plus an 80C deduction in one product'},
+      {id:'gold',name:'Gold ETF',band:{min:.08,max:.10},why:'Portfolio diversifier, not a core holding'},
+      {id:'ppf',name:'Public Provident Fund (PPF)',band:{min:.071,max:.071},why:'Debt anchor for very long goals, fully tax-free'},
+      {id:'nps',name:'National Pension System (NPS)',band:{min:.09,max:.11},why:'Retirement-specific, locked till 60'},
+    ],
+    suitability:{
+      liquid:{minY:0,maxY:2,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive']},
+      fd:{minY:0,maxY:3,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive']},
+      debtfund:{minY:1,maxY:6,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive']},
+      hybrid:{minY:3,maxY:99,buckets:['mod_conservative','moderate','mod_aggressive','aggressive']},
+      equityindex:{minY:7,maxY:99,buckets:['moderate','mod_aggressive','aggressive']},
+      elss:{minY:3,maxY:99,buckets:['moderate','mod_aggressive','aggressive']},
+      gold:{minY:3,maxY:99,buckets:['mod_conservative','moderate','mod_aggressive','aggressive']},
+      ppf:{minY:15,maxY:99,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive']},
+      nps:{minY:0,maxY:99,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive'],retirementOnly:true},
+    },
+    stretch:[
+      {id:'midcap',name:'Mid Cap Fund',band:{min:.13,max:.15},why:'Higher growth potential than large-cap, meaningfully bumpier ride, needs a 10+ year runway'},
+      {id:'smallcap',name:'Small Cap Fund',band:{min:.14,max:.17},why:'The highest-octane mainstream equity category. Drawdowns of 60%+ have happened. Only for a long runway and a strong stomach'},
+    ],
+    fmt(a,dp){if(dp===undefined)dp=0;const s=a<0?'-':'';a=Math.abs(a);const[i,d]=a.toFixed(dp).split('.');const l3=i.slice(-3),r=i.slice(0,-3);return s+'₹'+(r?r.replace(/\B(?=(\d{2})+(?!\d))/g,',')+',':'')+l3+(dp>0?'.'+d:'')},
+    compact(a){const x=Math.abs(a);if(x>=1e7)return'₹'+(x/1e7).toFixed(1)+' Cr';if(x>=1e5)return'₹'+(x/1e5).toFixed(1)+' L';return this.fmt(a)}},
+  US:{code:'US',name:'United States',sym:'$',
+    d:{inflation:.025,eduInflation:.05,debt:.045,hybrid:.07,equity:.09,postRet:.06,lifeExp:82},
+    goalInflation:{house:.04,car:.03,wedding:.04,travel:.03},
+    expChips:[2000,4000,6000,10000],feeChips:[10000,20000,40000,60000],
+    amtChips:[50000,100000,250000,500000],yrChips:[3,5,7,10,15],
+    instruments:[
+      {id:'hysa',name:'High-yield savings account',band:{min:.035,max:.045},why:'Emergency fund: FDIC-insured, instant access'},
+      {id:'cd',name:'Certificate of deposit',band:{min:.04,max:.05},why:'Locked-in known-date goal, no market risk tolerance'},
+      {id:'shortbond',name:'Short-duration bond fund',band:{min:.04,max:.055},why:'Slightly higher yield than a CD, small NAV movement'},
+      {id:'balanced',name:'Balanced / target-date fund',band:{min:.06,max:.08},why:'Medium goals wanting some equity upside without full equity risk'},
+      {id:'indexetf',name:'Total-market index fund/ETF',band:{min:.07,max:.10},why:'Long-horizon core holding: the account wrapper matters as much as the fund'},
+      {id:'ibond',name:'I-Bonds / TIPS',band:{min:.03,max:.05},why:'Inflation-protected parking for medium goals'},
+      {id:'k401',name:'401(k) / 403(b)',band:{min:.07,max:.10},why:'Retirement-specific: grab the employer match first, it is an immediate guaranteed return'},
+    ],
+    suitability:{
+      hysa:{minY:0,maxY:2,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive']},
+      cd:{minY:0,maxY:3,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive']},
+      shortbond:{minY:1,maxY:6,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive']},
+      ibond:{minY:3,maxY:99,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive']},
+      balanced:{minY:3,maxY:99,buckets:['mod_conservative','moderate','mod_aggressive','aggressive']},
+      indexetf:{minY:7,maxY:99,buckets:['moderate','mod_aggressive','aggressive']},
+      k401:{minY:0,maxY:99,buckets:['conservative','mod_conservative','moderate','mod_aggressive','aggressive'],retirementOnly:true},
+    },
+    stretch:[
+      {id:'smallcapetf',name:'Small-cap growth ETF',band:{min:.09,max:.13},why:'Higher growth potential than a total-market fund, meaningfully bumpier, needs a 10+ year runway'},
+    ],
+    fmt(a,dp){if(dp===undefined)dp=0;const s=a<0?'-':'';a=Math.abs(a);const[i,d]=a.toFixed(dp).split('.');return s+'$'+i.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(dp>0?'.'+d:'')},
+    compact(a){const x=Math.abs(a);if(x>=1e6)return'$'+(x/1e6).toFixed(1)+'M';if(x>=1e3)return'$'+(x/1e3).toFixed(1)+'K';return this.fmt(a)}}
+};
+
+function recommendInstruments(country, horizonYears, bucketId, goalType){
+  const cc=C[country];
+  const fits=[], excludedForHorizon=[];
+  cc.instruments.forEach(inst=>{
+    const s=cc.suitability[inst.id];
+    if(!s) return;
+    if(s.retirementOnly && goalType!=='retirement') return;
+    const bucketOk=s.buckets.includes(bucketId);
+    const horizonOk=horizonYears>=s.minY && horizonYears<=s.maxY;
+    if(bucketOk && horizonOk) fits.push(inst);
+    else if(bucketOk && !horizonOk && horizonYears<s.minY) excludedForHorizon.push({inst,neededYears:s.minY});
+  });
+  let stretch=[];
+  if((bucketId==='mod_aggressive'||bucketId==='aggressive') && horizonYears>=10) stretch=cc.stretch;
+  return {fits, excludedForHorizon, stretch};
+}
+
+const BUCKETS = {
+  conservative:     {name:'Conservative',tagline:'Capital preservation first',desc:'You prioritise protecting what you have over chasing growth. A steady, predictable return matters more than the possibility of higher gains.',eq:.20,de:.60,hy:.20,cls:'conservative'},
+  mod_conservative: {name:'Moderately Conservative',tagline:'Mostly stable, some growth',desc:'You want stability as the foundation but are open to modest equity for long-term growth. Large swings make you uncomfortable.',eq:.35,de:.50,hy:.15,cls:'mod_conservative'},
+  moderate:         {name:'Moderate',tagline:'Balanced growth and stability',desc:'A blend of growth and stability. You can tolerate medium-term ups and downs and expect meaningful gains over time.',eq:.50,de:.35,hy:.15,cls:'moderate'},
+  mod_aggressive:   {name:'Growth-Oriented',tagline:'Growth with managed risk',desc:'You want meaningful long-term wealth creation and can tolerate periods of significant decline, knowing that recoveries have historically followed.',eq:.70,de:.20,hy:.10,cls:'mod_aggressive'},
+  aggressive:       {name:'Aggressive',tagline:'Maximum long-term growth',desc:'You have high capacity and tolerance. You stay focused on the long term and can hold through deep drawdowns without changing course.',eq:.85,de:.10,hy:.05,cls:'aggressive'},
+};
+
+const BUCKET_ORDER = ['conservative','mod_conservative','moderate','mod_aggressive','aggressive'];
+
+// 5 Capacity questions
+const CAP_QS = [
+  {ey:'Financial foundation · 1 of 4',title:'How reliable is your income month to month?',
+   opts:[{t:'Very steady: government or large company job',s:4},{t:'Mostly steady: private sector, established firm',s:3},{t:'Variable: self-employed or commission-based',s:2},{t:'Uncertain, or not currently earning: freelance, startup, between roles, a student, or supported by family',s:1}]},
+  {ey:'Financial foundation · 2 of 4',title:'How many people rely on your income?',
+   opts:[{t:'Just me',s:4},{t:'Partner or one child',s:3},{t:'Partner and children, or also supporting parents',s:2},{t:'Large family with significant responsibilities',s:1}]},
+  {ey:'Financial foundation · 3 of 4',title:'How much of your monthly income goes to loan EMIs?',
+   opts:[{t:'None',s:4},{t:'Below 20%',s:3},{t:'20% to 40%',s:2},{t:'More than 40%',s:1}]},
+  // NOT "when will you need this money" — that gets asked once per goal,
+  // precisely, when the goal is actually created, and a single generic
+  // answer here couldn't represent someone with a 30-year retirement goal
+  // AND a 3-year wedding goal anyway. This asks a genuinely different
+  // capacity question instead: concentration. Money that's a small slice
+  // of what you have can absorb more risk than money that's most of what
+  // you own, independent of timing.
+  {ey:'Financial foundation · 4 of 4',title:'How much of your total savings would this represent?',
+   opts:[{t:'A small slice, most of my money sits elsewhere',s:4},{t:'A meaningful chunk, but not most of it',s:3},{t:'More than half of what I have',s:2},{t:'Nearly everything I have saved so far',s:1}]},
+];
+// Emergency-fund status (asked once, on its own screen) now also contributes
+// to the capacity score on this same 1-4 scale, instead of being asked a
+// second time as a separate capacity question.
+const EMERGENCY_SCORE={full:4, partial:2, no:1};
+
+// 5 Tolerance questions
+const TOL_QS = [
+  {ey:'Comfort with risk · 1 of 5',title:'Your investments dropped 30% last year. What do you do?',
+   opts:[{t:'Buy more, since prices are lower: a great opportunity',s:4},{t:'Hold steady and wait for recovery',s:3},{t:'Sell a portion, shift some to something safer',s:2},{t:'Sell everything to stop the bleeding',s:1}]},
+  {ey:'Comfort with risk · 2 of 5',title:'Have you invested in market-linked products before?',
+   opts:[{t:'Yes, 7+ years: been through a full market crash',s:4},{t:'Yes, 3 to 7 years',s:3},{t:'Yes, less than 3 years',s:2},{t:'This would be my first time',s:1}]},
+  {ey:'Comfort with risk · 3 of 5',title:'If this money were lost, what would happen?',
+   opts:[{t:'Nothing changes: it is a small part of what I own',s:4},{t:'Uncomfortable but manageable, I would recover',s:3},{t:'Significant setback to my financial goals',s:2},{t:'It would be devastating',s:1}]},
+  {ey:'Comfort with risk · 4 of 5',title:'Can you sleep soundly when your investments are down 20%?',
+   opts:[{t:'Yes, comfortably: markets recover eventually',s:4},{t:'Mostly: I would worry a bit but stay the course',s:3},{t:'Not really: I would check daily',s:2},{t:'No, I would lose sleep and want to sell',s:1}]},
+  {ey:'Comfort with risk · 5 of 5',title:'You have to choose between two paths. Which fits you better?',
+   opts:[{t:'Higher expected return with meaningful ups and downs',s:4},{t:'Reasonable return with limited swings',s:3},{t:'Modest but consistent return, low volatility',s:2},{t:'Guaranteed return, even if it is smaller',s:1}]},
+];
+
+const ICONS = {
+  retirement: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.1 5.1l2.1 2.1M16.8 16.8l2.1 2.1M5.1 18.9L7.2 16.8M16.8 7.2l2.1-2.1"/></svg>',
+  education: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5-10-5z"/><path d="M6 11.2v4.8c0 1.5 3 3 6 3s6-1.5 6-3v-4.8"/><path d="M22 9v6.5"/></svg>',
+  house: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>',
+  star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 2.5l2.9 6.5 7.1.6-5.4 4.6 1.7 6.9-6.3-3.8-6.3 3.8 1.7-6.9-5.4-4.6 7.1-.6z"/></svg>',
+  edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>',
+  upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V8"/><path d="M7 13l5-5 5 5"/><path d="M4 19h16"/></svg>',
+};
+
+const GOAL_TYPES = [
+  {id:'retirement',icon:ICONS.retirement,name:'Retirement',note:'Stop working someday'},
+  {id:'education', icon:ICONS.education,name:'Education', note:"Child's college fund"},
+  {id:'house',     icon:ICONS.house,name:'House',     note:'Property down payment'},
+  {id:'generic',   icon:ICONS.star,name:'Other goal',note:'Car, wedding, travel'},
+];
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+const G = {
+  country:null,
+  capA:[null,null,null,null],
+  tolA:[null,null,null,null,null],
+  bucket:null,capScore:0,tolScore:0,
+  monthlyExpense:null,
+  emergencyStatus:null,
+  emergencyPrioritize:null,
+  monthlyCapacity:null,
+  goals:[],
+  addingGoal:false,
+  editingIndex:null,
+  draftType:null,
+  draftA:null,draftB:null,draftC:null,draftSav:0,
+  si:0
+};
+
+function cfg(){return C[G.country]}
+
+/* =====================================================================
+   FLOW
+   ===================================================================== */
+function flow(){
+  const f=['country'];
+  CAP_QS.forEach((_,i)=>f.push('cap_'+i));
+  f.push('emergency');
+  // Only ask the prioritization choice if there's actually a gap to fill —
+  // a full emergency fund needs no decision.
+  if(G.emergencyStatus==='partial' || G.emergencyStatus==='no'){
+    f.push('emergency_choice');
+  }
+  f.push('budget');
+  TOL_QS.forEach((_,i)=>f.push('tol_'+i));
+  f.push('profile');
+  f.push('goals_hub');
+  // include goal sub-screens when the user has clicked "Add goal"
+  if(G.addingGoal){
+    f.push('goal_inputs');
+    f.push('goal_confirm');
+  }
+  f.push('plan');
+  return f;
+}
+
+function totalSteps(){return 10+4}// 10 profiling questions + 4 setup screens
+
+function progressPct(){
+  const f=flow();
+  const totalScreens=f.length-1;// exclude 'plan'
+  const pct=Math.min(100,Math.round((G.si/totalScreens)*100));
+  return pct;
+}
+
+function progressSection(){
+  const s=flow()[G.si];
+  if(s==='country')return'Before we start';
+  if(s.startsWith('cap_'))return'Your financial foundation';
+  if(s==='emergency'||s==='emergency_choice')return'Your safety net';
+  if(s==='budget')return'Your plan inputs';
+  if(s.startsWith('tol_'))return'Your comfort with risk';
+  if(s==='profile')return'Your risk profile';
+  if(s==='goals_hub'||s==='goal_inputs'||s==='goal_confirm')return'Building your plan';
+  return'Your plan';
+}
+
+/* =====================================================================
+   CALCULATION
+   ===================================================================== */
+function scoreBuckets(){
+  const cs=G.capA.reduce((s,a)=>s+(a||0),0) + (EMERGENCY_SCORE[G.emergencyStatus]||0);
+  const ts=G.tolA.reduce((s,a)=>s+(a||0),0);
+  const final=Math.min(cs,ts);
+  let b;
+  if(final<=8)b='conservative';
+  else if(final<=12)b='mod_conservative';
+  else if(final<=15)b='moderate';
+  else if(final<=18)b='mod_aggressive';
+  else b='aggressive';
+  return{capScore:cs,tolScore:ts,finalScore:final,bucket:b};
+}
+
+function bucketRate(bid){
+  const b=BUCKETS[bid],d=cfg().d;
+  return b.eq*d.equity+b.de*d.debt+b.hy*d.hybrid;
+}
+
+// A real adviser's glide path keeps easing risk UP as horizon lengthens
+// well past 7 years — an 8-year goal and a 40-year retirement goal should
+// not land on the identical allocation just because both cleared the same
+// one-time cutoff. This replaces the old 3-step bucket swap (<=3y forced
+// Conservative, <=7y capped at Moderate, >7y fully uncapped forever) with
+// a continuous equity ceiling that keeps rising until 18 years.
+//
+// The five anchor points are not arbitrary: they are pulled directly from
+// each named profile's own equity level (Conservative .20, Mod-Conservative
+// .35, Moderate .50, Growth-Oriented .70, Aggressive .85), at horizons
+// (2, 4, 7, 12, 18) years. That makes the ramp legible in the app's own
+// vocabulary: "by year 7 this goal can reach a Moderate-level ceiling, by
+// year 18 it can reach the Aggressive ceiling" — rather than an abstract
+// number nobody can sanity-check.
+//
+// Critically, this is a CEILING, never a floor: it only ever pulls a
+// goal's equity DOWN toward what a shorter horizon can safely absorb. It
+// never pushes anyone past their own stated tolerance just because their
+// horizon is long — capacity (time) can justify less risk than tolerance
+// allows, never more. That mirrors real suitability practice: you don't
+// override a client's stated risk tolerance upward on their behalf.
+const HORIZON_CEILING_ANCHORS = [[0,0.05],[2,0.20],[4,0.35],[7,0.50],[12,0.70],[18,0.85]];
+function horizonEquityCeiling(years){
+  const a=HORIZON_CEILING_ANCHORS;
+  if(years>=a[a.length-1][0]) return a[a.length-1][1];
+  for(let i=0;i<a.length-1;i++){
+    const[y0,c0]=a[i],[y1,c1]=a[i+1];
+    if(years<=y1){
+      const t=(years-y0)/(y1-y0);
+      return c0+t*(c1-c0);
+    }
+  }
+  return a[a.length-1][1];
+}
+// Returns the full continuous allocation for a goal: the person's own
+// tolerance-derived bucket, tilted down toward safer debt/hybrid only as
+// far as the horizon ceiling requires. When the ceiling doesn't bind
+// (moderate-or-below tolerance past roughly 7 years, any tolerance past
+// 18), this returns the base bucket completely unchanged.
+function horizonAllocation(baseBucketId,years){
+  const base=BUCKETS[baseBucketId]||BUCKETS.moderate;
+  const ceiling=horizonEquityCeiling(years);
+  const overridden=base.eq>ceiling;
+  const eq=Math.min(base.eq,ceiling);
+  let de=base.de,hy=base.hy;
+  if(overridden){
+    // Redistribute the equity given up into debt and hybrid, preserving
+    // the base profile's own debt:hybrid ratio rather than inventing a
+    // new one.
+    const freed=base.eq-eq;
+    const deHyTotal=base.de+base.hy;
+    const deShare=deHyTotal>0?base.de/deHyTotal:0.75;
+    de=base.de+freed*deShare;
+    hy=base.hy+freed*(1-deShare);
+  }
+  return{eq,de,hy,overridden,ceiling,baseBucketId};
+}
+// For instrument recommendations, which are inherently categorical (a
+// named list of funds tagged to named profiles), map the continuous
+// allocation back to whichever named profile's own equity level it sits
+// closest to. The math above stays exact; this is only for picking which
+// fund list to show.
+function nearestBucketId(eq){
+  let best=BUCKET_ORDER[0],bestDiff=Infinity;
+  BUCKET_ORDER.forEach(id=>{
+    const diff=Math.abs(BUCKETS[id].eq-eq);
+    if(diff<bestDiff){bestDiff=diff;best=id;}
+  });
+  return best;
+}
+function blendedRateFromAlloc(alloc){
+  const d=cfg().d;
+  return alloc.eq*d.equity+alloc.de*d.debt+alloc.hy*d.hybrid;
+}
+
+function calcGoal(goal){
+  const d=cfg().d,c=cfg();
+  // Defensive: bucket is always set by the risk questionnaire before a
+  // real user can reach goal creation, but fall back safely rather than
+  // crash if this is ever called before that (e.g. a future direct-entry
+  // path).
+  const alloc=horizonAllocation(G.bucket||'moderate',goal.years);
+  const eid=nearestBucketId(alloc.eq); // for instrument-list matching + display naming only
+  const overridden=alloc.overridden;
+  const rate=blendedRateFromAlloc(alloc);
+  let corpus,sip;
+  let extra={alloc};
+  const mRate=effectiveMonthlyRate(rate);
+  if(goal.type==='retirement'){
+    const expAtRet=inflateExpense(goal.monthlyExpense*12,[{rate:d.inflation,years:goal.years}],0.75);
+    const drawYrs=Math.max(5,d.lifeExp-goal.retireAge);
+    corpus=corpusRequired(realRate(d.postRet,d.inflation),drawYrs,expAtRet,true);
+    // Existing savings assumed to keep compounding at the same blended rate
+    // as the new SIP, so existingFV + gapCorpus always equals corpus exactly.
+    const existingFV=(goal.existingSavings||0)*Math.pow(1+mRate,goal.years*12);
+    const gapCorpus=Math.max(0,corpus-existingFV);
+    sip=solveSIP(mRate,goal.years*12,gapCorpus,true);
+    extra={...extra,expAtRet,drawYrs,existingFV,gapCorpus};
+  } else if(goal.type==='education'){
+    const fee1=inflateExpense(goal.annualFee,[{rate:d.eduInflation,years:goal.years}]);
+    corpus=corpusRequired(realRate(d.debt,d.eduInflation),goal.duration||4,fee1,true);
+    const existingFV=(goal.existingSavings||0)*Math.pow(1+mRate,goal.years*12);
+    const gapCorpus=Math.max(0,corpus-existingFV);
+    sip=solveSIP(mRate,goal.years*12,gapCorpus,true);
+    extra={...extra,existingFV,gapCorpus};
+  } else {
+    const inflRate=(c.goalInflation&&c.goalInflation[goal.genSub])||d.inflation;
+    const inflated=goal.amount*Math.pow(1+inflRate,goal.years);
+    const fvSav=(goal.existingSavings||0)*Math.pow(1+d.debt,goal.years);
+    corpus=Math.max(0,inflated-fvSav);
+    sip=corpus>0?solveSIP(mRate,goal.years*12,corpus,true):0;
+  }
+  return{corpus:Math.round(corpus),sip:Math.round(sip),eid,overridden,rate,...extra};
+}
+
+function calcEmergency(){
+  if(G.emergencyStatus==='full')return{needed:false,sip:0,amount:0,declined:false};
+  if(G.emergencyPrioritize===false)return{needed:false,sip:0,amount:0,declined:true};
+  const mo=G.monthlyExpense||0;
+  const months=G.emergencyStatus==='partial'?3:6;
+  const amount=mo*months;
+  const sip=Math.round(solveSIP(effectiveMonthlyRate(cfg().d.debt),12,amount,true));
+  return{needed:true,sip,amount,months,declined:false};
+}
+
+function buildPlan(){
+  const emg=calcEmergency();
+  const goals=G.goals.map(g=>({...g,...calcGoal(g)}));
+  const totalGoalSIP=goals.reduce((s,g)=>s+g.sip,0);
+  const totalSIP=(emg.needed?emg.sip:0)+totalGoalSIP;
+  const cap=G.monthlyCapacity||0;
+  const diff=cap-totalSIP;
+  const status=diff>=0?'ok':(diff>=-cap*0.2?'warn':'gap');
+  return{emg,goals,totalGoalSIP,totalSIP,diff,status,cap};
+}
+
+/* =====================================================================
+   CHART
+   ===================================================================== */
+function allocationDonut(eq, de, hy, uid){
+  const size=132, r=50, cx=66, cy=66, sw=22;
+  const circ=2*Math.PI*r;
+  const segs=[{pct:eq,color:'#C9A455'},{pct:de,color:'#2D6E6E'},{pct:hy,color:'#8FC79E'}].filter(s=>s.pct>0.001);
+  let cum=0;
+  const arcs=segs.map(s=>{
+    const len=circ*s.pct;
+    const dash=`${len.toFixed(2)} ${(circ-len).toFixed(2)}`;
+    const dashoffset=(-cum).toFixed(2);
+    cum+=len;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${sw}" stroke-dasharray="${dash}" stroke-dashoffset="${dashoffset}" stroke-linecap="butt"/>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="transform:rotate(-90deg);flex-shrink:0">${arcs}</svg>`;
+}
+function allocationLegend(eq, de, hy){
+  const rows=[{pct:eq,color:'#C9A455',label:'Equity'},{pct:de,color:'#2D6E6E',label:'Debt'},{pct:hy,color:'#8FC79E',label:'Hybrid'}].filter(s=>s.pct>0.001);
+  return rows.map(s=>`<div class="alloc-row"><span class="alloc-dot" style="background:${s.color}"></span><span class="alloc-name">${s.label}</span><span class="alloc-pct">${Math.round(s.pct*100)}%</span></div>`).join('');
+}
+function mountainChart(rows, uid){
+  if(!rows||!rows.length)return'';
+  const gid='mg'+(uid!==undefined?'-'+uid:'');
+  const w=320,h=120,p=4;
+  const maxV=rows[rows.length-1].closeBal;
+  const n=rows.length,sx=(w-p*2)/(n-1);
+  const y=v=>h-p-(Math.max(0,v)/maxV)*(h-p*2);
+  let gp='M'+p+','+h;
+  rows.forEach((r,i)=>{gp+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1);});
+  const lx=(p+(n-1)*sx).toFixed(1);
+  return`<svg class="chart" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0%" stop-color="#C9A455" stop-opacity=".8"/><stop offset="100%" stop-color="#C9A455" stop-opacity=".06"/></linearGradient></defs>
+  <path d="${gp} L${lx},${h} L${p},${h} Z" fill="url(#${gid})"/>
+  <line x1="${p}" y1="${h}" x2="${w-p}" y2="${h}" stroke="rgba(241,238,227,.18)" stroke-width="1"/>
+  </svg>`;
+}
+function potChart(rows, uid){
+  if(!rows||!rows.length)return'';
+  const gid='pg'+(uid!==undefined?'-'+uid:'');
+  const w=320,h=110,p=4;
+  const maxV=rows[0].openBal;
+  const n=rows.length,sx=(w-p*2)/(n-1||1);
+  const y=v=>h-p-(Math.max(0,v)/maxV)*(h-p*2);
+  let pts='M'+p+','+y(rows[0].openBal).toFixed(1);
+  rows.forEach((r,i)=>{pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1);});
+  const lx=(p+(n-1)*sx).toFixed(1);
+  return`<svg class="chart" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0%" stop-color="#3D7A4F" stop-opacity=".65"/><stop offset="100%" stop-color="#3D7A4F" stop-opacity=".05"/></linearGradient></defs>
+  <path d="${pts} L${lx},${h} L${p},${h} Z" fill="url(#${gid})"/>
+  <path d="${pts}" fill="none" stroke="#8FC79E" stroke-width="1.4"/>
+  <line x1="${p}" y1="${h}" x2="${w-p}" y2="${h}" stroke="rgba(241,238,227,.18)" stroke-width="1"/>
+  </svg>`;
+}
+
+/* =====================================================================
+   RENDER
+   ===================================================================== */
+function renderScreen(screen){
+  if(screen==='country')return renderCountry();
+  if(screen.startsWith('cap_'))return renderQ('cap',parseInt(screen.slice(4)));
+  if(screen.startsWith('tol_'))return renderQ('tol',parseInt(screen.slice(4)));
+  if(screen==='profile')return renderProfile();
+  if(screen==='budget')return renderBudget();
+  if(screen==='emergency')return renderEmergency();
+  if(screen==='emergency_choice')return renderEmergencyChoice();
+  if(screen==='goals_hub')return renderGoalsHub();
+  if(screen==='goal_inputs')return renderGoalInputs();
+  if(screen==='goal_confirm')return renderGoalConfirm();
+  if(screen==='plan')return renderPlan();
+  return '<div>Loading…</div>';
+}
+
+function renderCountry(){
+  return `<div class="eyebrow">Before we start</div>
+  <div class="qtitle">Where will you spend this money?</div>
+  <div class="qsub">Sets the right prices and tax rules for your plan.</div>
+  <div class="qbody"><div class="country-grid">
+  ${Object.values(C).map(c=>`
+    <div class="ccrd${G.country===c.code?' sel':''}" data-country="${c.code}">
+    <span class="cf">${c.sym}</span><div class="cn">${c.name}</div><div class="cc">${c.code}</div></div>`).join('')}
+  </div></div>
+  <div class="cta-zone"><button class="cta" id="nb"${G.country?'':' disabled'}>Continue</button></div>`;
+}
+
+function renderQ(section,idx){
+  const qs=section==='cap'?CAP_QS:TOL_QS;
+  const q=qs[idx];
+  const saved=section==='cap'?G.capA[idx]:G.tolA[idx];
+  return `<div class="eyebrow">${q.ey}</div>
+  <div class="qtitle">${q.title}</div>
+  <div class="qbody">
+  ${q.opts.map(o=>`
+    <div class="opt${saved===o.s?' sel':''}" data-score="${o.s}" data-sec="${section}" data-idx="${idx}">
+      <div class="opt-main">${o.t}</div>
+    </div>`).join('')}
+  </div>
+  <div class="cta-zone"><button class="cta" id="nb"${saved!==null?'':' disabled'}>Continue</button></div>`;
+}
+
+function renderProfile(){
+  const{capScore,tolScore,bucket}=scoreBuckets();
+  G.bucket=bucket;G.capScore=capScore;G.tolScore=tolScore;
+  const b=BUCKETS[bucket];
+  const blendedRate=(bucketRate(bucket)*100).toFixed(1);
+  const lower=capScore<tolScore?'capacity':'tolerance';
+  const equalNote=capScore===tolScore?'Your financial situation and your comfort with risk are well-aligned.':
+    lower==='capacity'?
+    'Your finances are more cautious than your appetite for risk. We protect your financial reality: the lower score wins.':
+    'You are more cautious emotionally than your finances strictly require. A plan you can sleep with always wins.';
+  return `<div class="eyebrow">Your risk profile</div>
+  <div class="qtitle">Here is who you are as an investor</div>
+  <div class="qbody" style="overflow-y:auto">
+  <div class="score-row">
+    <div class="score-block">
+      <span class="score-num">${capScore}<span style="font-size:14px;opacity:.5">/20</span></span>
+      <div class="score-sub"><span class="term" data-def="How much risk your financial situation can objectively handle: income stability, dependents, debts.">Capacity</span></div>
+    </div>
+    <div class="score-block">
+      <span class="score-num">${tolScore}<span style="font-size:14px;opacity:.5">/20</span></span>
+      <div class="score-sub"><span class="term" data-def="How much market movement you can handle emotionally, without panic-selling or losing sleep.">Tolerance</span></div>
+    </div>
+  </div>
+  <div class="lower-note">${equalNote}</div>
+  <div class="profile-card pc-${b.cls}">
+    <div class="pc-label">Your profile</div>
+    <div class="pc-name">${b.name}</div>
+    <div class="pc-tagline">${b.tagline}</div>
+    <div class="pc-desc">${b.desc}</div>
+  </div>
+  <div style="font-size:12.5px;color:rgba(241,238,227,.55);padding:0 2px 4px;line-height:1.6">
+    Based on this profile, your investments will target roughly <strong style="color:var(--gold)">${blendedRate}% per year</strong> on average. That comes from a blend of equity, debt, and hybrid based on your ${b.eq*100}% / ${b.de*100}% / ${b.hy*100}% allocation mix. Short-horizon goals will automatically use a safer rate.
+  </div>
+  </div>
+  <div class="cta-zone"><button class="cta" id="nb">Build my plan</button></div>`;
+}
+
+function renderBudget(){
+  const c=cfg();
+  return `<div class="eyebrow">Your plan inputs · 1 of 2</div>
+  <div class="qtitle">How much can you set aside each month?</div>
+  <div class="qsub">This is your total savings capacity: what remains after rent, EMIs, and daily expenses.</div>
+  <div class="qbody">
+  <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inp" type="number" inputmode="numeric" placeholder="0" value="${G.monthlyCapacity||''}"><span class="ns">/ month</span></div>
+  ${(()=>{const b=sliderBounds(c.expChips);return valueSlider('sl',G.monthlyCapacity||b.min,b.min,b.max,b.step,c.compact(b.min),c.compact(b.max));})()}
+  <div class="chips-label">Or pick a common amount</div>
+  <div class="chips">${c.expChips.map(a=>`<div class="chip${G.monthlyCapacity===a?' sel':''}" data-mc="${a}">${c.compact(a)}</div>`).join('')}</div>
+  <div class="err" id="err"></div>
+  </div>
+  <div class="cta-zone"><button class="cta" id="nb"${G.monthlyCapacity?'':' disabled'}>Continue</button></div>`;
+}
+
+function renderEmergency(){
+  const c=cfg();
+  const hasEmg=G.emergencyStatus;
+  return `<div class="eyebrow">Your safety net</div>
+  <div class="qtitle">Do you have an <span class="term" data-def="3 to 6 months of living expenses in a liquid account, your first line of defence before any investment.">emergency fund</span>?</div>
+  <div class="qsub">This is separate from investments: money that can be accessed within a day if needed.</div>
+  <div class="qbody">
+  <div class="opt${hasEmg==='full'?' sel':''}" data-emg="full"><div class="opt-main">Yes, 6+ months of expenses covered</div></div>
+  <div class="opt${hasEmg==='partial'?' sel':''}" data-emg="partial"><div class="opt-main">Partial: 3 to 6 months</div></div>
+  <div class="opt${hasEmg==='no'?' sel':''}" data-emg="no"><div class="opt-main">Not yet: less than 3 months or none</div></div>
+  </div>
+  <div class="cta-zone"><button class="cta" id="nb"${hasEmg?'':' disabled'}>Continue</button></div>`;
+}
+
+function renderEmergencyChoice(){
+  const c=cfg();
+  const gapMonths = G.emergencyStatus==='partial' ? '3 more months' : '6 months';
+  const pr=G.emergencyPrioritize;
+  return `<div class="eyebrow">Your safety net</div>
+  <div class="qtitle">Want to prioritize closing that gap?</div>
+  <div class="qsub">You have room to build up to ${gapMonths} of expenses in a safety net before other goals. Entirely your call — some people would rather tackle this first, others prefer to invest toward goals now and build the safety net alongside.</div>
+  <div class="qbody">
+  <div class="opt${pr===true?' sel':''}" data-emgpri="yes"><div class="opt-main">Yes, make it the first priority</div><div class="opt-tag">Added to your plan as a 12-month build-up, ahead of other goals</div></div>
+  <div class="opt${pr===false?' sel':''}" data-emgpri="no"><div class="opt-main">Not right now</div><div class="opt-tag">Skip it for this plan. You can always add it later</div></div>
+  </div>
+  <div class="cta-zone"><button class="cta" id="nb"${pr!==null?'':' disabled'}>Continue</button></div>`;
+}
+
+function renderGoalsHub(){
+  const c=cfg();
+  const emg=calcEmergency();
+  const canAdd=G.goals.length<3;
+  return `<div class="eyebrow">Your plan · add up to 3 goals</div>
+  <div class="qtitle">What are you saving for?</div>
+  <div class="qbody" style="overflow-y:auto">
+  <div class="goal-hub">
+  ${emg.needed?`
+    <div class="goal-pill done">
+      <div class="gp-left"><div class="gp-label">Emergency Fund</div><div class="gp-tag">First priority · build over 12 months</div></div>
+      <div class="gp-right">${c.fmt(emg.sip)}/mo<span class="gp-sip">${c.compact(emg.amount)} target</span></div>
+    </div>`:'' }
+  ${emg.declined?`<div class="gr-note" style="margin-bottom:4px">You chose to skip the emergency fund for now. It won't be part of this plan — add it any time by revisiting this section.</div>`:''}
+  ${G.goals.map((g,i)=>{
+    const calc=calcGoal(g);
+    return `<div class="goal-pill done">
+      <div class="gp-left"><div class="gp-label">${g.label}</div><div class="gp-tag">${g.years}yr horizon</div></div>
+      <div class="gp-right">${c.fmt(calc.sip)}/mo<span class="gp-sip">${c.compact(calc.corpus)} target</span></div>
+      <div class="gp-actions">
+        <button class="gp-iconbtn" data-edit-goal="${i}" aria-label="Edit this goal">${ICONS.edit}</button>
+        <button class="gp-iconbtn" data-delete-goal="${i}" aria-label="Remove this goal">${ICONS.trash}</button>
+      </div>
+    </div>`;
+  }).join('')}
+  ${canAdd?`<div class="add-goal-btn" id="addGoalBtn">+ Add a goal</div>`:''}
+  </div>
+  </div>
+  <div class="cta-zone">
+  <button class="cta" id="nb"${G.goals.length>0?'':' disabled'}>See my plan</button>
+  </div>`;
+}
+
+function renderGoalInputs(){
+  const c=cfg();
+  const types=GOAL_TYPES;
+  return `<div class="eyebrow">New goal · step 1 of 2</div>
+  <div class="qtitle">What is this goal?</div>
+  <div class="qbody">
+  <div class="mini-grid">
+  ${types.map(t=>`
+    <div class="mg${G.draftType===t.id?' sel':''}" data-gt="${t.id}">
+    <span class="mg-icon">${t.icon}</span>
+    <div class="mg-name">${t.name}</div>
+    <div class="mg-note">${t.note}</div>
+    </div>`).join('')}
+  </div>
+  </div>
+  <div class="cta-zone">
+  <button class="cta" id="nb"${G.draftType?'':' disabled'}>Set the numbers</button>
+  <button class="cta-ghost" id="cancelBtn">Cancel</button>
+  </div>`;
+}
+
+// Same slider helper as Door 1 — a continuous bar next to every numeric
+// field, so a value isn't limited to the handful of preset chips. Chips
+// stay underneath as shortcuts, not the only way in.
+function sliderBounds(chips, extendFactor, minFloorFactor){
+  extendFactor = extendFactor===undefined ? 2.5 : extendFactor;
+  minFloorFactor = minFloorFactor===undefined ? 0.3 : minFloorFactor;
+  const lo = chips[0]*minFloorFactor, hi = chips[chips.length-1]*extendFactor;
+  let raw = hi/200;
+  const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw,1))));
+  const norm = raw/mag;
+  const step = (norm<1.5?1:norm<3.5?2:norm<7.5?5:10)*mag;
+  return { min: Math.max(0, Math.round(lo/step)*step), max: Math.round(hi/step)*step, step };
+}
+function valueSlider(id, value, min, max, step, loLabel, hiLabel){
+  return `<div class="value-slider">
+    <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value||min}">
+    <div class="value-slider-labels"><span>${loLabel}</span><span>${hiLabel}</span></div>
+  </div>`;
+}
+function syncSliderToValue(sl, v, min, max){ if(sl && v!=null) sl.value = Math.min(max, Math.max(min, v)); }
+
+function renderGoalConfirm(){
+  const c=cfg(),d=cfg().d;
+  const t=G.draftType;
+  const label=(GOAL_TYPES.find(x=>x.id===t)||{name:t}).name;
+
+  // Build the right input fields depending on goal type
+  let fields='';
+  if(t==='retirement'){
+    fields=`
+    <div style="margin-bottom:18px">
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Monthly expenses today</label>
+      <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inp1" type="number" inputmode="numeric" placeholder="0" value="${G.draftA||''}"><span class="ns">/ mo</span></div>
+      ${(()=>{const b=sliderBounds(c.expChips);return valueSlider('sl1',G.draftA||b.min,b.min,b.max,b.step,c.compact(b.min),c.compact(b.max));})()}
+      <div class="chips-label">Or pick a common amount</div>
+      <div class="chips">${c.expChips.map(a=>`<div class="chip${G.draftA===a?' sel':''}" data-a="${a}">${c.compact(a)}</div>`).join('')}</div>
+    </div>
+    <div style="margin-bottom:18px">
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Your age today</label>
+      <div class="num-row"><input class="ni" id="inp3" type="number" inputmode="numeric" placeholder="30" value="${G.draftC||''}"><span class="ns">years old</span></div>
+      ${valueSlider('sl3',G.draftC||30,18,70,1,'18','70')}
+      <div class="chips-label">Or pick a common age</div>
+      <div class="chips">${[25,30,35,40,45].map(a=>`<div class="chip${G.draftC===a?' sel':''}" data-c="${a}">${a}</div>`).join('')}</div>
+    </div>
+    <div>
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Retirement age</label>
+      <div class="num-row"><input class="ni" id="inp2" type="number" inputmode="numeric" placeholder="60" value="${G.draftB||''}"><span class="ns">years old</span></div>
+      ${valueSlider('sl2',G.draftB||60,Math.max(35,(G.draftC||30)+1),85,1,Math.max(35,(G.draftC||30)+1),'85')}
+      <div class="chips-label">Or pick a common age</div>
+      <div class="chips">${[55,58,60,65].map(a=>`<div class="chip${G.draftB===a?' sel':''}" data-b="${a}">${a}</div>`).join('')}</div>
+    </div>
+    <div class="optional-field" style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(241,238,227,.15)">
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Already saved for this? (optional)</label>
+      <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="${G.draftSav||''}"></div>
+      ${(()=>{const b=sliderBounds(c.amtChips,6,0);return valueSlider('slSav',G.draftSav||0,0,b.max,b.step,c.compact(0),c.compact(b.max));})()}
+    </div>`;
+  } else if(t==='education'){
+    fields=`
+    <div style="margin-bottom:18px">
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Annual fee today</label>
+      <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inp1" type="number" inputmode="numeric" placeholder="0" value="${G.draftA||''}"><span class="ns">/ yr</span></div>
+      ${(()=>{const b=sliderBounds(c.feeChips);return valueSlider('sl1',G.draftA||b.min,b.min,b.max,b.step,c.compact(b.min),c.compact(b.max));})()}
+      <div class="chips-label">Or pick a common amount</div>
+      <div class="chips">${c.feeChips.map(a=>`<div class="chip${G.draftA===a?' sel':''}" data-a="${a}">${c.compact(a)}</div>`).join('')}</div>
+    </div>
+    <div>
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Years until college starts</label>
+      <div class="num-row"><input class="ni" id="inp2" type="number" inputmode="numeric" placeholder="10" value="${G.draftB||''}"><span class="ns">years</span></div>
+      ${valueSlider('sl2',G.draftB||10,1,22,1,'1','22')}
+      <div class="chips-label">Or pick a common span</div>
+      <div class="chips">${c.yrChips.filter(x=>x<=15).map(a=>`<div class="chip${G.draftB===a?' sel':''}" data-b="${a}">${a} yrs</div>`).join('')}</div>
+    </div>
+    <div class="optional-field" style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(241,238,227,.15)">
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Already saved for this? (optional)</label>
+      <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="${G.draftSav||''}"></div>
+      ${(()=>{const b=sliderBounds(c.feeChips,10,0);return valueSlider('slSav',G.draftSav||0,0,b.max,b.step,c.compact(0),c.compact(b.max));})()}
+    </div>`;
+  } else {
+    // house or generic
+    const isHouse=t==='house';
+    const inflLbl=isHouse?'property':'goal';
+    fields=`
+    <div style="margin-bottom:18px">
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Cost today</label>
+      <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inp1" type="number" inputmode="numeric" placeholder="0" value="${G.draftA||''}"><span class="ns">today</span></div>
+      ${(()=>{const b=sliderBounds(c.amtChips);return valueSlider('sl1',G.draftA||b.min,b.min,b.max,b.step,c.compact(b.min),c.compact(b.max));})()}
+      <div class="chips-label">Or pick a common amount</div>
+      <div class="chips">${c.amtChips.map(a=>`<div class="chip${G.draftA===a?' sel':''}" data-a="${a}">${c.compact(a)}</div>`).join('')}</div>
+    </div>
+    <div>
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Years until you need it</label>
+      <div class="num-row"><input class="ni" id="inp2" type="number" inputmode="numeric" placeholder="7" value="${G.draftB||''}"><span class="ns">years</span></div>
+      ${valueSlider('sl2',G.draftB||7,1,30,1,'1','30')}
+      <div class="chips-label">Or pick a common span</div>
+      <div class="chips">${c.yrChips.map(a=>`<div class="chip${G.draftB===a?' sel':''}" data-b="${a}">${a} yrs</div>`).join('')}</div>
+    </div>
+    <div class="optional-field" style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(241,238,227,.15)">
+      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Already saved for this? (optional)</label>
+      <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="${G.draftSav||''}"></div>
+      ${(()=>{const b=sliderBounds(c.amtChips,4,0);return valueSlider('slSav',G.draftSav||0,0,b.max,b.step,c.compact(0),c.compact(b.max));})()}
+    </div>`;
+  }
+
+  const valid=G.draftA&&G.draftB;
+  return `<div class="eyebrow">New goal · step 2 of 2 · ${label}</div>
+  <div class="qtitle">Fill in the numbers</div>
+  <div class="qbody" style="overflow-y:auto">${fields}
+  <div class="err" id="err"></div>
+  </div>
+  <div class="cta-zone">
+  <button class="cta" id="nb"${valid?'':' disabled'}>Add to plan</button>
+  <button class="cta-ghost" id="cancelBtn">Cancel</button>
+  </div>`;
+}
+
+function instRiskTier(inst){
+  // Rough heuristic from the top of the fund's return band, purely for a
+  // quick visual read: it is not a substitute for the actual note below,
+  // which explains the real reasoning.
+  const top=inst.band.max;
+  if(top<=0.08) return {cls:'low', label:'Low risk'};
+  if(top<=0.12) return {cls:'mod', label:'Moderate risk'};
+  return {cls:'high', label:'Higher risk'};
+}
+function renderInstrumentPanel(rec, overridden, fullBucketName, effectiveBucketName, c, eqPct, years){
+  let html='';
+
+  if(overridden){
+    html+=`<div class="inst-note warn">Your overall risk profile is <b>${fullBucketName}</b>, but a ${years}-year horizon can only safely absorb about <b>${eqPct}% equity</b>, closest to a <b>${effectiveBucketName}</b> mix. The instruments below are chosen for that scaled-down exposure, not your full profile, on a scale that keeps opening up the longer this goal's horizon is.</div>`;
+  }
+
+  if(rec.fits.length){
+    html+=`<div class="inst-grid">`+rec.fits.map(inst=>{
+      const rt=instRiskTier(inst);
+      return `<div class="inst-card">
+        <div class="inst-risk ${rt.cls}">${rt.label}</div>
+        <div class="inst-name">${inst.name}</div>
+        <div class="inst-rate"><span class="term" data-def="The illustrative long-run return range for this category. The wider the range, the more its actual yearly result can swing above or below the average.">typically ${(inst.band.min*100).toFixed(1)}&ndash;${(inst.band.max*100).toFixed(1)}%/yr</span></div>
+        <div class="inst-why">${inst.why}</div>
+      </div>`;}).join('')+`</div>`;
+  } else {
+    html+=`<div class="inst-note">No instrument on this list fits both your profile and this timeframe. Talk to an adviser before this goal gets closer.</div>`;
+  }
+
+  if(rec.excludedForHorizon.length){
+    html+=`<div class="inst-note">
+      <b>Not included, on purpose:</b> ${rec.excludedForHorizon.map(e=>e.inst.name).join(', ')}.
+      These normally suit your profile, but they need at least ${Math.max(...rec.excludedForHorizon.map(e=>e.neededYears))} years to ride out a downturn, and this goal does not have that long.
+    </div>`;
+  }
+
+  if(rec.stretch.length){
+    html+=`<div class="inst-note stretch">
+      <b>If you want to go further:</b> your profile and this goal's long horizon can support some exposure to
+      ${rec.stretch.map(s=>`${s.name} (${(s.band.min*100).toFixed(0)}&ndash;${(s.band.max*100).toFixed(0)}%/yr)`).join(' or ')}.
+      These run hotter and bumpier than the core options above. Some people know exactly what these are; others have never heard of them.
+      Either way, they are optional add-ons on top of the core list, not a replacement for it.
+    </div>`;
+  }
+
+  return html;
+}
+
+function ddToggleBlock(g,i,c){
+  const d=cfg().d;
+  const rows=drawdownSchedule({openingCorpus:g.corpus,firstWithdrawal:g.expAtRet,inflation:d.inflation,nominalRate:d.postRet,years:g.drawYrs,due:true});
+  const caret='<svg class="tog-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  return `<div class="inst-toggle" id="dd-${i}">${caret}How the pot gets spent after age ${g.retireAge}</div>
+  <div class="inst-panel" id="ddp-${i}"><div class="schedule-scroll"><table class="schedule-table">
+  <thead><tr><th>Year</th><th>Start of year</th><th>You withdraw</th><th>Growth earned</th><th>End of year</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td>${r.year}</td><td>${c.compact(r.openBal)}</td><td>${c.compact(r.withdrawal)}</td><td>${c.compact(Math.max(0,r.closeBal-r.openBal+r.withdrawal))}</td><td>${c.compact(r.closeBal)}</td></tr>`).join('')}
+  </tbody></table></div>
+  <div style="font-size:11px;color:rgba(241,238,227,.4);padding:2px 2px 10px;line-height:1.5">Withdrawals rise with inflation each year. Built to last to age ${d.lifeExp}, reaching zero by design, not by accident.</div></div>`;
+}
+function renderPlan(){
+  const c=cfg(),plan=buildPlan();
+  const b=BUCKETS[G.bucket];
+  const statusLabel={ok:'Fits within your savings',warn:'Slightly over, small adjustments needed',gap:'Gap: plan needs adjustment'};
+  const diffSign=plan.diff>=0?'+':'-';
+
+  // Build per-goal rows
+  const goalRows=plan.goals.map((g,i)=>{
+    const{eid,overridden,rate,sip,corpus,alloc}=g;
+    const bn=BUCKETS[eid].name;
+    const eqPct=Math.round(alloc.eq*100), fullEqPct=Math.round(BUCKETS[G.bucket].eq*100);
+    const note=overridden
+      ? `<span class="term" data-def="Your ${b.name} profile allows up to ${fullEqPct}% equity, but a ${g.years}-year horizon can only safely absorb up to ${Math.round(alloc.ceiling*100)}%, on a scale that keeps rising the longer the horizon gets. The debt and hybrid slices absorb the difference, kept in the same ratio your ${b.name} profile already uses between them.">${eqPct}% equity, scaled down from ${b.name} for ${g.years}yrs</span>`
+      : bn;
+    const rec=recommendInstruments(G.country, g.years, eid, g.type);
+    const mRate=effectiveMonthlyRate(rate);
+    const accRows=accumulationSchedule({sip, rate:mRate, years:g.years*12, due:true, opening:g.existingSavings||0}).rows;
+    const drawRowsChart = g.type==='retirement' ? drawdownSchedule({openingCorpus:g.corpus, firstWithdrawal:g.expAtRet, inflation:cfg().d.inflation, nominalRate:cfg().d.postRet, years:g.drawYrs, due:true}) : null;
+    const chartsHtml = g.type==='retirement'
+      ? `<div class="gr-chart-row">
+          <div class="gr-chart-card"><div class="gr-chart-cap">Building the pot, ${g.years} yrs</div>${mountainChart(accRows,i)}</div>
+          <div class="gr-chart-card"><div class="gr-chart-cap">Spending it down, ${g.drawYrs} yrs from ${g.retireAge}</div>${potChart(drawRowsChart,i)}</div>
+        </div>`
+      : `<div class="gr-chart-card"><div class="gr-chart-cap">How this goal's pot grows over ${g.years} years</div>${mountainChart(accRows,i)}</div>`;
+    return `<div class="goal-row-wrap">
+    <div class="goal-row">
+    <div class="gr-left">
+      <div class="gr-name">${g.label}</div>
+      <div class="gr-meta">${g.years}yr horizon · <span class="term" data-def="The blended rate from your ${bn} mix, ${(rate*100).toFixed(1)}% per year.">${note}</span>${g.existingSavings>0?` · <span class="term" data-def="Assumed to keep compounding at the same ${(rate*100).toFixed(1)}% rate as the new SIP, growing to ${c.compact(g.existingFV)} by the goal date.">${c.compact(g.existingSavings)} already saved</span>`:''}</div>
+    </div>
+    <div class="gr-right">
+      <div class="gr-sip">${c.fmt(sip)}/mo</div>
+      <div class="gr-corpus">${c.compact(corpus)} corpus</div>
+    </div>
+    </div>
+    ${chartsHtml}
+    <div class="inst-toggle" id="it-${i}">What should this actually be invested in?</div>
+    <div class="inst-panel" id="ip-${i}">${renderInstrumentPanel(rec, overridden, b.name, bn, c, eqPct, g.years)}</div>
+    ${g.type==='retirement'?ddToggleBlock(g,i,c):''}
+    </div>`;
+  });
+
+  // Accumulation chart of the total SIP
+  const topGoal=plan.goals.length>0?plan.goals[0]:null;
+  let chartHtml='';
+  if(topGoal&&plan.totalSIP>0){
+    const mRate=effectiveMonthlyRate(bucketRate(G.bucket));
+    const rows=accumulationSchedule({sip:plan.totalSIP,rate:mRate,years:topGoal.years*12,due:true}).rows;
+    chartHtml=`<div class="section-head">What your combined SIP builds over ${topGoal.years} years</div>
+    <div style="background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.1);border-radius:13px;padding:14px 12px 6px;margin-bottom:16px">${mountainChart(rows,'total')}</div>`;
+  }
+
+  // Your overall risk profile, as an actual allocation and return figure —
+  // each goal above already explains its own horizon-scaled tilt away
+  // from this; this is the baseline profile itself.
+  const baseAlloc=BUCKETS[G.bucket];
+  const baseRate=bucketRate(G.bucket);
+  const baseReal=realRate(baseRate, cfg().d.inflation);
+  const allocCard=`<div class="alloc-card">
+    <div class="section-head" style="margin-top:0">Your ${b.name} profile, as an allocation</div>
+    <div class="alloc-flex">${allocationDonut(baseAlloc.eq, baseAlloc.de, baseAlloc.hy)}<div class="alloc-legend">${allocationLegend(baseAlloc.eq, baseAlloc.de, baseAlloc.hy)}</div></div>
+    <div class="alloc-return-row">
+      <div><div class="alloc-return-label">Expected return</div><div class="alloc-return-value">${(baseRate*100).toFixed(1)}%</div></div>
+      <div><div class="alloc-return-label">After ${(cfg().d.inflation*100).toFixed(0)}% inflation</div><div class="alloc-return-value" style="color:${baseReal>0?'#8FC79E':'#E8977A'}">${(baseReal*100).toFixed(1)}%</div></div>
+    </div>
+    <div class="gr-note" style="margin-top:10px">This is your full profile's own mix. Goals with a shorter horizon than your profile can safely support are scaled down individually above, not by changing this baseline.</div>
+  </div>`;
+
+  // Gap suggestions
+  let gapCard='';
+  if(plan.status==='gap'){
+    const extYrs=plan.goals[0]?plan.goals[0].years+3:0;
+    const mRate=effectiveMonthlyRate(bucketRate(G.bucket));
+    const extSip=plan.goals[0]?solveSIP(mRate,extYrs*12,plan.goals[0].corpus,true):0;
+    const saving=Math.round(plan.goals[0]?plan.goals[0].sip-extSip:0);
+    gapCard=`<div class="gap-card">
+    <h4>One way to close the gap</h4>
+    <p>Extending your first goal's <span class="term" data-def="How long before you need the money.">horizon</span> by 3 years would reduce that goal's monthly SIP by roughly ${c.fmt(saving)}. Review each goal. Flexible goals like travel can be pushed out; retirement and education usually cannot.</p>
+    </div>`;
+  }
+
+  const assumpLines=[
+    `<b>Equity return:</b> ${(cfg().d.equity*100).toFixed(0)}% · <b>Debt:</b> ${(cfg().d.debt*100).toFixed(0)}% · <b>Hybrid:</b> ${(cfg().d.hybrid*100).toFixed(0)}%`,
+    `<b>Your blended rate (${b.name}):</b> ${(bucketRate(G.bucket)*100).toFixed(2)}% per year`,
+    `<b>General inflation:</b> ${(cfg().d.inflation*100).toFixed(0)}% · <b>Education inflation:</b> ${(cfg().d.eduInflation*100).toFixed(0)}%`,
+    `<b>Horizon scaling:</b> your equity ceiling rises smoothly with each goal's own horizon (roughly 5% at 0yrs, 20% by 2yrs, 35% by 4yrs, 50% by 7yrs, 70% by 12yrs, reaching your full profile's ceiling by 18yrs), never above what your stated risk profile itself allows, only below it for shorter goals.`,
+    `<b>Retirement drawdown:</b> 75% of inflated expenses, lasting to age ${cfg().d.lifeExp}.`,
+    ...(plan.goals.some(g=>g.existingSavings>0)?[`<b>Existing savings:</b> assumed to stay invested at the same blended rate as each goal's new SIP.`]:[]),
+    `<b>None of these are guarantees.</b> These are planning assumptions. Verify with a licensed financial adviser before acting.`
+  ].join('<br>');
+
+  return `<div class="plan-scroll">
+  <div class="eyebrow" style="padding-top:6px">Your complete plan</div>
+  <div class="qtitle" style="margin-bottom:16px">${b.name} investor · ${G.country} plan</div>
+
+  ${plan.emg.needed?`
+  <div class="section-head">Priority 1 · Emergency fund</div>
+  <div class="goal-row">
+    <div class="gr-left"><div class="gr-name">Emergency Fund</div><div class="gr-meta">Build over 12 months · ${plan.emg.months} months of expenses</div></div>
+    <div class="gr-right"><div class="gr-sip">${c.fmt(plan.emg.sip)}/mo</div><div class="gr-corpus">${c.compact(plan.emg.amount)} target</div></div>
+  </div>`:''}
+
+  ${plan.goals.length>0?`<div class="section-head">${plan.emg.needed?'Priority 2':'Goals'} · Investment goals</div>`:''}
+  ${goalRows.join('')}
+
+  <hr class="plan-divider">
+
+  <div class="plan-total ${plan.status}">
+    <span class="pt-label">Total needed/month</span>
+    <span class="pt-value">${c.fmt(plan.totalSIP)}</span>
+  </div>
+  <div class="plan-total" style="background:rgba(241,238,227,.05);border:1px solid rgba(241,238,227,.12)">
+    <span class="pt-label">Your savings capacity</span>
+    <span class="pt-value">${c.fmt(plan.cap)}</span>
+  </div>
+  <div class="plan-total ${plan.status}">
+    <span class="pt-label">${plan.diff>=0?'Surplus':'Shortfall'}</span>
+    <span class="pt-value">${diffSign}${c.fmt(Math.abs(plan.diff))}/mo</span>
+  </div>
+
+  ${gapCard}
+  ${chartHtml}
+  ${allocCard}
+
+  <div class="assump-toggle" id="at">Assumptions used in this plan</div>
+  <div class="assump-panel" id="ap"><div class="assump-inner">${assumpLines}</div></div>
+  <div class="save-row">
+    <button class="save-btn" id="exportBtn">${ICONS.download}<span>Save this plan</span></button>
+    <button class="save-btn" id="importBtn">${ICONS.upload}<span>Load a saved plan</span></button>
+    <input type="file" id="importFile" accept=".json" style="display:none">
+  </div>
+  <div class="save-note">Saves as a small file on your device, since this app does not store anything on its own. Load it again later to pick up exactly where you left off.</div>
+  <div class="restart-row"><button id="rb">Start over</button></div>
+  </div>`;
+}
+
+/* =====================================================================
+   RENDER ENGINE
+   ===================================================================== */
+const stage=document.getElementById('stage');
+const progressBar=document.getElementById('progressBar');
+const progressLabel=document.getElementById('progressLabel');
+const backBtn=document.getElementById('backBtn');
+const assumpBtn=document.getElementById('assumpBtn');
+function scrollToPanel(panel) {
+  let el = panel.parentElement;
+  while (el && el !== document.body) {
+    if (el.scrollHeight > el.clientHeight + 4) {
+      el.scrollTo({ top: panel.offsetTop - el.offsetTop - 12, behavior: 'smooth' });
+      return;
+    }
+    el = el.parentElement;
+  }
+  window.scrollTo({ top: panel.getBoundingClientRect().top + window.scrollY - 12, behavior: 'smooth' });
+}
+assumpBtn.addEventListener('click', () => {
+  const panel = document.getElementById('ap');
+  if (!panel) return;
+  panel.classList.add('open');
+  setTimeout(() => scrollToPanel(panel), 60);
+});
+
+function updateProgress(){
+  progressBar.style.width=progressPct()+'%';
+  progressLabel.textContent=progressSection();
+  const f=flow(),s=f[G.si];
+  backBtn.classList.toggle('show',G.si>0&&s!=='plan');
+  assumpBtn.classList.toggle('show', s==='plan');
+}
+
+function go(delta){G.si=Math.max(0,Math.min(flow().length-1,G.si+delta));render();}
+
+function render(){
+  const screen=flow()[G.si];
+  const wrap=document.createElement('div');
+  wrap.className='screen active';
+  wrap.innerHTML=renderScreen(screen);
+  stage.innerHTML='';
+  stage.appendChild(wrap);
+  updateProgress();
+  attach(screen);
+}
+
+/* =====================================================================
+   EVENT HANDLERS
+   ===================================================================== */
+function attach(screen){
+  const nb=document.getElementById('nb');
+
+  // term chips — reveal plain-language definition on tap
+  document.querySelectorAll('.term').forEach(el=>{
+    if(!el.querySelector('.term-tip')){
+      const tip=document.createElement('span');
+      tip.className='term-tip';
+      tip.textContent=el.dataset.def||'';
+      el.appendChild(tip);
+    }
+    el.addEventListener('click',e=>{e.stopPropagation();el.classList.toggle('open');});
+  });
+  document.addEventListener('click',()=>{document.querySelectorAll('.term.open').forEach(e=>e.classList.remove('open'));},{once:false});
+
+  if(screen==='country'){
+    document.querySelectorAll('[data-country]').forEach(el=>el.addEventListener('click',()=>{G.country=el.dataset.country;render();}));
+    nb&&nb.addEventListener('click',()=>go(1));
+  }
+
+  if(screen.startsWith('cap_')||screen.startsWith('tol_')){
+    document.querySelectorAll('[data-score]').forEach(el=>el.addEventListener('click',()=>{
+      const sec=el.dataset.sec,idx=parseInt(el.dataset.idx),score=parseInt(el.dataset.score);
+      if(sec==='cap')G.capA[idx]=score; else G.tolA[idx]=score;
+      render();
+    }));
+    nb&&nb.addEventListener('click',()=>go(1));
+  }
+
+  if(screen==='profile'){
+    nb&&nb.addEventListener('click',()=>go(1));
+  }
+
+  if(screen==='budget'){
+    const c=cfg();
+    const inp=document.getElementById('inp'),err=document.getElementById('err');
+    const sl=document.getElementById('sl');
+    const b=sliderBounds(c.expChips);
+    const set=v=>{G.monthlyCapacity=v;nb.disabled=!v;err.textContent='';};
+    inp&&inp.addEventListener('input',()=>{set(parseInt(inp.value)||null);syncSliderToValue(sl,G.monthlyCapacity,b.min,b.max);});
+    sl&&sl.addEventListener('input',()=>{inp.value=sl.value;set(parseInt(sl.value));});
+    document.querySelectorAll('[data-mc]').forEach(el=>el.addEventListener('click',()=>{inp.value=el.dataset.mc;syncSliderToValue(sl,parseInt(el.dataset.mc),b.min,b.max);set(parseInt(el.dataset.mc));}));
+    nb&&nb.addEventListener('click',()=>{
+      if(!G.monthlyCapacity){err.textContent='Enter your monthly savings amount.';return;}
+      // Emergency-fund sizing needs a monthly-expense figure; this app
+      // doesn't ask for one separately in Door 2, so approximate it from
+      // savings capacity now that it's actually known.
+      if(!G.monthlyExpense) G.monthlyExpense = G.monthlyCapacity;
+      go(1);
+    });
+  }
+
+  if(screen==='emergency'){
+    document.querySelectorAll('[data-emg]').forEach(el=>el.addEventListener('click',()=>{
+      G.emergencyStatus=el.dataset.emg;
+      G.emergencyPrioritize=null; // reset the downstream choice since the status just changed
+      render();
+    }));
+    nb&&nb.addEventListener('click',()=>{
+      go(1);
+    });
+  }
+
+  if(screen==='emergency_choice'){
+    document.querySelectorAll('[data-emgpri]').forEach(el=>el.addEventListener('click',()=>{
+      G.emergencyPrioritize = el.dataset.emgpri==='yes';
+      render();
+    }));
+    nb&&nb.addEventListener('click',()=>go(1));
+  }
+
+  if(screen==='goals_hub'){
+    document.getElementById('addGoalBtn')&&document.getElementById('addGoalBtn').addEventListener('click',()=>{
+      G.addingGoal=true;G.editingIndex=null;G.draftType=null;G.draftA=null;G.draftB=null;G.draftC=null;G.draftSav=0;
+      const f=flow();
+      const hubIdx=f.indexOf('goals_hub');
+      G.si=hubIdx+1; // now correctly lands on goal_inputs
+      render();
+    });
+    document.querySelectorAll('[data-delete-goal]').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const idx=parseInt(el.dataset.deleteGoal);
+        G.goals.splice(idx,1);
+        render();
+      });
+    });
+    document.querySelectorAll('[data-edit-goal]').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const idx=parseInt(el.dataset.editGoal);
+        const g=G.goals[idx];
+        G.editingIndex=idx;
+        G.addingGoal=true;
+        if(g.type==='retirement'){ G.draftType='retirement'; G.draftA=g.monthlyExpense; G.draftB=g.retireAge; G.draftC=g.currentAge||Math.max(18,g.retireAge-g.years); G.draftSav=g.existingSavings||0; }
+        else if(g.type==='education'){ G.draftType='education'; G.draftA=g.annualFee; G.draftB=g.years; G.draftSav=g.existingSavings||0; }
+        else { G.draftType=g.genSub; G.draftA=g.amount; G.draftB=g.years; G.draftSav=g.existingSavings||0; }
+        const f=flow();
+        const hubIdx=f.indexOf('goals_hub');
+        G.si=hubIdx+2; // skip straight to goal_confirm since the type is already known
+        render();
+      });
+    });
+    nb&&nb.addEventListener('click',()=>{
+      // jump to plan (last screen)
+      G.draftType=null;
+      const f=flow();
+      G.si=f.indexOf('plan');
+      render();
+    });
+  }
+
+  if(screen==='goal_inputs'){
+    document.querySelectorAll('[data-gt]').forEach(el=>el.addEventListener('click',()=>{G.draftType=el.dataset.gt;render();}));
+    nb&&nb.addEventListener('click',()=>go(1));
+    document.getElementById('cancelBtn')&&document.getElementById('cancelBtn').addEventListener('click',()=>{
+      G.addingGoal=false;G.draftType=null;
+      const f=flow();
+      G.si=f.indexOf('goals_hub');
+      render();
+    });
+  }
+
+  if(screen==='goal_confirm'){
+    const c=cfg();
+    const inp1=document.getElementById('inp1'),inp2=document.getElementById('inp2'),inp3=document.getElementById('inp3'),inpSav=document.getElementById('inpSav'),err=document.getElementById('err');
+    const sl1=document.getElementById('sl1'),sl2=document.getElementById('sl2'),sl3=document.getElementById('sl3'),slSav=document.getElementById('slSav');
+    const t=G.draftType;
+    const b1 = t==='retirement'?sliderBounds(c.expChips) : t==='education'?sliderBounds(c.feeChips) : sliderBounds(c.amtChips);
+    const b2 = t==='retirement'?{min:Math.max(35,(G.draftC||30)+1),max:85} : t==='education'?{min:1,max:22} : {min:1,max:30};
+    const bSav = t==='retirement'?sliderBounds(c.amtChips,6,0) : t==='education'?sliderBounds(c.feeChips,10,0) : sliderBounds(c.amtChips,4,0);
+    const gate=()=>{nb.disabled=!(G.draftA&&G.draftB&&(G.draftType!=='retirement'||G.draftC));};
+    const setA=v=>{G.draftA=v;gate();};
+    const setB=v=>{G.draftB=v;gate();};
+    const setC=v=>{G.draftC=v;gate();};
+    inp1&&inp1.addEventListener('input',()=>{setA(parseInt(inp1.value)||null);syncSliderToValue(sl1,G.draftA,b1.min,b1.max);});
+    inp2&&inp2.addEventListener('input',()=>{setB(parseInt(inp2.value)||null);syncSliderToValue(sl2,G.draftB,b2.min,b2.max);});
+    inp3&&inp3.addEventListener('input',()=>{setC(parseInt(inp3.value)||null);syncSliderToValue(sl3,G.draftC,18,70);});
+    inpSav&&inpSav.addEventListener('input',()=>{G.draftSav=parseInt(inpSav.value)||0;syncSliderToValue(slSav,G.draftSav,0,bSav.max);});
+    sl1&&sl1.addEventListener('input',()=>{inp1.value=sl1.value;setA(parseInt(sl1.value));});
+    sl2&&sl2.addEventListener('input',()=>{inp2.value=sl2.value;setB(parseInt(sl2.value));});
+    sl3&&sl3.addEventListener('input',()=>{inp3.value=sl3.value;setC(parseInt(sl3.value));});
+    slSav&&slSav.addEventListener('input',()=>{inpSav.value=slSav.value;G.draftSav=parseInt(slSav.value)||0;});
+    document.querySelectorAll('[data-a]').forEach(el=>el.addEventListener('click',()=>{inp1.value=el.dataset.a;syncSliderToValue(sl1,parseInt(el.dataset.a),b1.min,b1.max);setA(parseInt(el.dataset.a));}));
+    document.querySelectorAll('[data-b]').forEach(el=>el.addEventListener('click',()=>{inp2.value=el.dataset.b;syncSliderToValue(sl2,parseInt(el.dataset.b),b2.min,b2.max);setB(parseInt(el.dataset.b));}));
+    document.querySelectorAll('[data-c]').forEach(el=>el.addEventListener('click',()=>{inp3.value=el.dataset.c;syncSliderToValue(sl3,parseInt(el.dataset.c),18,70);setC(parseInt(el.dataset.c));}));
+
+    nb&&nb.addEventListener('click',()=>{
+      if(!G.draftA||!G.draftB||(G.draftType==='retirement'&&!G.draftC)){err.textContent='Please fill in all the fields.';return;}
+      const t=G.draftType;
+      if(t==='retirement'&&G.draftB<=G.draftC){err.textContent='Retirement age needs to be later than your age today.';return;}
+      const type=GOAL_TYPES.find(x=>x.id===t)||{name:t};
+      let goal={type:t===('house')?'generic':t,label:type.name,years:G.draftB,genSub:t};
+      if(t==='retirement'){goal={type:'retirement',label:'Retirement',retireAge:G.draftB,monthlyExpense:G.draftA,currentAge:G.draftC,years:Math.max(1,G.draftB-G.draftC),existingSavings:G.draftSav||0};}
+      else if(t==='education'){goal={type:'education',label:'Education',annualFee:G.draftA,years:G.draftB,duration:4,existingSavings:G.draftSav||0};}
+      else{
+        goal={type:'generic',label:type.name,amount:G.draftA,years:G.draftB,genSub:t,existingSavings:G.draftSav||0};
+      }
+      if(G.editingIndex!==null){ G.goals[G.editingIndex]=goal; }
+      else { G.goals.push(goal); }
+      G.addingGoal=false;G.editingIndex=null;G.draftType=null;G.draftA=null;G.draftB=null;
+      const f=flow();
+      G.si=f.indexOf('goals_hub');
+      render();
+    });
+    document.getElementById('cancelBtn')&&document.getElementById('cancelBtn').addEventListener('click',()=>{
+      G.addingGoal=false;G.editingIndex=null;G.draftType=null;
+      const f=flow();
+      G.si=f.indexOf('goals_hub');
+      render();
+    });
+  }
+
+  if(screen==='plan'){
+    document.getElementById('at')&&document.getElementById('at').addEventListener('click',()=>{
+      document.getElementById('ap').classList.toggle('open');
+    });
+    document.querySelectorAll('[id^="it-"]').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const idx=el.id.split('-')[1];
+        document.getElementById('ip-'+idx).classList.toggle('open');
+      });
+    });
+    document.querySelectorAll('[id^="dd-"]').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const idx=el.id.split('-')[1];
+        document.getElementById('ddp-'+idx).classList.toggle('open');
+        el.classList.toggle('open');
+      });
+    });
+    document.getElementById('rb')&&document.getElementById('rb').addEventListener('click',()=>{
+      Object.assign(G,{country:null,capA:[null,null,null,null],tolA:[null,null,null,null,null],bucket:null,capScore:0,tolScore:0,monthlyExpense:null,emergencyStatus:null,emergencyPrioritize:null,monthlyCapacity:null,goals:[],addingGoal:false,editingIndex:null,draftType:null,draftA:null,draftB:null,draftC:null,draftSav:0,si:0});
+      render();
+    });
+
+    document.getElementById('exportBtn')&&document.getElementById('exportBtn').addEventListener('click',()=>{
+      const savedState={
+        _goalden:'plan-export', _version:1, savedAt:new Date().toISOString(),
+        country:G.country, capA:G.capA, tolA:G.tolA,
+        monthlyExpense:G.monthlyExpense, emergencyStatus:G.emergencyStatus,
+        monthlyCapacity:G.monthlyCapacity, goals:G.goals,
+      };
+      const blob=new Blob([JSON.stringify(savedState,null,2)],{type:'application/json'});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url; a.download='goalden-plan-'+new Date().toISOString().slice(0,10)+'.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('importBtn')&&document.getElementById('importBtn').addEventListener('click',()=>{
+      document.getElementById('importFile').click();
+    });
+    document.getElementById('importFile')&&document.getElementById('importFile').addEventListener('change',(e)=>{
+      const file=e.target.files[0];
+      if(!file) return;
+      const reader=new FileReader();
+      reader.onload=(ev)=>{
+        try{
+          const data=JSON.parse(ev.target.result);
+          if(data._goalden!=='plan-export'){ alert('This does not look like a Goalden plan file.'); return; }
+          Object.assign(G,{
+            country:data.country, capA:data.capA, tolA:data.tolA,
+            monthlyExpense:data.monthlyExpense, emergencyStatus:data.emergencyStatus,
+            monthlyCapacity:data.monthlyCapacity, goals:data.goals||[],
+            addingGoal:false, editingIndex:null, draftType:null, draftA:null, draftB:null, draftSav:0,
+          });
+          // renderPlan() reads G.bucket directly rather than recomputing it —
+          // normally that happens when the profile screen renders, but
+          // importing skips straight to the plan screen, so recompute here.
+          const scored = scoreBuckets();
+          G.bucket = scored.bucket; G.capScore = scored.capScore; G.tolScore = scored.tolScore;
+          const f=flow();
+          G.si=f.indexOf('plan');
+          render();
+        }catch(err){
+          alert('Could not read that file. Make sure it is a plan file saved from Goalden.');
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+}
+
+backBtn.addEventListener('click',()=>{if(G.si>0)go(-1);});
+render();
+</script>
+</body>
+</html>

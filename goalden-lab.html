@@ -1,0 +1,2171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Goalden Lab · full assumption control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Figtree:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1C3A2D;--ink2:#22402F;--paper:#F1EEE3;
+  --gold:#C9A455;--red:#A03A22;--dim:#8A9389;--ok:#3D7A4F;--warn:#C9A455;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sans-serif;min-height:100vh}
+h1,h2,h3{font-family:'Newsreader',serif}
+.mono{font-family:'Spline Sans Mono',monospace}
+
+/* --- top nav --- */
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid rgba(241,238,227,.12)}
+.brand{font-family:'Newsreader',serif;font-weight:700;font-size:19px;color:var(--gold);text-decoration:none;display:inline-block}
+.brand span{color:var(--paper);font-weight:400;font-style:italic;font-size:13px;margin-left:6px;opacity:.65}
+/* The nine tools are the whole point of this page, so the tab bar gets its
+   own full-width strip instead of hiding as thin text in the header:
+   pill-shaped tabs with real padding, a labelled heading, and a filled
+   active state that is unmissable. */
+.tabbar{background:linear-gradient(180deg,rgba(201,164,85,.09),rgba(201,164,85,.03));border-bottom:1px solid rgba(201,164,85,.25);padding:12px 24px 14px}
+.tabbar-label{font-family:'Spline Sans Mono',monospace;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:rgba(201,164,85,.75);margin-bottom:9px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tab{font-family:'Spline Sans Mono',monospace;font-size:11.5px;letter-spacing:.02em;color:rgba(241,238,227,.68);background:rgba(241,238,227,.05);border:1px solid rgba(241,238,227,.16);border-radius:2px 12px 12px 12px;padding:9px 16px;cursor:pointer;transition:all .15s}
+.tab:hover{color:var(--paper);border-color:rgba(201,164,85,.5);background:rgba(241,238,227,.08)}
+.tab.active{color:var(--ink);background:var(--gold);border-color:var(--gold);font-weight:600}
+.country-toggle{display:flex;font-family:'Spline Sans Mono',monospace;font-size:11.5px;border:1px solid rgba(241,238,227,.2);border-radius:3px}
+.ctbtn{padding:6px 13px;border:none;background:transparent;color:rgba(241,238,227,.55);cursor:pointer}
+.ctbtn:first-child{border-right:1px solid rgba(241,238,227,.15)}
+.ctbtn.active{background:rgba(201,164,85,.15);color:var(--gold)}
+
+main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
+.grid{display:grid;grid-template-columns:340px 1fr;gap:26px;align-items:start}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
+
+/* --- assumption panel --- */
+.panel{background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.1);border-radius:3px 20px 20px 20px;padding:24px}
+.panel h3{font-size:16px;color:var(--paper);margin-bottom:16px}
+.field{margin-bottom:18px}
+.slider-row{display:flex;align-items:center;gap:10px}
+.slider-row input[type=range]{flex:1}
+.field-num{width:64px !important;flex-shrink:0;background:rgba(241,238,227,.07);border:1px solid rgba(241,238,227,.2);border-radius:4px;padding:5px 6px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:11.5px;text-align:center}
+.field-num::-webkit-outer-spin-button,.field-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.field label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(241,238,227,.6);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.field label b{color:var(--gold);font-weight:600}
+.field input[type=range]{width:100%;accent-color:var(--gold);height:20px}
+.field input[type=number]{width:100%;background:rgba(241,238,227,.06);border:1px solid rgba(241,238,227,.16);border-radius:4px;padding:9px 11px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:13px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.toggle-row{display:flex;gap:1px;margin-bottom:14px;border:1px solid rgba(241,238,227,.18);border-radius:3px;overflow:hidden}
+.tglbtn{flex:1;font-family:'Spline Sans Mono',monospace;font-size:10.5px;padding:9px 6px;border:none;border-right:1px solid rgba(241,238,227,.14);background:transparent;color:rgba(241,238,227,.55);cursor:pointer;text-align:center}
+.tglbtn:last-child{border-right:none}
+.tglbtn.active{background:rgba(201,164,85,.16);color:var(--gold);font-weight:600}
+.divider{border:none;border-top:1px dashed rgba(241,238,227,.15);margin:18px 0}
+.section-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:12px}
+
+/* --- output area --- */
+.output{display:flex;flex-direction:column;gap:18px}
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat{background:rgba(241,238,227,.05);border:1px solid rgba(241,238,227,.1);border-radius:3px 15px 15px 15px;padding:17px 18px}
+.stat-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.stat-value{font-family:'Newsreader',serif;font-size:24px;font-weight:600;color:var(--paper)}
+.stat-sub{font-size:11.5px;color:rgba(241,238,227,.5);margin-top:4px}
+.card{background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.1);border-radius:2px 2px 18px 18px;padding:22px}
+.card h4{font-size:15px;margin-bottom:4px;color:var(--paper)}
+.card .cap{font-size:12px;color:rgba(241,238,227,.5);margin-bottom:14px}
+svg.chart{width:100%;height:auto;display:block}
+
+/* --- table --- */
+.dtable{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11.5px}
+.dtable th{text-align:right;padding:7px 8px;color:var(--dim);font-weight:500;border-bottom:1px solid rgba(241,238,227,.15);position:sticky;top:0;background:var(--ink)}
+.dtable th:first-child,.dtable td:first-child{text-align:left}
+.dtable td{text-align:right;padding:6px 8px;color:rgba(241,238,227,.75);border-bottom:1px solid rgba(241,238,227,.06)}
+.dtable tr.shock td{background:rgba(160,58,34,.18);color:#F0C4B4}
+.dtable tr.negative td{color:#E8977A}
+.table-scroll{max-height:340px;overflow-y:auto;border-radius:10px}
+
+/* --- episode chips --- */
+.episode-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.inst-header{margin-bottom:20px}
+.inst-source{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);margin-top:10px}
+.inst-cat-block{margin-bottom:26px}
+.inst-cat-head{font-family:'Newsreader',serif;font-size:17px;color:var(--paper);margin-bottom:12px;display:flex;align-items:baseline;gap:8px}
+.inst-cat-count{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim);font-weight:400}
+.lab-inst-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.lab-inst-card{background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.1);border-radius:3px 12px 12px 12px;padding:13px 14px}
+.lab-inst-name{font-family:'Newsreader',serif;font-size:14px;color:var(--paper);line-height:1.3;margin-bottom:4px}
+.lab-inst-rate{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--gold);margin-bottom:6px}
+.lab-inst-note{font-size:11.5px;color:rgba(241,238,227,.55);line-height:1.5}
+.lab-inst-flag{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;margin-bottom:6px}
+.lab-inst-card.flag-avoid{border-color:rgba(160,58,34,.4)}
+.lab-inst-card.flag-avoid .lab-inst-flag{background:rgba(160,58,34,.2);color:#F0C4B4}
+.lab-inst-card.flag-legacy{border-color:rgba(241,238,227,.15);opacity:.75}
+.lab-inst-card.flag-legacy .lab-inst-flag{background:rgba(241,238,227,.08);color:rgba(241,238,227,.6)}
+.lab-inst-card.flag-check .lab-inst-flag{background:rgba(201,164,85,.18);color:var(--gold)}
+
+/* --- efficient frontier chart --- */
+.fx-chart-wrap{position:relative}
+.fx-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:11px;color:rgba(241,238,227,.55)}
+.fx-legend span{display:flex;align-items:center;gap:6px}
+.fx-legend i{display:inline-block;width:16px;height:3px;flex-shrink:0}
+.risk-comp-legend{display:flex;flex-direction:column;gap:6px;margin-top:10px;font-size:11.5px;color:rgba(241,238,227,.6);line-height:1.5}
+.risk-comp-legend span{display:flex;align-items:flex-start;gap:8px}
+.risk-comp-legend i{display:inline-block;width:11px;height:11px;border-radius:2px;flex-shrink:0;margin-top:3px}
+.fx-tooltip{position:absolute;pointer-events:none;background:#12261C;border:1px solid rgba(201,164,85,.4);border-radius:3px 8px 8px 8px;padding:8px 11px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--paper);opacity:0;transition:opacity .1s;white-space:nowrap;z-index:20;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.fx-tooltip.show{opacity:1}
+.fx-tooltip .tt-label{color:var(--gold);font-weight:600;margin-bottom:3px;display:block}
+svg.chart .fx-hover-target{cursor:pointer}
+
+/* --- info icon hover tooltip (for stat labels, term explanations) --- */
+.info-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(241,238,227,.35);color:rgba(241,238,227,.55);font-size:9.5px;font-family:'Spline Sans Mono',monospace;font-style:normal;cursor:help;margin-left:5px;position:relative;flex-shrink:0}
+.info-icon:hover{border-color:var(--gold);color:var(--gold)}
+.info-icon .ii-tip{display:none;position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#12261C;border:1px solid rgba(201,164,85,.4);border-radius:3px 8px 8px 8px;padding:9px 12px;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:400;color:rgba(241,238,227,.85);width:220px;line-height:1.5;text-align:left;z-index:30;box-shadow:0 4px 14px rgba(0,0,0,.35);white-space:normal}
+.info-icon:hover .ii-tip{display:block}
+.stat-label{display:flex;align-items:center}
+
+.term{border-bottom:1px dashed rgba(201,164,85,.6);cursor:help;position:relative}
+.term::after{content:attr(data-def);display:none;position:absolute;bottom:calc(100% + 7px);left:0;background:#12261C;border:1px solid rgba(201,164,85,.4);border-radius:3px 8px 8px 8px;padding:9px 12px;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:400;color:rgba(241,238,227,.85);width:240px;line-height:1.5;white-space:normal;z-index:30;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.term:hover::after{display:block}
+.term:hover{border-bottom-color:var(--gold);color:var(--gold)}
+
+/* --- cluster-grouped portfolio sliders --- */
+.port-cluster{margin-bottom:6px}
+.port-cluster-head{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);padding:10px 0 8px;border-top:1px dashed rgba(241,238,227,.14);margin-top:10px}
+.port-cluster:first-child .port-cluster-head{border-top:none;margin-top:0}
+.pf-total-banner{display:flex;align-items:baseline;justify-content:space-between;background:rgba(201,164,85,.1);border:1px solid rgba(201,164,85,.35);border-radius:8px;padding:10px 14px;margin-bottom:16px}
+.pf-total-banner .ttl-label{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(241,238,227,.6);letter-spacing:.04em}
+.pf-total-banner .ttl-value{font-family:'Spline Sans Mono',monospace;font-size:16px;font-weight:600;color:var(--gold)}
+.port-asset-meta{display:block;font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(241,238,227,.42);font-weight:400;margin-top:2px;letter-spacing:.01em}
+.port-pct-row{display:flex;align-items:baseline;gap:6px;margin:6px 0 5px}
+.port-pct-badge{font-family:'Spline Sans Mono',monospace;font-size:15px;font-weight:600;color:var(--paper)}
+.port-pct-of{font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(241,238,227,.4)}
+.epchip{font-family:'Spline Sans Mono',monospace;font-size:11px;padding:8px 8px;border-radius:2px;border:1px solid rgba(241,238,227,.16);background:rgba(241,238,227,.04);color:rgba(241,238,227,.7);cursor:pointer;text-align:center;line-height:1.5}
+.epchip.active{background:rgba(160,58,34,.25);border-color:var(--red);color:#F0C4B4}
+.epchip b{display:block;color:var(--paper);font-size:12px}
+
+/* --- health score --- */
+.score-dial{display:flex;align-items:center;gap:22px}
+.dial-num{font-family:'Newsreader',serif;font-size:52px;font-weight:700;color:var(--gold)}
+.dial-bars{flex:1;display:flex;flex-direction:column;gap:8px}
+.dbar-row{display:flex;align-items:center;gap:10px;font-size:11.5px}
+.dbar-label{width:110px;font-family:'Spline Sans Mono',monospace;color:rgba(241,238,227,.6);flex-shrink:0}
+.dbar-track{flex:1;height:7px;background:rgba(241,238,227,.1);border-radius:4px;overflow:hidden}
+.dbar-fill{height:100%;background:var(--gold);border-radius:4px}
+.dbar-val{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);width:34px;text-align:right}
+
+.gr-note{font-size:12.5px;color:rgba(241,238,227,.6);line-height:1.6;padding:12px 14px;background:rgba(241,238,227,.04);border-left:2px solid var(--gold);border-radius:0 8px 8px 0;margin-top:6px}
+
+.fx-flow{display:flex;align-items:center;justify-content:center;gap:14px;margin:6px 0 18px;font-family:'Newsreader',serif;font-size:15px}
+.fx-arrow{color:var(--gold);font-size:20px}
+@media print{
+  body{background:#fff;color:#1C3A2D}
+  header,.tabbar,.panel,.section-label,#tabs,.country-toggle,#reseedBtn,.gp-actions,button{display:none !important}
+  main{padding:0;max-width:100%}
+  .grid{grid-template-columns:1fr;display:block}
+  .card,.stat{background:#fff;border:1px solid #ccc;break-inside:avoid;box-shadow:none}
+  .stat-value,.hero-figure,h3,h4{color:#1C3A2D !important}
+  .gr-note,.cap,.stat-label{color:#555 !important}
+  svg.chart line,svg.chart path{filter:none}
+  .print-header{display:block !important;margin-bottom:24px;border-bottom:2px solid #1C3A2D;padding-bottom:12px}
+  .print-header .pt{font-family:'Newsreader',serif;font-size:22px;font-weight:700}
+  .print-header .ps{font-family:'Spline Sans Mono',monospace;font-size:11px;color:#666;margin-top:4px}
+}
+.print-header{display:none}
+.print-btn{position:fixed;bottom:20px;right:20px;background:var(--gold);color:var(--ink);border:none;border-radius:24px;padding:12px 18px;font-family:'Figtree',sans-serif;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:50;display:flex;align-items:center;gap:8px}
+.print-btn svg{width:15px;height:15px}
+@media print{.print-btn{display:none !important}}
+
+.snap-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+.snap-card{background:rgba(201,164,85,.08);border:1px solid rgba(201,164,85,.3);border-radius:3px 14px 14px 14px;padding:14px}
+.snap-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.snap-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.06em}
+.snap-figure{font-family:'Newsreader',serif;font-size:22px;font-weight:600;color:var(--paper)}
+.snap-sub{font-size:11px;color:rgba(241,238,227,.55);margin-top:4px}
+.snap-add{background:rgba(241,238,227,.04);border:1.5px dashed rgba(241,238,227,.2);border-radius:3px 14px 14px 14px;color:rgba(241,238,227,.55);font-family:'Figtree',sans-serif;font-size:13px;cursor:pointer;padding:14px}
+.gp-iconbtn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(241,238,227,.16);background:rgba(241,238,227,.04);color:rgba(241,238,227,.5);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:5px;flex-shrink:0}
+.gp-iconbtn:hover{color:var(--paper)}
+.gp-iconbtn svg{width:100%;height:100%}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html" class="brand">Goalden<span>the lab</span></a>
+  <div class="country-toggle" id="countryToggle"></div>
+</header>
+<nav class="tabbar">
+  <div class="tabbar-label">Nine tools, pick one</div>
+  <div class="tabs" id="tabs"></div>
+</nav>
+<div class="print-header" id="printHeader"></div>
+<main id="main"></main>
+<button class="print-btn" id="printBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span>Print / Save as PDF</span></button>
+
+<script>
+'use strict';
+/* =====================================================================
+   ENGINE (verbatim port)
+   ===================================================================== */
+function inflateExpense(amt,phases,f){if(f===undefined)f=1;for(const p of phases)amt*=Math.pow(1+p.rate,p.years);return amt*f}
+function realRate(r,i){return(1+r)/(1+i)-1}
+function corpusRequired(rate,years,w,due){if(rate===0)return w*years;let pv=w*(1-Math.pow(1+rate,-years))/rate;return due?pv*(1+rate):pv}
+function solveSIP(rate,periods,fv,due){if(rate===0)return fv/periods;let f=(Math.pow(1+rate,periods)-1)/rate;return fv/(due?f*(1+rate):f)}
+function solveStepUpSIP(rate,growth,periods,fv,due){
+  if(Math.abs(rate-growth)<1e-9){const f=periods*Math.pow(1+rate,periods-1)*(due?(1+rate):1);return fv/f;}
+  let f=(Math.pow(1+rate,periods)-Math.pow(1+growth,periods))/(rate-growth);
+  return fv/(due?f*(1+rate):f);
+}
+function effectiveMonthlyRate(r){return Math.pow(1+r,1/12)-1}
+function swpWithdrawal(rate,years,corpus,due){
+  if(rate===0)return corpus/years;
+  let f=(1-Math.pow(1+rate,-years))/rate;
+  if(due)f*=(1+rate);
+  return corpus/f;
+}
+function drawdownWithShock(opts, shockYear, shockReturn){
+  const rows=[];let bal=opts.openingCorpus,w=opts.firstWithdrawal;let ranOutYear=null;
+  for(let yr=1;yr<=opts.years;yr++){
+    const rate=(yr===shockYear)?shockReturn:opts.nominalRate;
+    let close;
+    if(opts.due){const baw=bal-w;close=baw+baw*rate;}
+    else{close=(bal+bal*rate)-w;}
+    if(close<0&&ranOutYear===null)ranOutYear=yr;
+    rows.push({year:yr,openBal:bal,withdrawal:w,rate,closeBal:close});
+    bal=close;
+    w*=(1+opts.inflation);
+  }
+  return{rows,ranOutYear,finalBalance:bal};
+}
+function accumulationSchedule(o){
+  const rows=[];let bal=o.opening||0,contrib=o.sip,total=0;
+  for(let i=1;i<=o.periods;i++){
+    let close;
+    if(o.due){const b2=bal+contrib;close=b2*(1+o.rate);}
+    else{close=bal*(1+o.rate)+contrib;}
+    total+=contrib;
+    rows.push({period:i,closeBal:close,contributed:total});
+    bal=close;
+    contrib*=(1+(o.stepUp||0));
+  }
+  return{rows,finalBalance:bal};
+}
+
+/* =====================================================================
+   MONTE CARLO — seeded (mulberry32 PRNG + Box-Muller), n=1000 default.
+   Verified: volatility=0 collapses exactly to the deterministic engine
+   answer at every percentile; same seed reproduces identical results;
+   spread widens monotonically with volatility.
+   ===================================================================== */
+function mulberry32(seed){
+  return function(){
+    seed|=0; seed=(seed+0x6D2B79F5)|0;
+    let t=Math.imul(seed^(seed>>>15),1|seed);
+    t=(t+Math.imul(t^(t>>>7),61|t))^t;
+    return((t^(t>>>14))>>>0)/4294967296;
+  };
+}
+function gaussian(rng){const u1=rng()||1e-9,u2=rng();return Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);}
+
+function monteCarloAccumulation({sip,meanReturn,volatility,years,due,seed,n}){
+  const rng=mulberry32(seed);
+  const finals=[],paths=[];
+  for(let sim=0;sim<n;sim++){
+    let bal=0; const path=[0];
+    for(let y=1;y<=years;y++){
+      const r=volatility===0?meanReturn:meanReturn+volatility*gaussian(rng);
+      bal=due?(bal+sip)*(1+r):bal*(1+r)+sip;
+      path.push(bal);
+    }
+    finals.push(bal); paths.push(path);
+  }
+  finals.sort((a,b)=>a-b);
+  const pct=p=>finals[Math.max(0,Math.min(n-1,Math.floor(p*(n-1))))];
+  // percentile band PER YEAR (for the fan chart) — recompute per-year percentiles across all paths
+  const yearBands=[];
+  for(let y=0;y<=years;y++){
+    const vals=paths.map(p=>p[y]).sort((a,b)=>a-b);
+    const pp=p=>vals[Math.max(0,Math.min(n-1,Math.floor(p*(n-1))))];
+    yearBands.push({year:y,p10:pp(0.10),p25:pp(0.25),p50:pp(0.50),p75:pp(0.75),p90:pp(0.90)});
+  }
+  return{p10:pct(0.10),p25:pct(0.25),p50:pct(0.50),p75:pct(0.75),p90:pct(0.90),mean:finals.reduce((a,b)=>a+b,0)/n,yearBands};
+}
+
+// Same PRNG, same percentile-banding approach as monteCarloAccumulation,
+// but run over the SPENDING-down phase instead: each simulated year draws
+// a random return, the withdrawal (already fixed by the deterministic
+// plan) is taken out, and once a path hits zero it stays there. This is
+// what a single average return can never show: two paths with the exact
+// same mean and volatility can survive or fail entirely depending on
+// WHEN the bad years land — sequence-of-returns risk.
+function monteCarloDrawdown({openingCorpus,firstWithdrawal,inflation,meanReturn,volatility,years,due,seed,n}){
+  const rng=mulberry32(seed);
+  const finals=[],paths=[],ranOutYears=[];
+  for(let sim=0;sim<n;sim++){
+    let bal=openingCorpus,w=firstWithdrawal,ranOut=null;
+    const path=[bal];
+    for(let y=1;y<=years;y++){
+      const r=volatility===0?meanReturn:meanReturn+volatility*gaussian(rng);
+      let close;
+      if(due){const baw=bal-w;close=baw+baw*r;}else{close=(bal+bal*r)-w;}
+      // A plan built to reach exactly zero can land a hair below it from
+      // pure floating-point rounding (seen: -2.5e-7 on a multi-crore
+      // balance). Only count it as ruin past a real, rupee-scale deficit.
+      if(close<-1&&ranOut===null)ranOut=y;
+      bal=Math.max(0,close);
+      path.push(bal);
+      w*=(1+inflation);
+    }
+    finals.push(bal);paths.push(path);ranOutYears.push(ranOut);
+  }
+  finals.sort((a,b)=>a-b);
+  const pct=p=>finals[Math.max(0,Math.min(n-1,Math.floor(p*(n-1))))];
+  const yearBands=[];
+  for(let y=0;y<=years;y++){
+    const vals=paths.map(p=>p[y]).sort((a,b)=>a-b);
+    const pp=p=>vals[Math.max(0,Math.min(n-1,Math.floor(p*(n-1))))];
+    yearBands.push({year:y,p10:pp(0.10),p25:pp(0.25),p50:pp(0.50),p75:pp(0.75),p90:pp(0.90)});
+  }
+  const survived=ranOutYears.filter(x=>x===null).length;
+  const failedYears=ranOutYears.filter(x=>x!==null).sort((a,b)=>a-b);
+  const medianRuinYear=failedYears.length?failedYears[Math.floor(failedYears.length/2)]:null;
+  return{p10:pct(0.10),p25:pct(0.25),p50:pct(0.50),p75:pct(0.75),p90:pct(0.90),yearBands,
+         survivalPct:survived/n,failCount:failedYears.length,medianRuinYear,n};
+}
+
+const REGIME_PRESETS = {
+  bull:   {label:'Bull run',      note:'Strong sustained growth, low volatility',   meanAdj:1.15, volAdj:0.8},
+  normal: {label:'Historical average', note:'Long-run blended average',             meanAdj:1.0,  volAdj:1.0},
+  bear:   {label:'Extended slump', note:'Below-average returns, higher volatility', meanAdj:0.6,  volAdj:1.4},
+};
+
+/* =====================================================================
+   PORTFOLIO DIVERSIFICATION / EFFICIENT FRONTIER
+   Asset-CLASS level (not individual stocks) — this app has no live market
+   data feed, so building this on fabricated individual-stock betas and
+   correlations would be a bigger honesty problem than the loss of
+   granularity. These are illustrative, clearly-labelled planning
+   assumptions: returns/vols anchor to the same figures used everywhere
+   else in Goalden; the correlation matrix encodes well-established
+   qualitative relationships (domestic equity tiers move together, gold
+   is a low/negative-correlation hedge, debt is largely uncorrelated with
+   equity) rather than a fitted statistical estimate. Verified against a
+   closed-form two-asset case before use — see build notes.
+   ===================================================================== */
+// Category-level building blocks named after the real SEBI fund categories
+// and indices an Indian investor actually shops from (Nifty 50 index funds,
+// gilt funds, REITs, arbitrage funds, and so on). The return/volatility
+// figures are long-run CATEGORY-level planning assumptions consistent with
+// the rest of Goalden — deliberately NOT any specific AMC scheme's live
+// performance, because this app has no market data feed and pretending
+// otherwise would be a bigger honesty problem than the loss of precision.
+const PORTFOLIO_ASSETS_IN = [
+  // Growth equity
+  {id:'nifty50',  name:'Nifty 50 Index Fund',          cluster:'growth', ret:0.12,  vol:0.18, beta:1.00},
+  {id:'next50',   name:'Nifty Next 50 Index Fund',     cluster:'growth', ret:0.135, vol:0.22, beta:1.10},
+  {id:'flexicap', name:'Flexi Cap Fund',               cluster:'growth', ret:0.125, vol:0.19, beta:1.00},
+  {id:'multicap', name:'Multi Cap Fund',               cluster:'growth', ret:0.13,  vol:0.20, beta:1.05},
+  {id:'elss',     name:'ELSS Tax Saver Fund',          cluster:'growth', ret:0.125, vol:0.19, beta:1.00},
+  {id:'mid',      name:'Mid Cap Fund (Midcap 150)',    cluster:'growth', ret:0.14,  vol:0.22, beta:1.15},
+  {id:'small',    name:'Small Cap Fund (Smallcap 250)',cluster:'growth', ret:0.155, vol:0.28, beta:1.30},
+  // Income-oriented equity
+  {id:'value',    name:'Value / Contra Fund',          cluster:'income', ret:0.125, vol:0.19, beta:0.95},
+  {id:'dividend', name:'Dividend Yield Fund',          cluster:'income', ret:0.11,  vol:0.14, beta:0.75},
+  // Debt
+  {id:'liquid',   name:'Liquid Fund',                  cluster:'debt',   ret:0.065, vol:0.015,beta:0.05},
+  {id:'bankpsu',  name:'Banking &amp; PSU Debt Fund',  cluster:'debt',   ret:0.072, vol:0.03, beta:0.06},
+  {id:'corpbond', name:'Corporate Bond Fund',          cluster:'debt',   ret:0.075, vol:0.035,beta:0.08},
+  {id:'gilt',     name:'Gilt Fund (10yr G-Sec)',       cluster:'debt',   ret:0.073, vol:0.06, beta:0.05},
+  {id:'credit',   name:'Credit Risk Fund',             cluster:'debt',   ret:0.085, vol:0.065,beta:0.15},
+  {id:'arb',      name:'Arbitrage Fund',               cluster:'debt',   ret:0.068, vol:0.02, beta:0.05},
+  // Hybrid
+  {id:'agghyb',   name:'Aggressive Hybrid Fund',       cluster:'hybrid', ret:0.11,  vol:0.14, beta:0.65},
+  {id:'bafund',   name:'Balanced Advantage Fund',      cluster:'hybrid', ret:0.10,  vol:0.11, beta:0.55},
+  {id:'eqsav',    name:'Equity Savings Fund',          cluster:'hybrid', ret:0.09,  vol:0.08, beta:0.40},
+  {id:'multiasset',name:'Multi Asset Allocation Fund', cluster:'hybrid', ret:0.105, vol:0.10, beta:0.50},
+  // Precious metals
+  {id:'gold',     name:'Gold ETF',                     cluster:'gold',   ret:0.09,  vol:0.14, beta:-0.05},
+  {id:'silver',   name:'Silver ETF',                   cluster:'gold',   ret:0.095, vol:0.22, beta:0.10},
+  // International (INR, unhedged)
+  {id:'sp500',    name:'US S&amp;P 500 Index (INR)',   cluster:'intl',   ret:0.10,  vol:0.17, beta:0.65},
+  {id:'nasdaq',   name:'Nasdaq 100 Index (INR)',       cluster:'intl',   ret:0.12,  vol:0.22, beta:0.80},
+  // Real assets
+  {id:'reit',     name:'REITs &amp; InvITs',           cluster:'alt',    ret:0.095, vol:0.16, beta:0.55},
+];
+const PORTFOLIO_ASSETS_US = [
+  {id:'total',    name:'Total-Market Index',        cluster:'growth', ret:0.10,  vol:0.16, beta:1.00},
+  {id:'sp500',    name:'S&amp;P 500 Index',         cluster:'growth', ret:0.10,  vol:0.16, beta:1.00},
+  {id:'lgrowth',  name:'Large Cap Growth',          cluster:'growth', ret:0.11,  vol:0.19, beta:1.10},
+  {id:'small',    name:'Small Cap Growth',          cluster:'growth', ret:0.11,  vol:0.22, beta:1.25},
+  {id:'scv',      name:'Small Cap Value',           cluster:'income', ret:0.105, vol:0.20, beta:1.10},
+  {id:'dividend', name:'Dividend / Value Equity',   cluster:'income', ret:0.09,  vol:0.13, beta:0.80},
+  {id:'shortbond',name:'Short-Term Treasuries',     cluster:'debt',   ret:0.04,  vol:0.02, beta:0.05},
+  {id:'aggbond',  name:'Aggregate Bond Index',      cluster:'debt',   ret:0.045, vol:0.06, beta:0.05},
+  {id:'tips',     name:'TIPS (Inflation-Protected)',cluster:'debt',   ret:0.04,  vol:0.05, beta:0.00},
+  {id:'hy',       name:'High-Yield Corporate Bonds',cluster:'debt',   ret:0.065, vol:0.09, beta:0.40},
+  {id:'ltt',      name:'Long-Term Treasuries',      cluster:'debt',   ret:0.045, vol:0.12, beta:-0.10},
+  {id:'balanced', name:'Balanced / Target-Date',    cluster:'hybrid', ret:0.07,  vol:0.09, beta:0.55},
+  {id:'gold',     name:'Gold ETF',                  cluster:'gold',   ret:0.08,  vol:0.14, beta:-0.05},
+  {id:'intl',     name:'International Developed',   cluster:'intl',   ret:0.08,  vol:0.17, beta:0.60},
+  {id:'em',       name:'Emerging Markets',          cluster:'intl',   ret:0.09,  vol:0.21, beta:0.70},
+  {id:'reit',     name:'US REITs',                  cluster:'alt',    ret:0.085, vol:0.17, beta:0.60},
+];
+
+// Cluster-level correlations — assets in the same style cluster move together
+// closely; growth equity and income equity are both equity so still highly
+// correlated with each other; debt is largely independent of equity; gold is
+// a near-zero/slightly-negative hedge; international carries partial overlap
+// with domestic equity. Verified symmetric and positive-definite before use.
+const CLUSTER_CORR = {
+  'growth-growth':0.88,'growth-income':0.75,'growth-debt':0.10,'growth-hybrid':0.70,'growth-gold':-0.05,'growth-intl':0.50,'growth-alt':0.55,
+  'income-income':0.85,'income-debt':0.15,'income-hybrid':0.65,'income-gold':-0.03,'income-intl':0.40,'income-alt':0.50,
+  'debt-debt':0.80,'debt-hybrid':0.35,'debt-gold':0.08,'debt-intl':0.12,'debt-alt':0.25,
+  'hybrid-hybrid':0.85,'hybrid-gold':0.00,'hybrid-intl':0.45,'hybrid-alt':0.45,
+  'gold-gold':0.85,'gold-intl':0.10,'gold-alt':0.05,
+  'intl-intl':0.90,'intl-alt':0.35,
+  'alt-alt':0.85,
+};
+function clusterCorr(c1,c2){
+  if(c1===c2) return CLUSTER_CORR[c1+'-'+c1] !== undefined ? CLUSTER_CORR[c1+'-'+c1] : 1.00;
+  const k1=c1+'-'+c2, k2=c2+'-'+c1;
+  return CLUSTER_CORR[k1]!==undefined ? CLUSTER_CORR[k1] : CLUSTER_CORR[k2];
+}
+function buildCorrMatrix(assets){
+  const n=assets.length;
+  const m=Array.from({length:n},()=>new Array(n).fill(0));
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++) m[i][j] = i===j ? 1.00 : clusterCorr(assets[i].cluster, assets[j].cluster);
+  return m;
+}
+const PORTFOLIO_CORR_IN = buildCorrMatrix(PORTFOLIO_ASSETS_IN);
+const PORTFOLIO_CORR_US = buildCorrMatrix(PORTFOLIO_ASSETS_US);
+
+function portfolioReturn(weights, returns){ return weights.reduce((s,w,i)=>s+w*returns[i],0); }
+function portfolioVariance(weights, vols, corr){
+  let v=0;
+  for(let i=0;i<weights.length;i++) for(let j=0;j<weights.length;j++) v+=weights[i]*weights[j]*vols[i]*vols[j]*corr[i][j];
+  return v;
+}
+function portfolioBeta(weights, betas){ return weights.reduce((s,w,i)=>s+w*betas[i],0); }
+
+// Rigorous systematic/unsystematic risk split via the single-index model,
+// computed directly from the covariance matrix rather than the
+// hand-assigned per-asset beta above — guarantees beta=1.00 exactly for
+// 100% market and unsystematic risk >= 0 always, since both are
+// structural properties of covariance projection, not approximations.
+// marketIdx is the asset used as the market proxy (index 0 in each list:
+// Large Cap Equity for India, Total-Market Equity for the US).
+function decomposeRisk(weights, vols, corr, marketIdx){
+  const marketVol = vols[marketIdx];
+  const totalVar = portfolioVariance(weights, vols, corr);
+  let covWithMarket = 0;
+  for(let i=0;i<weights.length;i++) covWithMarket += weights[i]*vols[i]*marketVol*corr[i][marketIdx];
+  const beta = covWithMarket / (marketVol*marketVol);
+  const systematicVar = beta*beta*marketVol*marketVol;
+  const unsystematicVar = Math.max(0, totalVar - systematicVar);
+  return {
+    totalVol: Math.sqrt(totalVar), beta,
+    systematicVol: Math.sqrt(systematicVar),
+    unsystematicVol: Math.sqrt(unsystematicVar),
+    unsystematicPct: totalVar>0 ? unsystematicVar/totalVar : 0,
+    systematicPct: totalVar>0 ? systematicVar/totalVar : 0,
+  };
+}
+function normalizeWeights(raw){
+  const sum=raw.reduce((a,b)=>a+b,0);
+  return sum>0 ? raw.map(w=>w/sum) : raw.map(()=>1/raw.length);
+}
+// Rounding 15 independent fractions to whole percents for display can miss
+// or overshoot 100 by a point or two (classic apportionment problem — the
+// exact thing a person adding up the numbers by hand would notice and
+// distrust). Largest-remainder method: floor everything, then hand the
+// leftover points to whichever assets had the biggest rounded-off remainder,
+// so the displayed integers always sum to exactly 100.
+function roundPercentsTo100(weights){
+  const raw = weights.map(w=>w*100);
+  const floors = raw.map(Math.floor);
+  let remainder = 100 - floors.reduce((a,b)=>a+b,0);
+  const order = raw.map((v,i)=>({i, frac: v-Math.floor(v)})).sort((a,b)=>b.frac-a.frac);
+  const result = floors.slice();
+  for(let k=0; k<remainder && k<order.length; k++) result[order[k].i] += 1;
+  return result;
+}
+
+function randomWeights(n, rng){
+  const cuts=[0,1];
+  for(let i=0;i<n-1;i++) cuts.push(rng());
+  cuts.sort((a,b)=>a-b);
+  const w=[];
+  for(let i=0;i<n;i++) w.push(cuts[i+1]-cuts[i]);
+  return w;
+}
+
+function generateFrontier(returns, vols, corr, n, seed){
+  const rng=mulberry32(seed);
+  const cloud=[];
+  for(let i=0;i<n;i++){
+    const w=randomWeights(returns.length, rng);
+    cloud.push({ w, ret:portfolioReturn(w,returns), vol:Math.sqrt(portfolioVariance(w,vols,corr)) });
+  }
+  const minV=Math.min(...cloud.map(p=>p.vol)), maxV=Math.max(...cloud.map(p=>p.vol));
+  const bins=40, binW=(maxV-minV)/bins;
+  const best=new Array(bins).fill(null);
+  cloud.forEach(p=>{
+    let b=Math.min(bins-1,Math.floor((p.vol-minV)/(binW||1)));
+    if(!best[b]||p.ret>best[b].ret) best[b]=p;
+  });
+  return { cloud, frontier:best.filter(Boolean).sort((a,b)=>a.vol-b.vol) };
+}
+
+/* =====================================================================
+   JOINT CHILDREN EDUCATION CORPUS SOLVER (B-03)
+   Verified against three cases: gap-year saving (₹30,181/yr kept vs
+   separate corpora), mid-timeline binding constraint (never goes
+   negative even when the tightest point is mid-plan, not the end),
+   and exact reduction to the standard single-goal engine when rates
+   are held constant.
+   ===================================================================== */
+function solveJointEducationCorpus({children, eduInflation, preRate, parkRate, sipStopYear, horizon}){
+  function simulate(sip){
+    let bal=0, minBal=Infinity, minYear=0;
+    const rows=[];
+    for(let t=1;t<=horizon;t++){
+      let fees=0;
+      children.forEach(ch=>{
+        const s=ch.yearsToStart+1, e=ch.yearsToStart+ch.duration;
+        if(t>=s && t<=e) fees += ch.annualFeeToday*Math.pow(1+eduInflation, t-1);
+      });
+      const contrib = t<=sipStopYear ? sip : 0;
+      const anyNear = children.some(ch => t>=ch.yearsToStart);
+      const rate = anyNear ? parkRate : preRate;
+      const after = bal + contrib - fees;
+      if(after<minBal){minBal=after; minYear=t;}
+      bal = after*(1+rate);
+      rows.push({year:t, contrib:Math.round(contrib), fees:Math.round(fees), rate, close:Math.round(bal)});
+    }
+    return{finalBal:bal, minBal, minYear, rows};
+  }
+  let lo=0, hi=50000000;
+  for(let i=0;i<60;i++){
+    const mid=(lo+hi)/2;
+    simulate(mid).minBal >= 0 ? hi=mid : lo=mid;
+  }
+  return{sip:hi, ...simulate(hi)};
+}
+
+function separateCorporaTotal({children, eduInflation, preRate, parkRate}){
+  let total=0;
+  children.forEach(ch=>{
+    const r = solveJointEducationCorpus({
+      children:[ch], eduInflation, preRate, parkRate,
+      sipStopYear: ch.yearsToStart, horizon: ch.yearsToStart+ch.duration,
+    });
+    total += r.sip;
+  });
+  return total;
+}
+
+
+/* =====================================================================
+   FX MODULE (verbatim port of fx.js)
+   ===================================================================== */
+function fxInvestingAbroad(principal, foreignReturn, homeDeprec, years){
+  return principal * Math.pow((1+foreignReturn)*(1+homeDeprec), years);
+}
+function fxReceivingFromAbroad(principal, foreignReturn, foreignDeprec, years){
+  return principal * Math.pow((1+foreignReturn)/(1+foreignDeprec), years);
+}
+function fxCompare({principal, direction, homeReturn, foreignReturn, depreciationRate, years}){
+  const domesticFV = principal * Math.pow(1+homeReturn, years);
+  const crossBorderFV = direction==='investingAbroad'
+    ? fxInvestingAbroad(principal, foreignReturn, depreciationRate, years)
+    : fxReceivingFromAbroad(principal, foreignReturn, depreciationRate, years);
+  const marketOnlyFV = principal * Math.pow(1+foreignReturn, years);
+  const currencyEffect = crossBorderFV - marketOnlyFV;
+  const effectiveAnnualReturn = Math.pow(crossBorderFV/principal, 1/years) - 1;
+  return {domesticFV, crossBorderFV, marketOnlyFV, currencyEffect, effectiveAnnualReturn, foreignBeatsHome: crossBorderFV>domesticFV};
+}
+
+/* =====================================================================
+   CONFIG
+   ===================================================================== */
+const C = {
+  IN:{code:'IN',sym:'₹',name:'India',
+    d:{inflation:.06,debt:.07,hybrid:.10,equity:.12,postRet:.09,lifeExp:78},
+    fmt(a,dp){if(dp===undefined)dp=0;const s=a<0?'-':'';a=Math.abs(a);const[i,d]=a.toFixed(dp).split('.');const l3=i.slice(-3),r=i.slice(0,-3);return s+'₹'+(r?r.replace(/\B(?=(\d{2})+(?!\d))/g,',')+',':'')+l3+(dp>0?'.'+d:'')},
+    compact(a){const x=Math.abs(a);if(x>=1e7)return(a<0?'-':'')+'₹'+(x/1e7).toFixed(2)+' Cr';if(x>=1e5)return(a<0?'-':'')+'₹'+(x/1e5).toFixed(2)+' L';return this.fmt(a)},
+    episodes:[
+      {id:'2008',label:'2008 Financial Crisis',rate:-0.52,note:'Sensex fell 52.7% over CY2008 (₹20,393→₹9,647)',source:'Verified Jul 2026. Converges across multiple sources: -52.7% full calendar year, -52.96% peak(Jan 8)-to-trough(Oct 17)'},
+      {id:'2013',label:'2013 Taper Tantrum',rate:-0.12,note:'Sensex fell ~12% in 20 sessions (Jul 2013); rupee fell ~20% same window',source:'Verified Jul 2026. Primarily a currency/bond event; equity correction was milder than 2008/2020, and debt+currency stress hit hybrid portfolios harder than the equity number alone suggests'},
+      {id:'2020',label:'2020 COVID Crash',rate:-0.38,note:'Peak (Jan 2020) to trough (23 Mar 2020) ~38%, recovered within a year',source:'Verified Jul 2026. Q1 2020 Sensex quarterly fall was 28.6%; peak-to-trough closer to 38%'},
+    ],
+    labInstruments:{
+      sourceDoc:'Complete Instrument Reference — All Investment Vehicles (Wealth Management Masterclass, verified June 2026)',
+      crossCheckedAsOf:'Jul 2026',
+      granular:true,
+      equity:[
+        {id:'largecap',name:'Large Cap Fund',band:{min:0.11,max:0.13},note:'Min 80% in top 100 companies by market cap: core, stable allocation'},
+        {id:'largemidcap',name:'Large & Mid Cap Fund',band:{min:0.12,max:0.14},note:'Min 35% large + min 35% mid cap: blended growth'},
+        {id:'midcap',name:'Mid Cap Fund',band:{min:0.13,max:0.15},note:'7+ year horizon only. Historically higher alpha than large cap, higher drawdowns too'},
+        {id:'smallcap',name:'Small Cap Fund',band:{min:0.14,max:0.17},note:'10+ year horizon only. Drawdowns of 60%+ have happened; not for anyone who might need the money early'},
+        {id:'multicap',name:'Multi Cap Fund',band:{min:0.12,max:0.14},note:'SEBI-mandated min 25% each in large/mid/small: diversified by rule, not manager choice'},
+        {id:'flexicap',name:'Flexi Cap Fund',band:{min:0.11,max:0.14},note:"No market-cap restriction: a bet on the fund manager's judgment"},
+        {id:'focused',name:'Focused Fund',band:{min:0.12,max:0.16},note:'Max 30 stocks: concentrated, higher-conviction, higher-variance'},
+        {id:'valuecontra',name:'Value / Contra Fund',band:{min:0.11,max:0.14},note:'Buys undervalued or unloved companies. Needs patience, mean-reversion can take years'},
+        {id:'dividendyield',name:'Dividend Yield Fund',band:{min:0.10,max:0.12},note:'Income-oriented equity: steadier, lower-growth than growth-style equity funds'},
+      ],
+      debt:[
+        {id:'overnight',name:'Overnight Fund',band:{min:0.055,max:0.06},note:'<1 day maturity: near-zero rate and credit risk, for 1-7 day parking'},
+        {id:'liquid',name:'Liquid Fund',band:{min:0.062,max:0.068},note:'Up to 91-day maturity: the standard emergency-fund parking category'},
+        {id:'ultrashort',name:'Ultra Short Duration Fund',band:{min:0.065,max:0.07},note:'3-6 month Macaulay duration'},
+        {id:'lowduration',name:'Low Duration Fund',band:{min:0.068,max:0.073},note:'6-12 month Macaulay duration'},
+        {id:'moneymarket',name:'Money Market Fund',band:{min:0.068,max:0.073},note:'CP/CD/T-Bill up to 1 year: good yield with near-liquid access'},
+        {id:'shortduration',name:'Short Duration Fund',band:{min:0.07,max:0.075},note:'1-3 year Macaulay duration: matches most 1-3yr goals'},
+        {id:'mediumduration',name:'Medium Duration Fund',band:{min:0.072,max:0.077},note:'3-4 year Macaulay duration'},
+        {id:'medlongduration',name:'Medium to Long Duration Fund',band:{min:0.073,max:0.078},note:'4-7 year duration: high rate risk, tactical only'},
+        {id:'longduration',name:'Long Duration Fund',band:{min:0.074,max:0.08},note:'>7 year duration: very high rate risk, tactical-only when expecting rate cuts'},
+        {id:'dynamicbond',name:'Dynamic Bond Fund',band:{min:0.07,max:0.08},note:"Duration set by manager view (1-30 yrs): only if you trust the manager's rate call"},
+        {id:'gilt',name:'Gilt Fund',band:{min:0.07,max:0.075},note:'Min 80% G-Secs: zero credit risk, pure interest-rate exposure. 2022 was painful for this category'},
+        {id:'floater',name:'Floater Fund',band:{min:0.068,max:0.073},note:'Min 65% floating-rate instruments: designed for a rising-rate environment'},
+        {id:'corpbond',name:'Corporate Bond Fund',band:{min:0.072,max:0.078},note:'Min 80% AA+ and above: quality corporate exposure'},
+        {id:'creditrisk',name:'Credit Risk Fund',band:{min:0.085,max:0.11},note:'Min 65% below-AA rated. HIGH credit risk. This is the category that blew up at Franklin Templeton in 2020. Most retail investors should avoid it.',flag:'avoid'},
+        {id:'bankingpsu',name:'Banking & PSU Fund',band:{min:0.07,max:0.076},note:'Min 80% bank/PSU bonds: high quality with reasonable yield, a common retiree allocation'},
+      ],
+      hybrid:[
+        {id:'conservativehybrid',name:'Conservative Hybrid Fund',band:{min:0.075,max:0.09},note:'10-25% equity, 75-90% debt: near-retirees, low equity exposure'},
+        {id:'balancedhybrid',name:'Balanced Hybrid Fund',band:{min:0.095,max:0.11},note:'Strict 40-60% equity/debt bands: less common since balanced-advantage funds arrived'},
+        {id:'aggressivehybrid',name:'Aggressive Hybrid Fund',band:{min:0.10,max:0.12},note:'65-80% equity, 20-35% debt: the most popular hybrid category, 5+ year horizon'},
+        {id:'balancedadvantage',name:'Dynamic Asset Allocation / Balanced Advantage Fund',band:{min:0.09,max:0.11},note:'Equity allocation 0-100% moves with valuation models: a worry-free option for behaviourally unstable investors'},
+        {id:'multiasset',name:'Multi Asset Allocation Fund',band:{min:0.09,max:0.11},note:'Min 10% each across at least 3 asset classes (equity/debt/gold): one-stop diversification'},
+        {id:'arbitrage',name:'Arbitrage Fund',band:{min:0.055,max:0.065},note:'Cash-futures spread: gets equity tax treatment on what is economically a low-risk debt-like return'},
+        {id:'equitysavings',name:'Equity Savings Fund',band:{min:0.075,max:0.09},note:'Min 65% equity but only 20-30% net equity exposure (rest hedged via arbitrage)'},
+      ],
+      retirementLifecycle:[
+        {id:'retirementfundequity',name:'Retirement Fund (equity sub-type)',band:{min:0.11,max:0.13},note:'5-year lock-in or till retirement, whichever is later'},
+        {id:'retirementfunddebt',name:'Retirement Fund (debt sub-type)',band:{min:0.07,max:0.08},note:'Same lock-in, conservative sub-type'},
+        {id:'childrensfund',name:"Children's Fund",band:{min:0.10,max:0.12},note:'5-year lock-in or till the child turns 18, whichever is later'},
+      ],
+      indexAndETF:[
+        {id:'indexequity',name:'Index Fund (Equity)',band:{min:null,max:null},note:'Index return minus tracking error (~0.1-0.2% expense): very low cost core holding'},
+        {id:'indexdebt',name:'Index Fund (Debt: Target Maturity)',band:{min:0.07,max:0.075},note:'Tracks a debt index with a fixed maturity year: no credit risk, pulls to par at maturity'},
+        {id:'etfequity',name:'ETF (Equity)',band:{min:null,max:null},note:'Same as equity index fund but exchange-traded: needs a demat account'},
+        {id:'etfinternational',name:'ETF/FoF (International: Nasdaq 100, S&P 500 etc.)',band:{min:null,max:null},note:'Foreign index return in INR terms: taxed at slab, not equity rates',flag:'check-status'},
+      ],
+      goldAndReal:[
+        {id:'goldetf',name:'Gold ETF',band:{min:0.08,max:0.10},note:'PRIMARY gold route since SGB stopped new issuance: slab-rate tax since Apr 2023'},
+        {id:'goldphysical',name:'Gold: Physical (coins/bars only)',band:{min:0.08,max:0.10},note:'Making charges destroy returns on jewellery: ETF is almost always better'},
+        {id:'sgbexisting',name:'SGB: existing holders only',band:{min:0.025,max:0.025},note:'2.5% annual interest + gold price movement. No new issuance since Feb 2024',flag:'legacy'},
+        {id:'reit',name:'REIT',band:{min:0.065,max:0.09},note:'Min 90% income distribution requirement: office/retail real estate income + price appreciation'},
+      ],
+    }},
+  US:{code:'US',sym:'$',name:'United States',
+    d:{inflation:.025,debt:.045,hybrid:.07,equity:.09,postRet:.06,lifeExp:82},
+    fmt(a,dp){if(dp===undefined)dp=0;const s=a<0?'-':'';a=Math.abs(a);const[i,d]=a.toFixed(dp).split('.');return s+'$'+i.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(dp>0?'.'+d:'')},
+    compact(a){const x=Math.abs(a);if(x>=1e6)return(a<0?'-':'')+'$'+(x/1e6).toFixed(2)+'M';if(x>=1e3)return(a<0?'-':'')+'$'+(x/1e3).toFixed(2)+'K';return this.fmt(a)},
+    episodes:[
+      {id:'2008',label:'2008-09 GFC',rate:-0.37,note:'S&P -37% in 2008 alone'},
+      {id:'2022',label:'2022 Dual Drawdown',rate:-0.18,note:'S&P -18%, bonds fell too: a 60/40 stress case'},
+      {id:'2000',label:'2000-02 Dot-Com',rate:-0.49,note:'S&P ~-49% peak-to-trough'},
+    ],
+    labInstruments:{
+      sourceDoc:'Standard US account and fund categories',
+      crossCheckedAsOf:'Jul 2026',
+      granular:false,
+      cash:[
+        {id:'hysa',name:'High-yield savings account',band:{min:0.035,max:0.045},note:'FDIC-insured, instant access'},
+        {id:'moneymarket',name:'Money-market fund / T-bills',band:{min:0.04,max:0.05},note:'T-bill interest exempt from state tax'},
+        {id:'cd',name:'Certificate of deposit',band:{min:0.04,max:0.05},note:'Fixed term, early-withdrawal penalty'},
+      ],
+      bond:[
+        {id:'shortbond',name:'Short-duration bond fund',band:{min:0.04,max:0.055},note:'Small NAV volatility, slightly higher yield than a CD'},
+        {id:'ibond',name:'I-Bonds / TIPS',band:{min:0.03,max:0.05},note:'Inflation-protected, 1yr minimum, penalty under 5yrs'},
+      ],
+      equity:[
+        {id:'balanced',name:'Balanced / target-date fund',band:{min:0.06,max:0.08},note:'Glide path shifts from equity to bonds as the target date nears'},
+        {id:'indexetf',name:'Total-market index fund/ETF',band:{min:0.07,max:0.10},note:'Long-horizon core holding: the account wrapper matters as much as the fund'},
+        {id:'smallcapetf',name:'Small-cap growth ETF',band:{min:0.09,max:0.13},note:'Higher growth potential, meaningfully bumpier, needs a 10+ year runway'},
+      ],
+      retirement:[
+        {id:'k401',name:'401(k) / 403(b)',band:{min:0.07,max:0.10},note:'Grab the employer match first: an immediate, guaranteed return'},
+        {id:'ira',name:'Traditional / Roth IRA',band:{min:0.07,max:0.10},note:'Fills the gap after the 401(k) match, more investment choice than most plans'},
+        {id:'hsa',name:'Health Savings Account (HSA)',band:{min:0.07,max:0.10},note:'Triple tax advantage: deductible in, grows untaxed, tax-free out for medical expenses'},
+      ],
+      education:[
+        {id:'edu529',name:'529 education savings plan',band:{min:0.06,max:0.09},note:'Purpose-built education wrapper, gift-tax front-loading allowed'},
+      ],
+    }}
+};
+
+const FX_DEPRECIATION_DEFAULT = 0.04; // INR/USD, verified Jul 2026
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+const L = {
+  country:'IN', tab:'retirement',
+  ret:{ age:30, retireAge:60, monthlyExpense:50000, lifestyleFactor:75,
+        preRate:10, postRate:9, inflation:6, lifeExp:78, due:true, realTerms:false, shock:null,
+        corpusMode:'expenses', customCorpus:30000000, customBasis:'future',
+        existingSavings:0, ddVol:12, ddSeed:7 },
+  step:{ corpus:37083320, years:30, preRate:10, stepUpPct:8 },
+  swp:{ corpus:10000000, years:20, postRate:9, inflation:6, due:true, shock:null },
+  fx:{ principal:1000000, direction:'investingAbroad', homeReturn:12, foreignReturn:9, deprec:4, years:10 },
+  joint:{
+    children:[
+      {annualFeeToday:300000, yearsToStart:8, duration:4},
+      {annualFeeToday:300000, yearsToStart:14, duration:4},
+    ],
+    eduInflation:10, preRate:11, parkRate:7, editingChild:null,
+  },
+  mc:{ sip:200000, years:20, meanReturn:10, volatility:15, regime:'normal', seed:42 },
+  health:{ capacity:40000, totalSIP:35000, emergencyStatus:'partial', shockSurvives:true },
+  snapshots:[], // up to 2 saved Retirement Lab states, for side-by-side comparison
+  instCategory:'all',
+  instSearch:'',
+  portfolio:{ weights:[35,15,10,25,10,5], seed:11, inflation:null },
+};
+
+function cfg(){ return C[L.country]; }
+
+/* =====================================================================
+   CHARTS
+   ===================================================================== */
+function svgOpen(w,h){return `<svg class="chart" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`;}
+
+function infoIcon(text){
+  return `<span class="info-icon">i<span class="ii-tip">${text}</span></span>`;
+}
+
+function attachChartHovers(scope){
+  scope.querySelectorAll('.fx-chart-wrap').forEach(wrap=>{
+    const tip=wrap.querySelector('.fx-tooltip');
+    if(!tip) return;
+    wrap.querySelectorAll('.fx-hover-target').forEach(el=>{
+      el.addEventListener('mouseenter',()=>{
+        tip.innerHTML=`<span class="tt-label">${el.dataset.tipLabel}</span>Return: ${el.dataset.tipRet} &nbsp; Risk: ${el.dataset.tipVol}`;
+        tip.classList.add('show');
+      });
+      el.addEventListener('mousemove',(e)=>{
+        const rect=wrap.getBoundingClientRect();
+        let tx=e.clientX-rect.left+14, ty=e.clientY-rect.top-14;
+        tip.style.left=tx+'px'; tip.style.top=ty+'px';
+      });
+      el.addEventListener('mouseleave',()=>{ tip.classList.remove('show'); });
+    });
+  });
+}
+
+function yearlyAmortization(monthlyRows){
+  const years=[];
+  let prevClose=0, prevContributed=0;
+  for(let m=0; m<monthlyRows.length; m+=12){
+    const yearEndRow = monthlyRows[Math.min(m+11, monthlyRows.length-1)];
+    const contributedThisYear = yearEndRow.contributed - prevContributed;
+    const growthThisYear = yearEndRow.closeBal - prevClose - contributedThisYear;
+    years.push({
+      year: years.length+1,
+      contributedThisYear: Math.round(contributedThisYear),
+      growthThisYear: Math.round(growthThisYear),
+      closeBal: Math.round(yearEndRow.closeBal),
+    });
+    prevClose = yearEndRow.closeBal;
+    prevContributed = yearEndRow.contributed;
+  }
+  return years;
+}
+
+function drawdownChart(rows, w, h){
+  if(w===undefined)w=760; if(h===undefined)h=220;
+  const p=6;
+  const maxV=Math.max(rows[0].openBal, 0);
+  const minV=Math.min(0, ...rows.map(r=>r.closeBal));
+  const range=maxV-minV || 1;
+  const n=rows.length, sx=(w-p*2)/(n-1||1);
+  const y=v=>h-p-((v-minV)/range)*(h-p*2);
+  const zeroY=y(0);
+  let pts='M'+p+','+y(rows[0].openBal).toFixed(1);
+  rows.forEach((r,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1));
+  const lx=(p+(n-1)*sx).toFixed(1);
+  let shockMarks='';
+  rows.forEach((r,i)=>{
+    if(r.rate!==undefined && r.rate < -0.05){
+      const cx=(p+i*sx).toFixed(1);
+      shockMarks+=`<circle cx="${cx}" cy="${y(r.closeBal).toFixed(1)}" r="4" fill="#E8977A"/>`;
+    }
+  });
+  return svgOpen(w,h)+
+    `<defs><linearGradient id="ddg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3D7A4F" stop-opacity=".55"/><stop offset="100%" stop-color="#3D7A4F" stop-opacity=".04"/></linearGradient></defs>
+    <path d="${pts} L${lx},${zeroY} L${p},${zeroY} Z" fill="url(#ddg)"/>
+    <line x1="${p}" y1="${zeroY}" x2="${w-p}" y2="${zeroY}" stroke="rgba(241,238,227,.35)" stroke-width="1" stroke-dasharray="3,3"/>
+    <path d="${pts}" fill="none" stroke="#8FC79E" stroke-width="1.75"/>
+    ${shockMarks}
+    </svg>`;
+}
+
+function mountainChart(rows, w, h){
+  if(w===undefined)w=760; if(h===undefined)h=200;
+  const p=6, maxV=rows[rows.length-1].closeBal, n=rows.length, sx=(w-p*2)/(n-1||1);
+  const y=v=>h-p-(Math.max(0,v)/maxV)*(h-p*2);
+  let gp='M'+p+','+h, cp='M'+p+','+h;
+  rows.forEach((r,i)=>{const x=(p+i*sx).toFixed(1); gp+=' L'+x+','+y(r.closeBal).toFixed(1); cp+=' L'+x+','+y(r.contributed).toFixed(1);});
+  const lx=(p+(n-1)*sx).toFixed(1);
+  return svgOpen(w,h)+
+    `<defs><linearGradient id="mg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C9A455" stop-opacity=".8"/><stop offset="100%" stop-color="#C9A455" stop-opacity=".06"/></linearGradient></defs>
+    <path d="${gp} L${lx},${h} L${p},${h} Z" fill="url(#mg2)"/>
+    <path d="${cp} L${lx},${h} L${p},${h} Z" fill="rgba(241,238,227,.14)"/>
+    <line x1="${p}" y1="${h}" x2="${w-p}" y2="${h}" stroke="rgba(241,238,227,.2)" stroke-width="1"/>
+    </svg>`;
+}
+
+function twinFatesChart(rowsA, rowsB, w, h){
+  if(w===undefined)w=760; if(h===undefined)h=200;
+  const p=6;
+  const allVals=[...rowsA.map(r=>r.closeBal),...rowsB.map(r=>r.closeBal),0];
+  const maxV=Math.max(...allVals), minV=Math.min(...allVals);
+  const range=(maxV-minV)||1;
+  const n=rowsA.length, sx=(w-p*2)/(n-1||1);
+  const y=v=>h-p-((v-minV)/range)*(h-p*2);
+  const zeroY=y(0);
+  function pathFor(rows){let pts='M'+p+','+y(rows[0].openBal).toFixed(1);rows.forEach((r,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1));return pts;}
+  return svgOpen(w,h)+
+    `<line x1="${p}" y1="${zeroY}" x2="${w-p}" y2="${zeroY}" stroke="rgba(241,238,227,.3)" stroke-width="1" stroke-dasharray="3,3"/>
+    <path d="${pathFor(rowsA)}" fill="none" stroke="#E8977A" stroke-width="2"/>
+    <path d="${pathFor(rowsB)}" fill="none" stroke="#8FC79E" stroke-width="2"/>
+    </svg>`;
+}
+
+/* =====================================================================
+   TAB: RETIREMENT LAB
+   ===================================================================== */
+function calcRetLab(){
+  const c=cfg(), r=L.ret;
+  const yrs=r.retireAge-r.age;
+  const drawYrs=Math.max(5, r.lifeExp-r.retireAge);
+  const infl=r.inflation/100, preR=r.preRate/100, postR=r.postRate/100;
+  const rr=realRate(postR, infl);
+  let expAtRet, corpus;
+  if(r.corpusMode==='custom'){
+    // The person names the pot; the plan solves backwards from it.
+    // If they typed the amount in today's money, inflate it to the
+    // retirement date first so the target keeps its purchasing power.
+    corpus = r.customBasis==='today' ? r.customCorpus*Math.pow(1+infl, yrs) : r.customCorpus;
+    // What that pot sustainably supports: the same inverse-annuity used
+    // by the Sustainable Withdrawal tab, so both tabs agree by construction.
+    expAtRet = swpWithdrawal(rr, drawYrs, corpus, r.due);
+  } else {
+    expAtRet=inflateExpense(r.monthlyExpense*12, [{rate:infl, years:yrs}], r.lifestyleFactor/100);
+    corpus=corpusRequired(rr, drawYrs, expAtRet, r.due);
+  }
+  const mRate=effectiveMonthlyRate(preR);
+  // Existing savings assumed to keep compounding at the same rate as the
+  // new SIP, so existingFV + gapCorpus lands on the full target corpus
+  // exactly — same identity used in both doors.
+  const existing=r.existingSavings||0;
+  const existingFV=existing*Math.pow(1+mRate, yrs*12);
+  const gapCorpus=Math.max(0, corpus-existingFV);
+  const sip=solveSIP(mRate, yrs*12, gapCorpus, r.due);
+  const realCorpus=corpus/Math.pow(1+infl, yrs);
+  const accRows=accumulationSchedule({sip, rate:mRate, periods:yrs*12, due:r.due, opening:existing}).rows;
+
+  let ddRows, shockInfo=null;
+  if(r.shock){
+    const ep=c.episodes.find(e=>e.id===r.shock.epId);
+    const res=drawdownWithShock({openingCorpus:corpus, firstWithdrawal:expAtRet, inflation:infl, nominalRate:postR, years:drawYrs, due:r.due}, r.shock.year, ep.rate);
+    ddRows=res.rows;
+    shockInfo={ep, ranOutYear:res.ranOutYear, finalBalance:res.finalBalance};
+  } else {
+    const res=drawdownWithShock({openingCorpus:corpus, firstWithdrawal:expAtRet, inflation:infl, nominalRate:postR, years:drawYrs, due:r.due}, -1, 0);
+    ddRows=res.rows;
+  }
+
+  return {yrs, drawYrs, expAtRet, corpus, sip, realCorpus, accRows, ddRows, shockInfo, existing, existingFV, gapCorpus};
+}
+
+// The drawdown Monte Carlo simulates 1,000 paths over the full spending
+// phase, comparable cost to the MC tab's own accumulation simulation
+// (that one needed a debounce to stay under 16ms per tick; this one is no
+// cheaper). renderRetirement() runs synchronously on every slider tick for
+// this tab, so this card must NEVER compute inline there — only this
+// debounced job touches monteCarloDrawdown, and it patches the card's own
+// container directly rather than forcing a full tab re-render.
+let ddmcTimer=null;
+let lastDDMCHtml='';
+function renderDDMCBody(res){
+  const r=L.ret, c=cfg();
+  const mc=monteCarloDrawdown({openingCorpus:res.corpus, firstWithdrawal:res.expAtRet, inflation:r.inflation/100,
+    meanReturn:r.postRate/100, volatility:r.ddVol/100, years:res.drawYrs, due:r.due, seed:r.ddSeed, n:1000});
+  const survPct=Math.round(mc.survivalPct*100);
+  const html=`<div class="stat-row" style="margin-top:10px">
+    <div class="stat"><div class="stat-label">Survives to age ${r.lifeExp}${infoIcon('Share of the 1,000 simulated paths that never hit zero before the plan ends. Below 100% means pure return-order randomness, not a wrong average, can still empty the pot.')}</div><div class="stat-value" style="color:${survPct>=90?'#8FC79E':survPct>=70?'#C9A455':'#E8977A'}">${survPct}%</div><div class="stat-sub">${mc.failCount} of ${mc.n} paths ran out${mc.medianRuinYear?`, typically by year ${mc.medianRuinYear}`:''}</div></div>
+    <div class="stat"><div class="stat-label">P10 ending balance${infoIcon('9 in 10 simulated paths ended with at least this much left over. A reasonable worst-case planning floor for the drawdown phase.')}</div><div class="stat-value" style="color:#E8977A">${c.compact(mc.p10)}</div></div>
+    <div class="stat"><div class="stat-label">P50 ending balance${infoIcon('The median simulated path: half ended with more left over than this, half with less.')}</div><div class="stat-value">${c.compact(mc.p50)}</div></div>
+  </div>
+  <div class="cap" style="margin-top:10px">Fan of 1,000 simulated drawdown paths, seed ${r.ddSeed}</div>
+  ${fanChart(mc.yearBands)}`;
+  lastDDMCHtml=html;
+  return html;
+}
+function scheduleDDMCUpdate(delay){
+  if(ddmcTimer) clearTimeout(ddmcTimer);
+  ddmcTimer=setTimeout(()=>{
+    ddmcTimer=null;
+    const body=document.getElementById('ret-ddmc-body');
+    if(body){ body.innerHTML=renderDDMCBody(calcRetLab()); }
+  }, delay===undefined?150:delay);
+}
+
+function renderRetirement(){
+  const c=cfg(), r=L.ret;
+  // Keep the custom target inside a sensible range for the active country
+  // (state survives a country switch, so an old rupee-scale figure would
+  // otherwise render as an absurd dollar target).
+  const ccMin = L.country==='IN' ? 5000000 : 100000;
+  const ccMax = L.country==='IN' ? 200000000 : 10000000;
+  const ccStep = L.country==='IN' ? 500000 : 25000;
+  if(r.customCorpus<ccMin || r.customCorpus>ccMax) r.customCorpus = L.country==='IN' ? 30000000 : 1500000;
+  const res=calcRetLab();
+  const dispCorpus = r.realTerms ? res.realCorpus : res.corpus;
+  const dispLabel = r.realTerms ? "today's money" : (L.country==='IN' ? 'future rupees' : 'future dollars');
+  const custom = r.corpusMode==='custom';
+  const todayDraw = res.expAtRet/12/Math.pow(1+r.inflation/100, res.yrs);
+  scheduleDDMCUpdate();
+
+  return `<div class="grid">
+  <div class="panel">
+    <h3>Assumptions</h3>
+
+    <div class="section-label">You</div>
+    <div class="field-row">
+      <div class="field"><label>Age <b>${r.age}</b></label><input type="range" min="18" max="65" value="${r.age}" data-k="age"></div>
+      <div class="field"><label>Retire <b>${r.retireAge}</b></label><input type="range" min="45" max="75" value="${r.retireAge}" data-k="retireAge"></div>
+    </div>
+    <div class="field"><label>Already saved for retirement${infoIcon('A starting balance in EPF, NPS, mutual funds, or anywhere else already earmarked for retirement. Assumed to keep compounding at the same rate as the new SIP below, so the two grow on one combined curve.')} <b>${c.compact(r.existingSavings)}</b></label><input type="range" min="0" max="${L.country==='IN'?20000000:400000}" step="${L.country==='IN'?50000:1000}" value="${r.existingSavings}" data-k="existingSavings"></div>
+    <div class="section-label">Set the retirement target</div>
+    <div class="toggle-row">
+      <button class="tglbtn${!custom?' active':''}" data-toggle="corpusMode" data-val="expenses">Work it out<br><span style="opacity:.6">from my expenses</span></button>
+      <button class="tglbtn${custom?' active':''}" data-toggle="corpusMode" data-val="custom">I know my number<br><span style="opacity:.6">I'll set the pot myself</span></button>
+    </div>
+    ${!custom?`
+    <div class="field"><label>Monthly expenses today <b>${c.fmt(r.monthlyExpense)}</b></label><input type="range" min="10000" max="500000" step="5000" value="${r.monthlyExpense}" data-k="monthlyExpense"></div>
+    <div class="field"><label>Lifestyle at retirement${infoIcon('Most people spend less after retiring: no commute, no work costs, often no EMI. 75% of inflated expenses is a common planning default. Push it above 100% if you expect to spend more, say on travel or healthcare.')} <b>${r.lifestyleFactor}%</b> of inflated expenses</label><input type="range" min="40" max="120" value="${r.lifestyleFactor}" data-k="lifestyleFactor"></div>
+    `:`
+    <div class="field"><label>Target pot at retirement <b>${c.compact(r.customCorpus)}</b></label><input type="range" min="${ccMin}" max="${ccMax}" step="${ccStep}" value="${r.customCorpus}" data-k="customCorpus"></div>
+    <div class="section-label">That amount is in</div>
+    <div class="toggle-row">
+      <button class="tglbtn${r.customBasis==='future'?' active':''}" data-toggle="customBasis" data-val="future">Future money${infoIcon('The literal figure in the account on the day you retire. If you want exactly this number sitting there, pick this.')}</button>
+      <button class="tglbtn${r.customBasis==='today'?' active':''}" data-toggle="customBasis" data-val="today">Today's money${infoIcon('The amount in current purchasing power. The plan inflates it to the retirement date for you, so what you can actually buy with it matches what that figure buys now.')}</button>
+    </div>
+    <div class="gr-note">The plan now solves backwards: given this pot, it works out both the SIP needed to build it and the monthly spending it can sustain to age ${r.lifeExp}.</div>
+    `}
+
+    <hr class="divider">
+    <div class="section-label">Rates</div>
+    <div class="field"><label>Inflation <b>${r.inflation}%</b></label><input type="range" min="2" max="12" step="0.1" value="${r.inflation}" data-k="inflation"></div>
+    <div class="field"><label>Growth while saving${infoIcon('The yearly return assumed on your SIP during the working years. Higher-equity mixes justify a higher figure here; it is the rate your contributions compound at before retirement.')} <b>${r.preRate}%</b></label><input type="range" min="4" max="16" step="0.1" value="${r.preRate}" data-k="preRate"></div>
+    <div class="field"><label>Growth after retirement${infoIcon('The return earned on the pot while it is being spent down. Usually set lower than the saving-phase rate, because retirees shift to safer, lower-return holdings.')} <b>${r.postRate}%</b></label><input type="range" min="3" max="14" step="0.1" value="${r.postRate}" data-k="postRate"></div>
+    <div class="field"><label>Plan to age <b>${r.lifeExp}</b></label><input type="range" min="70" max="95" value="${r.lifeExp}" data-k="lifeExp"></div>
+
+    <hr class="divider">
+    <div class="section-label">Withdrawal timing${infoIcon('Start of year (annuity due) takes each withdrawal before that year has earned any growth, so a slightly larger pot is needed. End of year (ordinary annuity) lets the full balance grow first. Textbook retirement cases usually use annuity due.')}</div>
+    <div class="toggle-row">
+      <button class="tglbtn${r.due?' active':''}" data-toggle="due" data-val="true">Start of year<br><span style="opacity:.6">(annuity due)</span></button>
+      <button class="tglbtn${!r.due?' active':''}" data-toggle="due" data-val="false">End of year<br><span style="opacity:.6">(ordinary)</span></button>
+    </div>
+
+    <div class="section-label">Show figures in${infoIcon('Future money is the literal account figure on the day. Today\'s money strips inflation back out, so you can judge the amount against prices you know now.')}</div>
+    <div class="toggle-row">
+      <button class="tglbtn${!r.realTerms?' active':''}" data-toggle="realTerms" data-val="false">Future ₹</button>
+      <button class="tglbtn${r.realTerms?' active':''}" data-toggle="realTerms" data-val="true">Today's ₹</button>
+    </div>
+
+    <hr class="divider">
+    <div class="section-label">Stress test: inject a historical shock${infoIcon('Drops a real one-year historical market fall into a chosen year of the spending-down phase, then re-runs the whole timeline to see whether the pot still lasts to the planned age.')}</div>
+    <div class="episode-grid">
+      <div class="epchip${!r.shock?' active':''}" data-shock="none"><b>No shock</b>baseline plan</div>
+      ${c.episodes.map(ep=>`<div class="epchip${r.shock&&r.shock.epId===ep.id?' active':''}" data-shock="${ep.id}"><b>${ep.label}</b>${(ep.rate*100).toFixed(0)}% in one year</div>`).join('')}
+    </div>
+    ${r.shock?`<div class="field"><label>Shock hits in drawdown year <b>${r.shock.year}</b></label><input type="range" min="1" max="${res.drawYrs}" value="${r.shock.year}" data-k="shockYear"></div>`:''}
+  </div>
+
+  <div class="output">
+    <div class="stat-row">
+      ${custom?`
+      <div class="stat"><div class="stat-label">Your target pot${infoIcon('The figure you set, converted to its value on the day you retire if you entered it in current purchasing power.')}</div><div class="stat-value">${c.compact(dispCorpus)}</div><div class="stat-sub">${dispLabel}</div></div>
+      <div class="stat"><div class="stat-label">Monthly SIP</div><div class="stat-value">${c.fmt(Math.round(res.sip))}</div><div class="stat-sub">${res.existing>0?`covers the gap after ${c.compact(res.existing)} grows to ${c.compact(Math.round(res.existingFV))}`:`for ${res.yrs} years`}</div></div>
+      <div class="stat"><div class="stat-label">Supports spending of${infoIcon('The largest first-year withdrawal this pot can sustain, rising with inflation every year and lasting exactly to the planned age. Same inverse-annuity math as the Sustainable Withdrawal tab.')}</div><div class="stat-value">${c.fmt(Math.round(res.expAtRet/12))}/mo</div><div class="stat-sub">about ${c.fmt(Math.round(todayDraw))}/mo in current purchasing power, to age ${r.lifeExp}</div></div>
+      `:`
+      <div class="stat"><div class="stat-label">Corpus needed${infoIcon('The lump sum required on the day you retire so that withdrawals, rising with inflation, last exactly to your planned age.')}</div><div class="stat-value">${c.compact(dispCorpus)}</div><div class="stat-sub">${dispLabel}</div></div>
+      <div class="stat"><div class="stat-label">Monthly SIP</div><div class="stat-value">${c.fmt(Math.round(res.sip))}</div><div class="stat-sub">${res.existing>0?`covers the gap after ${c.compact(res.existing)} grows to ${c.compact(Math.round(res.existingFV))}`:`for ${res.yrs} years`}</div></div>
+      <div class="stat"><div class="stat-label">Drawdown span${infoIcon('The number of years the pot is planned to be spent down: from your retirement age to the planning age.')}</div><div class="stat-value">${res.drawYrs} yrs</div><div class="stat-sub">to age ${r.lifeExp}</div></div>
+      `}
+    </div>
+
+    <div class="card">
+      <h4>Accumulation: how the pot grows</h4>
+      <div class="cap">Gold = growth earned · grey = what you put in</div>
+      ${mountainChart(res.accRows)}
+    </div>
+
+    <div class="card">
+      <h4>Amortization schedule${infoIcon('Here, the year-by-year record of the saving phase: what you contributed, what growth was earned, and the closing balance, aggregated up from monthly compounding.')}: the saving phase, year by year</h4>
+      <div class="cap">Aggregated from monthly compounding · this is the proof behind the chart above</div>
+      <div class="table-scroll"><table class="dtable">
+      <thead><tr><th>Year</th><th>Contributed</th><th>Growth earned</th><th>Closing balance</th></tr></thead>
+      <tbody>
+      ${yearlyAmortization(res.accRows).map(row=>`<tr>
+        <td>${row.year}</td><td>${c.compact(row.contributedThisYear)}</td><td>${c.compact(row.growthThisYear)}</td><td>${c.compact(row.closeBal)}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
+
+    <div class="card">
+      <h4>Drawdown${infoIcon('The spending-down phase after retirement: withdrawals rise with inflation every year while the remaining pot keeps earning the post-retirement rate.')} ${res.shockInfo?`with ${res.shockInfo.ep.label} injected`:'(baseline)'}</h4>
+      <div class="cap">${res.shockInfo ?
+        (res.shockInfo.ranOutYear ? `Runs out in drawdown year ${res.shockInfo.ranOutYear}, ${res.drawYrs-res.shockInfo.ranOutYear} years short of plan.` : 'Survives the shock without running out.')
+        : 'Dashed line marks zero. Built to reach exactly zero at the end of the plan.'}</div>
+      ${drawdownChart(res.ddRows)}
+    </div>
+
+    <div class="card">
+      <h4>Year-by-year drawdown table</h4>
+      <div class="cap">The verification proof: every rupee accounted for</div>
+      <div class="table-scroll"><table class="dtable">
+      <thead><tr><th>Year</th><th>Open</th><th>Withdraw</th><th>Return</th><th>Close</th></tr></thead>
+      <tbody>
+      ${res.ddRows.map(row=>{
+        const isShock = res.shockInfo && row.rate !== undefined && row.rate < -0.05;
+        const isNeg = row.closeBal < 0;
+        return `<tr class="${isShock?'shock':''}${isNeg?' negative':''}">
+          <td>${row.year}</td><td>${c.compact(row.openBal)}</td><td>${c.compact(row.withdrawal)}</td>
+          <td>${row.rate!==undefined?(row.rate*100).toFixed(1)+'%':'—'}</td><td>${c.compact(row.closeBal)}</td></tr>`;
+      }).join('')}
+      </tbody></table></div>
+    </div>
+
+    <div class="card">
+      <h4>Drawdown Monte Carlo: does the ORDER of returns matter?${infoIcon('The chart above assumes one fixed post-retirement return every single year. Real markets never behave that steadily. This runs 1,000 random drawdown paths with the same average return and lets volatility land differently in each one, which is the only way to see sequence-of-returns risk: two paths with an identical long-run average can still end in ruin or comfort depending purely on WHEN the bad years happen to fall.')}</h4>
+      <div class="cap">Same withdrawals as the plan above. Only the year-to-year return varies. This corpus was sized to reach exactly zero if that return holds every year with no room to spare, so even modest volatility can knock the survival rate down hard: that fragility is the finding, not a glitch.</div>
+      <div class="field"><label>Volatility of yearly returns${infoIcon('Standard deviation of the post-retirement return. At 0% every path is identical to the deterministic line above. Real diversified portfolios in the drawdown phase typically run somewhere around 8 to 15%.')} <b>${r.ddVol}%</b></label><input type="range" min="0" max="25" value="${r.ddVol}" data-k="ddVol"></div>
+      <div id="ret-ddmc-body">${lastDDMCHtml||'<div class="gr-note">Computing the first 1,000 paths…</div>'}</div>
+      <button id="reseedDDBtn" style="width:100%;margin-top:10px;background:transparent;border:1px solid rgba(241,238,227,.18);color:rgba(241,238,227,.6);border-radius:8px;padding:9px;font-size:12px;cursor:pointer">Try a different seed</button>
+    </div>
+
+    ${renderSnapshotBar(res)}
+  </div>
+  </div>`;
+}
+
+function renderSnapshotBar(res){
+  const c=cfg();
+  const canSave = L.snapshots.length < 2;
+  const rows = L.snapshots.map((s,i) => `
+    <div class="snap-card">
+      <div class="snap-head">
+        <span class="snap-label">${s.label}</span>
+        <button class="gp-iconbtn" data-remove-snapshot="${i}" aria-label="Remove this snapshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+      </div>
+      <div class="snap-figure">${s.currency.compact(s.corpus)}</div>
+      <div class="snap-sub">${s.sipDisplay}/mo &middot; ${s.summary}</div>
+    </div>`).join('');
+
+  return `<div class="card">
+    <h4>Snapshots: compare two what-ifs side by side</h4>
+    <div class="cap">Change any assumption above, save a snapshot, change it again, save another. As-of ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}.</div>
+    <div class="snap-grid">
+      ${rows}
+      ${canSave ? `<button class="snap-add" id="saveSnapshotBtn">+ Save this as a snapshot</button>` : ''}
+    </div>
+    ${L.snapshots.length===2 ? `<div class="gr-note" style="margin-top:12px">${snapshotCompareNote()}</div>` : ''}
+  </div>`;
+}
+
+function snapshotCompareNote(){
+  const [a,b] = L.snapshots;
+  if(a.currency.code !== b.currency.code) return 'These two snapshots use different countries, so the corpus figures are not directly comparable in one currency.';
+  const diff = b.corpus - a.corpus;
+  const pct = a.corpus !== 0 ? (diff/a.corpus*100) : 0;
+  return `${b.label} needs ${a.currency.compact(Math.abs(diff))} ${diff>=0?'more':'less'} than ${a.label} (${diff>=0?'+':''}${pct.toFixed(1)}%).`;
+}
+
+/* =====================================================================
+   TAB: STEP-UP SIP
+   ===================================================================== */
+function renderStepUp(){
+  const c=cfg(), s=L.step;
+  const mRate=effectiveMonthlyRate(s.preRate/100);
+  const mStep=effectiveMonthlyRate(s.stepUpPct/100);
+  const flatSip=solveSIP(mRate, s.years*12, s.corpus, true);
+  const steppedSip=solveStepUpSIP(mRate, mStep, s.years*12, s.corpus, true);
+
+  const flatAcc=accumulationSchedule({sip:flatSip, rate:mRate, periods:s.years*12, due:true}).rows;
+  const stepAcc=accumulationSchedule({sip:steppedSip, rate:mRate, periods:s.years*12, due:true, stepUp:mStep}).rows;
+
+  return `<div class="grid">
+  <div class="panel">
+    <h3>Step-up SIP</h3>
+    <div class="field"><label>Target corpus <b>${c.compact(s.corpus)}</b></label><input type="range" min="1000000" max="100000000" step="500000" value="${s.corpus}" data-k="corpus" data-tab="step"></div>
+    <div class="field"><label>Years to invest <b>${s.years}</b></label><input type="range" min="5" max="40" value="${s.years}" data-k="years" data-tab="step"></div>
+    <div class="field"><label>Expected growth <b>${s.preRate}%</b></label><input type="range" min="4" max="16" step="0.1" value="${s.preRate}" data-k="preRate" data-tab="step"></div>
+    <div class="field"><label>Annual step-up${infoIcon('The percentage by which the SIP amount rises every year, usually matched to expected salary growth. At 0% this collapses to an ordinary flat SIP.')} <b>${s.stepUpPct}%</b></label><input type="range" min="0" max="20" value="${s.stepUpPct}" data-k="stepUpPct" data-tab="step"></div>
+    <div class="gr-note">A flat SIP starts higher and stays fixed. A step-up SIP starts lower and rises with your salary, often the difference between a plan you can afford in year 1 and one you can't.</div>
+  </div>
+  <div class="output">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Flat SIP (fixed forever)${infoIcon('One unchanging monthly amount from the first month to the last. Simple, but it front-loads the burden into your lowest-earning years.')}</div><div class="stat-value">${c.fmt(Math.round(flatSip))}</div></div>
+      <div class="stat"><div class="stat-label">Step-up SIP (starting)${infoIcon('The first-year monthly amount. It then rises by the step-up rate each year, reaching the same target by paying more in later, higher-income years.')}</div><div class="stat-value">${c.fmt(Math.round(steppedSip))}</div></div>
+      <div class="stat"><div class="stat-label">Year-1 saving</div><div class="stat-value">${c.fmt(Math.round(flatSip-steppedSip))}</div><div class="stat-sub">less to start</div></div>
+    </div>
+    <div class="card">
+      <h4>Both reach the same target, at a different starting cost</h4>
+      <div class="cap">Red = flat SIP · Green = step-up SIP, rising ${s.stepUpPct}%/yr</div>
+      ${twinFatesChart(
+        flatAcc.map(r=>({openBal:0,closeBal:r.closeBal})),
+        stepAcc.map(r=>({openBal:0,closeBal:r.closeBal}))
+      )}
+    </div>
+  </div>
+  </div>`;
+}
+
+/* =====================================================================
+   TAB: SWP (SUSTAINABLE WITHDRAWAL)
+   ===================================================================== */
+function renderSWP(){
+  const c=cfg(), s=L.swp;
+  const infl=s.inflation/100, postR=s.postRate/100;
+  const rr=realRate(postR, infl);
+  const w=swpWithdrawal(rr, s.years, s.corpus, s.due);
+  const shockEp = s.shock ? c.episodes.find(e=>e.id===s.shock.epId) : null;
+  const shockYr = s.shock ? Math.min(s.shock.year, s.years) : -1;
+  const sim=drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:infl, nominalRate:postR, years:s.years, due:s.due}, shockYr, shockEp?shockEp.rate:0);
+  const rows=sim.rows;
+
+  return `<div class="grid">
+  <div class="panel">
+    <h3>Sustainable withdrawal</h3>
+    <div class="field"><label>You have a corpus of <b>${c.compact(s.corpus)}</b></label><input type="range" min="1000000" max="100000000" step="500000" value="${s.corpus}" data-k="corpus" data-tab="swp"></div>
+    <div class="field"><label>Draw for <b>${s.years}</b> years</label><input type="range" min="5" max="40" value="${s.years}" data-k="years" data-tab="swp"></div>
+    <div class="field"><label>Growth during drawdown <b>${s.postRate}%</b></label><input type="range" min="3" max="14" step="0.1" value="${s.postRate}" data-k="postRate" data-tab="swp"></div>
+    <div class="field"><label>Inflation-adjust withdrawals by${infoIcon('Each year the withdrawal grows by this rate, so your purchasing power stays level instead of quietly eroding through the drawdown years.')} <b>${s.inflation}%</b></label><input type="range" min="2" max="12" step="0.1" value="${s.inflation}" data-k="inflation" data-tab="swp"></div>
+    <hr class="divider">
+    <div class="section-label">Stress test: inject a historical shock${infoIcon('Drops a real one-year historical market fall into a chosen year of the withdrawal phase, then re-runs the whole timeline to see how many years the money actually lasts. The withdrawal amount stays fixed at the baseline plan, which is exactly what makes the shock dangerous.')}</div>
+    <div class="episode-grid">
+      <div class="epchip${!s.shock?' active':''}" data-swpshock="none"><b>No shock</b>baseline plan</div>
+      ${c.episodes.map(ep=>`<div class="epchip${s.shock&&s.shock.epId===ep.id?' active':''}" data-swpshock="${ep.id}"><b>${ep.label}</b>${(ep.rate*100).toFixed(0)}% in one year</div>`).join('')}
+    </div>
+    ${s.shock?`<div class="field"><label>Shock hits in year <b>${shockYr}</b></label><input type="range" min="1" max="${s.years}" value="${shockYr}" data-k="swpShockYear" data-tab="swp"></div>`:''}
+    <div class="gr-note">The reverse of a goal calculator: instead of "how much do I need," this asks "how much can I safely take out."</div>
+  </div>
+  <div class="output">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Sustainable monthly draw${infoIcon('The largest starting withdrawal that, rising with inflation every year, empties the pot exactly at the end of the chosen period and not a year earlier. Anything higher and the money runs out before the deadline.')}</div><div class="stat-value">${c.fmt(Math.round(w/12))}</div><div class="stat-sub">first month, then inflation-adjusted</div></div>
+      <div class="stat"><div class="stat-label">Annual draw, year 1</div><div class="stat-value">${c.compact(w)}</div></div>
+      <div class="stat"><div class="stat-label">Corpus lasts</div><div class="stat-value" style="${sim.ranOutYear?'color:#E8977A':''}">${sim.ranOutYear?sim.ranOutYear:s.years} yrs</div><div class="stat-sub">${sim.ranOutYear?`runs out ${s.years-sim.ranOutYear} years early`:(shockEp?'survives the shock':'exactly, by design')}</div></div>
+    </div>
+    <div class="card">
+      <h4>Drawdown schedule${shockEp?` with ${shockEp.label} injected`:''}</h4>
+      <div class="cap">${shockEp?(sim.ranOutYear?`The same withdrawals now empty the pot in year ${sim.ranOutYear}, ${s.years-sim.ranOutYear} years short of plan. Sequence matters: the earlier the shock, the worse the damage.`:'Absorbs the shock and still lasts the full period.'):`Built to reach zero in year ${s.years}`}</div>
+      ${drawdownChart(rows)}
+    </div>
+  </div>
+  </div>`;
+}
+
+/* =====================================================================
+   TAB: CROSS-BORDER
+   ===================================================================== */
+function renderFX(){
+  const f=L.fx;
+  const homeC = f.direction==='investingAbroad' ? C.IN : C.US;
+  const awayC = f.direction==='investingAbroad' ? C.US : C.IN;
+  const res=fxCompare({principal:f.principal, direction:f.direction, homeReturn:f.homeReturn/100, foreignReturn:f.foreignReturn/100, depreciationRate:f.deprec/100, years:f.years});
+  const pMin = f.direction==='investingAbroad' ? 100000 : 1000;
+  const pMax = f.direction==='investingAbroad' ? 10000000 : 120000;
+  const pStep = f.direction==='investingAbroad' ? 50000 : 500;
+
+  return `<div class="grid">
+  <div class="panel">
+    <h3>Cross-border investing</h3>
+    <div class="section-label">Direction</div>
+    <div class="toggle-row">
+      <button class="tglbtn${f.direction==='investingAbroad'?' active':''}" data-toggle="direction" data-val="investingAbroad">₹ → $<br>India investing in US</button>
+      <button class="tglbtn${f.direction==='receivingFromAbroad'?' active':''}" data-toggle="direction" data-val="receivingFromAbroad">$ → ₹<br>US investing in India</button>
+    </div>
+    <div class="field"><label>Amount invested <b>${homeC.compact(f.principal)}</b></label><input type="range" min="${pMin}" max="${pMax}" step="${pStep}" value="${f.principal}" data-k="principal" data-tab="fx"></div>
+    <div class="field"><label>Home market return <b>${f.homeReturn}%</b></label><input type="range" min="3" max="16" step="0.1" value="${f.homeReturn}" data-k="homeReturn" data-tab="fx"></div>
+    <div class="field"><label>Foreign market return <b>${f.foreignReturn}%</b></label><input type="range" min="3" max="16" step="0.1" value="${f.foreignReturn}" data-k="foreignReturn" data-tab="fx"></div>
+    <div class="field"><label>₹ depreciation vs $${infoIcon('The average yearly fall in the rupee against the dollar. A weakening rupee boosts returns brought home from the US, and drags on money sent the other way. It compounds just like a return does.')} <b>${f.deprec}%</b>/yr</label><input type="range" min="0" max="8" step="0.1" value="${f.deprec}" data-k="deprec" data-tab="fx"></div>
+    <div class="field"><label>Years <b>${f.years}</b></label><input type="range" min="1" max="30" value="${f.years}" data-k="years" data-tab="fx"></div>
+    <div class="gr-note">Verified Jul 2026: the rupee has weakened against the dollar in every multi-year window on record, 3.9%/3.4%/4.3%/3.5% annualised over 5/10/15/20 years. 4% is the round central default.</div>
+  </div>
+  <div class="output">
+    <div class="fx-flow">${homeC.compact(f.principal)}<span class="fx-arrow">→</span>${awayC.name} market<span class="fx-arrow">→</span>back to ${homeC.name}</div>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Stayed home</div><div class="stat-value">${homeC.compact(res.domesticFV)}</div></div>
+      <div class="stat"><div class="stat-label">Went abroad</div><div class="stat-value">${homeC.compact(res.crossBorderFV)}</div><div class="stat-sub">${res.foreignBeatsHome?'beats staying home':'loses to staying home'}</div></div>
+      <div class="stat"><div class="stat-label">Currency effect${infoIcon('The part of the final outcome caused purely by exchange-rate movement, separated from what the foreign market itself earned. Positive means the currency worked for you, negative means it ate into the market return.')}</div><div class="stat-value" style="color:${res.currencyEffect>=0?'#8FC79E':'#E8977A'}">${res.currencyEffect>=0?'+':''}${homeC.compact(res.currencyEffect)}</div><div class="stat-sub">${res.currencyEffect>=0?'tailwind':'drag'}</div></div>
+    </div>
+    <div class="card">
+      <h4>The interesting fact</h4>
+      <div class="cap">Market return alone vs what currency movement actually did to it</div>
+      <div class="gr-note" style="margin-top:0">
+      In market terms alone (as if the exchange rate never moved), ${homeC.compact(f.principal)} at ${f.foreignReturn}% for ${f.years} years becomes <b style="color:var(--paper)">${homeC.compact(res.marketOnlyFV)}</b>.
+      Once currency movement is priced in, it actually becomes <b style="color:var(--paper)">${homeC.compact(res.crossBorderFV)}</b>,
+      an effective annual return of <b style="color:var(--gold)">${(res.effectiveAnnualReturn*100).toFixed(2)}%</b> in ${homeC.name} terms, not the headline ${f.foreignReturn}%.
+      This comparison never used today's actual exchange rate. It only used the two growth rates and the depreciation rate. The starting exchange rate cancels out completely.
+      </div>
+    </div>
+  </div>
+  </div>`;
+}
+
+function smoothPath(points, xFn, yFn){
+  // Catmull-Rom to cubic-bezier conversion for a smooth curve through the frontier points
+  if(points.length<3) return points.map((p,i)=>(i===0?'M':'L')+xFn(p.vol).toFixed(1)+','+yFn(p.ret).toFixed(1)).join(' ');
+  const pts=points.map(p=>[xFn(p.vol), yFn(p.ret)]);
+  let d=`M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[i-1]||pts[i], p1=pts[i], p2=pts[i+1], p3=pts[i+2]||p2;
+    const c1x=p1[0]+(p2[0]-p0[0])/6, c1y=p1[1]+(p2[1]-p0[1])/6;
+    const c2x=p2[0]-(p3[0]-p1[0])/6, c2y=p2[1]-(p3[1]-p1[1])/6;
+    d+=` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
+  }
+  return d;
+}
+
+function frontierChart(cloud, frontier, assetPoints, currentPoint, w, h){
+  if(w===undefined)w=640; if(h===undefined)h=400;
+  const pL=54, pR=18, pT=20, pB=44;
+  const allX=[...cloud.map(p=>p.vol),...assetPoints.map(p=>p.vol),currentPoint.vol];
+  const allY=[...cloud.map(p=>p.ret),...assetPoints.map(p=>p.ret),currentPoint.ret];
+  const maxX=Math.max(...allX)*1.08, minX=0;
+  const maxY=Math.max(...allY)*1.1, minY=Math.min(0,Math.min(...allY)*0.9);
+  const x=v=>pL+((v-minX)/(maxX-minX))*(w-pL-pR);
+  const y=v=>h-pB-((v-minY)/(maxY-minY))*(h-pT-pB);
+
+  let grid='';
+  for(let i=0;i<=4;i++){
+    const gx=pL+i*(w-pL-pR)/4, vx=minX+i*(maxX-minX)/4;
+    grid+=`<line x1="${gx.toFixed(1)}" y1="${pT}" x2="${gx.toFixed(1)}" y2="${h-pB}" stroke="rgba(241,238,227,.05)" stroke-width="1"/>`;
+    grid+=`<text x="${gx.toFixed(1)}" y="${h-pB+18}" fill="rgba(241,238,227,.42)" font-size="10" font-family="'Spline Sans Mono',monospace" text-anchor="middle">${(vx*100).toFixed(0)}%</text>`;
+    const gy=h-pB-i*(h-pT-pB)/4, vy=minY+i*(maxY-minY)/4;
+    grid+=`<line x1="${pL}" y1="${gy.toFixed(1)}" x2="${w-pR}" y2="${gy.toFixed(1)}" stroke="rgba(241,238,227,.05)" stroke-width="1"/>`;
+    grid+=`<text x="${pL-9}" y="${(gy+3).toFixed(1)}" fill="rgba(241,238,227,.42)" font-size="10" font-family="'Spline Sans Mono',monospace" text-anchor="end">${(vy*100).toFixed(0)}%</text>`;
+  }
+  grid+=`<text x="${(pL+(w-pL-pR)/2).toFixed(1)}" y="${h-6}" fill="rgba(241,238,227,.5)" font-size="10.5" font-family="'Spline Sans Mono',monospace" text-anchor="middle">RISK: how much this bounces around, per year</text>`;
+  grid+=`<text x="15" y="${(pT+(h-pT-pB)/2).toFixed(1)}" fill="rgba(241,238,227,.5)" font-size="10.5" font-family="'Spline Sans Mono',monospace" text-anchor="middle" transform="rotate(-90,15,${(pT+(h-pT-pB)/2).toFixed(1)})">RETURN: what you'd expect to earn</text>`;
+
+  // Cloud: faded, small, so it reads as a soft field rather than competing with the frontier
+  const dots=cloud.map(p=>`<circle cx="${x(p.vol).toFixed(1)}" cy="${y(p.ret).toFixed(1)}" r="1.3" fill="rgba(201,164,85,.10)"/>`).join('');
+
+  const frontierD=smoothPath(frontier, x, y);
+  const lastFx=x(frontier[frontier.length-1].vol).toFixed(1);
+  const firstFx=x(frontier[0].vol).toFixed(1);
+  const fillD=frontierD+` L${lastFx},${(h-pB).toFixed(1)} L${firstFx},${(h-pB).toFixed(1)} Z`;
+
+  // Hoverable frontier markers — sparse (every ~4th point) so they don't clutter the curve
+  const hoverPts=frontier.filter((_,i)=>i%4===0 || i===frontier.length-1);
+  const frontierHovers=hoverPts.map(p=>
+    `<circle class="fx-hover-target" cx="${x(p.vol).toFixed(1)}" cy="${y(p.ret).toFixed(1)}" r="9" fill="transparent"
+      data-tip-ret="${(p.ret*100).toFixed(2)}%" data-tip-vol="${(p.vol*100).toFixed(2)}%" data-tip-label="On the frontier"/>`
+  ).join('');
+
+  const assetDots=assetPoints.map(p=>
+    `<circle class="fx-hover-target" cx="${x(p.vol).toFixed(1)}" cy="${y(p.ret).toFixed(1)}" r="4" fill="#8FC79E" stroke="#1C3A2D" stroke-width="1"
+      data-tip-ret="${(p.ret*100).toFixed(2)}%" data-tip-vol="${(p.vol*100).toFixed(2)}%" data-tip-label="${p.fullLabel||p.label}"/>
+     <text x="${x(p.vol).toFixed(1)}" y="${(y(p.ret)-9).toFixed(1)}" fill="rgba(241,238,227,.6)" font-size="9" font-family="'Spline Sans Mono',monospace" text-anchor="middle" pointer-events="none">${p.label}</text>`
+  ).join('');
+
+  const curX=x(currentPoint.vol).toFixed(1), curY=y(currentPoint.ret).toFixed(1);
+  const currentMarker=`<circle cx="${curX}" cy="${curY}" r="8" fill="none" stroke="#F1EEE3" stroke-width="2"/>
+    <circle class="fx-hover-target" cx="${curX}" cy="${curY}" r="10" fill="#F1EEE3" fill-opacity="0"
+      data-tip-ret="${(currentPoint.ret*100).toFixed(2)}%" data-tip-vol="${(currentPoint.vol*100).toFixed(2)}%" data-tip-label="Your current mix"/>
+    <circle cx="${curX}" cy="${curY}" r="3" fill="#F1EEE3" pointer-events="none"/>`;
+
+  // Gap to frontier: interpolate the frontier's return at the same risk
+  // level as the current mix, and show the difference if it's meaningful.
+  let gapAnnotation = '';
+  let gapPct = null;
+  for(let i=0;i<frontier.length-1;i++){
+    const a=frontier[i], b=frontier[i+1];
+    if(currentPoint.vol>=a.vol && currentPoint.vol<=b.vol){
+      const t=(b.vol-a.vol)>1e-9 ? (currentPoint.vol-a.vol)/(b.vol-a.vol) : 0;
+      const frontierRetHere = a.ret + t*(b.ret-a.ret);
+      gapPct = frontierRetHere - currentPoint.ret;
+      if(gapPct > 0.0015){
+        const fy=y(frontierRetHere).toFixed(1);
+        gapAnnotation = `<line x1="${curX}" y1="${curY}" x2="${curX}" y2="${fy}" stroke="#F1EEE3" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/>
+          <text x="${(parseFloat(curX)+8).toFixed(1)}" y="${((parseFloat(curY)+parseFloat(fy))/2+3).toFixed(1)}" fill="#F1EEE3" font-size="10" font-family="'Spline Sans Mono',monospace" opacity=".85">+${(gapPct*100).toFixed(1)}% possible</text>`;
+      }
+      break;
+    }
+  }
+
+  return `<div class="fx-chart-wrap">${svgOpen(w,h)}
+    <defs><linearGradient id="frontierFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#C9A455" stop-opacity=".28"/><stop offset="100%" stop-color="#C9A455" stop-opacity="0"/>
+    </linearGradient></defs>
+    ${grid}${dots}
+    <path d="${fillD}" fill="url(#frontierFill)"/>
+    <path d="${frontierD}" fill="none" stroke="#C9A455" stroke-width="2.25" stroke-linecap="round"/>
+    ${gapAnnotation}${frontierHovers}${assetDots}${currentMarker}
+    </svg>
+    <div class="fx-legend">
+      <span><i style="background:#C9A455"></i>The frontier: the best return possible at each risk level</span>
+      <span><i style="background:#8FC79E;border-radius:50%"></i>A single building block on its own</span>
+      <span><i style="border:2px solid #F1EEE3;background:transparent"></i>Your current mix</span>
+      <span><i style="border-top:2px dashed rgba(241,238,227,.7);background:transparent"></i>Return you're leaving on the table at this risk level</span>
+    </div>
+    <div class="fx-tooltip" id="fxTooltip"></div>
+  </div>`;
+}
+
+function fanChart(yearBands, w, h){
+  if(w===undefined)w=760; if(h===undefined)h=240;
+  const p=6;
+  const maxV=Math.max(...yearBands.map(b=>b.p90));
+  const n=yearBands.length, sx=(w-p*2)/(n-1||1);
+  const y=v=>h-p-(Math.max(0,v)/maxV)*(h-p*2);
+  function pathFor(key){let pts='M'+p+','+y(yearBands[0][key]).toFixed(1);yearBands.forEach((b,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(b[key]).toFixed(1));return pts;}
+  function bandFor(lo,hi){
+    let pts='M'+p+','+y(yearBands[0][lo]).toFixed(1);
+    yearBands.forEach((b,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(b[lo]).toFixed(1));
+    for(let i=n-1;i>=0;i--) pts+=' L'+(p+i*sx).toFixed(1)+','+y(yearBands[i][hi]).toFixed(1);
+    return pts+' Z';
+  }
+  return svgOpen(w,h)+
+    `<path d="${bandFor('p10','p90')}" fill="rgba(201,164,85,.12)"/>
+    <path d="${bandFor('p25','p75')}" fill="rgba(201,164,85,.22)"/>
+    <path d="${pathFor('p50')}" fill="none" stroke="#C9A455" stroke-width="2"/>
+    </svg>`;
+}
+
+/* =====================================================================
+   TAB: JOINT CHILDREN CORPUS
+   ===================================================================== */
+function renderJoint(){
+  const c=cfg(), j=L.joint;
+  const infl=j.eduInflation/100, preR=j.preRate/100, parkR=j.parkRate/100;
+  const horizon = Math.max(...j.children.map(ch=>ch.yearsToStart+ch.duration));
+  const sipStopYear = Math.max(...j.children.map(ch=>ch.yearsToStart));
+  const opts={children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, sipStopYear, horizon};
+  const joint=solveJointEducationCorpus(opts);
+  const separate=separateCorporaTotal({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR});
+  const saved=separate-joint.sip;
+
+  const timelineRows=joint.rows;
+  const maxBal=Math.max(...timelineRows.map(r=>r.close), 1);
+  const w=760,h=160,p=6,n=timelineRows.length,sx=(w-p*2)/(n-1||1);
+  const y=v=>h-p-(Math.max(0,v)/maxBal)*(h-p*2);
+  let pts='M'+p+','+h;
+  timelineRows.forEach((r,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.close).toFixed(1));
+  const lx=(p+(n-1)*sx).toFixed(1);
+  let feeMarks='';
+  timelineRows.forEach((r,i)=>{if(r.fees>0){const cx=(p+i*sx).toFixed(1);feeMarks+=`<circle cx="${cx}" cy="${y(r.close).toFixed(1)}" r="3" fill="#E8977A"/>`;}});
+  const timelineChart = svgOpen(w,h)+
+    `<defs><linearGradient id="jg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C9A455" stop-opacity=".55"/><stop offset="100%" stop-color="#C9A455" stop-opacity=".05"/></linearGradient></defs>
+    <path d="${pts} L${lx},${h} L${p},${h} Z" fill="url(#jg)"/>
+    <path d="${pts}" fill="none" stroke="#C9A455" stroke-width="1.75"/>
+    ${feeMarks}
+    </svg>`;
+
+  const childRows = j.children.map((ch,i)=>{
+    if(j.editingChild===i){
+      return `<div class="goal-row" style="padding:12px 14px;background:rgba(201,164,85,.08);border:1px solid rgba(201,164,85,.35);border-radius:10px;margin-bottom:8px">
+        <div class="mono" style="font-size:9.5px;color:var(--gold);text-transform:uppercase;letter-spacing:.06em;margin-bottom:9px">Editing child ${i+1}</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <label style="font-size:10px;color:var(--dim)">Fee today/yr<br><input type="number" class="field-num" id="editFee" value="${ch.annualFeeToday}" style="width:96px;margin-top:4px"></label>
+          <label style="font-size:10px;color:var(--dim)">College in, yrs<br><input type="number" class="field-num" id="editStart" value="${ch.yearsToStart}" style="width:64px;margin-top:4px"></label>
+          <label style="font-size:10px;color:var(--dim)">Course, yrs<br><input type="number" class="field-num" id="editDur" value="${ch.duration}" style="width:56px;margin-top:4px"></label>
+        </div>
+        <div class="inline-error" id="editChildErr" style="font-size:11px;color:#E8977A;margin-bottom:8px"></div>
+        <div style="display:flex;gap:8px">
+          <button data-save-child="${i}" style="flex:1;background:rgba(201,164,85,.18);border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:7px;font-size:11.5px;cursor:pointer">Save</button>
+          <button data-cancel-child style="flex:1;background:transparent;border:1px solid rgba(241,238,227,.2);color:rgba(241,238,227,.5);border-radius:6px;padding:7px;font-size:11.5px;cursor:pointer">Cancel</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="goal-row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:rgba(241,238,227,.05);border-radius:10px;margin-bottom:8px">
+      <div>
+        <div style="font-family:'Newsreader',serif;font-size:14px">Child ${i+1}</div>
+        <div class="mono" style="font-size:10.5px;color:var(--dim)">${c.compact(ch.annualFeeToday)}/yr fee · college in ${ch.yearsToStart}yr · ${ch.duration}yr course</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button data-edit-child="${i}" style="background:transparent;border:1px solid rgba(241,238,227,.2);color:rgba(241,238,227,.5);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">edit</button>
+        ${j.children.length>1?`<button data-remove-child="${i}" style="background:transparent;border:1px solid rgba(241,238,227,.2);color:rgba(241,238,227,.5);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">remove</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div class="grid">
+  <div class="panel">
+    <h3>Joint children's corpus</h3>
+    <div class="section-label">Children (up to 3)</div>
+    ${childRows}
+    ${j.children.length<3?`<button id="addChildBtn" style="width:100%;background:rgba(241,238,227,.06);border:1.5px dashed rgba(241,238,227,.2);border-radius:10px;padding:12px;color:rgba(241,238,227,.55);cursor:pointer;font-size:13px;margin-bottom:16px">+ Add a child</button>`:''}
+    <hr class="divider">
+    <div class="field"><label>Education inflation <b>${j.eduInflation}%</b></label><input type="range" min="4" max="16" step="0.5" value="${j.eduInflation}" data-k="eduInflation" data-tab="joint"></div>
+    <div class="field"><label>Growth while saving <b>${j.preRate}%</b></label><input type="range" min="4" max="16" step="0.1" value="${j.preRate}" data-k="preRate" data-tab="joint"></div>
+    <div class="field"><label>Parking rate near/during college${infoIcon('Once the first child is within a year of starting college, the whole pot moves out of growth assets into safer holdings. This is the return assumed on that safer parking, typically a liquid or short-duration debt rate.')} <b>${j.parkRate}%</b></label><input type="range" min="3" max="10" step="0.1" value="${j.parkRate}" data-k="parkRate" data-tab="joint"></div>
+    <div class="gr-note">Rule: the whole corpus shifts to the parking rate once the FIRST child is within a year of starting. A single pot means one risk profile for everyone in it. Red dots on the chart mark fee-withdrawal years.</div>
+  </div>
+  <div class="output">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Joint corpus SIP</div><div class="stat-value">${c.fmt(Math.round(joint.sip))}</div><div class="stat-sub">/yr, one pot</div></div>
+      <div class="stat"><div class="stat-label">Separate corpora would need</div><div class="stat-value">${c.fmt(Math.round(separate))}</div><div class="stat-sub">/yr, per-child silos</div></div>
+      <div class="stat"><div class="stat-label">Saved by clubbing${infoIcon('One shared pot lets the gap years between children keep compounding instead of sitting idle in separate silos, so the required yearly saving falls versus running one corpus per child.')}</div><div class="stat-value" style="color:#8FC79E">${c.fmt(Math.round(saved))}</div><div class="stat-sub">/yr</div></div>
+    </div>
+    <div class="card">
+      <h4>Corpus timeline: tightest point${infoIcon('The year the balance comes closest to zero across the whole saving-and-spending timeline. The solver guarantees it never actually dips below zero at any point, not just at the end.')} is year ${joint.minYear}</h4>
+      <div class="cap">${Math.abs(joint.minBal)<1000 ? 'Solved so the balance touches exactly zero at its tightest point, never negative.' : 'Balance across the full saving-and-spending timeline.'}</div>
+      ${timelineChart}
+    </div>
+    <div class="card">
+      <h4>Why this differs from two separate corpora</h4>
+      <div class="gr-note" style="margin-top:0">
+      Gap years between children compound untouched instead of sitting idle in two silos. Overlap years (both children in college at once) are the real stress test. The solver checks the balance never goes negative at <b style="color:var(--paper)">any</b> point in the timeline, not just at the end. The tightest year here is year ${joint.minYear}${joint.minYear<horizon?', mid-timeline, not the last year':''}, which a solver that only targets a zero terminal balance would have missed entirely.
+      </div>
+    </div>
+  </div>
+  </div>`;
+}
+
+/* =====================================================================
+   TAB: MONTE CARLO
+   ===================================================================== */
+function renderMC(){
+  const c=cfg(), m=L.mc;
+  const regime=REGIME_PRESETS[m.regime];
+  const meanReturn=(m.meanReturn/100)*regime.meanAdj;
+  const volatility=(m.volatility/100)*regime.volAdj;
+  const res=monteCarloAccumulation({sip:m.sip, meanReturn, volatility, years:m.years, due:true, seed:m.seed, n:1000});
+
+  // Twin fates: bull vs bear side by side (C-07)
+  const bull=monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*REGIME_PRESETS.bull.meanAdj, volatility:(m.volatility/100)*REGIME_PRESETS.bull.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
+  const bear=monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*REGIME_PRESETS.bear.meanAdj, volatility:(m.volatility/100)*REGIME_PRESETS.bear.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
+
+  return `<div class="grid">
+  <div class="panel">
+    <h3>Monte Carlo: 1,000 simulated paths</h3>
+    <div class="field"><label>Annual contribution <b data-mc-label="sip">${c.fmt(m.sip)}</b></label><input type="range" min="10000" max="1000000" step="10000" value="${m.sip}" data-k="sip" data-tab="mc"></div>
+    <div class="field"><label>Years <b data-mc-label="years">${m.years}</b></label><input type="range" min="5" max="35" value="${m.years}" data-k="years" data-tab="mc"></div>
+    <div class="field"><label>Expected return <b data-mc-label="meanReturn">${m.meanReturn}%</b></label><input type="range" min="4" max="16" step="0.1" value="${m.meanReturn}" data-k="meanReturn" data-tab="mc"></div>
+    <div class="field"><label>Volatility (std dev)${infoIcon('The standard deviation of yearly returns: how widely each simulated year swings around the average. Around 15% is typical for a diversified equity fund. At 0% every path is identical and the fan collapses to one deterministic line.')} <b data-mc-label="volatility">${m.volatility}%</b></label><input type="range" min="0" max="30" value="${m.volatility}" data-k="volatility" data-tab="mc"></div>
+    <hr class="divider">
+    <div class="section-label">Regime preset${infoIcon('Presets that scale the average return and the volatility together, to mimic a sustained bull market, normal conditions, or an extended slump. A shorthand for asking: what if the whole era is kinder or harsher than expected?')}</div>
+    <div class="toggle-row">
+      ${Object.entries(REGIME_PRESETS).map(([id,r])=>`<button class="tglbtn${m.regime===id?' active':''}" data-toggle="regime" data-val="${id}">${r.label}</button>`).join('')}
+    </div>
+    <div class="gr-note">${regime.note}. Seed ${m.seed}.${infoIcon('A seed pins down the random number generator, so the same 1,000 paths are reproduced exactly every time. Change the seed to draw a different, equally valid set of simulated futures.')} The same seed always reproduces the identical 1,000 paths, so this isn't randomly different every time you look at it.</div>
+    <button id="reseedBtn" style="width:100%;margin-top:10px;background:transparent;border:1px solid rgba(241,238,227,.18);color:rgba(241,238,227,.6);border-radius:8px;padding:9px;font-size:12px;cursor:pointer">Try a different seed</button>
+  </div>
+  <div class="output">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Median outcome (P50)${infoIcon('The middle result of 1,000 simulated futures: half ended above this figure, half below. A more honest central estimate than a single deterministic number.')}</div><div class="stat-value">${c.compact(res.p50)}</div></div>
+      <div class="stat"><div class="stat-label">Worst-case band (P10)${infoIcon('9 in 10 simulated futures ended above this line. Treat it as a planning floor, not the absolute worst case, since real markets can do worse than any simulation.')}</div><div class="stat-value" style="color:#E8977A">${c.compact(res.p10)}</div></div>
+      <div class="stat"><div class="stat-label">Best-case band (P90)${infoIcon('Only 1 in 10 simulated futures ended above this line. Enjoy it if it happens, but never build the plan on it.')}</div><div class="stat-value" style="color:#8FC79E">${c.compact(res.p90)}</div></div>
+    </div>
+    <div class="card">
+      <h4>Fan chart: the range of outcomes, not just one number</h4>
+      <div class="cap">Gold line = median · dark band = 25th-75th percentile · light band = 10th-90th percentile</div>
+      ${fanChart(res.yearBands)}
+    </div>
+    <div class="card">
+      <h4>Twin fates: same plan, two futures</h4>
+      <div class="cap">Same contribution, same years. Only the regime differs</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px">
+        <div>
+          <div class="mono" style="font-size:11px;color:#8FC79E;margin-bottom:6px">BULL RUN → ${c.compact(bull.p50)}</div>
+          ${fanChart(bull.yearBands, 360, 150)}
+        </div>
+        <div>
+          <div class="mono" style="font-size:11px;color:#E8977A;margin-bottom:6px">EXTENDED SLUMP → ${c.compact(bear.p50)}</div>
+          ${fanChart(bear.yearBands, 360, 150)}
+        </div>
+      </div>
+    </div>
+    <div class="gr-note">Set volatility to 0% to check this collapses to a single deterministic line. Every percentile becomes identical, proving the doors and the Lab share one engine even under simulation.</div>
+  </div>
+  </div>`;
+}
+
+/* =====================================================================
+   TAB: INSTRUMENT EXPLORER
+   ===================================================================== */
+const CATEGORY_LABELS={
+  equity:'Equity funds', debt:'Debt funds', hybrid:'Hybrid funds',
+  retirementLifecycle:'Retirement & lifecycle', indexAndETF:'Index & ETF', goldAndReal:'Gold & real assets',
+  cash:'Cash & short-term', bond:'Bonds', retirement:'Retirement accounts', education:'Education',
+};
+const FLAG_LABELS={
+  avoid:{text:'Higher risk, read the note', cls:'flag-avoid'},
+  legacy:{text:'Legacy, not newly purchasable', cls:'flag-legacy'},
+  'check-status':{text:'Verify current availability', cls:'flag-check'},
+};
+
+function instrumentCardsHTML(){
+  const c=cfg(), li=c.labInstruments;
+  const catKeys=Object.keys(li).filter(k=>!['sourceDoc','crossCheckedAsOf','granular'].includes(k));
+  const activeCats = L.instCategory==='all' ? catKeys : [L.instCategory];
+  const q=(L.instSearch||'').trim().toLowerCase();
+  let shown=0;
+  const cards = activeCats.map(catKey => {
+    const items = li[catKey].filter(inst=>{
+      if(!q) return true;
+      const flag = inst.flag ? FLAG_LABELS[inst.flag] : null;
+      return (inst.name+' '+inst.note+' '+(flag?flag.text:'')).toLowerCase().includes(q);
+    });
+    if(!items.length) return '';
+    shown+=items.length;
+    return `<div class="inst-cat-block">
+      <div class="inst-cat-head">${CATEGORY_LABELS[catKey]||catKey} <span class="inst-cat-count">${items.length}</span></div>
+      <div class="lab-inst-grid">
+      ${items.map(inst=>{
+        const flag = inst.flag ? FLAG_LABELS[inst.flag] : null;
+        const rateDisplay = inst.band.min===null ? 'Tracks index' : `${(inst.band.min*100).toFixed(1)}&ndash;${(inst.band.max*100).toFixed(1)}%/yr`;
+        return `<div class="lab-inst-card${flag?' '+flag.cls:''}">
+          <div class="lab-inst-name">${inst.name}</div>
+          <div class="lab-inst-rate">${rateDisplay}</div>
+          ${flag?`<div class="lab-inst-flag">${flag.text}</div>`:''}
+          <div class="lab-inst-note">${inst.note}</div>
+        </div>`;
+      }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  if(q && shown===0){
+    return `<div class="gr-note">Nothing matches "${L.instSearch}". Try a broader word like duration, gilt, index, gold, or clear the search.</div>`;
+  }
+  return cards;
+}
+
+function renderInstruments(){
+  const c=cfg(), li=c.labInstruments;
+  const catKeys=Object.keys(li).filter(k=>!['sourceDoc','crossCheckedAsOf','granular'].includes(k));
+  if(L.instCategory!=='all' && !catKeys.includes(L.instCategory)) L.instCategory='all';
+  const totalCount = catKeys.reduce((s,k)=>s+li[k].length,0);
+  const cards = instrumentCardsHTML();
+
+  return `<div style="max-width:980px">
+    <div class="inst-header">
+      <h3 style="margin-bottom:4px">Instrument Explorer</h3>
+      <div class="cap">${li.granular
+        ? `The full ${totalCount}-category breakdown from your verified reference document. Door 2 shows a curated 6-9 item list matched to a person's risk profile and horizon; this is everything underneath it.`
+        : `A ${totalCount}-item reference list of standard US account and fund categories. Less granular than the India side, since the underlying category-by-category breakdown was not part of the verified source material.`}
+      </div>
+      <div class="inst-source">Source: ${li.sourceDoc} &middot; cross-checked ${li.crossCheckedAsOf}</div>
+    </div>
+
+    <input id="instSearchBox" type="text" placeholder="Search all ${totalCount} categories: try gilt, duration, index, gold" value="${L.instSearch||''}" autocomplete="off" spellcheck="false" style="width:100%;background:rgba(241,238,227,.05);border:1px solid rgba(241,238,227,.18);border-radius:3px;padding:10px 12px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:12px;margin-bottom:12px;outline:none">
+
+    <div class="gr-note" style="margin:0 0 14px">Terms used in the notes below, hover any of them:
+      <span class="term" data-def="The weighted average time to receive a bond fund's cash flows. Longer duration means the fund's price is more sensitive to interest-rate moves. A 1-3 year duration fund suits a goal 1-3 years away because rate swings barely dent it.">Macaulay duration</span> ·
+      <span class="term" data-def="The risk that a bond issuer fails to pay interest or principal. Government bonds carry effectively none; low-rated corporate paper carries a lot, which is what failed at Franklin Templeton in 2020.">credit risk</span> ·
+      <span class="term" data-def="Government Securities: bonds issued by the Government of India. Zero credit risk, but their prices still move with interest rates.">G-Secs</span> ·
+      <span class="term" data-def="Net Asset Value: the per-unit price of a fund, computed daily from the market value of everything it holds.">NAV</span> ·
+      <span class="term" data-def="A target-maturity fund's price drifting back toward its redemption value as the maturity date approaches, which is why holding it to maturity locks in the yield.">pulls to par</span>
+    </div>
+    <div class="episode-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-bottom:18px">
+      <div class="epchip${L.instCategory==='all'?' active':''}" data-instcat="all"><b>All categories</b>${totalCount} total</div>
+      ${catKeys.map(k=>`<div class="epchip${L.instCategory===k?' active':''}" data-instcat="${k}"><b>${CATEGORY_LABELS[k]||k}</b>${li[k].length} items</div>`).join('')}
+    </div>
+
+    <div id="inst-cards">${cards}</div>
+  </div>`;
+}
+
+/* =====================================================================
+   TAB: PORTFOLIO & EFFICIENT FRONTIER
+   ===================================================================== */
+const PORT_CLUSTER_LABELS={growth:'Growth equity',income:'Income-oriented equity',debt:'Debt',hybrid:'Hybrid',gold:'Precious metals',intl:'International',alt:'Real assets'};
+
+function riskCompositionBar(decomp, concentratedDecomp, w, h){
+  if(w===undefined)w=620; if(h===undefined)h=76;
+  const barH=30, barY=14, pL=4, pR=4;
+  const barW=w-pL-pR;
+  const sysW=decomp.systematicPct*barW;
+  const unsysW=decomp.unsystematicPct*barW;
+  const markerX=pL+concentratedDecomp.unsystematicPct*barW; // where 100%-in-top-holding would sit, for reference
+
+  return svgOpen(w,h)+
+    `<defs>
+      <linearGradient id="sysGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#8FC79E"/><stop offset="100%" stop-color="#5FA875"/></linearGradient>
+      <linearGradient id="unsysGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#E8977A"/><stop offset="100%" stop-color="#D97757"/></linearGradient>
+    </defs>
+    <rect x="${pL}" y="${barY}" width="${barW.toFixed(1)}" height="${barH}" rx="3" fill="rgba(241,238,227,.06)"/>
+    <rect x="${pL}" y="${barY}" width="${sysW.toFixed(1)}" height="${barH}" rx="3" fill="url(#sysGrad)"/>
+    <rect x="${(pL+sysW).toFixed(1)}" y="${barY}" width="${unsysW.toFixed(1)}" height="${barH}" fill="url(#unsysGrad)" rx="3"/>
+    ${decomp.systematicPct>0.14?`<text x="${(pL+sysW/2).toFixed(1)}" y="${barY+barH/2+4}" fill="#12261C" font-size="12" font-weight="700" font-family="'Spline Sans Mono',monospace" text-anchor="middle">${(decomp.systematicPct*100).toFixed(0)}%</text>`:''}
+    ${decomp.unsystematicPct>0.10?`<text x="${(pL+sysW+unsysW/2).toFixed(1)}" y="${barY+barH/2+4}" fill="#12261C" font-size="12" font-weight="700" font-family="'Spline Sans Mono',monospace" text-anchor="middle">${(decomp.unsystematicPct*100).toFixed(0)}%</text>`:''}
+    <line x1="${markerX.toFixed(1)}" y1="${barY-6}" x2="${markerX.toFixed(1)}" y2="${barY+barH+6}" stroke="#F1EEE3" stroke-width="1.5" stroke-dasharray="3,2"/>
+    <text x="${markerX.toFixed(1)}" y="${barY+barH+20}" fill="rgba(241,238,227,.55)" font-size="9" font-family="'Spline Sans Mono',monospace" text-anchor="middle">if 100% in your biggest holding</text>
+    </svg>`;
+}
+
+function computePortfolioDerived(assets, corr){
+  const rawW = L.portfolio.weights;
+  const w = normalizeWeights(rawW);
+  const returns = assets.map(a=>a.ret), vols = assets.map(a=>a.vol);
+  const marketIdx = 0;
+  const portRet = portfolioReturn(w, returns);
+  const decomp = decomposeRisk(w, vols, corr, marketIdx);
+  const topIdx = w.indexOf(Math.max(...w));
+  const concRet = returns[topIdx], concVol = vols[topIdx];
+  const volSaved = concVol - decomp.totalVol;
+  const retGiven = concRet - portRet;
+  const concentratedW = assets.map((_,i)=>i===topIdx?1:0);
+  const concentratedDecomp = decomposeRisk(concentratedW, vols, corr, marketIdx);
+  return { w, rawW, returns, vols, marketIdx, portRet, decomp, topIdx, concRet, concVol, volSaved, retGiven, concentratedDecomp };
+}
+
+function pfInflation(){
+  // Lazy default per country until the person touches the slider,
+  // so a country switch keeps a sensible starting assumption.
+  if(L.portfolio.inflation!=null) return L.portfolio.inflation;
+  return L.country==='IN' ? 6 : 2.5;
+}
+function portfolioStatsHTML(d){
+  const inf=pfInflation()/100;
+  const real=realRate(d.portRet, inf);
+  return `<div class="stat"><div class="stat-label">Expected return${infoIcon('The average yearly gain this mix would be expected to produce over the long run, based on the illustrative return assumptions for each building block. This is the nominal figure, before inflation.')}</div><div class="stat-value">${(d.portRet*100).toFixed(2)}%</div></div>
+  <div class="stat"><div class="stat-label">After ${pfInflation()}% inflation${infoIcon('The real return: what this mix earns in purchasing power once inflation is stripped out, using the exact Fisher relation rather than a simple subtraction. This is the rate your money actually grows in terms of what it can buy.')}</div><div class="stat-value" style="color:${real>0?'#8FC79E':'#E8977A'}">${(real*100).toFixed(2)}%</div><div class="stat-sub">${real>0?'growing in real terms':'losing purchasing power'}</div></div>
+  <div class="stat"><div class="stat-label">Risk${infoIcon('How much the portfolio\'s value tends to bounce around year to year. Higher means bigger swings, both up and down, not just bigger losses.')}</div><div class="stat-value">${(d.decomp.totalVol*100).toFixed(2)}%</div></div>
+  <div class="stat"><div class="stat-label">Beta${infoIcon('How much your portfolio moves when the overall market moves. 1.0 = moves with the market. Above 1.0 = bigger swings than the market. Below 1.0 = smaller swings. Near zero or negative = little relationship, sometimes moves the opposite way. Computed directly from the correlation structure, not a rough estimate.')}</div><div class="stat-value">${d.decomp.beta.toFixed(2)}</div><div class="stat-sub">${d.decomp.beta>1?'more volatile than the market':d.decomp.beta<1&&d.decomp.beta>0?'less volatile than the market':d.decomp.beta<=0?'moves opposite to / independent of the market':''}</div></div>`;
+}
+
+function portfolioRiskBarHTML(d){
+  return `${riskCompositionBar(d.decomp, d.concentratedDecomp)}
+  <div class="risk-comp-legend">
+    <span><i style="background:#5FA875"></i>Systematic ${(d.decomp.systematicPct*100).toFixed(0)}% (${(d.decomp.systematicVol*100).toFixed(1)}% volatility): the market-wide risk you can't remove</span>
+    <span><i style="background:#D97757"></i>Unsystematic ${(d.decomp.unsystematicPct*100).toFixed(0)}% (${(d.decomp.unsystematicVol*100).toFixed(1)}% volatility): specific to your mix, this is what diversifying reduces</span>
+  </div>`;
+}
+
+function portfolioDiversifyHTML(d, assets){
+  return `Your biggest single position is <b style="color:var(--paper)">${assets[d.topIdx].name}</b>. Holding <i>only</i> that would give ${(d.concRet*100).toFixed(1)}% return at ${(d.concVol*100).toFixed(1)}% risk, with <b style="color:var(--paper)">${(d.concentratedDecomp.unsystematicPct*100).toFixed(0)}%</b> of that risk being pure unsystematic, single-holding risk.
+  Your actual mix gives up <b style="color:var(--paper)">${(d.retGiven*100).toFixed(1)} percentage points</b> of return
+  in exchange for <b style="color:${d.volSaved>0?'#8FC79E':'#E8977A'}">${d.volSaved>=0?(d.volSaved*100).toFixed(1)+' points less':(-d.volSaved*100).toFixed(1)+' points more'}</b> risk, and cuts unsystematic risk's share from ${(d.concentratedDecomp.unsystematicPct*100).toFixed(0)}% down to ${(d.decomp.unsystematicPct*100).toFixed(0)}%.
+  ${d.volSaved>0 && d.retGiven < d.volSaved ? "That's the diversification trade working in your favour: you gave up less return than the risk you removed." : ''}
+  This is <span class="term" data-def="Risk that comes from a specific holding or sector: a single company having a bad year, a single sector falling out of favour. Spreading across uncorrelated assets reduces or removes it.">unsystematic risk</span> being diversified away. It's the one kind of investment risk that's genuinely free to reduce: no expected return needs to be sacrificed to do it, only to eliminate the LAST bit of it entirely gets expensive.`;
+}
+
+function portfolioBetaTextHTML(d, assets){
+  return `<span class="term" data-def="A measure of how much an asset or portfolio moves relative to the overall market. Beta 1.0 = moves with the market. Above 1.0 = bigger swings. Below 1.0 = smaller swings. Near 0 or negative = little to no relationship, sometimes moves the opposite way.">Beta</span> of <b style="color:var(--gold)">${d.decomp.beta.toFixed(2)}</b> means: if the broad market moves 10% in a year, your portfolio has historically tended to move roughly ${(d.decomp.beta*10).toFixed(1)}% in the same direction, all else equal.
+  This is <span class="term" data-def="Risk from the market as a whole: recessions, rate changes, broad sentiment shifts. Every asset with meaningful equity exposure carries some of this. Diversification cannot remove it, only unsystematic risk.">systematic risk</span>: diversifying across these ${assets.length} building blocks does not remove it, because market-wide moves affect nearly everything at once. Lowering beta means deliberately holding more of the low-beta assets above (debt, gold), which is a different lever from diversification.`;
+}
+
+function portfolioChartHTML(d, assets, corr){
+  const {cloud, frontier} = generateFrontier(d.returns, d.vols, corr, 3000, L.portfolio.seed);
+  const assetPoints = assets.map((a,i)=>({vol:a.vol, ret:a.ret, label:a.name.split(' ')[0], fullLabel:a.name}));
+  return frontierChart(cloud, frontier, assetPoints, {vol:d.decomp.totalVol, ret:d.portRet});
+}
+
+// Called on every slider tick (input event fires continuously during a
+// drag). Recomputes only the cheap, closed-form numbers — stats, the risk
+// bar, and the two text cards — and patches just those DOM nodes directly.
+// Crucially this never touches the sliders themselves or the frontier
+// chart, so the drag gesture the browser is mid-tracking never gets its
+// underlying element replaced (that was the actual cause of the stutter,
+// not just raw compute time — see build notes).
+function portfolioMoneyHTML(d){
+  const c=cfg();
+  const inf=pfInflation()/100;
+  const real=realRate(d.portRet, inf);
+  const base=c.code==='IN'?1000000:10000;
+  const yrs=10;
+  const fv=base*Math.pow(1+d.portRet,yrs);
+  const realFv=base*Math.pow(1+real,yrs);
+  return `<div class="gr-note" style="margin-top:0">${c.compact(base)} left in this mix for ${yrs} years grows to <b style="color:var(--paper)">${c.compact(fv)}</b> on paper. In today's purchasing power, after ${pfInflation()}% inflation, it is really worth <b style="color:${real>0?'#8FC79E':'#E8977A'}">${c.compact(realFv)}</b>. The gap between those two numbers is what inflation quietly takes, and it is why the after-inflation return above, not the headline one, is the number to judge a mix by.</div>`;
+}
+function updatePortfolioLive(){
+  const c=cfg();
+  const assets = c.code==='IN' ? PORTFOLIO_ASSETS_IN : PORTFOLIO_ASSETS_US;
+  const corr = c.code==='IN' ? PORTFOLIO_CORR_IN : PORTFOLIO_CORR_US;
+  const d = computePortfolioDerived(assets, corr);
+  const statsEl=document.getElementById('pf-stats'); if(statsEl) statsEl.innerHTML=portfolioStatsHTML(d);
+  const moneyEl=document.getElementById('pf-money'); if(moneyEl) moneyEl.innerHTML=portfolioMoneyHTML(d);
+  const barEl=document.getElementById('pf-riskbar'); if(barEl) barEl.innerHTML=portfolioRiskBarHTML(d);
+  const divEl=document.getElementById('pf-diversify'); if(divEl) divEl.innerHTML=portfolioDiversifyHTML(d, assets);
+  const betaEl=document.getElementById('pf-beta-text'); if(betaEl) betaEl.innerHTML=portfolioBetaTextHTML(d, assets);
+  // .term and .info-icon tooltips are pure CSS (:hover), so no JS re-attachment is needed here
+}
+
+let portfolioChartTimer=null;
+function schedulePortfolioChartUpdate(delay){
+  if(portfolioChartTimer) clearTimeout(portfolioChartTimer);
+  portfolioChartTimer=setTimeout(()=>{
+    portfolioChartTimer=null;
+    const c=cfg();
+    const assets = c.code==='IN' ? PORTFOLIO_ASSETS_IN : PORTFOLIO_ASSETS_US;
+    const corr = c.code==='IN' ? PORTFOLIO_CORR_IN : PORTFOLIO_CORR_US;
+    const d = computePortfolioDerived(assets, corr);
+    const chartEl=document.getElementById('pf-chart');
+    if(chartEl){ chartEl.innerHTML=portfolioChartHTML(d, assets, corr); attachChartHovers(chartEl); }
+  }, delay===undefined?130:delay);
+}
+
+function renderPortfolio(){
+  const c=cfg();
+  const assets = c.code==='IN' ? PORTFOLIO_ASSETS_IN : PORTFOLIO_ASSETS_US;
+  const corr = c.code==='IN' ? PORTFOLIO_CORR_IN : PORTFOLIO_CORR_US;
+  if(!L.portfolio.weights || L.portfolio.weights.length !== assets.length){
+    L.portfolio.weights = assets.map(()=>Math.round(100/assets.length));
+  }
+  const d = computePortfolioDerived(assets, corr);
+  const rawW = d.rawW, w = d.w;
+  const pct = roundPercentsTo100(w);
+
+  // Group sliders by cluster so 15 assets stay navigable
+  const clusterOrder=['growth','income','debt','hybrid','gold','intl','alt'];
+  let sliders='';
+  clusterOrder.forEach(cl=>{
+    const idxs=assets.map((a,i)=>a.cluster===cl?i:null).filter(i=>i!==null);
+    if(!idxs.length) return;
+    sliders+=`<div class="port-cluster"><div class="port-cluster-head">${PORT_CLUSTER_LABELS[cl]}</div>`;
+    idxs.forEach(i=>{
+      const a=assets[i];
+      sliders+=`<div class="field">
+        <label>${a.name}<span class="port-asset-meta">typically ${(a.ret*100).toFixed(1)}%/yr${infoIcon('The illustrative long-run expected return for this building block, same figure used everywhere else in Goalden. This is what actually moves your overall expected return when you drag its bar.')} &middot; ${(a.vol*100).toFixed(0)}% volatility, how much a bad year here typically swings</span></label>
+        <div class="port-pct-row"><span class="port-pct-badge" data-pf-label="${i}">${pct[i]}%</span><span class="port-pct-of">of your total portfolio</span></div>
+        <div class="slider-row">
+          <input type="range" min="0" max="100" value="${rawW[i]}" data-portidx="${i}">
+          <input type="number" class="field-num" value="${rawW[i]}" data-portidx-num="${i}">
+        </div>
+      </div>`;
+    });
+    sliders+=`</div>`;
+  });
+
+  return `<div class="grid">
+  <div class="panel">
+    <h3>Build a portfolio</h3>
+    <div class="cap" style="margin-bottom:14px">${assets.length} building blocks across ${clusterOrder.filter(cl=>assets.some(a=>a.cluster===cl)).length} categories, each with its own return and volatility below. The bar and number you drag are a relative weight, not the final percentage. All 15 weights get automatically rescaled against each other so the bold percentage next to each name always reflects its true share, and the total below always reads exactly 100%. Named after the real SEBI categories and indices you would actually shop from, with long-run category-level assumptions; not any specific fund house's live performance.</div>
+    <div class="pf-total-banner"><span class="ttl-label">Total allocated${infoIcon('Every mix, however you drag it, is rescaled to sum to exactly 100%. This checks out to the rupee (or point) by construction, not by luck.')}</span><span class="ttl-value" id="pf-total-check">${pct.reduce((a,b)=>a+b,0)}%</span></div>
+    ${sliders}
+    <button id="reseedFrontierBtn" style="width:100%;margin-top:14px;background:transparent;border:1px solid rgba(241,238,227,.18);color:rgba(241,238,227,.6);border-radius:3px;padding:9px;font-size:11px;cursor:pointer;font-family:'Spline Sans Mono',monospace">Resample the frontier cloud</button>
+  </div>
+
+  <div class="output">
+    <div class="stat-row" id="pf-stats" style="grid-template-columns:repeat(4,1fr)">${portfolioStatsHTML(d)}</div>
+
+    <div class="card">
+      <h4>What this return does to actual money</h4>
+      <div class="cap">Updates live as you drag. The honest way to judge a mix is the after-inflation line.</div>
+      <div id="pf-money">${portfolioMoneyHTML(d)}</div>
+      <div class="field" style="margin-top:12px;margin-bottom:4px"><label>Inflation assumption <b id="pf-inf-label">${pfInflation()}%</b></label>
+        <div class="slider-row">
+          <input type="range" min="0" max="12" step="0.1" value="${pfInflation()}" data-pfinf>
+          <input type="number" class="field-num" min="0" max="12" step="0.1" value="${pfInflation()}" data-pfinf-num>
+        </div>
+      </div>
+      <button id="pfToRetBtn" style="width:100%;margin-top:10px;background:rgba(201,164,85,.14);border:1px solid rgba(201,164,85,.5);color:var(--gold);border-radius:3px;padding:10px;font-size:12px;cursor:pointer;font-family:'Spline Sans Mono',monospace">Use this return in the Retirement Lab</button>
+      <div class="cap" style="margin-top:7px">Sets the Retirement tab's "Growth while saving" to this mix's expected return and takes you there.</div>
+    </div>
+
+    <div class="card">
+      <h4>The risk-return map <span style="color:rgba(241,238,227,.4);font-weight:400;font-size:13px">(finance calls this curve the "efficient frontier")</span></h4>
+      <div class="cap">Each faint dot is one possible mix of these ${assets.length} building blocks. Hover the gold line, the green dots, or your marker for exact numbers.</div>
+      <div id="pf-chart">${portfolioChartHTML(d, assets, corr)}</div>
+    </div>
+
+    <div class="card">
+      <h4>How much of your risk is diversifiable, right now${infoIcon('This updates live as you move the sliders. Systematic risk comes from the market as a whole and cannot be diversified away. Unsystematic risk is specific to your particular mix of holdings, and shrinks as you spread across less-correlated building blocks.')}</h4>
+      <div class="cap">Drag any slider on the left and watch the split shift.</div>
+      <div id="pf-riskbar">${portfolioRiskBarHTML(d)}</div>
+    </div>
+
+    <div class="card">
+      <h4>What diversifying actually bought you</h4>
+      <div class="gr-note" id="pf-diversify" style="margin-top:0">${portfolioDiversifyHTML(d, assets)}</div>
+    </div>
+
+    <div class="card">
+      <h4>Reading beta</h4>
+      <div class="gr-note" id="pf-beta-text" style="margin-top:0">${portfolioBetaTextHTML(d, assets)}</div>
+    </div>
+  </div>
+  </div>`;
+}
+
+/* =====================================================================
+   TAB: HEALTH SCORE
+   ===================================================================== */
+function calcHealthScore(){
+  const h=L.health;
+  const fundingRatio = h.capacity>0 ? Math.min(1, h.capacity/Math.max(1,h.totalSIP)) : 0;
+  const funding=Math.round(fundingRatio*40);
+  const emergency = h.emergencyStatus==='full'?20:h.emergencyStatus==='partial'?10:0;
+  const stress = h.shockSurvives?25:5;
+  const surplus = h.capacity > h.totalSIP;
+  const discipline = surplus?15:5;
+  return {funding, emergency, stress, discipline, total:funding+emergency+stress+discipline, fundingRatio};
+}
+
+function renderHealth(){
+  const c=cfg(), h=L.health, sc=calcHealthScore();
+  const bands=[{max:39,label:'Needs attention',color:'#A03A22'},{max:69,label:'On track, room to grow',color:'#C9A455'},{max:100,label:'Strong shape',color:'#3D7A4F'}];
+  const band=bands.find(b=>sc.total<=b.max);
+
+  return `<div class="grid">
+  <div class="panel">
+    <h3>Plan health inputs</h3>
+    <div class="field"><label>Your savings capacity <b>${c.fmt(h.capacity)}</b>/mo</label><input type="range" min="5000" max="300000" step="1000" value="${h.capacity}" data-k="capacity" data-tab="health"></div>
+    <div class="field"><label>Total your goals need <b>${c.fmt(h.totalSIP)}</b>/mo</label><input type="range" min="5000" max="300000" step="1000" value="${h.totalSIP}" data-k="totalSIP" data-tab="health"></div>
+    <div class="section-label">Emergency fund</div>
+    <div class="toggle-row">
+      <button class="tglbtn${h.emergencyStatus==='no'?' active':''}" data-toggle="emergencyStatus" data-val="no">None</button>
+      <button class="tglbtn${h.emergencyStatus==='partial'?' active':''}" data-toggle="emergencyStatus" data-val="partial">Partial</button>
+      <button class="tglbtn${h.emergencyStatus==='full'?' active':''}" data-toggle="emergencyStatus" data-val="full">Full</button>
+    </div>
+    <div class="section-label">Survives a 2008-style shock?</div>
+    <div class="toggle-row">
+      <button class="tglbtn${h.shockSurvives?' active':''}" data-toggle="shockSurvives" data-val="true">Yes</button>
+      <button class="tglbtn${!h.shockSurvives?' active':''}" data-toggle="shockSurvives" data-val="false">No / unsure</button>
+    </div>
+    <div class="gr-note">A scored composite, built only from what this app actually measures: funding, emergency cover, and stress survival. Not a substitute for a full review with an adviser.</div>
+  </div>
+  <div class="output">
+    <div class="card">
+      <h4>Plan Health Score${infoIcon('A 0 to 100 composite scored only from what this app can actually measure: funding 40 points, emergency cover 20, stress survival 25, discipline 15. A quick pulse check, not a full financial review.')}</h4>
+      <div class="cap">${band.label}</div>
+      <div class="score-dial">
+        <div class="dial-num" style="color:${band.color}">${sc.total}</div>
+        <div class="dial-bars">
+          <div class="dbar-row"><span class="dbar-label">Funding</span><div class="dbar-track"><div class="dbar-fill" style="width:${sc.funding/40*100}%"></div></div><span class="dbar-val">${sc.funding}/40</span></div>
+          <div class="dbar-row"><span class="dbar-label">Emergency</span><div class="dbar-track"><div class="dbar-fill" style="width:${sc.emergency/20*100}%"></div></div><span class="dbar-val">${sc.emergency}/20</span></div>
+          <div class="dbar-row"><span class="dbar-label">Stress survival</span><div class="dbar-track"><div class="dbar-fill" style="width:${sc.stress/25*100}%"></div></div><span class="dbar-val">${sc.stress}/25</span></div>
+          <div class="dbar-row"><span class="dbar-label">Discipline</span><div class="dbar-track"><div class="dbar-fill" style="width:${sc.discipline/15*100}%"></div></div><span class="dbar-val">${sc.discipline}/15</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h4>What moves this score</h4>
+      <div class="gr-note" style="margin-top:0">
+      <b>Funding (40pts):</b> your capacity (${c.fmt(h.capacity)}) against what your goals need (${c.fmt(h.totalSIP)}). Currently ${(sc.fundingRatio*100).toFixed(0)}% funded.${infoIcon('Funding ratio: savings capacity divided by what all goals together need per month. At 100% or more, every goal is fully paid for out of current capacity.')}<br>
+      <b>Emergency (20pts):</b> ${h.emergencyStatus==='full'?'fully covered':h.emergencyStatus==='partial'?'partially covered':'not yet built'}.<br>
+      <b>Stress survival (25pts):</b> ${h.shockSurvives?'plan holds up':'plan may not survive'} a 2008-style shock. Check the Retirement tab's stress test to verify this properly rather than guessing.<br>
+      <b>Discipline (15pts):</b> ${h.capacity>h.totalSIP?'capacity exceeds what goals need, a real surplus':'capacity is fully or over-committed'}.
+      </div>
+    </div>
+  </div>
+  </div>`;
+}
+
+/* =====================================================================
+   RENDER ENGINE
+   ===================================================================== */
+const TABS=[
+  {id:'retirement', label:'Retirement Lab'},
+  {id:'stepup', label:'Step-Up SIP'},
+  {id:'swp', label:'Sustainable Withdrawal'},
+  {id:'fx', label:'Cross-Border'},
+  {id:'joint', label:'Joint Children Corpus'},
+  {id:'mc', label:'Monte Carlo'},
+  {id:'portfolio', label:'Build a Portfolio'},
+  {id:'instruments', label:'Instrument Explorer'},
+  {id:'health', label:'Plan Health'},
+];
+
+function renderTabs(){
+  document.getElementById('tabs').innerHTML = TABS.map(t=>
+    `<button class="tab${L.tab===t.id?' active':''}" data-tab-switch="${t.id}">${t.label}</button>`).join('');
+  document.getElementById('countryToggle').innerHTML = Object.values(C).map(c=>
+    `<button class="ctbtn${L.country===c.code?' active':''}" data-country="${c.code}">${c.sym} ${c.code}</button>`).join('');
+}
+
+function render(){
+  renderTabs();
+  const main=document.getElementById('main');
+  if(L.tab==='retirement') main.innerHTML=renderRetirement();
+  else if(L.tab==='stepup') main.innerHTML=renderStepUp();
+  else if(L.tab==='swp') main.innerHTML=renderSWP();
+  else if(L.tab==='fx') main.innerHTML=renderFX();
+  else if(L.tab==='joint') main.innerHTML=renderJoint();
+  else if(L.tab==='mc') main.innerHTML=renderMC();
+  else if(L.tab==='portfolio') main.innerHTML=renderPortfolio();
+  else if(L.tab==='instruments') main.innerHTML=renderInstruments();
+  else if(L.tab==='health') main.innerHTML=renderHealth();
+  const tabLabel=(TABS.find(t=>t.id===L.tab)||{}).label||'';
+  document.getElementById('printHeader').innerHTML=
+    '<div class="pt">Goalden Lab &middot; '+tabLabel+'</div>'+
+    '<div class="ps">'+cfg().name+' &middot; printed '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})+'</div>';
+  attach();
+}
+
+function attach(){
+  document.querySelectorAll('[data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{L.tab=el.dataset.tabSwitch;render();}));
+  document.querySelectorAll('[data-country]').forEach(el=>el.addEventListener('click',()=>{L.country=el.dataset.country;L.instCategory='all';render();}));
+
+  let mcRenderTimer=null;
+  document.querySelectorAll('input[type=range][data-k]').forEach(el=>{
+    el.addEventListener('input',()=>{
+      const k=el.dataset.k, tab=el.dataset.tab||'ret';
+      const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
+      let v=parseFloat(el.value);
+      if(k==='shockYear'){ L.ret.shock.year=v; render(); return; }
+      if(k==='swpShockYear'){ L.swp.shock.year=v; render(); return; }
+      target[k]=v;
+      if(tab==='mc'){
+        // MC's stats need the full 1000-path simulation to produce — there
+        // is no cheap closed-form shortcut like Portfolio has. So instead
+        // echo just the slider's own raw value instantly (keeps the drag
+        // itself perfectly smooth) and debounce the expensive recompute.
+        const lbl=document.querySelector(`[data-mc-label="${k}"]`);
+        if(lbl) lbl.textContent = k==='sip' ? cfg().fmt(v) : (k==='years' ? v : v+'%');
+        if(mcRenderTimer) clearTimeout(mcRenderTimer);
+        mcRenderTimer=setTimeout(()=>{ mcRenderTimer=null; render(); }, 130);
+        return;
+      }
+      render();
+    });
+  });
+
+  // Keyboard number entry beside every slider — wraps each range input in a
+  // flex row with a paired number field. Typing a value and pressing Enter
+  // (or blurring) pushes it through the SAME slider input-event handler
+  // above, so there is only one place that actually updates state.
+  document.querySelectorAll('input[type=range][data-k]').forEach(slider=>{
+    if(slider.parentElement.classList.contains('slider-row')) return;
+    const row=document.createElement('div');
+    row.className='slider-row';
+    slider.parentElement.insertBefore(row, slider);
+    row.appendChild(slider);
+    const num=document.createElement('input');
+    num.type='number'; num.className='field-num';
+    num.min=slider.min; num.max=slider.max; num.step=slider.step||1;
+    num.value=slider.value;
+    row.appendChild(num);
+    const pushToSlider=()=>{
+      let v=parseFloat(num.value);
+      if(isNaN(v)) { num.value=slider.value; return; }
+      v=Math.max(parseFloat(slider.min), Math.min(parseFloat(slider.max), v));
+      slider.value=v; num.value=v;
+      // Deferred to the next tick: dispatching synchronously from inside a
+      // blur handler can fire the re-render (which replaces this very
+      // element's parent) while the browser is still finishing its own
+      // blur-related DOM work, causing a "node no longer a child" error.
+      setTimeout(()=>{ slider.dispatchEvent(new Event('input',{bubbles:true})); }, 0);
+    };
+    num.addEventListener('keydown',e=>{ if(e.key==='Enter') pushToSlider(); });
+    num.addEventListener('blur',pushToSlider);
+    slider.addEventListener('input',()=>{ num.value=slider.value; });
+  });
+
+  document.querySelectorAll('[data-toggle]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const key=el.dataset.toggle, val=el.dataset.val;
+      const parsedVal = val==='true'?true : val==='false'?false : val;
+      if(key==='direction'){
+        if(parsedVal !== L.fx.direction){
+          // Swap home/foreign rates so the defaults stay meaningful for
+          // whichever country is now "home" — otherwise a US "home return"
+          // silently keeps India's default rate, which is misleading.
+          const tmp = L.fx.homeReturn;
+          L.fx.homeReturn = L.fx.foreignReturn;
+          L.fx.foreignReturn = tmp;
+          // Rescale the principal roughly to the new home currency's scale
+          // (₹10L ≈ $12K at ~₹83/$) so the number stays realistic rather
+          // than showing "$1,000,000" as a default US contribution.
+          L.fx.principal = parsedVal==='receivingFromAbroad'
+            ? Math.round(L.fx.principal/83/500)*500
+            : Math.round(L.fx.principal*83/50000)*50000;
+        }
+        L.fx.direction=parsedVal;
+      }
+      else if(key==='regime') L.mc.regime=parsedVal;
+      else if(key==='emergencyStatus') L.health.emergencyStatus=parsedVal;
+      else if(key==='shockSurvives') L.health.shockSurvives=parsedVal;
+      else L.ret[key]=parsedVal;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-shock]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const id=el.dataset.shock;
+      if(id==='none'){ L.ret.shock=null; }
+      else { L.ret.shock={epId:id, year: L.ret.shock?L.ret.shock.year:5}; }
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-swpshock]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const id=el.dataset.swpshock;
+      if(id==='none'){ L.swp.shock=null; }
+      else { L.swp.shock={epId:id, year: L.swp.shock?L.swp.shock.year:3}; }
+      render();
+    });
+  });
+
+  document.querySelectorAll('input[data-pfinf]').forEach(el=>{
+    el.addEventListener('input',()=>{
+      L.portfolio.inflation=parseFloat(el.value);
+      const lbl=document.getElementById('pf-inf-label'); if(lbl) lbl.textContent=L.portfolio.inflation+'%';
+      const num=document.querySelector('input[data-pfinf-num]'); if(num) num.value=el.value;
+      // Cheap path only: inflation changes no chart, so no debounce needed.
+      updatePortfolioLive();
+    });
+  });
+  document.querySelectorAll('input[data-pfinf-num]').forEach(el=>{
+    const push=()=>{
+      let v=parseFloat(el.value); if(isNaN(v)){ return; }
+      v=Math.max(0, Math.min(12, v));
+      const sl=document.querySelector('input[data-pfinf]');
+      sl.value=v; el.value=v;
+      sl.dispatchEvent(new Event('input',{bubbles:true}));
+    };
+    el.addEventListener('keydown',e=>{ if(e.key==='Enter') push(); });
+    el.addEventListener('blur',push);
+  });
+
+  document.getElementById('pfToRetBtn')&&document.getElementById('pfToRetBtn').addEventListener('click',()=>{
+    const c=cfg();
+    const assets = c.code==='IN' ? PORTFOLIO_ASSETS_IN : PORTFOLIO_ASSETS_US;
+    const corr = c.code==='IN' ? PORTFOLIO_CORR_IN : PORTFOLIO_CORR_US;
+    const d = computePortfolioDerived(assets, corr);
+    L.ret.preRate=Math.max(4, Math.min(16, Math.round(d.portRet*1000)/10));
+    L.tab='retirement';
+    render();
+  });
+
+  document.querySelectorAll('[data-instcat]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      L.instCategory=el.dataset.instcat;
+      render();
+    });
+  });
+
+  const isb=document.getElementById('instSearchBox');
+  if(isb){
+    isb.addEventListener('input',()=>{
+      L.instSearch=isb.value;
+      // Patch only the cards container: a full render would replace the
+      // input mid-keystroke and throw the person's cursor out of the box.
+      const el=document.getElementById('inst-cards');
+      if(el) el.innerHTML=instrumentCardsHTML();
+    });
+  }
+
+  document.querySelectorAll('input[data-portidx]').forEach(el=>{
+    el.addEventListener('input',()=>{
+      const idx=parseInt(el.dataset.portidx);
+      const v=parseFloat(el.value);
+      L.portfolio.weights[idx]=v;
+      // Fast path: patch every asset's % label directly (no DOM
+      // regeneration of the panel — that's what keeps the native drag
+      // gesture from being interrupted). All 15 need refreshing, not just
+      // the one being dragged: moving any one bar renormalizes every
+      // other asset's share too, and leaving the other 14 stale mid-drag
+      // is exactly what makes the numbers look like they stop adding up.
+      // Largest-remainder rounding keeps them summing to exactly 100 on
+      // every single tick, not just after release.
+      const w = normalizeWeights(L.portfolio.weights);
+      const pct = roundPercentsTo100(w);
+      pct.forEach((p,i)=>{
+        const label = document.querySelector(`[data-pf-label="${i}"]`);
+        if(label) label.textContent = p+'%';
+      });
+      const totalEl = document.getElementById('pf-total-check');
+      if(totalEl) totalEl.textContent = pct.reduce((a,b)=>a+b,0)+'%';
+      const pairedNum = document.querySelector(`input[data-portidx-num="${idx}"]`);
+      if(pairedNum) pairedNum.value = v;
+      updatePortfolioLive();
+      schedulePortfolioChartUpdate();
+    });
+  });
+  document.querySelectorAll('input[data-portidx-num]').forEach(el=>{
+    const commit=()=>{
+      const idx=parseInt(el.dataset.portidxNum);
+      let v=parseFloat(el.value);
+      if(isNaN(v)) v=0;
+      v=Math.max(0,Math.min(100,v));
+      L.portfolio.weights[idx]=v;
+      render();
+    };
+    el.addEventListener('keydown',e=>{ if(e.key==='Enter') commit(); });
+    el.addEventListener('blur',()=>{ setTimeout(commit,0); });
+  });
+  document.getElementById('reseedFrontierBtn')&&document.getElementById('reseedFrontierBtn').addEventListener('click',()=>{
+    L.portfolio.seed=Math.floor(Math.random()*100000);
+    render();
+  });
+
+  // Chart hover tooltip — event delegation over every .fx-hover-target circle
+  // (frontier points, asset dots, the current-portfolio marker) inside any
+  // .fx-chart-wrap. One handler serves every chart of this type.
+  attachChartHovers(document);
+
+  document.getElementById('reseedBtn')&&document.getElementById('reseedBtn').addEventListener('click',()=>{
+    L.mc.seed = Math.floor(Math.random()*100000);
+    render();
+  });
+
+  document.getElementById('reseedDDBtn')&&document.getElementById('reseedDDBtn').addEventListener('click',()=>{
+    L.ret.ddSeed = Math.floor(Math.random()*100000);
+    // Only the drawdown-MC card needs to change; skip the full retirement
+    // render and go straight to the debounced patch (delay 0, since a
+    // button click isn't a drag that needs settling time).
+    scheduleDDMCUpdate(0);
+  });
+
+  document.getElementById('saveSnapshotBtn')&&document.getElementById('saveSnapshotBtn').addEventListener('click',()=>{
+    if(L.snapshots.length>=2) return;
+    const c=cfg(), r=L.ret, res=calcRetLab();
+    const rLabel = r.shock ? `with ${c.episodes.find(e=>e.id===r.shock.epId).label}` : (r.realTerms ? "today's money" : 'baseline');
+    L.snapshots.push({
+      label: 'Snapshot ' + (L.snapshots.length+1),
+      corpus: r.realTerms ? res.realCorpus : res.corpus,
+      sipDisplay: c.fmt(Math.round(res.sip)),
+      summary: `age ${r.age}\u2192${r.retireAge}, ${r.preRate}%/${r.postRate}%, ${rLabel}`,
+      currency: c,
+    });
+    render();
+  });
+  document.querySelectorAll('[data-remove-snapshot]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      L.snapshots.splice(parseInt(el.dataset.removeSnapshot),1);
+      render();
+    });
+  });
+
+  document.getElementById('addChildBtn')&&document.getElementById('addChildBtn').addEventListener('click',()=>{
+    if(L.joint.children.length<3){
+      L.joint.children.push({annualFeeToday:300000, yearsToStart:12, duration:4});
+      render();
+    }
+  });
+  document.querySelectorAll('[data-remove-child]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const idx=parseInt(el.dataset.removeChild);
+      L.joint.children.splice(idx,1);
+      if(L.joint.editingChild===idx) L.joint.editingChild=null;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-edit-child]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      L.joint.editingChild=parseInt(el.dataset.editChild);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-save-child]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const idx=parseInt(el.dataset.saveChild);
+      const fee=parseInt(document.getElementById('editFee').value);
+      const start=parseInt(document.getElementById('editStart').value);
+      const dur=parseInt(document.getElementById('editDur').value);
+      const err=document.getElementById('editChildErr');
+      if(!fee||fee<=0){err.textContent='Enter a fee above zero.';return;}
+      if(!start||start<1){err.textContent='College needs to start at least a year out.';return;}
+      if(!dur||dur<1){err.textContent='Course length needs to be at least a year.';return;}
+      L.joint.children[idx]={annualFeeToday:fee, yearsToStart:start, duration:dur};
+      L.joint.editingChild=null;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-cancel-child]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      L.joint.editingChild=null;
+      render();
+    });
+  });
+}
+
+document.getElementById('printBtn').addEventListener('click',()=>window.print());
+render();
+</script>
+</body>
+</html>

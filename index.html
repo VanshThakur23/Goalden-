@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Goalden — find your number</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Figtree:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1C3A2D; --paper:#F1EEE3; --gold:#C9A455; --dim:#8A9389;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sans-serif;min-height:100vh}
+h1,h2,h3{font-family:'Newsreader',serif}
+.mono{font-family:'Spline Sans Mono',monospace}
+
+.hero{padding:56px 24px 40px;max-width:720px;margin:0 auto;text-align:center}
+.hero .kicker{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:18px}
+.hero h1{font-size:clamp(34px,6vw,52px);font-weight:600;line-height:1.1;margin-bottom:16px;letter-spacing:-.01em}
+.hero p{font-size:16px;color:rgba(241,238,227,.7);line-height:1.6;max-width:52ch;margin:0 auto}
+.hero-visual{max-width:520px;margin:32px auto 0}
+.hero-visual svg{width:100%;height:auto;display:block}
+
+main{max-width:1080px;margin:0 auto;padding:0 24px 60px}
+.doors{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+@media(max-width:860px){.doors{grid-template-columns:1fr}}
+
+.door{
+  background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.12);
+  border-radius:3px 24px 24px 24px;padding:28px 26px;display:flex;flex-direction:column;
+  text-decoration:none;color:inherit;transition:all .2s;position:relative;overflow:hidden;
+}
+.door:hover{background:rgba(241,238,227,.07);border-color:rgba(201,164,85,.4);transform:translateY(-2px)}
+.door-level{font-family:'Spline Sans Mono',monospace;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+.door-icon{width:64px;height:64px;color:var(--ink);margin-bottom:18px;background:var(--gold);border-radius:50% 50% 50% 4px;display:flex;align-items:center;justify-content:center;padding:15px;box-shadow:0 6px 20px rgba(201,164,85,.25)}
+.door-icon svg{width:100%;height:100%}
+.door h2{font-size:23px;font-weight:600;margin-bottom:6px}
+.door .tagline{font-family:'Newsreader',serif;font-style:italic;font-size:14.5px;color:rgba(241,238,227,.6);margin-bottom:16px}
+.door .desc{font-size:13.5px;color:rgba(241,238,227,.65);line-height:1.6;margin-bottom:18px;flex:1}
+.door .meta{display:flex;justify-content:space-between;align-items:center;padding-top:16px;border-top:1px solid rgba(241,238,227,.1)}
+.door .time{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim)}
+.door .cta{font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:var(--gold);display:flex;align-items:center;gap:5px}
+.door .cta svg{width:13px;height:13px}
+
+.door-1{border-radius:3px 24px 24px 24px}
+.door-2{border-radius:24px 3px 24px 24px}
+.door-3{border-radius:24px 24px 3px 24px}
+
+.for-whom{list-style:none;margin-top:2px}
+.for-whom li{font-size:12px;color:rgba(241,238,227,.5);padding-left:14px;position:relative;margin-bottom:4px}
+.for-whom li::before{content:'';position:absolute;left:0;top:7px;width:4px;height:4px;border-radius:50%;background:var(--gold)}
+
+.not-sure{max-width:720px;margin:52px auto 0;background:rgba(201,164,85,.06);border:1px solid rgba(201,164,85,.25);border-radius:3px 20px 20px 20px;padding:24px 28px}
+.not-sure h3{font-size:16px;margin-bottom:10px}
+.not-sure p{font-size:13.5px;color:rgba(241,238,227,.65);line-height:1.6}
+.not-sure b{color:var(--paper)}
+
+footer{text-align:center;padding:30px 24px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(241,238,227,.35)}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">Goalden</div>
+  <h1>Every goal has a number.<br>Find yours.</h1>
+  <p>Three ways in, depending on how much you already know and how deep you want to go. Pick the one that fits. You can always move to a deeper one later.</p>
+  <div class="hero-visual">
+    <svg viewBox="0 0 400 140" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="heroFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#C9A455" stop-opacity=".55"/>
+          <stop offset="100%" stop-color="#C9A455" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="M0,120 C60,115 90,90 130,70 C170,50 190,85 230,60 C270,35 300,15 340,20 C365,23 385,10 400,5 L400,140 L0,140 Z" fill="url(#heroFill)"/>
+      <path d="M0,120 C60,115 90,90 130,70 C170,50 190,85 230,60 C270,35 300,15 340,20 C365,23 385,10 400,5" fill="none" stroke="#C9A455" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="400" cy="5" r="5" fill="#F1EEE3"/>
+      <circle cx="230" cy="60" r="3" fill="#C9A455" opacity=".7"/>
+      <circle cx="130" cy="70" r="3" fill="#C9A455" opacity=".7"/>
+    </svg>
+  </div>
+</div>
+
+<main>
+  <div class="doors">
+
+    <a class="door door-1" href="goalden.html">
+      <div class="door-level">Level 1 &middot; Quick</div>
+      <div class="door-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></div>
+      <h2>Quick Calculate</h2>
+      <div class="tagline">"I just want the number."</div>
+      <div class="desc">Answer four plain-language questions: no jargon, no percentages to guess at. Get your target amount and what to save monthly, explained in one sentence.</div>
+      <ul class="for-whom">
+        <li>First time thinking about this at all</li>
+        <li>Want a fast, honest answer</li>
+        <li>Not ready for a full profile yet</li>
+      </ul>
+      <div class="meta"><span class="time">~2 minutes</span><span class="cta">Start here<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+    <a class="door door-2" href="goalden-door2.html">
+      <div class="door-level">Level 2 &middot; Guided</div>
+      <div class="door-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      <h2>The Full Plan</h2>
+      <div class="tagline">"Tell me what actually fits me."</div>
+      <div class="desc">A real risk-profiling questionnaire, the kind used in wealth management, scores your capacity and comfort with risk, then names the actual fund categories that suit your profile and each goal's timeline, with plain-English reasons for what's included and what's deliberately left out.</div>
+      <ul class="for-whom">
+        <li>Want to understand your own risk profile</li>
+        <li>Juggling more than one goal at once</li>
+        <li>Want to know which funds and why, not just a percentage</li>
+      </ul>
+      <div class="meta"><span class="time">10&ndash;15 minutes</span><span class="cta">Get guided<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+    <a class="door door-3" href="goalden-lab.html">
+      <div class="door-level">Level 3 &middot; The Lab</div>
+      <div class="door-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6L4 20a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L15 8V2"/><path d="M9 2h6"/><path d="M8.5 14h7"/></svg></div>
+      <h2>The Lab</h2>
+      <div class="tagline">"Let me see everything and drive."</div>
+      <div class="desc">Every assumption on a slider you can also type into. The complete instrument breakdown, all 42 categories from a verified wealth-management reference, not a simplified summary. Build a real portfolio across 15 building blocks and see the risk-return trade-off on an interactive chart. Historical crash stress-testing, Monte Carlo simulation, joint-corpus planning for multiple children, and a printable output for advisor use.</div>
+      <ul class="for-whom">
+        <li>Already comfortable with financial terms</li>
+        <li>Want to change any number and see the effect</li>
+        <li>Advisors, students, or the simply curious</li>
+      </ul>
+      <div class="meta"><span class="time">As long as you like</span><span class="cta">Open the Lab<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></div>
+    </a>
+
+  </div>
+
+  <div class="not-sure">
+    <h3>Not sure which one?</h3>
+    <p>Start with <b>Quick Calculate</b>. It takes two minutes, and every door uses the same underlying math, so nothing you enter there is wasted if you decide to go deeper afterward. Most people only need Level 1 or Level 2; the Lab is there for when you want to see the machinery, not because Level 1 is somehow incomplete.</p>
+  </div>
+</main>
+
+<footer>GOALDEN &middot; one engine, three doors &middot; built for India and the United States</footer>
+
+</body>
+</html>

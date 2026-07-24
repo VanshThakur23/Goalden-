@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Goalden — find your number</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Figtree:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1C3A2D; --ink2:#274A3A; --paper:#F1EEE3; --card:#FAF8F0;
+  --gold:#C9A455; --gold-deep:#A98B45; --red:#A03A22;
+  --body:#3D4A42; --dim:#8A9389; --rule:rgba(28,58,45,.14);
+  --ok:#3D7A4F; --teal:#2D6E6E;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sans-serif;overflow-x:hidden;min-height:100vh;display:flex;flex-direction:column}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 10px;flex-shrink:0}
+.brand{font-family:'Newsreader',serif;font-weight:700;font-size:19px;letter-spacing:-.01em;color:var(--gold);text-decoration:none;display:inline-block}
+.brand span{color:var(--paper);font-weight:400;font-style:italic;font-size:14px;margin-left:6px;opacity:.7}
+.backbtn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(241,238,227,.25);background:transparent;color:var(--paper);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s}
+.assumpbtn{width:30px;height:30px;border-radius:50%;border:1px solid rgba(201,164,85,.5);background:rgba(201,164,85,.12);color:var(--gold);font-family:'Newsreader',serif;font-style:italic;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s}
+.assumpbtn.show{opacity:1;pointer-events:auto}
+.backbtn.show{opacity:1;pointer-events:auto}
+.progress{display:flex;gap:6px;padding:2px 20px 18px;flex-shrink:0}
+.dot{height:4px;flex:1;background:rgba(241,238,227,.16);border-radius:2px;overflow:hidden}
+.dot i{display:block;height:100%;width:0%;background:var(--gold);border-radius:2px;transition:width .35s ease}
+.dot.done i,.dot.active i{width:100%}
+
+.stage{flex:1;position:relative;overflow:hidden}
+.screen{position:absolute;inset:0;padding:8px 24px 24px;display:flex;flex-direction:column;opacity:0;transform:translateX(24px);pointer-events:none;transition:opacity .3s ease,transform .3s ease}
+.screen.active{opacity:1;transform:translateX(0);pointer-events:auto;position:relative}
+.screen.leaving{opacity:0;transform:translateX(-24px)}
+
+.q-eyebrow{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+.q-title{font-family:'Newsreader',serif;font-weight:600;font-size:clamp(22px,7vw,30px);line-height:1.18;color:var(--paper);margin-bottom:8px}
+.q-sub{font-size:14px;color:rgba(241,238,227,.65);margin-bottom:26px;max-width:38ch;line-height:1.5}
+.q-body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px}
+
+/* country grid */
+.country-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+.country-card{background:rgba(241,238,227,.06);border:1.5px solid rgba(241,238,227,.14);border-radius:6px 18px 6px 18px;padding:24px 14px;text-align:center;cursor:pointer;transition:all .18s}
+.country-card:active{transform:scale(.97)}
+.country-card.selected{background:rgba(201,164,85,.16);border-color:var(--gold)}
+.country-badge{width:44px;height:44px;border-radius:50%;background:rgba(201,164,85,.14);border:1px solid rgba(201,164,85,.3);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-family:'Newsreader',serif;font-size:22px;color:var(--gold)}
+.country-name{font-family:'Newsreader',serif;font-size:17px;font-weight:600;color:var(--paper)}
+.country-cur{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim);margin-top:3px}
+
+/* goal grid */
+.goal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.goal-card{background:rgba(241,238,227,.06);border:1.5px solid rgba(241,238,227,.14);border-radius:4px 16px 4px 16px;padding:20px 14px;text-align:center;cursor:pointer;transition:all .18s}
+.goal-card:active{transform:scale(.97)}
+.goal-card.selected{background:rgba(201,164,85,.16);border-color:var(--gold)}
+.goal-icon{width:26px;height:26px;margin-bottom:9px;display:block;color:var(--gold)}
+.goal-icon svg{width:100%;height:100%}
+.goal-name{font-family:'Newsreader',serif;font-size:15px;font-weight:600;color:var(--paper);line-height:1.2}
+.goal-tag{font-size:12px;color:rgba(241,238,227,.55);margin-top:4px}
+
+/* generic goal type picker */
+.gen-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gen-card{background:rgba(241,238,227,.06);border:1.5px solid rgba(241,238,227,.14);border-radius:4px 14px 4px 14px;padding:14px;text-align:center;cursor:pointer;transition:all .18s}
+.gen-card:active{transform:scale(.97)}
+.gen-card.selected{background:rgba(201,164,85,.16);border-color:var(--gold)}
+.gen-icon{width:22px;height:22px;display:block;margin-bottom:6px;color:var(--gold)}
+.gen-icon svg{width:100%;height:100%}
+.gen-label{font-size:13.5px;font-weight:600;color:var(--paper)}
+.gen-rate{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);margin-top:2px}
+
+/* number input */
+.num-wrap{display:flex;align-items:baseline;gap:8px;padding:18px 0;border-bottom:2px solid rgba(241,238,227,.2)}
+.num-prefix{font-family:'Newsreader',serif;font-size:28px;color:var(--gold)}
+.num-input{flex:1;background:transparent;border:none;outline:none;color:var(--paper);font-family:'Newsreader',serif;font-size:clamp(30px,10vw,42px);font-weight:600;-moz-appearance:textfield}
+.num-input::-webkit-outer-spin-button,.num-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.num-suffix{font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--dim);white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px}
+.chip{font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--paper);background:rgba(241,238,227,.08);border:1px solid rgba(241,238,227,.18);padding:9px 15px;border-radius:3px;cursor:pointer;transition:all .15s}
+.chip:active{transform:scale(.95)}
+.chip.selected{background:var(--gold);border-color:var(--gold);color:var(--ink)}
+.inline-error{color:#E8977A;font-size:13px;margin-top:14px;font-family:'Spline Sans Mono',monospace;min-height:16px}
+.value-slider{margin:18px 0 8px}
+.value-slider input[type=range]{width:100%;accent-color:var(--gold);height:22px;cursor:pointer}
+.value-slider-labels{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);margin-top:2px}
+.chips-label{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin:14px 0 8px}
+.optional-field{margin-top:20px;padding-top:20px;border-top:1px dashed rgba(241,238,227,.18)}
+.optional-label{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.num-wrap-sm{display:flex;align-items:baseline;gap:6px;padding:10px 0;border-bottom:1px solid rgba(241,238,227,.15)}
+.num-prefix-sm{font-family:'Newsreader',serif;font-size:18px;color:rgba(201,164,85,.6)}
+.num-input-sm{flex:1;background:transparent;border:none;outline:none;color:rgba(241,238,227,.75);font-family:'Newsreader',serif;font-size:22px;font-weight:600;-moz-appearance:textfield}
+.num-input-sm::-webkit-outer-spin-button,.num-input-sm::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+/* risk */
+.risk-stack{display:flex;flex-direction:column;gap:12px}
+.risk-card{background:rgba(241,238,227,.06);border:1.5px solid rgba(241,238,227,.14);border-radius:3px 16px 16px 16px;padding:19px 18px;cursor:pointer;transition:all .18s;text-align:left}
+.risk-card:active{transform:scale(.98)}
+.risk-card.selected{background:rgba(201,164,85,.14);border-color:var(--gold)}
+.risk-card h4{font-family:'Newsreader',serif;font-size:16.5px;color:var(--paper);margin-bottom:4px}
+.risk-card p{font-size:13px;color:rgba(241,238,227,.6);line-height:1.4}
+
+/* CTA */
+.cta-zone{padding:14px 0 4px;flex-shrink:0}
+.cta{width:100%;background:var(--gold);color:var(--ink);border:none;border-radius:9px;font-family:'Figtree',sans-serif;font-weight:700;font-size:16px;padding:17px;cursor:pointer;transition:transform .12s,opacity .2s}
+.cta:active{transform:scale(.98)}
+.cta:disabled{opacity:.3;pointer-events:none}
+
+/* results */
+.result-scroll{overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
+.result-intro{text-align:center;font-family:'Newsreader',serif;font-style:italic;font-size:15px;color:rgba(241,238,227,.72);padding:4px 12px 18px;line-height:1.5}
+.hero-number{text-align:center;padding:6px 0 4px}
+.hero-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
+.hero-figure{font-family:'Newsreader',serif;font-weight:600;font-size:clamp(42px,15vw,64px);color:var(--paper);line-height:0.95;letter-spacing:-.01em}
+.hero-sub{font-size:13.5px;color:rgba(241,238,227,.55);margin-top:10px}
+.action-card{background:var(--gold);color:var(--ink);border-radius:3px 22px 22px 22px;padding:22px 24px;margin:26px 0 18px}
+.action-card .al{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;opacity:.7}
+.action-card .af{font-family:'Newsreader',serif;font-weight:700;font-size:28px;margin:5px 0 8px}
+.action-card .as{font-size:13.5px;line-height:1.5}
+.chart-card{background:rgba(241,238,227,.05);border:1px solid rgba(241,238,227,.12);border-radius:2px 2px 18px 18px;padding:18px 16px 8px;margin-bottom:18px}
+.chart-title{font-family:'Newsreader',serif;font-size:15.5px;color:var(--paper);margin-bottom:2px}
+.chart-caption{font-size:12px;color:rgba(241,238,227,.5);margin-bottom:10px}
+.alloc-flex{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:14px}
+.alloc-legend{flex:1;min-width:140px}
+.alloc-row{display:flex;align-items:center;gap:8px;padding:5px 0}
+.alloc-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.alloc-name{flex:1;font-size:13px;color:rgba(241,238,227,.8)}
+.alloc-pct{font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--paper);font-weight:600}
+.alloc-return-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:12px;border-top:1px solid rgba(241,238,227,.1)}
+.alloc-return-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.04em;margin-bottom:3px}
+.alloc-return-value{font-family:'Newsreader',serif;font-size:19px;font-weight:600;color:var(--paper)}
+svg.chart{width:100%;height:auto;display:block}
+
+/* delay card */
+.delay-card{background:rgba(28,58,45,.7);border:1px solid rgba(201,164,85,.35);border-radius:16px 3px 16px 16px;padding:19px 20px;margin-bottom:20px}
+.delay-title{font-family:'Newsreader',serif;font-size:15px;color:var(--paper);margin-bottom:12px}
+.delay-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(241,238,227,.1)}
+.delay-row:last-child{border-bottom:none}
+.delay-label{font-size:13px;color:rgba(241,238,227,.7)}
+.delay-value{font-family:'Newsreader',serif;font-size:15px;color:var(--paper);font-weight:600}
+.delay-extra{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--red);margin-left:6px}
+
+.assump-toggle{font-family:'Spline Sans Mono',monospace;font-size:12px;color:rgba(241,238,227,.5);text-align:center;padding:10px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.tog-caret{display:inline-block;vertical-align:-1px;margin-right:6px;transition:transform .25s ease}
+.assump-toggle.open .tog-caret{transform:rotate(180deg)}
+.schedule-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11px;margin-top:6px}
+.schedule-table th{text-align:right;padding:6px 7px;color:var(--dim);font-weight:500;border-bottom:1px solid rgba(241,238,227,.15)}
+.schedule-table th:first-child,.schedule-table td:first-child{text-align:left}
+.schedule-table td{text-align:right;padding:5px 7px;color:rgba(241,238,227,.7);border-bottom:1px solid rgba(241,238,227,.06)}
+.schedule-scroll{max-height:280px;overflow-y:auto;border-radius:8px;margin-top:8px}
+.edit-row{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 14px}
+.edit-chip{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(241,238,227,.65);background:rgba(241,238,227,.06);border:1px solid rgba(241,238,227,.16);border-radius:2px 10px 10px 10px;padding:6px 11px;cursor:pointer;transition:border-color .15s,color .15s}
+.edit-chip:hover{border-color:rgba(201,164,85,.5);color:var(--paper)}
+.edit-chip::before{content:'edit \2192  ';opacity:.5;font-size:9.5px}
+.assump-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.assump-panel.open{max-height:500px}
+.assump-inner{padding:4px 2px 18px;font-size:12.5px;color:rgba(241,238,227,.6);line-height:1.8}
+.assump-inner b{color:var(--paper)}
+.restart-row{padding:6px 0 28px;text-align:center}
+.restart-row button{background:none;border:1px solid rgba(241,238,227,.2);color:rgba(241,238,227,.7);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <button class="backbtn" id="backBtn" aria-label="Back">←</button>
+  <a href="index.html" class="brand">Goalden<span>quick calculate</span></a>
+  <button class="assumpbtn" id="assumpBtn" aria-label="View assumptions" title="What assumptions are we using?">i</button>
+</div>
+<div class="progress" id="progress"></div>
+<div class="stage" id="stage"></div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   ENGINE — verbatim port of engine.js. Same functions, same math.
+   Tested against solved workbooks in /goalden-engine/engine.test.js.
+   ===================================================================== */
+function inflateExpense(amt, phases, factor) {
+  if (factor === undefined) factor = 1;
+  for (const p of phases) amt *= Math.pow(1 + p.rate, p.years);
+  return amt * factor;
+}
+function realRate(r, i) { return (1 + r) / (1 + i) - 1; }
+function corpusRequired(rate, years, withdrawal, due) {
+  if (rate === 0) return withdrawal * years;
+  let pv = withdrawal * (1 - Math.pow(1 + rate, -years)) / rate;
+  return due ? pv * (1 + rate) : pv;
+}
+function solveSIP(rate, periods, fv, due) {
+  if (rate === 0) return fv / periods;
+  let f = (Math.pow(1 + rate, periods) - 1) / rate;
+  return fv / (due ? f * (1 + rate) : f);
+}
+function effectiveMonthlyRate(r) { return Math.pow(1 + r, 1/12) - 1; }
+function accumulationSchedule(opts) {
+  const rows = []; let bal = opts.opening || 0; let sip = opts.sip; let total = 0;
+  for (let i = 1; i <= opts.years; i++) {
+    let close;
+    if (opts.due) { const b2 = bal + sip; close = b2 + b2 * opts.rate; }
+    else { close = (bal + bal * opts.rate) + sip; }
+    total += sip;
+    rows.push({ period: i, closeBal: close, contributed: total });
+    bal = close;
+  }
+  return { rows, finalBalance: bal };
+}
+function caretSvg() {
+  return '<svg class="tog-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+}
+function yearlyAmortization(monthlyRows) {
+  const years = []; let prevClose = 0, prevContributed = 0;
+  for (let m = 0; m < monthlyRows.length; m += 12) {
+    const end = monthlyRows[Math.min(m + 11, monthlyRows.length - 1)];
+    const contributedThisYear = end.contributed - prevContributed;
+    const growthThisYear = end.closeBal - prevClose - contributedThisYear;
+    years.push({ year: years.length + 1, contributed: Math.round(contributedThisYear), growth: Math.round(growthThisYear), close: Math.round(end.closeBal) });
+    prevClose = end.closeBal; prevContributed = end.contributed;
+  }
+  return years;
+}
+function drawdownSchedule(opts) {
+  const rows = []; let bal = opts.openingCorpus; let w = opts.firstWithdrawal;
+  for (let yr = 1; yr <= opts.years; yr++) {
+    let close;
+    if (opts.due) { const baw = bal - w; close = baw + baw * opts.nominalRate; }
+    else { close = (bal + bal * opts.nominalRate) - w; }
+    rows.push({ year: yr, openBal: bal, withdrawal: w, closeBal: Math.max(0, close) });
+    bal = close;
+    w *= (1 + opts.inflation);
+  }
+  return rows;
+}
+
+/* =====================================================================
+   CONFIG
+   ===================================================================== */
+const C = {
+  IN: {
+    code:'IN', flag:'🇮🇳', name:'India', sym:'₹',
+    d: { inflation:.06, eduInflation:.10, debt:.07, hybrid:.10, equity:.12, postRet:.09, lifeExp:78 },
+    goalInflation: { house:.075, car:.05, wedding:.07, travel:.05 },
+    expChips: [25000, 50000, 100000, 200000],
+    feeChips: [50000, 100000, 200000, 500000],
+    amtChips: [500000, 1000000, 2500000, 5000000],
+    ageChips: [22, 25, 30, 35, 40],
+    retireChips: [55, 60, 65],
+    collegeChips: [5, 8, 10, 15],
+    goalYrChips: [3, 5, 7, 10],
+    fmt(amt, dp) {
+      if (dp === undefined) dp = 0;
+      const s = (amt < 0 ? '-' : ''), a = Math.abs(amt);
+      const [i, d] = a.toFixed(dp).split('.');
+      const last3 = i.slice(-3), rest = i.slice(0, -3);
+      const grouped = (rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' : '') + last3;
+      return s + '₹' + grouped + (dp > 0 ? '.' + d : '');
+    },
+    compact(amt) {
+      const a = Math.abs(amt);
+      if (a >= 1e7) return '₹' + (a/1e7).toFixed(1) + ' Cr';
+      if (a >= 1e5) return '₹' + (a/1e5).toFixed(1) + ' L';
+      return this.fmt(amt);
+    }
+  },
+  US: {
+    code:'US', flag:'🇺🇸', name:'United States', sym:'$',
+    d: { inflation:.025, eduInflation:.05, debt:.045, hybrid:.07, equity:.09, postRet:.06, lifeExp:82 },
+    goalInflation: { house:.04, car:.03, wedding:.04, travel:.03 },
+    expChips: [2000, 4000, 6000, 10000],
+    feeChips: [10000, 20000, 40000, 60000],
+    amtChips: [50000, 100000, 250000, 500000],
+    ageChips: [22, 25, 30, 35, 40],
+    retireChips: [60, 65, 67],
+    collegeChips: [5, 8, 10, 15],
+    goalYrChips: [3, 5, 7, 10],
+    fmt(amt, dp) {
+      if (dp === undefined) dp = 0;
+      const s = (amt < 0 ? '-' : ''), a = Math.abs(amt);
+      const [i, d] = a.toFixed(dp).split('.');
+      return s + '$' + i.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (dp > 0 ? '.' + d : '');
+    },
+    compact(amt) {
+      const a = Math.abs(amt);
+      if (a >= 1e6) return '$' + (a/1e6).toFixed(1) + 'M';
+      if (a >= 1e3) return '$' + (a/1e3).toFixed(1) + 'K';
+      return this.fmt(amt);
+    }
+  }
+};
+
+const RISK = [
+  { id:'cautious', title:"I'd rather avoid big swings", desc:'Steadier path, lower growth: mixes safer options with some growth.', eq:.25, de:.60, hy:.15 },
+  { id:'balanced', title:'Some ups and downs are fine', desc:'A blend of growth and stability, the middle path most people pick.', eq:.50, de:.35, hy:.15 },
+  { id:'growth',   title:"I'm investing for the long run", desc:'More growth-focused. Expect a bumpier ride on the way there.', eq:.75, de:.15, hy:.10 },
+];
+
+const ICONS = {
+  retirement: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.1 5.1l2.1 2.1M16.8 16.8l2.1 2.1M5.1 18.9L7.2 16.8M16.8 7.2l2.1-2.1"/></svg>',
+  education: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5-10-5z"/><path d="M6 11.2v4.8c0 1.5 3 3 6 3s6-1.5 6-3v-4.8"/><path d="M22 9v6.5"/></svg>',
+  house: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5l3 2.5"/></svg>',
+  car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.4-4.8A2 2 0 0 1 6.3 6.8h11.4a2 2 0 0 1 1.9 1.4L21 13"/><rect x="2" y="13" width="20" height="5" rx="1.5"/><circle cx="7" cy="18.3" r="1.4"/><circle cx="17" cy="18.3" r="1.4"/></svg>',
+  wedding: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/></svg>',
+  travel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2.5L11 13"/><path d="M21.5 2.5l-6.8 19-3.7-8-8-3.7z"/></svg>',
+};
+
+const GOALS = [
+  { id:'retirement', icon:ICONS.retirement, name:'Retirement', tag:'Stop working someday' },
+  { id:'education',  icon:ICONS.education, name:'Education', tag:"A child's college fund" },
+  { id:'generic',    icon:ICONS.house, name:'A big purchase', tag:'House, car, wedding' },
+  { id:'delay',      icon:ICONS.clock, name:'Cost of waiting', tag:'See what a delay costs' },
+];
+
+const GEN_TYPES = [
+  { id:'house',   icon:ICONS.house, label:'House', rateKey:'house' },
+  { id:'car',     icon:ICONS.car, label:'Car', rateKey:'car' },
+  { id:'wedding', icon:ICONS.wedding, label:'Wedding', rateKey:'wedding' },
+  { id:'travel',  icon:ICONS.travel, label:'Holiday', rateKey:'travel' },
+];
+
+/* =====================================================================
+   STATE + FLOWS
+   ===================================================================== */
+const S = {
+  country: null, goalType: null,
+  age: null, retireAge: null, monthlyExpense: null,
+  annualFee: null, yearsToCollege: null, courseDuration: null,
+  genType: null, genAmount: null, genYears: null, existingSavings: 0,
+  risk: null, si: 0, quickEdit: false
+};
+
+function flow() {
+  if (!S.goalType) return ['country', 'goal'];
+  if (S.goalType === 'retirement') return ['country','goal','age','retire','expense','risk','results'];
+  if (S.goalType === 'education')  return ['country','goal','edu_fee','edu_years','edu_duration','risk','results'];
+  if (S.goalType === 'generic')    return ['country','goal','gen_type','gen_amount','gen_years','risk','results'];
+  if (S.goalType === 'delay')      return ['country','goal','delay_corpus','delay_years','results'];
+  return ['country','goal'];
+}
+
+function cfg() { return C[S.country]; }
+
+function riskAllocation() {
+  return RISK.find(x => x.id === S.risk) || RISK[1];
+}
+function riskRate() {
+  const d = cfg().d, a = riskAllocation();
+  return a.eq*d.equity + a.de*d.debt + a.hy*d.hybrid;
+}
+
+/* =====================================================================
+   CALCULATION
+   ===================================================================== */
+function calcRetirement() {
+  const d = cfg().d, c = cfg();
+  const yrs = S.retireAge - S.age;
+  const drawYrs = Math.max(5, d.lifeExp - S.retireAge);
+  const annualExp = S.monthlyExpense * 12;
+  const expAtRet = inflateExpense(annualExp, [{rate: d.inflation, years: yrs}], 0.75);
+  const rr = realRate(d.postRet, d.inflation);
+  const corpus = corpusRequired(rr, drawYrs, expAtRet, true);
+  const preRate = riskRate();
+  const mRate = effectiveMonthlyRate(preRate);
+  // Existing savings are assumed to stay invested the same way the new SIP
+  // will be, so both compound at the same mRate. That keeps the identity
+  // exact: existingFV + gapCorpus always equals the full target corpus,
+  // which is what the accumulation chart below needs to land on.
+  const existing = S.existingSavings || 0;
+  const existingFV = existing * Math.pow(1 + mRate, yrs * 12);
+  const gapCorpus = Math.max(0, corpus - existingFV);
+  const alreadyMet = existing > 0 && gapCorpus === 0;
+  const sip = alreadyMet ? 0 : solveSIP(mRate, yrs * 12, gapCorpus, true);
+  const realCorpus = corpus / Math.pow(1 + d.inflation, yrs);
+  const accRows = accumulationSchedule({sip, rate: mRate, years: yrs * 12, due: true, opening: existing}).rows;
+  const drawRows = drawdownSchedule({openingCorpus: corpus, firstWithdrawal: expAtRet, inflation: d.inflation, nominalRate: d.postRet, years: drawYrs, due: true});
+  const delay = alreadyMet ? null : calcDelay(gapCorpus, mRate, yrs);
+  return {corpus, sip, realCorpus, preRate, expAtRet, yrs, drawYrs, accRows, drawRows, delay, d, existing, existingFV, gapCorpus, alreadyMet};
+}
+
+function calcEducation() {
+  const d = cfg().d, c = cfg();
+  const feeAtCollege = inflateExpense(S.annualFee, [{rate: d.eduInflation, years: S.yearsToCollege}]);
+  const rr = realRate(d.debt, d.eduInflation);
+  const corpus = corpusRequired(rr, S.courseDuration, feeAtCollege, true);
+  const preRate = riskRate();
+  const mRate = effectiveMonthlyRate(preRate);
+  const existing = S.existingSavings || 0;
+  const existingFV = existing * Math.pow(1 + mRate, S.yearsToCollege * 12);
+  const gapCorpus = Math.max(0, corpus - existingFV);
+  const alreadyMet = existing > 0 && gapCorpus === 0;
+  const sip = alreadyMet ? 0 : solveSIP(mRate, S.yearsToCollege * 12, gapCorpus, true);
+  const realCorpus = corpus / Math.pow(1 + d.inflation, S.yearsToCollege);
+  const accRows = accumulationSchedule({sip, rate: mRate, years: S.yearsToCollege * 12, due: true, opening: existing}).rows;
+  const feeYears = Array.from({length: S.courseDuration}, (_, i) =>
+    inflateExpense(S.annualFee, [{rate: d.eduInflation, years: S.yearsToCollege + i}])
+  );
+  const delay = alreadyMet ? null : calcDelay(gapCorpus, mRate, S.yearsToCollege);
+  return {corpus, sip, realCorpus, preRate, feeAtCollege, accRows, feeYears, delay, d, existing, existingFV, gapCorpus, alreadyMet};
+}
+
+function calcGeneric() {
+  const d = cfg().d, c = cfg();
+  const inflRate = (c.goalInflation && c.goalInflation[S.genType]) ? c.goalInflation[S.genType] : d.inflation;
+  const inflatedGoal = S.genAmount * Math.pow(1 + inflRate, S.genYears);
+  const fvSavings = S.existingSavings * Math.pow(1 + d.debt, S.genYears);
+  const gap = Math.max(0, inflatedGoal - fvSavings);
+  const preRate = riskRate();
+  const mRate = effectiveMonthlyRate(preRate);
+  const sip = gap > 0 ? solveSIP(mRate, S.genYears * 12, gap, true) : 0;
+  const accRows = sip > 0 ? accumulationSchedule({sip, rate: mRate, years: S.genYears * 12, due: true}).rows : [];
+  const delay = gap > 0 ? calcDelay(gap, mRate, S.genYears) : null;
+  return {inflatedGoal, fvSavings, gap, sip, preRate, accRows, inflRate, delay, d};
+}
+
+function calcDelay(corpus, mRate, yearsRemaining) {
+  const now3 = Math.max(1, yearsRemaining - 3);
+  const now5 = Math.max(1, yearsRemaining - 5);
+  const sipNow = solveSIP(mRate, yearsRemaining * 12, corpus, true);
+  const sip3   = solveSIP(mRate, now3 * 12, corpus, true);
+  const sip5   = solveSIP(mRate, now5 * 12, corpus, true);
+  return { sipNow, sip3, extra3: sip3 - sipNow, sip5, extra5: sip5 - sipNow };
+}
+
+/* =====================================================================
+   CHARTS
+   ===================================================================== */
+function mountainChart(rows, maxOverride) {
+  const w = 320, h = 148, p = 4;
+  const maxV = maxOverride || rows[rows.length-1].closeBal;
+  const n = rows.length;
+  const sx = (w - p*2) / (n-1);
+  const y = v => h - p - (Math.max(0,v)/maxV) * (h - p*2);
+  let gp = 'M'+p+','+h, cp = 'M'+p+','+h;
+  rows.forEach((r,i) => {
+    const x = (p + i*sx).toFixed(1);
+    gp += ' L'+x+','+y(r.closeBal).toFixed(1);
+    cp += ' L'+x+','+y(r.contributed).toFixed(1);
+  });
+  const lx = (p+(n-1)*sx).toFixed(1);
+  return '<svg class="chart" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs><linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C9A455" stop-opacity=".85"/><stop offset="100%" stop-color="#C9A455" stop-opacity=".08"/></linearGradient></defs>' +
+    '<path d="'+gp+' L'+lx+','+h+' L'+p+','+h+' Z" fill="url(#mg)"/>' +
+    '<path d="'+cp+' L'+lx+','+h+' L'+p+','+h+' Z" fill="rgba(241,238,227,.16)"/>' +
+    '<line x1="'+p+'" y1="'+h+'" x2="'+(w-p)+'" y2="'+h+'" stroke="rgba(241,238,227,.2)" stroke-width="1"/>' +
+    '</svg>';
+}
+
+function allocationDonut(eq, de, hy, uid) {
+  const size = 132, r = 50, cx = 66, cy = 66, sw = 22;
+  const circ = 2 * Math.PI * r;
+  const segs = [
+    { pct: eq, color: '#C9A455', label: 'Equity' },
+    { pct: de, color: '#2D6E6E', label: 'Debt' },
+    { pct: hy, color: '#8FC79E', label: 'Hybrid' },
+  ].filter(s => s.pct > 0.001);
+  let cum = 0;
+  const arcs = segs.map(s => {
+    const len = circ * s.pct;
+    const dash = len.toFixed(2) + ' ' + (circ - len).toFixed(2);
+    const dashoffset = (-cum).toFixed(2);
+    cum += len;
+    return '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+s.color+'" stroke-width="'+sw+'" stroke-dasharray="'+dash+'" stroke-dashoffset="'+dashoffset+'" stroke-linecap="butt"/>';
+  }).join('');
+  return '<svg viewBox="0 0 '+size+' '+size+'" width="'+size+'" height="'+size+'" style="transform:rotate(-90deg);flex-shrink:0">' + arcs + '</svg>';
+}
+function allocationLegend(eq, de, hy) {
+  const rows = [
+    { pct: eq, color: '#C9A455', label: 'Equity' },
+    { pct: de, color: '#2D6E6E', label: 'Debt' },
+    { pct: hy, color: '#8FC79E', label: 'Hybrid' },
+  ].filter(s => s.pct > 0.001);
+  return rows.map(s =>
+    '<div class="alloc-row"><span class="alloc-dot" style="background:'+s.color+'"></span><span class="alloc-name">'+s.label+'</span><span class="alloc-pct">'+Math.round(s.pct*100)+'%</span></div>'
+  ).join('');
+}
+function potChart(rows) {
+  const w = 320, h = 148, p = 4;
+  const maxV = rows[0].openBal;
+  const n = rows.length;
+  const sx = (w-p*2)/(n-1);
+  const y = v => h - p - (Math.max(0,v)/maxV)*(h-p*2);
+  let pts = 'M'+p+','+y(rows[0].openBal).toFixed(1);
+  rows.forEach((r,i) => pts += ' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1));
+  const lx = (p+(n-1)*sx).toFixed(1);
+  return '<svg class="chart" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3D7A4F" stop-opacity=".7"/><stop offset="100%" stop-color="#3D7A4F" stop-opacity=".05"/></linearGradient></defs>' +
+    '<path d="'+pts+' L'+lx+','+h+' L'+p+','+h+' Z" fill="url(#eg)"/>' +
+    '<path d="'+pts+'" fill="none" stroke="#8FC79E" stroke-width="1.5"/>' +
+    '<line x1="'+p+'" y1="'+h+'" x2="'+(w-p)+'" y2="'+h+'" stroke="rgba(241,238,227,.2)" stroke-width="1"/>' +
+    '</svg>';
+}
+
+function feeBarChart(feeYears) {
+  const c = cfg();
+  const w = 320, h = 120, p = 4;
+  const maxFee = Math.max(...feeYears);
+  const n = feeYears.length;
+  const barW = (w - p*2 - (n-1)*8) / n;
+  let bars = '';
+  feeYears.forEach((fee, i) => {
+    const bh = (fee/maxFee) * (h - p*2 - 20);
+    const bx = p + i*(barW+8);
+    const by = h - p - bh - 16;
+    bars += '<rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="#C9A455" rx="3" opacity="'+(0.5+0.5*fee/maxFee).toFixed(2)+'"/>';
+    bars += '<text x="'+(bx+barW/2).toFixed(1)+'" y="'+(h-p-2).toFixed(1)+'" fill="rgba(241,238,227,.5)" font-size="9" text-anchor="middle" font-family="monospace">Yr '+(i+1)+'</text>';
+    bars += '<text x="'+(bx+barW/2).toFixed(1)+'" y="'+(by-4).toFixed(1)+'" fill="rgba(241,238,227,.8)" font-size="9" text-anchor="middle" font-family="monospace">'+c.compact(fee)+'</text>';
+  });
+  return '<svg class="chart" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">'+bars+'</svg>';
+}
+
+/* =====================================================================
+   DELAY CARD
+   ===================================================================== */
+function delayCard(delay, yearsRemaining) {
+  const c = cfg();
+  if (!delay || yearsRemaining <= 3) return '';
+  return '<div class="delay-card">' +
+    '<div class="delay-title">What if you waited instead?</div>' +
+    '<div class="delay-row"><span class="delay-label">Start now</span><span class="delay-value">'+c.fmt(Math.round(delay.sipNow))+'/mo</span></div>' +
+    (yearsRemaining > 3 ? '<div class="delay-row"><span class="delay-label">Wait 3 years</span><span class="delay-value">'+c.fmt(Math.round(delay.sip3))+'/mo<span class="delay-extra">+'+c.fmt(Math.round(delay.extra3))+'/mo</span></span></div>' : '') +
+    (yearsRemaining > 5 ? '<div class="delay-row"><span class="delay-label">Wait 5 years</span><span class="delay-value">'+c.fmt(Math.round(delay.sip5))+'/mo<span class="delay-extra">+'+c.fmt(Math.round(delay.extra5))+'/mo</span></span></div>' : '') +
+    '</div>';
+}
+
+/* =====================================================================
+   ASSUMPTION PANELS
+   ===================================================================== */
+function assumpRetirement(r) {
+  const c = cfg();
+  return '<b>Prices rising:</b> '+(r.d.inflation*100).toFixed(1)+'% a year.<br>' +
+    '<b>Spending in retirement:</b> 75% of your inflated expenses. The assumption is some costs finish before you retire.<br>' +
+    '<b>Growth while saving:</b> '+(r.preRate*100).toFixed(1)+'% a year, matching your comfort level.<br>' +
+    '<b>Growth after retirement:</b> '+(r.d.postRet*100).toFixed(1)+'% a year, shifted to something steadier.<br>' +
+    '<b>How long the pot lasts:</b> to age '+r.d.lifeExp+'. A planning default, not a prediction about you specifically.<br>' +
+    (r.existing>0 ? '<b>Existing savings:</b> '+c.compact(r.existing)+' assumed to stay invested at the same rate as your new SIP, growing to '+c.compact(r.existingFV)+' by age '+S.retireAge+'.<br>' : '') +
+    '<b>None of these are guarantees.</b> They are the same conservative starting numbers a real adviser would use.';
+}
+
+function assumpEducation(r) {
+  const c = cfg();
+  return '<b>Education cost inflation:</b> '+(r.d.eduInflation*100).toFixed(0)+'% a year. Fees typically rise faster than general prices.<br>' +
+    '<b>During the study years:</b> the corpus earns '+(r.d.debt*100).toFixed(1)+'% (a safer parking rate) while fees keep rising. That is why the corpus needed is larger than simply adding up the fees.<br>' +
+    '<b>Growth while saving:</b> '+(r.preRate*100).toFixed(1)+'% a year, matching your comfort level.<br>' +
+    (r.existing>0 ? '<b>Existing savings:</b> '+c.compact(r.existing)+' assumed to stay invested at the same rate as your new SIP, growing to '+c.compact(r.existingFV)+' by the time college starts.<br>' : '') +
+    '<b>None of these are guarantees.</b> Review as the start date gets closer.';
+}
+
+function assumpGeneric(r) {
+  return '<b>Price inflation for this goal:</b> '+(r.inflRate*100).toFixed(1)+'% a year. Things like property and weddings tend to rise faster than general prices.<br>' +
+    '<b>Growth while saving:</b> '+(r.preRate*100).toFixed(1)+'% a year, matching your comfort level.<br>' +
+    '<b>Your existing savings:</b> assumed to earn '+(r.d.debt*100).toFixed(1)+'% while waiting.<br>' +
+    '<b>None of these are guarantees.</b>';
+}
+
+/* =====================================================================
+   SLIDER HELPER — every numeric question gets a real, continuous slider
+   (not just a fixed set of preset chips) so a person can land on any
+   value, not only the ones we guessed they'd want. Chips remain as
+   quick-jump shortcuts underneath, not the only way in.
+   ===================================================================== */
+function sliderBounds(chips, extendFactor, minFloorFactor) {
+  extendFactor = extendFactor===undefined ? 2.5 : extendFactor;
+  minFloorFactor = minFloorFactor===undefined ? 0.3 : minFloorFactor;
+  const lo = chips[0] * minFloorFactor;
+  const hi = chips[chips.length-1] * extendFactor;
+  let raw = hi / 200;
+  const mag = Math.pow(10, Math.floor(Math.log10(Math.max(raw,1))));
+  const norm = raw / mag;
+  const step = (norm<1.5?1:norm<3.5?2:norm<7.5?5:10) * mag;
+  return { min: Math.max(0, Math.round(lo/step)*step), max: Math.round(hi/step)*step, step };
+}
+function valueSlider(id, value, min, max, step, loLabel, hiLabel) {
+  return '<div class="value-slider">' +
+    '<input type="range" id="'+id+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+(value||min)+'">' +
+    '<div class="value-slider-labels"><span>'+loLabel+'</span><span>'+hiLabel+'</span></div>' +
+    '</div>';
+}
+// Wires a slider to the same number-input + set() flow a screen already
+// uses, so dragging, typing, and tapping a chip all stay in sync.
+function wireSlider(sliderId, inp, min, max, setFn) {
+  const sl = document.getElementById(sliderId);
+  if (!sl) return null;
+  sl.addEventListener('input', () => { inp.value = sl.value; setFn(parseInt(sl.value)); });
+  return sl;
+}
+function syncSliderToValue(sl, v, min, max) {
+  if (sl && v!=null) sl.value = Math.min(max, Math.max(min, v));
+}
+
+/* =====================================================================
+   SCREENS
+   ===================================================================== */
+function sCountry() {
+  return '<div class="q-eyebrow">Before we start</div>' +
+    '<div class="q-title">Where will you spend this money?</div>' +
+    '<div class="q-sub">Not where you are from. Where the goal will actually be spent, since that sets the right prices and rules.</div>' +
+    '<div class="q-body"><div class="country-grid">' +
+    Object.values(C).map(c =>
+      '<div class="country-card'+(S.country===c.code?' selected':'')+'" data-country="'+c.code+'">' +
+      '<span class="country-badge">'+c.sym+'</span><div class="country-name">'+c.name+'</div><div class="country-cur">'+c.code+'</div></div>'
+    ).join('') +
+    '</div></div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.country?'':' disabled')+'>Continue</button></div>';
+}
+
+function sGoal() {
+  return '<div class="q-eyebrow">What are you planning for?</div>' +
+    '<div class="q-title">Pick a goal to find your number</div>' +
+    '<div class="q-sub">Each goal has its own set of questions. Just a few things, and you will have your answer.</div>' +
+    '<div class="q-body"><div class="goal-grid">' +
+    GOALS.map(g =>
+      '<div class="goal-card'+(S.goalType===g.id?' selected':'')+'" data-goal="'+g.id+'">' +
+      '<span class="goal-icon">'+g.icon+'</span><div class="goal-name">'+g.name+'</div><div class="goal-tag">'+g.tag+'</div></div>'
+    ).join('') +
+    '</div></div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.goalType?'':' disabled')+'>Continue</button></div>';
+}
+
+function sAge() {
+  const c = cfg();
+  return '<div class="q-eyebrow">Question 1</div>' +
+    '<div class="q-title">How old are you today?</div>' +
+    '<div class="q-body">' +
+    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="30" value="'+(S.age||'')+'"><span class="num-suffix">years old</span></div>' +
+    valueSlider('inpSlider', S.age||30, 18, 70, 1, '18', '70') +
+    '<div class="chips-label">Or pick a common age</div>' +
+    '<div class="chips">'+c.ageChips.map(a=>'<div class="chip'+(S.age===a?' selected':'')+'" data-age="'+a+'">'+a+'</div>').join('')+'</div>' +
+    '<div class="inline-error" id="err"></div>' +
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.age?'':' disabled')+'>Continue</button></div>';
+}
+
+function sRetire() {
+  const c = cfg();
+  const retMin = Math.max(35, (S.age||30)+1);
+  return '<div class="q-eyebrow">Question 2</div>' +
+    '<div class="q-title">When do you want to stop working?</div>' +
+    '<div class="q-sub">Your best guess is fine.</div>' +
+    '<div class="q-body">' +
+    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="60" value="'+(S.retireAge||'')+'"><span class="num-suffix">years old</span></div>' +
+    valueSlider('inpSlider', S.retireAge||60, retMin, 85, 1, retMin, '85') +
+    '<div class="chips-label">Or pick a common age</div>' +
+    '<div class="chips">'+c.retireChips.map(a=>'<div class="chip'+(S.retireAge===a?' selected':'')+'" data-retire="'+a+'">'+a+'</div>').join('')+'</div>' +
+    '<div class="inline-error" id="err"></div>' +
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.retireAge?'':' disabled')+'>Continue</button></div>';
+}
+
+function sExpense() {
+  const c = cfg();
+  return '<div class="q-eyebrow">Question 3</div>' +
+    '<div class="q-title">What do you spend in a normal month?</div>' +
+    '<div class="q-sub">Rent, food, bills: everything it takes to keep life running today.</div>' +
+    '<div class="q-body">' +
+    '<div class="num-wrap"><span class="num-prefix">'+c.sym+'</span><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="0" value="'+(S.monthlyExpense||'')+'"><span class="num-suffix">/ month</span></div>' +
+    (()=>{const b=sliderBounds(c.expChips);return valueSlider('inpSlider', S.monthlyExpense||b.min, b.min, b.max, b.step, c.compact(b.min), c.compact(b.max));})() +
+    '<div class="chips-label">Or pick a common amount</div>' +
+    '<div class="chips">'+c.expChips.map(a=>'<div class="chip'+(S.monthlyExpense===a?' selected':'')+'" data-exp="'+a+'">'+c.compact(a)+'</div>').join('')+'</div>' +
+    '<div class="optional-field"><div class="optional-label">Already have retirement savings? (optional)</div>' +
+    '<div class="num-wrap-sm"><span class="num-prefix-sm">'+c.sym+'</span><input class="num-input-sm" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="'+(S.existingSavings||'')+'"></div>' +
+    (()=>{const b=sliderBounds(c.amtChips,6,0);return valueSlider('inpSavSlider', S.existingSavings||0, 0, b.max, b.step, c.compact(0), c.compact(b.max));})() +
+    '</div>' +
+    '<div class="inline-error" id="err"></div>' +
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.monthlyExpense?'':' disabled')+'>Continue</button></div>';
+}
+
+function sEduFee() {
+  const c = cfg();
+  return '<div class="q-eyebrow">Education fund · step 1</div>' +
+    '<div class="q-title">What does one year of the course cost today?</div>' +
+    '<div class="q-sub">Use today\'s fees. The calculator inflates them forward to when college actually starts.</div>' +
+    '<div class="q-body">' +
+    '<div class="num-wrap"><span class="num-prefix">'+c.sym+'</span><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="0" value="'+(S.annualFee||'')+'"><span class="num-suffix">/ year</span></div>' +
+    (()=>{const b=sliderBounds(c.feeChips);return valueSlider('inpSlider', S.annualFee||b.min, b.min, b.max, b.step, c.compact(b.min), c.compact(b.max));})() +
+    '<div class="chips-label">Or pick a common amount</div>' +
+    '<div class="chips">'+c.feeChips.map(a=>'<div class="chip'+(S.annualFee===a?' selected':'')+'" data-fee="'+a+'">'+c.compact(a)+'</div>').join('')+'</div>' +
+    '<div class="optional-field"><div class="optional-label">Already saved for this course? (optional)</div>' +
+    '<div class="num-wrap-sm"><span class="num-prefix-sm">'+c.sym+'</span><input class="num-input-sm" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="'+(S.existingSavings||'')+'"></div>' +
+    (()=>{const b=sliderBounds(c.feeChips,10,0);return valueSlider('inpSavSlider', S.existingSavings||0, 0, b.max, b.step, c.compact(0), c.compact(b.max));})() +
+    '</div>' +
+    '<div class="inline-error" id="err"></div>' +
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.annualFee?'':' disabled')+'>Continue</button></div>';
+}
+
+function sEduYears() {
+  const c = cfg();
+  return '<div class="q-eyebrow">Education fund · step 2</div>' +
+    '<div class="q-title">How many years until college starts?</div>' +
+    '<div class="q-body">' +
+    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="10" value="'+(S.yearsToCollege||'')+'"><span class="num-suffix">years</span></div>' +
+    valueSlider('inpSlider', S.yearsToCollege||10, 1, 22, 1, '1', '22') +
+    '<div class="chips-label">Or pick a common span</div>' +
+    '<div class="chips">'+c.collegeChips.map(a=>'<div class="chip'+(S.yearsToCollege===a?' selected':'')+'" data-cy="'+a+'">'+a+' yrs</div>').join('')+'</div>' +
+    '<div class="inline-error" id="err"></div>' +
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.yearsToCollege?'':' disabled')+'>Continue</button></div>';
+}
+
+function sEduDuration() {
+  return '<div class="q-eyebrow">Education fund · step 3</div>' +
+    '<div class="q-title">How many years will the course take?</div>' +
+    '<div class="q-body">' +
+    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="4" value="'+(S.courseDuration||'')+'"><span class="num-suffix">years of study</span></div>' +
+    valueSlider('inpSlider', S.courseDuration||4, 1, 8, 1, '1', '8') +
+    '<div class="chips-label">Or pick a common length</div>' +
+    '<div class="chips">'+[2,3,4,5].map(a=>'<div class="chip'+(S.courseDuration===a?' selected':'')+'" data-cd="'+a+'">'+a+' yrs</div>').join('')+'</div>' +
+    '<div class="inline-error" id="err"></div>' +
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.courseDuration?'':' disabled')+'>Continue</button></div>';
+}
+
+function sGenType() {
+  const c = cfg();
+  return '<div class="q-eyebrow">Big purchase · step 1</div>' +
+    '<div class="q-title">What are you saving for?</div>' +
+    '<div class="q-sub">This sets the right price-rise assumption for your goal.</div>' +
+    '<div class="q-body"><div class="gen-grid">' +
+    GEN_TYPES.map(g =>
+      '<div class="gen-card'+(S.genType===g.id?' selected':'')+'" data-gt="'+g.id+'">' +
+      '<span class="gen-icon">'+g.icon+'</span><div class="gen-label">'+g.label+'</div>' +
+      '<div class="gen-rate">'+(c.goalInflation[g.rateKey]*100).toFixed(0)+'% price rise/yr assumed</div></div>'
+    ).join('') +
+    '</div></div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.genType?'':' disabled')+'>Continue</button></div>';
+}
+
+function sGenAmount() {
+  const c = cfg();
+  const genLabel = GEN_TYPES.find(g => g.id === S.genType);
+  return '<div class="q-eyebrow">Big purchase · step 2</div>' +
+    '<div class="q-title">What does it cost today?</div>' +
+    '<div class="q-sub">The price it would cost right now. We inflate it forward to the year you will actually pay.</div>' +
+    '<div class="q-body">' +
+    '<div class="num-wrap"><span class="num-prefix">'+c.sym+'</span><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="0" value="'+(S.genAmount||'')+'"><span class="num-suffix">today</span></div>' +
+    (()=>{const b=sliderBounds(c.amtChips);return valueSlider('inpSlider', S.genAmount||b.min, b.min, b.max, b.step, c.compact(b.min), c.compact(b.max));})() +
+    '<div class="chips-label">Or pick a common amount</div>' +
+    '<div class="chips">'+c.amtChips.map(a=>'<div class="chip'+(S.genAmount===a?' selected':'')+'" data-ga="'+a+'">'+c.compact(a)+'</div>').join('')+'</div>' +
+    '<div class="optional-field"><div class="optional-label">Already saved for this? (optional)</div>' +
+    '<div class="num-wrap-sm"><span class="num-prefix-sm">'+c.sym+'</span><input class="num-input-sm" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="'+(S.existingSavings||'')+'"></div>' +
+    (()=>{const b=sliderBounds(c.amtChips,4,0);return valueSlider('inpSavSlider', S.existingSavings||0, 0, b.max, b.step, c.compact(0), c.compact(b.max));})() +
+    '</div>' +
+    '<div class="inline-error" id="err"></div>' +
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.genAmount?'':' disabled')+'>Continue</button></div>';
+}
+
+function sGenYears() {
+  const c = cfg();
+  return '<div class="q-eyebrow">Big purchase · step 3</div>' +
+    '<div class="q-title">How many years until you need it?</div>' +
+    '<div class="q-body">' +
+    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="5" value="'+(S.genYears||'')+'"><span class="num-suffix">years away</span></div>' +
+    valueSlider('inpSlider', S.genYears||5, 1, 30, 1, '1', '30') +
+    '<div class="chips-label">Or pick a common span</div>' +
+    '<div class="chips">'+c.goalYrChips.map(a=>'<div class="chip'+(S.genYears===a?' selected':'')+'" data-gy="'+a+'">'+a+' yrs</div>').join('')+'</div>' +
+    '<div class="inline-error" id="err"></div>' +
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.genYears?'':' disabled')+'>Continue</button></div>';
+}
+
+function sRisk() {
+  return '<div class="q-eyebrow">Last question</div>' +
+    '<div class="q-title">How do you feel about ups and downs?</div>' +
+    '<div class="q-body"><div class="risk-stack">' +
+    RISK.map(r => '<div class="risk-card'+(S.risk===r.id?' selected':'')+'" data-risk="'+r.id+'"><h4>'+r.title+'</h4><p>'+r.desc+'</p></div>').join('') +
+    '</div></div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.risk?'':' disabled')+'>See my number</button></div>';
+}
+
+/* =====================================================================
+   RESULTS
+   ===================================================================== */
+function sResults() {
+  if (S.goalType === 'retirement') return sResultsRetirement();
+  if (S.goalType === 'education')  return sResultsEducation();
+  if (S.goalType === 'generic')    return sResultsGeneric();
+  if (S.goalType === 'delay')      return sResultsDelay();
+  return '<div>Not implemented yet</div>';
+}
+
+// Shared by all three results screens: what your money is actually
+// invested in, and what it earns before vs after inflation eats into it.
+function allocationCardHtml(preRate, d, rLabel) {
+  const a = riskAllocation();
+  const real = realRate(preRate, d.inflation);
+  return '<div class="chart-card"><div class="chart-title">Where this money would sit</div>' +
+    '<div class="chart-caption">An illustrative mix for a &quot;'+rLabel+'&quot; investor. Real fund selection should match your actual comfort with risk.</div>' +
+    '<div class="alloc-flex">' + allocationDonut(a.eq, a.de, a.hy) + '<div class="alloc-legend">' + allocationLegend(a.eq, a.de, a.hy) + '</div></div>' +
+    '<div class="alloc-return-row">' +
+    '<div><div class="alloc-return-label">Expected return</div><div class="alloc-return-value">'+(preRate*100).toFixed(1)+'%</div></div>' +
+    '<div><div class="alloc-return-label">After '+(d.inflation*100).toFixed(0)+'% inflation</div><div class="alloc-return-value" style="color:'+(real>0?'#8FC79E':'#E8977A')+'">'+(real*100).toFixed(1)+'%</div></div>' +
+    '</div></div>';
+}
+
+function sResultsRetirement() {
+  const c = cfg(), r = calcRetirement();
+  const rLabel = RISK.find(x => x.id === S.risk).title.toLowerCase();
+  const existingNote = r.existing>0 ? ' Your existing '+c.compact(r.existing)+', left to grow the same way, covers '+c.compact(r.existingFV)+' of it by then.' : '';
+  const actionCard = r.alreadyMet
+    ? '<div class="action-card"><div class="al">Good news</div><div class="af">No SIP needed</div>' +
+      '<div class="as">Your existing '+c.compact(r.existing)+', left to grow at "'+rLabel+'", is already projected to more than cover the pot by age '+S.retireAge+'.</div></div>'
+    : '<div class="action-card"><div class="al">Put away, starting now</div>' +
+      '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
+      '<div class="as">For '+r.yrs+' years at "'+rLabel+'". Pot ready by age '+S.retireAge+', lasts to '+r.d.lifeExp+'.</div></div>';
+  return '<div class="result-scroll">' +
+    '<div class="result-intro">Good news: this is a solvable problem. Here is exactly what it takes.</div>' +
+    '<div class="edit-row">' +
+    '<div class="edit-chip" data-jump="age">Age '+S.age+'</div>' +
+    '<div class="edit-chip" data-jump="retire">Retire '+S.retireAge+'</div>' +
+    '<div class="edit-chip" data-jump="expense">'+c.compact(S.monthlyExpense)+'/mo</div>' +
+    '<div class="edit-chip" data-jump="risk">'+rLabel+'</div>' +
+    '</div>' +
+    '<div class="hero-number">' +
+    '<div class="hero-label">Pot needed by age '+S.retireAge+'</div>' +
+    '<div class="hero-figure">'+c.compact(r.corpus)+'</div>' +
+    '<div class="hero-sub">About '+c.compact(r.realCorpus)+' in today\'s money. Prices will be higher by then, but your spending power stays the same.'+existingNote+'</div>' +
+    '</div>' +
+    actionCard +
+    '<div class="chart-card"><div class="chart-title">How the pot grows</div>' +
+    '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
+    mountainChart(r.accRows)+'</div>' +
+    '<div class="chart-card"><div class="chart-title">How the pot gets spent</div>' +
+    '<div class="chart-caption">Built to last until age '+r.d.lifeExp+'</div>' +
+    potChart(r.drawRows)+'</div>' +
+    allocationCardHtml(r.preRate, r.d, rLabel) +
+    delayCard(r.delay, r.yrs) +
+    '<div class="assump-toggle" id="st">'+caretSvg()+'See the full month-by-month schedule</div>' +
+    '<div class="assump-panel" id="sp"><div class="schedule-scroll"><table class="schedule-table">' +
+    '<thead><tr><th>Year</th><th>You paid in</th><th>Growth earned</th><th>Balance</th></tr></thead><tbody>' +
+    yearlyAmortization(r.accRows).map(row=>'<tr><td>'+row.year+'</td><td>'+c.compact(row.contributed)+'</td><td>'+c.compact(row.growth)+'</td><td>'+c.compact(row.close)+'</td></tr>').join('') +
+    '</tbody></table></div></div>' +
+    '<div class="assump-toggle" id="dt">'+caretSvg()+'See the spending-down years, one by one</div>' +
+    '<div class="assump-panel" id="dp"><div class="schedule-scroll"><table class="schedule-table">' +
+    '<thead><tr><th>Year</th><th>Start of year</th><th>You withdraw</th><th>Growth earned</th><th>End of year</th></tr></thead><tbody>' +
+    r.drawRows.map(row=>'<tr><td>'+row.year+'</td><td>'+c.compact(row.openBal)+'</td><td>'+c.compact(row.withdrawal)+'</td><td>'+c.compact(Math.max(0,row.closeBal-row.openBal+row.withdrawal))+'</td><td>'+c.compact(row.closeBal)+'</td></tr>').join('') +
+    '</tbody></table></div></div>' +
+    '<div class="assump-toggle" id="at">What assumptions did we use?</div>' +
+    '<div class="assump-panel" id="ap"><div class="assump-inner">'+assumpRetirement(r)+'</div></div>' +
+    '<div class="restart-row"><button id="rb">Start over</button></div>' +
+    '</div>';
+}
+
+function sResultsEducation() {
+  const c = cfg(), r = calcEducation();
+  const rLabel = RISK.find(x => x.id === S.risk).title.toLowerCase();
+  const existingNote = r.existing>0 ? ' What you\'ve already saved, '+c.compact(r.existing)+', grows to about '+c.compact(r.existingFV)+' of that by then.' : '';
+  const actionCard = r.alreadyMet
+    ? '<div class="action-card"><div class="al">Good news</div><div class="af">No SIP needed</div>' +
+      '<div class="as">What you\'ve already saved, left to grow at "'+rLabel+'", is already projected to more than cover the corpus.</div></div>'
+    : '<div class="action-card"><div class="al">Put away, starting now</div>' +
+      '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
+      '<div class="as">For '+S.yearsToCollege+' years at "'+rLabel+'". Corpus ready before college starts.</div></div>';
+  return '<div class="result-scroll">' +
+    '<div class="result-intro">A college fund is one of the most plannable goals there is. Here is the number.</div>' +
+    '<div class="edit-row">' +
+    '<div class="edit-chip" data-jump="edu_fee">'+c.compact(S.annualFee)+'/yr</div>' +
+    '<div class="edit-chip" data-jump="edu_years">'+S.yearsToCollege+' yrs away</div>' +
+    '<div class="edit-chip" data-jump="edu_duration">'+S.courseDuration+'-yr course</div>' +
+    '<div class="edit-chip" data-jump="risk">'+rLabel+'</div>' +
+    '</div>' +
+    '<div class="hero-number">' +
+    '<div class="hero-label">Corpus needed in '+S.yearsToCollege+' years</div>' +
+    '<div class="hero-figure">'+c.compact(r.corpus)+'</div>' +
+    '<div class="hero-sub">This covers '+S.courseDuration+' years of fees. Year 1 alone costs '+c.compact(r.feeAtCollege)+', and fees keep rising while your child studies.'+existingNote+'</div>' +
+    '</div>' +
+    actionCard +
+    '<div class="chart-card"><div class="chart-title">How the college fund grows</div>' +
+    '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
+    mountainChart(r.accRows)+'</div>' +
+    '<div class="chart-card"><div class="chart-title">Fee you will pay each year of study</div>' +
+    '<div class="chart-caption">Rises every year because education costs keep going up</div>' +
+    feeBarChart(r.feeYears)+'</div>' +
+    allocationCardHtml(r.preRate, r.d, rLabel) +
+    delayCard(r.delay, S.yearsToCollege) +
+    '<div class="assump-toggle" id="st">'+caretSvg()+'See the full month-by-month schedule</div>' +
+    '<div class="assump-panel" id="sp"><div class="schedule-scroll"><table class="schedule-table">' +
+    '<thead><tr><th>Year</th><th>You paid in</th><th>Growth earned</th><th>Balance</th></tr></thead><tbody>' +
+    yearlyAmortization(r.accRows).map(row=>'<tr><td>'+row.year+'</td><td>'+c.compact(row.contributed)+'</td><td>'+c.compact(row.growth)+'</td><td>'+c.compact(row.close)+'</td></tr>').join('') +
+    '</tbody></table></div></div>' +
+    '<div class="assump-toggle" id="at">What assumptions did we use?</div>' +
+    '<div class="assump-panel" id="ap"><div class="assump-inner">'+assumpEducation(r)+'</div></div>' +
+    '<div class="restart-row"><button id="rb">Start over</button></div>' +
+    '</div>';
+}
+
+function sResultsGeneric() {
+  const c = cfg(), r = calcGeneric();
+  const genLabel = GEN_TYPES.find(g => g.id === S.genType);
+  const rLabel = RISK.find(x => x.id === S.risk).title.toLowerCase();
+  const alreadyMet = r.gap === 0;
+  return '<div class="result-scroll">' +
+    '<div class="result-intro">'+(alreadyMet?'Even better news: you may already be on track.':'A clear target ahead. Here is what it takes to reach it.')+'</div>' +
+    '<div class="edit-row">' +
+    '<div class="edit-chip" data-jump="gen_type">'+genLabel.label+'</div>' +
+    '<div class="edit-chip" data-jump="gen_amount">'+c.compact(S.genAmount)+' today</div>' +
+    '<div class="edit-chip" data-jump="gen_years">'+S.genYears+' yrs away</div>' +
+    '<div class="edit-chip" data-jump="risk">'+rLabel+'</div>' +
+    '</div>' +
+    '<div class="hero-number">' +
+    '<div class="hero-label">What it will cost in '+S.genYears+' years</div>' +
+    '<div class="hero-figure">'+c.compact(r.inflatedGoal)+'</div>' +
+    '<div class="hero-sub">Today\'s price is '+c.compact(S.genAmount)+'. Price inflation of '+(r.inflRate*100).toFixed(0)+'%/yr adds '+c.compact(r.inflatedGoal - S.genAmount)+' over '+S.genYears+' years.</div>' +
+    '</div>' +
+    (alreadyMet ?
+      '<div class="action-card"><div class="al">Good news</div><div class="af">No SIP needed</div>' +
+      '<div class="as">Your existing savings will grow to more than the inflated cost by then.</div></div>' :
+      '<div class="action-card"><div class="al">Put away, starting now</div>' +
+      '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
+      '<div class="as">For '+S.genYears+' years at "'+rLabel+'". Covers the gap after your existing savings grow.</div></div>'
+    ) +
+    (r.accRows.length > 0 ?
+      '<div class="chart-card"><div class="chart-title">How the fund grows</div>' +
+      '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
+      mountainChart(r.accRows)+'</div>' : '') +
+    (r.gap > 0 ? allocationCardHtml(r.preRate, r.d, rLabel) : '') +
+    (r.delay ? delayCard(r.delay, S.genYears) : '') +
+    (r.accRows.length > 0 ?
+      '<div class="assump-toggle" id="st">'+caretSvg()+'See the full month-by-month schedule</div>' +
+      '<div class="assump-panel" id="sp"><div class="schedule-scroll"><table class="schedule-table">' +
+      '<thead><tr><th>Year</th><th>You paid in</th><th>Growth earned</th><th>Balance</th></tr></thead><tbody>' +
+      yearlyAmortization(r.accRows).map(row=>'<tr><td>'+row.year+'</td><td>'+c.compact(row.contributed)+'</td><td>'+c.compact(row.growth)+'</td><td>'+c.compact(row.close)+'</td></tr>').join('') +
+      '</tbody></table></div></div>' : '') +
+    '<div class="assump-toggle" id="at">What assumptions did we use?</div>' +
+    '<div class="assump-panel" id="ap"><div class="assump-inner">'+assumpGeneric(r)+'</div></div>' +
+    '<div class="restart-row"><button id="rb">Start over</button></div>' +
+    '</div>';
+}
+
+function sResultsDelay() {
+  const c = cfg();
+  return '<div class="result-scroll">' +
+    '<div class="hero-number">' +
+    '<div class="hero-label">Cost of delay</div>' +
+    '<div class="hero-figure">Pick a goal above</div>' +
+    '<div class="hero-sub">The cost-of-delay comparison shows automatically at the bottom of every result screen. Complete any goal above to see yours.</div>' +
+    '</div>' +
+    '<div class="restart-row"><button id="rb">Pick a goal</button></div>' +
+    '</div>';
+}
+
+/* =====================================================================
+   RENDER ENGINE
+   ===================================================================== */
+const stage = document.getElementById('stage');
+const progressEl = document.getElementById('progress');
+const backBtn = document.getElementById('backBtn');
+const assumpBtn = document.getElementById('assumpBtn');
+function scrollToPanel(panel) {
+  // The flex/overflow layout here doesn't always resolve to one clean
+  // scrollable ancestor (varies by content length and screen), so walk up
+  // from the panel and scroll whichever container actually has overflow,
+  // falling back to the window if none do.
+  let el = panel.parentElement;
+  while (el && el !== document.body) {
+    if (el.scrollHeight > el.clientHeight + 4) {
+      el.scrollTo({ top: panel.offsetTop - el.offsetTop - 12, behavior: 'smooth' });
+      return;
+    }
+    el = el.parentElement;
+  }
+  window.scrollTo({ top: panel.getBoundingClientRect().top + window.scrollY - 12, behavior: 'smooth' });
+}
+assumpBtn.addEventListener('click', () => {
+  const panel = document.getElementById('ap');
+  if (!panel) return;
+  panel.classList.add('open');
+  // The panel expands via a CSS max-height transition — scrolling in the
+  // same tick sees it still at its collapsed height, so give the layout
+  // a moment to update first.
+  setTimeout(() => scrollToPanel(panel), 60);
+});
+
+function renderProgress() {
+  progressEl.innerHTML = '';
+  const f = flow();
+  f.forEach((s, i) => {
+    if (s === 'results') return;
+    const d = document.createElement('div');
+    d.className = 'dot'+(i < S.si?' done':(i===S.si?' active':''));
+    d.innerHTML = '<i></i>';
+    progressEl.appendChild(d);
+  });
+}
+
+function go(delta) {
+  // reset goal-specific fields if changing goal
+  if (delta > 0 && flow()[S.si] === 'goal') {
+    S.age = null; S.retireAge = null; S.monthlyExpense = null;
+    S.annualFee = null; S.yearsToCollege = null; S.courseDuration = null;
+    S.genType = null; S.genAmount = null; S.genYears = null; S.existingSavings = 0;
+    S.risk = null;
+  }
+  S.si = Math.max(0, Math.min(flow().length - 1, S.si + delta));
+  render();
+}
+
+// Reached results, want to fix one answer without re-walking every question
+// after it: jump straight to that screen, keeping every other answer intact.
+function jumpEdit(screenName) {
+  S.quickEdit = true;
+  S.si = flow().indexOf(screenName);
+  render();
+}
+
+// The single "Continue" exit point for every question screen. Normal flow
+// just steps forward one screen. But if we arrived here via jumpEdit (fixing
+// one answer from the results screen), stepping forward one would land on
+// whatever question happens to sit next in the array, which is almost never
+// what the person wants; they want straight back to their updated result.
+function advance() {
+  if (S.quickEdit) { S.quickEdit = false; S.si = flow().indexOf('results'); render(); }
+  else { go(1); }
+}
+
+function render() {
+  const f = flow(), screen = f[S.si];
+  let html = '';
+  if (screen==='country')      html = sCountry();
+  else if (screen==='goal')    html = sGoal();
+  else if (screen==='age')     html = sAge();
+  else if (screen==='retire')  html = sRetire();
+  else if (screen==='expense') html = sExpense();
+  else if (screen==='edu_fee') html = sEduFee();
+  else if (screen==='edu_years')     html = sEduYears();
+  else if (screen==='edu_duration')  html = sEduDuration();
+  else if (screen==='gen_type')   html = sGenType();
+  else if (screen==='gen_amount') html = sGenAmount();
+  else if (screen==='gen_years')  html = sGenYears();
+  else if (screen==='risk')    html = sRisk();
+  else if (screen==='results') html = sResults();
+
+  const wrap = document.createElement('div');
+  wrap.className = 'screen active';
+  wrap.innerHTML = html;
+  stage.innerHTML = '';
+  stage.appendChild(wrap);
+  backBtn.classList.toggle('show', S.si > 0);
+  assumpBtn.classList.toggle('show', screen==='results');
+  renderProgress();
+  attach(screen);
+}
+
+/* =====================================================================
+   EVENT HANDLERS
+   ===================================================================== */
+function attach(screen) {
+  const nb = document.getElementById('nextBtn');
+
+  function sel(el) { el && el.classList.add('selected'); }
+  function unsel(q) { document.querySelectorAll(q).forEach(e => e.classList.remove('selected')); }
+
+  if (screen==='country') {
+    document.querySelectorAll('[data-country]').forEach(el => el.addEventListener('click', () => {
+      S.country = el.dataset.country; S.goalType = null; S.si = 0;
+      render();
+    }));
+    nb && nb.addEventListener('click', () => go(1));
+  }
+
+  if (screen==='goal') {
+    document.querySelectorAll('[data-goal]').forEach(el => el.addEventListener('click', () => {
+      S.goalType = el.dataset.goal;
+      render();
+    }));
+    nb && nb.addEventListener('click', () => {
+      if (S.goalType === 'delay') { S.si++; render(); } else go(1);
+    });
+  }
+
+  if (screen==='age') {
+    const inp = document.getElementById('inp'), err = document.getElementById('err');
+    const sl = document.getElementById('inpSlider');
+    const set = v => { S.age = v; nb.disabled = !v; err.textContent = ''; };
+    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.age, 18, 70); });
+    wireSlider('inpSlider', inp, 18, 70, set);
+    document.querySelectorAll('[data-age]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.age; syncSliderToValue(sl, parseInt(el.dataset.age), 18, 70); set(parseInt(el.dataset.age)); }));
+    nb.addEventListener('click', () => {
+      if (!S.age||S.age<16||S.age>75){err.textContent='Enter an age between 16 and 75.';return;}
+      go(1);
+    });
+  }
+
+  if (screen==='retire') {
+    const inp = document.getElementById('inp'), err = document.getElementById('err');
+    const sl = document.getElementById('inpSlider');
+    const retMin = Math.max(35, (S.age||30)+1);
+    const set = v => { S.retireAge = v; nb.disabled = !v; err.textContent=''; };
+    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.retireAge, retMin, 85); });
+    wireSlider('inpSlider', inp, retMin, 85, set);
+    document.querySelectorAll('[data-retire]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.retire; syncSliderToValue(sl, parseInt(el.dataset.retire), retMin, 85); set(parseInt(el.dataset.retire)); }));
+    nb.addEventListener('click', () => {
+      if (!S.retireAge||S.retireAge<=S.age){err.textContent='This should be after your current age ('+S.age+').';return;}
+      if (S.retireAge>85){err.textContent='Try an age up to 85.';return;}
+      advance();
+    });
+  }
+
+  if (screen==='expense') {
+    const c = cfg();
+    const inp = document.getElementById('inp'), inpSav = document.getElementById('inpSav'), err = document.getElementById('err');
+    const sl = document.getElementById('inpSlider'), slSav = document.getElementById('inpSavSlider');
+    const b = sliderBounds(c.expChips), bSav = sliderBounds(c.amtChips,6,0);
+    const set = v => { S.monthlyExpense = v; nb.disabled = !v; err.textContent=''; };
+    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.monthlyExpense, b.min, b.max); });
+    wireSlider('inpSlider', inp, b.min, b.max, set);
+    inpSav && inpSav.addEventListener('input', () => { S.existingSavings = parseInt(inpSav.value)||0; syncSliderToValue(slSav, S.existingSavings, 0, bSav.max); });
+    if (slSav) slSav.addEventListener('input', () => { inpSav.value = slSav.value; S.existingSavings = parseInt(slSav.value)||0; });
+    document.querySelectorAll('[data-exp]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.exp; syncSliderToValue(sl, parseInt(el.dataset.exp), b.min, b.max); set(parseInt(el.dataset.exp)); }));
+    nb.addEventListener('click', () => { if(!S.monthlyExpense){err.textContent='Enter your typical monthly spend.';return;} advance(); });
+  }
+
+  if (screen==='edu_fee') {
+    const c = cfg();
+    const inp = document.getElementById('inp'), inpSav = document.getElementById('inpSav'), err = document.getElementById('err');
+    const sl = document.getElementById('inpSlider'), slSav = document.getElementById('inpSavSlider');
+    const b = sliderBounds(c.feeChips), bSav = sliderBounds(c.feeChips,10,0);
+    const set = v => { S.annualFee = v; nb.disabled = !v; err.textContent=''; };
+    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.annualFee, b.min, b.max); });
+    wireSlider('inpSlider', inp, b.min, b.max, set);
+    inpSav && inpSav.addEventListener('input', () => { S.existingSavings = parseInt(inpSav.value)||0; syncSliderToValue(slSav, S.existingSavings, 0, bSav.max); });
+    if (slSav) slSav.addEventListener('input', () => { inpSav.value = slSav.value; S.existingSavings = parseInt(slSav.value)||0; });
+    document.querySelectorAll('[data-fee]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.fee; syncSliderToValue(sl, parseInt(el.dataset.fee), b.min, b.max); set(parseInt(el.dataset.fee)); }));
+    nb.addEventListener('click', () => { if(!S.annualFee){err.textContent='Enter the annual fee.';return;} advance(); });
+  }
+
+  if (screen==='edu_years') {
+    const inp = document.getElementById('inp'), err = document.getElementById('err');
+    const sl = document.getElementById('inpSlider');
+    const set = v => { S.yearsToCollege = v; nb.disabled = !v; err.textContent=''; };
+    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.yearsToCollege, 1, 22); });
+    wireSlider('inpSlider', inp, 1, 22, set);
+    document.querySelectorAll('[data-cy]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.cy; syncSliderToValue(sl, parseInt(el.dataset.cy), 1, 22); set(parseInt(el.dataset.cy)); }));
+    nb.addEventListener('click', () => {
+      if(!S.yearsToCollege||S.yearsToCollege<1){err.textContent='Enter years until college starts.';return;}
+      advance();
+    });
+  }
+
+  if (screen==='edu_duration') {
+    const inp = document.getElementById('inp'), err = document.getElementById('err');
+    const sl = document.getElementById('inpSlider');
+    const set = v => { S.courseDuration = v; nb.disabled = !v; err.textContent=''; };
+    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.courseDuration, 1, 8); });
+    wireSlider('inpSlider', inp, 1, 8, set);
+    document.querySelectorAll('[data-cd]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.cd; syncSliderToValue(sl, parseInt(el.dataset.cd), 1, 8); set(parseInt(el.dataset.cd)); }));
+    nb.addEventListener('click', () => { if(!S.courseDuration){err.textContent='Enter course duration.';return;} advance(); });
+  }
+
+  if (screen==='gen_type') {
+    document.querySelectorAll('[data-gt]').forEach(el => el.addEventListener('click', () => { S.genType = el.dataset.gt; render(); }));
+    nb && nb.addEventListener('click', () => advance());
+  }
+
+  if (screen==='gen_amount') {
+    const c = cfg();
+    const inp = document.getElementById('inp'), inpSav = document.getElementById('inpSav'), err = document.getElementById('err');
+    const sl = document.getElementById('inpSlider'), slSav = document.getElementById('inpSavSlider');
+    const b = sliderBounds(c.amtChips), bSav = sliderBounds(c.amtChips,4,0);
+    const set = v => { S.genAmount = v; nb.disabled = !v; err.textContent=''; };
+    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.genAmount, b.min, b.max); });
+    wireSlider('inpSlider', inp, b.min, b.max, set);
+    inpSav && inpSav.addEventListener('input', () => { S.existingSavings = parseInt(inpSav.value)||0; syncSliderToValue(slSav, S.existingSavings, 0, bSav.max); });
+    if (slSav) slSav.addEventListener('input', () => { inpSav.value = slSav.value; S.existingSavings = parseInt(slSav.value)||0; });
+    document.querySelectorAll('[data-ga]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.ga; syncSliderToValue(sl, parseInt(el.dataset.ga), b.min, b.max); set(parseInt(el.dataset.ga)); }));
+    nb.addEventListener('click', () => { if(!S.genAmount){err.textContent='Enter the goal amount.';return;} advance(); });
+  }
+
+  if (screen==='gen_years') {
+    const inp = document.getElementById('inp'), err = document.getElementById('err');
+    const sl = document.getElementById('inpSlider');
+    const set = v => { S.genYears = v; nb.disabled = !v; err.textContent=''; };
+    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.genYears, 1, 30); });
+    wireSlider('inpSlider', inp, 1, 30, set);
+    document.querySelectorAll('[data-gy]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.gy; syncSliderToValue(sl, parseInt(el.dataset.gy), 1, 30); set(parseInt(el.dataset.gy)); }));
+    nb.addEventListener('click', () => { if(!S.genYears||S.genYears<1){err.textContent='Enter years until you need it.';return;} advance(); });
+  }
+
+  if (screen==='risk') {
+    document.querySelectorAll('[data-risk]').forEach(el => el.addEventListener('click', () => { S.risk=el.dataset.risk; render(); }));
+    nb && nb.addEventListener('click', () => advance());
+  }
+
+  if (screen==='results') {
+    document.querySelectorAll('[data-jump]').forEach(el => el.addEventListener('click', () => jumpEdit(el.dataset.jump)));
+    const at = document.getElementById('at'), ap = document.getElementById('ap');
+    if (at && ap) at.addEventListener('click', () => ap.classList.toggle('open'));
+    const st = document.getElementById('st'), sp = document.getElementById('sp');
+    if (st && sp) st.addEventListener('click', () => { sp.classList.toggle('open'); st.classList.toggle('open'); });
+    const dt = document.getElementById('dt'), dp = document.getElementById('dp');
+    if (dt && dp) dt.addEventListener('click', () => { dp.classList.toggle('open'); dt.classList.toggle('open'); });
+    const rb = document.getElementById('rb');
+    if (rb) rb.addEventListener('click', () => {
+      Object.assign(S, {country:null,goalType:null,age:null,retireAge:null,monthlyExpense:null,annualFee:null,yearsToCollege:null,courseDuration:null,genType:null,genAmount:null,genYears:null,existingSavings:0,risk:null,si:0,quickEdit:false});
+      render();
+    });
+  }
+}
+
+backBtn.addEventListener('click', () => {
+  if (S.quickEdit) { S.quickEdit = false; S.si = flow().indexOf('results'); render(); return; }
+  if (S.si>0) go(-1);
+});
+render();
+</script>
+</body>
+</html>
