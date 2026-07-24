@@ -16,6 +16,7 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
 body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sans-serif;overflow-x:hidden;min-height:100vh;display:flex;flex-direction:column}
+
 @media(prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}}
 
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 10px;flex-shrink:0}
@@ -169,7 +170,14 @@ body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sa
 .alloc-return-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:12px;border-top:1px solid rgba(241,238,227,.1)}
 .alloc-return-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.04em;margin-bottom:3px}
 .alloc-return-value{font-family:'Newsreader',serif;font-size:19px;font-weight:600;color:var(--paper)}
-svg.chart{width:100%;height:auto;display:block}
+/* Cap only the chart itself, not the surrounding layout: charts were
+   designed and tuned around a ~380-480px column, so uncapped they grow to
+   fill however wide the card happens to be (600px+ on a real desktop
+   monitor), which looks oversized and hard to read. Everything else on
+   the page stays genuinely full-width -- this was the actual fix needed,
+   not shrinking the whole app into a narrow column, which is worse: it
+   leaves most of a normal monitor empty and looks broken. */
+svg.chart{width:100%;max-width:480px;height:auto;display:block;margin-left:auto;margin-right:auto}
 
 /* delay card */
 .delay-card{background:rgba(28,58,45,.7);border:1px solid rgba(201,164,85,.35);border-radius:16px 3px 16px 16px;padding:19px 20px;margin-bottom:20px}
