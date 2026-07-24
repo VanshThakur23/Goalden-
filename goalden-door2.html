@@ -141,7 +141,7 @@ body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sa
 .mg-note{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);margin-top:3px}
 
 /* --- plan results --- */
-.plan-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.plan-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0}
 .section-head{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:20px 0 10px}
 .goal-row{display:flex;justify-content:space-between;align-items:flex-start;padding:13px 15px;background:rgba(241,238,227,.05);border-radius:3px 13px 13px 13px;margin-bottom:0}
 .goal-row-wrap{margin-bottom:10px}
@@ -651,22 +651,46 @@ function mountainChart(rows, uid){
   <line x1="${p}" y1="${h}" x2="${w-p}" y2="${h}" stroke="rgba(241,238,227,.18)" stroke-width="1"/>
   </svg>`;
 }
-function potChart(rows, uid){
+// A bare filled shape with no readable numbers isn't information, it's
+// decoration. Always show the actual starting/ending amounts, the years
+// spanned, and — the thing that actually matters — exactly where the pot
+// runs dry if it does, with a real marker, not left for the reader to
+// guess from the shape of the line.
+function potChart(rows, c, uid){
   if(!rows||!rows.length)return'';
   const gid='pg'+(uid!==undefined?'-'+uid:'');
-  const w=320,h=110,p=4;
+  const w=320,h=134,p=4,topPad=20,botPad=20;
+  const chartH=h-topPad-botPad;
   const maxV=rows[0].openBal;
   const n=rows.length,sx=(w-p*2)/(n-1||1);
-  const y=v=>h-p-(Math.max(0,v)/maxV)*(h-p*2);
+  const y=v=>topPad+chartH-(Math.max(0,v)/maxV)*chartH;
+  let depletedYear=null;
+  for(const r of rows){ if(r.closeBal<=0){ depletedYear=r.year; break; } }
+  // Reaching exactly zero AT the final year is the plan working correctly
+  // (that's what "lasts N years" means); only flag it when the money runs
+  // out BEFORE that.
+  const prematureDepletion = depletedYear!==null && depletedYear<n;
   let pts='M'+p+','+y(rows[0].openBal).toFixed(1);
   rows.forEach((r,i)=>{pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1);});
   const lx=(p+(n-1)*sx).toFixed(1);
+  const baseY=y(0).toFixed(1);
+  const endVal=rows[rows.length-1].closeBal;
+  const endYv=y(endVal).toFixed(1);
+  const fmt=c?(v=>c.compact(v)):(v=>Math.round(v).toLocaleString());
+  const markX=prematureDepletion?(p+(depletedYear-1)*sx).toFixed(1):null;
+  const markY=prematureDepletion?y(0).toFixed(1):null;
   return`<svg class="chart" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
   <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
   <stop offset="0%" stop-color="#3D7A4F" stop-opacity=".65"/><stop offset="100%" stop-color="#3D7A4F" stop-opacity=".05"/></linearGradient></defs>
-  <path d="${pts} L${lx},${h} L${p},${h} Z" fill="url(#${gid})"/>
+  <path d="${pts} L${lx},${baseY} L${p},${baseY} Z" fill="url(#${gid})"/>
   <path d="${pts}" fill="none" stroke="#8FC79E" stroke-width="1.4"/>
-  <line x1="${p}" y1="${h}" x2="${w-p}" y2="${h}" stroke="rgba(241,238,227,.18)" stroke-width="1"/>
+  <line x1="${p}" y1="${baseY}" x2="${w-p}" y2="${baseY}" stroke="rgba(241,238,227,.18)" stroke-width="1"/>
+  <text x="${p}" y="12" font-family="Spline Sans Mono,monospace" font-size="9" fill="rgba(241,238,227,.55)">Starts at ${fmt(maxV)}</text>
+  ${prematureDepletion
+    ? `<circle cx="${markX}" cy="${markY}" r="3" fill="#E8977A"/><text x="${markX}" y="${(parseFloat(markY)-6).toFixed(1)}" text-anchor="middle" font-family="Spline Sans Mono,monospace" font-size="9" font-weight="600" fill="#E8977A">Runs out, yr ${depletedYear}</text>`
+    : `<circle cx="${lx}" cy="${endYv}" r="2.8" fill="#8FC79E"/><text x="${w-p}" y="12" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="9" font-weight="600" fill="#8FC79E">${endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal)}</text>`}
+  <text x="${p}" y="${h-6}" font-family="Spline Sans Mono,monospace" font-size="8.5" fill="rgba(241,238,227,.4)">Yr 1</text>
+  <text x="${w-p}" y="${h-6}" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="8.5" fill="rgba(241,238,227,.4)">Yr ${n}</text>
   </svg>`;
 }
 
@@ -1044,7 +1068,7 @@ function renderPlan(){
     const chartsHtml = g.type==='retirement'
       ? `<div class="gr-chart-row">
           <div class="gr-chart-card"><div class="gr-chart-cap">Building the pot, ${g.years} yrs</div>${mountainChart(accRows,i)}</div>
-          <div class="gr-chart-card"><div class="gr-chart-cap">Spending it down, ${g.drawYrs} yrs from ${g.retireAge}</div>${potChart(drawRowsChart,i)}</div>
+          <div class="gr-chart-card"><div class="gr-chart-cap">Spending it down, ${g.drawYrs} yrs from ${g.retireAge}</div>${potChart(drawRowsChart,c,i)}</div>
         </div>`
       : `<div class="gr-chart-card"><div class="gr-chart-cap">How this goal's pot grows over ${g.years} years</div>${mountainChart(accRows,i)}</div>`;
     return `<div class="goal-row-wrap">

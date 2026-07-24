@@ -767,15 +767,24 @@ function yearlyAmortization(monthlyRows){
   return years;
 }
 
-function drawdownChart(rows, w, h){
-  if(w===undefined)w=760; if(h===undefined)h=220;
-  const p=6;
+// A bare filled shape with no readable numbers on it isn't information,
+// it's decoration. Always show the actual starting/ending amounts, the
+// years spanned, and exactly where the pot runs dry if it does — with a
+// real marker, not left for the reader to guess from the shape of the
+// line. Shock-year markers (existing feature) are preserved as-is.
+function drawdownChart(rows, c, w, h){
+  if(w===undefined)w=760; if(h===undefined)h=240;
+  const p=6, topPad=26, botPad=22;
+  const chartH=h-topPad-botPad;
   const maxV=Math.max(rows[0].openBal, 0);
   const minV=Math.min(0, ...rows.map(r=>r.closeBal));
   const range=maxV-minV || 1;
   const n=rows.length, sx=(w-p*2)/(n-1||1);
-  const y=v=>h-p-((v-minV)/range)*(h-p*2);
+  const y=v=>topPad+chartH-((v-minV)/range)*chartH;
   const zeroY=y(0);
+  let depletedYear=null;
+  for(const r of rows){ if(r.closeBal<=0){ depletedYear=r.year; break; } }
+  const prematureDepletion = depletedYear!==null && depletedYear<n;
   let pts='M'+p+','+y(rows[0].openBal).toFixed(1);
   rows.forEach((r,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1));
   const lx=(p+(n-1)*sx).toFixed(1);
@@ -786,12 +795,22 @@ function drawdownChart(rows, w, h){
       shockMarks+=`<circle cx="${cx}" cy="${y(r.closeBal).toFixed(1)}" r="4" fill="#E8977A"/>`;
     }
   });
+  const endVal=rows[rows.length-1].closeBal;
+  const fmt=c?(v=>c.compact(v)):(v=>Math.round(v).toLocaleString());
+  const markX=prematureDepletion?(p+(depletedYear-1)*sx).toFixed(1):null;
+  const markY=prematureDepletion?zeroY.toFixed(1):null;
   return svgOpen(w,h)+
     `<defs><linearGradient id="ddg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3D7A4F" stop-opacity=".55"/><stop offset="100%" stop-color="#3D7A4F" stop-opacity=".04"/></linearGradient></defs>
-    <path d="${pts} L${lx},${zeroY} L${p},${zeroY} Z" fill="url(#ddg)"/>
-    <line x1="${p}" y1="${zeroY}" x2="${w-p}" y2="${zeroY}" stroke="rgba(241,238,227,.35)" stroke-width="1" stroke-dasharray="3,3"/>
+    <path d="${pts} L${lx},${zeroY.toFixed(1)} L${p},${zeroY.toFixed(1)} Z" fill="url(#ddg)"/>
+    <line x1="${p}" y1="${zeroY.toFixed(1)}" x2="${w-p}" y2="${zeroY.toFixed(1)}" stroke="rgba(241,238,227,.35)" stroke-width="1" stroke-dasharray="3,3"/>
     <path d="${pts}" fill="none" stroke="#8FC79E" stroke-width="1.75"/>
     ${shockMarks}
+    <text x="${p}" y="16" font-family="Spline Sans Mono,monospace" font-size="12" fill="rgba(241,238,227,.6)">Starts at ${fmt(maxV)}</text>
+    ${prematureDepletion
+      ? `<circle cx="${markX}" cy="${markY}" r="4" fill="#E8977A"/><text x="${markX}" y="${(parseFloat(markY)-9).toFixed(1)}" text-anchor="middle" font-family="Spline Sans Mono,monospace" font-size="12" font-weight="600" fill="#E8977A">Runs out, yr ${depletedYear}</text>`
+      : `<circle cx="${lx}" cy="${y(endVal).toFixed(1)}" r="3.5" fill="#8FC79E"/><text x="${w-p}" y="16" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="12" font-weight="600" fill="#8FC79E">${endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal)}</text>`}
+    <text x="${p}" y="${h-6}" font-family="Spline Sans Mono,monospace" font-size="11" fill="rgba(241,238,227,.4)">Yr 1</text>
+    <text x="${w-p}" y="${h-6}" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="11" fill="rgba(241,238,227,.4)">Yr ${n}</text>
     </svg>`;
 }
 
@@ -1015,7 +1034,7 @@ function renderRetirement(){
       <div class="cap">${res.shockInfo ?
         (res.shockInfo.ranOutYear ? `Runs out in drawdown year ${res.shockInfo.ranOutYear}, ${res.drawYrs-res.shockInfo.ranOutYear} years short of plan.` : 'Survives the shock without running out.')
         : 'Dashed line marks zero. Built to reach exactly zero at the end of the plan.'}</div>
-      ${drawdownChart(res.ddRows)}
+      ${drawdownChart(res.ddRows, c)}
     </div>
 
     <div class="card">
@@ -1157,7 +1176,7 @@ function renderSWP(){
     <div class="card">
       <h4>Drawdown schedule${shockEp?` with ${shockEp.label} injected`:''}</h4>
       <div class="cap">${shockEp?(sim.ranOutYear?`The same withdrawals now empty the pot in year ${sim.ranOutYear}, ${s.years-sim.ranOutYear} years short of plan. Sequence matters: the earlier the shock, the worse the damage.`:'Absorbs the shock and still lasts the full period.'):`Built to reach zero in year ${s.years}`}</div>
-      ${drawdownChart(rows)}
+      ${drawdownChart(rows, c)}
     </div>
   </div>
   </div>`;

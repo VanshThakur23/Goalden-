@@ -31,14 +31,19 @@ body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sa
 .dot.done i,.dot.active i{width:100%}
 
 .stage{flex:1;position:relative;overflow:hidden}
-.screen{position:absolute;inset:0;padding:8px 24px 24px;display:flex;flex-direction:column;opacity:0;transform:translateX(24px);pointer-events:none;transition:opacity .3s ease,transform .3s ease}
-.screen.active{opacity:1;transform:translateX(0);pointer-events:auto;position:relative}
+.screen{position:absolute;inset:0;padding:8px 24px 24px;display:flex;flex-direction:column;opacity:0;transform:translateX(24px);pointer-events:none;transition:opacity .3s ease,transform .3s ease;min-height:0}
+/* Same fix as Door 2: switching to position:relative here for the active
+   screen drops the height that inset:0 was providing (relative positioning
+   only offsets, it doesn't size), so tall content just grew past .stage's
+   box and got silently clipped by overflow:hidden with no scrollbar. This
+   was never actually applied here before, only in Door 2. */
+.screen.active{opacity:1;transform:translateX(0);pointer-events:auto;position:relative;height:100%;min-height:0}
 .screen.leaving{opacity:0;transform:translateX(-24px)}
 
 .q-eyebrow{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
 .q-title{font-family:'Newsreader',serif;font-weight:600;font-size:clamp(22px,7vw,30px);line-height:1.18;color:var(--paper);margin-bottom:8px}
 .q-sub{font-size:14px;color:rgba(241,238,227,.65);margin-bottom:26px;max-width:38ch;line-height:1.5}
-.q-body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px}
+.q-body{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:16px;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 
 /* country grid */
 .country-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
@@ -106,7 +111,7 @@ body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sa
 .cta:disabled{opacity:.3;pointer-events:none}
 
 /* results */
-.result-scroll{overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
+.result-scroll{overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch;min-height:0}
 .result-intro{text-align:center;font-family:'Newsreader',serif;font-style:italic;font-size:15px;color:rgba(241,238,227,.72);padding:4px 12px 18px;line-height:1.5}
 .hero-number{text-align:center;padding:6px 0 4px}
 .hero-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
@@ -472,20 +477,49 @@ function allocationLegend(eq, de, hy) {
     '<div class="alloc-row"><span class="alloc-dot" style="background:'+s.color+'"></span><span class="alloc-name">'+s.label+'</span><span class="alloc-pct">'+Math.round(s.pct*100)+'%</span></div>'
   ).join('');
 }
-function potChart(rows) {
-  const w = 320, h = 148, p = 4;
+// A bare filled shape with no readable numbers on it isn't information,
+// it's decoration. This version always shows the actual starting and
+// ending amounts, the years the timeline spans, and — the thing that
+// actually matters for a drawdown plan — exactly where the pot runs dry
+// if it does, marked with a real dot and label, not left for the reader
+// to guess from the shape of the line.
+function potChart(rows, c) {
+  const w = 320, h = 172, p = 4, topPad = 20, botPad = 20;
+  const chartH = h - topPad - botPad;
   const maxV = rows[0].openBal;
   const n = rows.length;
-  const sx = (w-p*2)/(n-1);
-  const y = v => h - p - (Math.max(0,v)/maxV)*(h-p*2);
+  const sx = (w-p*2)/(n-1||1);
+  const y = v => topPad + chartH - (Math.max(0,v)/maxV)*chartH;
+  let depletedYear = null;
+  for (const r of rows) { if (r.closeBal <= 0) { depletedYear = r.year; break; } }
+  // Reaching exactly zero AT the final year is the plan working correctly
+  // — that is what "lasts until age X" means, since the corpus is solved
+  // to just cover that many years of withdrawals. Only flag it as an
+  // actual shortfall when the money runs out BEFORE the plan says it
+  // should.
+  const prematureDepletion = depletedYear !== null && depletedYear < n;
   let pts = 'M'+p+','+y(rows[0].openBal).toFixed(1);
   rows.forEach((r,i) => pts += ' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1));
   const lx = (p+(n-1)*sx).toFixed(1);
+  const baseY = y(0).toFixed(1);
+  const endVal = rows[rows.length-1].closeBal;
+  const endX = lx, endYv = y(endVal);
+  const fmt = c ? (v => c.compact(v)) : (v => Math.round(v).toLocaleString());
+  const markX = prematureDepletion ? (p+(depletedYear-1)*sx).toFixed(1) : null;
+  const markY = prematureDepletion ? y(0).toFixed(1) : null;
   return '<svg class="chart" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">' +
     '<defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3D7A4F" stop-opacity=".7"/><stop offset="100%" stop-color="#3D7A4F" stop-opacity=".05"/></linearGradient></defs>' +
-    '<path d="'+pts+' L'+lx+','+h+' L'+p+','+h+' Z" fill="url(#eg)"/>' +
+    '<path d="'+pts+' L'+lx+','+baseY+' L'+p+','+baseY+' Z" fill="url(#eg)"/>' +
     '<path d="'+pts+'" fill="none" stroke="#8FC79E" stroke-width="1.5"/>' +
-    '<line x1="'+p+'" y1="'+h+'" x2="'+(w-p)+'" y2="'+h+'" stroke="rgba(241,238,227,.2)" stroke-width="1"/>' +
+    '<line x1="'+p+'" y1="'+baseY+'" x2="'+(w-p)+'" y2="'+baseY+'" stroke="rgba(241,238,227,.2)" stroke-width="1"/>' +
+    '<text x="'+p+'" y="12" font-family="Spline Sans Mono,monospace" font-size="9.5" fill="rgba(241,238,227,.55)">Starts at '+fmt(maxV)+'</text>' +
+    (prematureDepletion
+      ? '<circle cx="'+markX+'" cy="'+markY+'" r="3.2" fill="#E8977A"/>' +
+        '<text x="'+markX+'" y="'+(parseFloat(markY)-7)+'" text-anchor="middle" font-family="Spline Sans Mono,monospace" font-size="9.5" font-weight="600" fill="#E8977A">Runs out, yr '+depletedYear+'</text>'
+      : '<circle cx="'+endX+'" cy="'+endYv.toFixed(1)+'" r="3" fill="#8FC79E"/>' +
+        '<text x="'+(w-p)+'" y="12" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="9.5" font-weight="600" fill="#8FC79E">'+(endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal))+'</text>') +
+    '<text x="'+p+'" y="'+(h-6)+'" font-family="Spline Sans Mono,monospace" font-size="9" fill="rgba(241,238,227,.4)">Yr 1</text>' +
+    '<text x="'+(w-p)+'" y="'+(h-6)+'" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="9" fill="rgba(241,238,227,.4)">Yr '+n+'</text>' +
     '</svg>';
 }
 
@@ -822,7 +856,7 @@ function sResultsRetirement() {
     mountainChart(r.accRows)+'</div>' +
     '<div class="chart-card"><div class="chart-title">How the pot gets spent</div>' +
     '<div class="chart-caption">Built to last until age '+r.d.lifeExp+'</div>' +
-    potChart(r.drawRows)+'</div>' +
+    potChart(r.drawRows, c)+'</div>' +
     allocationCardHtml(r.preRate, r.d, rLabel) +
     delayCard(r.delay, r.yrs) +
     '<div class="assump-toggle" id="st">'+caretSvg()+'See the full month-by-month schedule</div>' +
