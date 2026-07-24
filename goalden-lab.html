@@ -323,8 +323,30 @@ function monteCarloDrawdown({openingCorpus,firstWithdrawal,inflation,meanReturn,
   const survived=ranOutYears.filter(x=>x===null).length;
   const failedYears=ranOutYears.filter(x=>x!==null).sort((a,b)=>a-b);
   const medianRuinYear=failedYears.length?failedYears[Math.floor(failedYears.length/2)]:null;
+  // A corpus with no margin for error (this app deliberately builds one to
+  // show the fragility) fails on MORE than half its simulated paths the
+  // moment any volatility is added at all. That means the P10 and P50
+  // "ending balance" are both legitimately ₹0 for nearly the entire
+  // volatility range, which is mathematically correct but useless as a
+  // headline stat: it never differentiates a mild scenario from a severe
+  // one, because both just say ₹0. The fix isn't to change the math, it's
+  // to report the right thing for a failed path: WHEN it ran out, not a
+  // balance that was never going to be anything but zero. Ties among
+  // failed paths break on ruin year (an earlier failure is a worse
+  // outcome), so P10 and P50 keep differentiating from each other even
+  // when both represent failures.
+  const combined = finals.map((bal,i)=>({bal, ranOut: ranOutYears[i]}))
+    .sort((a,b)=>{
+      const aR=a.ranOut!==null, bR=b.ranOut!==null;
+      if(aR&&bR) return a.ranOut-b.ranOut;
+      if(aR&&!bR) return -1;
+      if(!aR&&bR) return 1;
+      return a.bal-b.bal;
+    });
+  const pctDetail = p => combined[Math.max(0,Math.min(n-1,Math.floor(p*(n-1))))];
   return{p10:pct(0.10),p25:pct(0.25),p50:pct(0.50),p75:pct(0.75),p90:pct(0.90),yearBands,
-         survivalPct:survived/n,failCount:failedYears.length,medianRuinYear,n};
+         survivalPct:survived/n,failCount:failedYears.length,medianRuinYear,n,
+         p10Detail:pctDetail(0.10),p50Detail:pctDetail(0.50)};
 }
 
 const REGIME_PRESETS = {
@@ -907,10 +929,25 @@ function renderDDMCBody(res){
   const mc=monteCarloDrawdown({openingCorpus:res.corpus, firstWithdrawal:res.expAtRet, inflation:r.inflation/100,
     meanReturn:r.postRate/100, volatility:r.ddVol/100, years:res.drawYrs, due:r.due, seed:r.ddSeed, n:1000});
   const survPct=Math.round(mc.survivalPct*100);
+  // A zero-margin corpus (the plan is deliberately sized to reach exactly
+  // zero with no buffer) means P10 and, very often, P50 too represent a
+  // path that ran out. A flat "₹0" for both tells the reader nothing and
+  // stops differentiating the moment survival drops under 50%, which can
+  // happen at very low volatility. Show WHEN that percentile's path ran
+  // out instead, since that keeps changing meaningfully as volatility
+  // rises even after the ending-balance number itself has flatlined.
+  const p10IsFail = mc.p10Detail.ranOut !== null;
+  const p50IsFail = mc.p50Detail.ranOut !== null;
+  const p10Html = p10IsFail
+    ? `<span style="color:#E8977A">Ran out, yr ${mc.p10Detail.ranOut}</span>`
+    : `<span style="color:#E8977A">${c.compact(mc.p10Detail.bal)}</span>`;
+  const p50Html = p50IsFail
+    ? `<span style="color:#E8977A">Ran out, yr ${mc.p50Detail.ranOut}</span>`
+    : c.compact(mc.p50Detail.bal);
   const html=`<div class="stat-row" style="margin-top:10px">
     <div class="stat"><div class="stat-label">Survives to age ${r.lifeExp}${infoIcon('Share of the 1,000 simulated paths that never hit zero before the plan ends. Below 100% means pure return-order randomness, not a wrong average, can still empty the pot.')}</div><div class="stat-value" style="color:${survPct>=90?'#8FC79E':survPct>=70?'#C9A455':'#E8977A'}">${survPct}%</div><div class="stat-sub">${mc.failCount} of ${mc.n} paths ran out${mc.medianRuinYear?`, typically by year ${mc.medianRuinYear}`:''}</div></div>
-    <div class="stat"><div class="stat-label">P10 ending balance${infoIcon('9 in 10 simulated paths ended with at least this much left over. A reasonable worst-case planning floor for the drawdown phase.')}</div><div class="stat-value" style="color:#E8977A">${c.compact(mc.p10)}</div></div>
-    <div class="stat"><div class="stat-label">P50 ending balance${infoIcon('The median simulated path: half ended with more left over than this, half with less.')}</div><div class="stat-value">${c.compact(mc.p50)}</div></div>
+    <div class="stat"><div class="stat-label">P10 outcome${infoIcon('The 10th-percentile path: 9 in 10 simulated paths did at least this well. If even this path ran out of money, the year shown is when, not a balance, since it never had one left.')}</div><div class="stat-value" style="font-size:22px">${p10Html}</div></div>
+    <div class="stat"><div class="stat-label">P50 outcome${infoIcon('The median simulated path: half did better than this, half worse. If survival is below 50%, the typical path itself runs out, which is exactly what this is reporting.')}</div><div class="stat-value" style="font-size:22px">${p50Html}</div></div>
   </div>
   <div class="cap" style="margin-top:10px">Fan of 1,000 simulated drawdown paths, seed ${r.ddSeed}</div>
   ${fanChart(mc.yearBands)}`;
