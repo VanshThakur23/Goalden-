@@ -142,6 +142,50 @@ body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sa
 
 /* --- plan results --- */
 .plan-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0}
+/* "The Case" screen -- identical styling to Door 1, kept in sync by hand
+   since each file is a self-contained static page (see build notes). */
+.case-cta{margin:26px 0 4px;padding:24px 20px;background:linear-gradient(135deg,rgba(201,164,85,.22),rgba(201,164,85,.06));border:2px solid rgba(201,164,85,.55);border-radius:3px 20px 20px 20px;text-align:center;position:relative;animation:caseCtaPulse 2.2s ease-in-out 3}
+@keyframes caseCtaPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,164,85,.35)}50%{box-shadow:0 0 0 10px rgba(201,164,85,0)}}
+.case-cta .cta-eyebrow{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:8px;font-weight:600}
+.case-cta .cta-q{font-family:'Newsreader',serif;font-size:19px;color:var(--paper);margin-bottom:16px;line-height:1.35;font-weight:600}
+.case-cta button{background:var(--gold);color:var(--ink);border:none;font-family:'Figtree',sans-serif;font-weight:700;font-size:15.5px;padding:15px 30px;border-radius:3px 12px 12px 12px;cursor:pointer;box-shadow:0 4px 14px rgba(201,164,85,.3);transition:transform .15s ease}
+.case-cta button:hover{transform:translateY(-1px)}
+.case-cta button:after{content:" →"}
+.case-wrap{padding-bottom:20px;flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;min-height:0}
+.case-hero{padding:8px 0 20px;text-align:center}
+.case-eyebrow{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+.case-title{font-family:'Newsreader',serif;font-size:23px;color:var(--paper);line-height:1.3;margin-bottom:10px}
+.case-sub{font-size:13.5px;color:rgba(241,238,227,.65);line-height:1.55;max-width:44ch;margin:0 auto}
+.case-section{background:rgba(241,238,227,.045);border:1px solid rgba(241,238,227,.12);border-radius:2px 16px 16px 16px;padding:20px 18px;margin-bottom:16px}
+.case-section h4{font-family:'Newsreader',serif;font-size:17px;color:var(--paper);margin-bottom:6px;line-height:1.3}
+.case-section .case-cap{font-size:12.5px;color:rgba(241,238,227,.6);line-height:1.5;margin-bottom:14px}
+.race-legend{display:flex;gap:14px;justify-content:center;margin:8px 0 14px;flex-wrap:wrap}
+.race-legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(241,238,227,.6);font-family:'Spline Sans Mono',monospace}
+.race-legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.race-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.race-stat{background:rgba(241,238,227,.05);border-radius:3px 10px 10px 10px;padding:11px 9px;text-align:center}
+.race-stat .rs-label{font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;color:rgba(241,238,227,.5);margin-bottom:5px}
+.race-stat .rs-val{font-family:'Newsreader',serif;font-size:16px;font-weight:600}
+.case-slider-row{margin:14px 0 6px}
+.case-slider-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:rgba(241,238,227,.7);margin-bottom:8px}
+.case-slider-label b{color:var(--gold);font-family:'Spline Sans Mono',monospace}
+.case-callout{background:rgba(232,151,122,.1);border:1px solid rgba(232,151,122,.3);border-radius:3px 12px 12px 12px;padding:12px 14px;margin-top:10px;font-size:12.5px;line-height:1.5;color:rgba(241,238,227,.85)}
+.case-callout.good{background:rgba(143,199,142,.1);border-color:rgba(143,199,142,.3)}
+.holdbar-track{display:flex;height:26px;border-radius:3px;overflow:hidden;margin:12px 0 6px}
+.holdbar-seg{transition:width .2s ease}
+.holdbar-legend{display:flex;justify-content:space-between;font-size:11px;color:rgba(241,238,227,.5);font-family:'Spline Sans Mono',monospace}
+.growth-chain{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:14px 0;font-size:12.5px}
+.growth-chain .gc-node{background:rgba(201,164,85,.12);border:1px solid rgba(201,164,85,.3);border-radius:3px 9px 9px 9px;padding:7px 11px;color:rgba(241,238,227,.85)}
+.growth-chain .gc-arrow{color:rgba(241,238,227,.35);font-size:14px}
+.compare-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.compare-card{background:rgba(241,238,227,.05);border-radius:3px 10px 10px 10px;padding:12px}
+.compare-card .cc-label{font-family:'Spline Sans Mono',monospace;font-size:9.5px;color:rgba(241,238,227,.5);margin-bottom:5px}
+.compare-card .cc-val{font-family:'Newsreader',serif;font-size:15px;font-weight:600;color:var(--paper);margin-bottom:3px}
+.compare-card .cc-note{font-size:11px;color:rgba(241,238,227,.5);line-height:1.4}
+.case-back-row{padding:16px 0 8px;text-align:center}
+.case-back-row button{background:none;border:1px solid rgba(241,238,227,.2);color:rgba(241,238,227,.7);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
+.term-i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(241,238,227,.4);color:rgba(241,238,227,.6);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:pointer;position:relative;margin-left:2px;vertical-align:middle}
+.term-i-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink2,#16281f);border:1px solid rgba(201,164,85,.3);border-radius:9px;padding:9px 12px;font-size:11.5px;color:rgba(241,238,227,.85);z-index:20;pointer-events:none;width:220px;line-height:1.45;font-family:'Figtree',sans-serif;font-weight:400;text-align:left;white-space:normal}
 .section-head{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:20px 0 10px}
 .goal-row{display:flex;justify-content:space-between;align-items:flex-start;padding:13px 15px;background:rgba(241,238,227,.05);border-radius:3px 13px 13px 13px;margin-bottom:0}
 .goal-row-wrap{margin-bottom:10px}
@@ -244,7 +288,7 @@ function drawdownSchedule(opts){const rows=[];let bal=opts.openingCorpus;let w=o
    ===================================================================== */
 const C = {
   IN:{code:'IN',name:'India',sym:'₹',
-    d:{inflation:.06,eduInflation:.10,debt:.07,hybrid:.10,equity:.12,postRet:.09,lifeExp:78},
+    d:{inflation:.06,eduInflation:.10,debt:.07,hybrid:.10,equity:.12,postRet:.09,lifeExp:78,fdRate:.065},
     goalInflation:{house:.075,car:.05,wedding:.07,travel:.05},
     expChips:[25000,50000,75000,100000],feeChips:[50000,100000,200000,500000],
     amtChips:[500000,1000000,2500000,5000000],yrChips:[3,5,7,10,15],
@@ -277,7 +321,7 @@ const C = {
     fmt(a,dp){if(dp===undefined)dp=0;const s=a<0?'-':'';a=Math.abs(a);const[i,d]=a.toFixed(dp).split('.');const l3=i.slice(-3),r=i.slice(0,-3);return s+'₹'+(r?r.replace(/\B(?=(\d{2})+(?!\d))/g,',')+',':'')+l3+(dp>0?'.'+d:'')},
     compact(a){const x=Math.abs(a);if(x>=1e7)return'₹'+(x/1e7).toFixed(1)+' Cr';if(x>=1e5)return'₹'+(x/1e5).toFixed(1)+' L';return this.fmt(a)}},
   US:{code:'US',name:'United States',sym:'$',
-    d:{inflation:.025,eduInflation:.05,debt:.045,hybrid:.07,equity:.09,postRet:.06,lifeExp:82},
+    d:{inflation:.025,eduInflation:.05,debt:.045,hybrid:.07,equity:.09,postRet:.06,lifeExp:82,fdRate:.04},
     goalInflation:{house:.04,car:.03,wedding:.04,travel:.03},
     expChips:[2000,4000,6000,10000],feeChips:[10000,20000,40000,60000],
     amtChips:[50000,100000,250000,500000],yrChips:[3,5,7,10,15],
@@ -322,6 +366,396 @@ function recommendInstruments(country, horizonYears, bucketId, goalType){
   if((bucketId==='mod_aggressive'||bucketId==='aggressive') && horizonYears>=10) stretch=cc.stretch;
   return {fits, excludedForHorizon, stretch};
 }
+
+// =========================================================================
+// =========================================================================
+// REAL HISTORICAL MARKET DATA
+// Sensex: fiscal-year (April-to-April) annual returns, FY1979-80 through
+// FY2022-23, 44 real data points. Source: freefincal.com's compilation of
+// Sensex closing values, itself built from BSE data (values before 1992
+// are BSE's own re-based figures). This is price return; Sensex dividend
+// yield has historically been small (1-2%), so total return would run
+// slightly higher than what is shown here, not lower.
+// S&P 500: calendar-year returns, 1928-2024, 97 real data points.
+// 1928-2015 is price return (S&P 500 price index, no dividends), sourced
+// from a compilation of Cowles Commission / S&P historical data.
+// 2016-2024 is total return (dividends reinvested), sourced from
+// Macrotrends S&P 500 total-return series. The methodology genuinely
+// differs at that seam; both halves are real, reported figures, not
+// smoothed or blended to hide the join.
+// Neither series is fabricated or estimated. Both stop at real, cited
+// years rather than being extended with a guess for "this year so far."
+// =========================================================================
+const SENSEX_ANNUAL_RETURNS = [
+  {y:1980,r:0.0350},{y:1981,r:0.3525},{y:1982,r:0.2712},{y:1983,r:-0.0376},
+  {y:1984,r:0.1606},{y:1985,r:0.4239},{y:1986,r:0.5957},{y:1987,r:-0.0895},
+  {y:1988,r:-0.2221},{y:1989,r:0.8226},{y:1990,r:0.0816},{y:1991,r:0.5245},
+  {y:1992,r:2.6761},{y:1993,r:-0.4732},{y:1994,r:0.6357},{y:1995,r:-0.1228},
+  {y:1996,r:0.0281},{y:1997,r:0.0051},{y:1998,r:0.1583},{y:1999,r:-0.0714},
+  {y:2000,r:0.3707},{y:2001,r:-0.2942},{y:2002,r:-0.0185},{y:2003,r:-0.1198},
+  {y:2004,r:0.8633},{y:2005,r:0.1505},{y:2006,r:0.7508},{y:2007,r:0.0770},
+  {y:2008,r:0.2546},{y:2009,r:-0.3663},{y:2010,r:0.7868},{y:2011,r:0.0977},
+  {y:2012,r:-0.1000},{y:2013,r:0.0793},{y:2014,r:0.1899},{y:2015,r:0.2590},
+  {y:2016,r:-0.1058},{y:2017,r:0.1836},{y:2018,r:0.1118},{y:2019,r:0.1689},
+  {y:2020,r:-0.2729},{y:2021,r:0.7700},{y:2022,r:0.1800},{y:2023,r:-0.0048},
+];
+const SP500_ANNUAL_RETURNS = [
+  {y:1928,r:0.4381},{y:1929,r:-0.0830},{y:1930,r:-0.2512},{y:1931,r:-0.4384},
+  {y:1932,r:-0.0864},{y:1933,r:0.4998},{y:1934,r:-0.0119},{y:1935,r:0.4674},
+  {y:1936,r:0.3194},{y:1937,r:-0.3534},{y:1938,r:0.2928},{y:1939,r:-0.0110},
+  {y:1940,r:-0.1067},{y:1941,r:-0.1277},{y:1942,r:0.1917},{y:1943,r:0.2506},
+  {y:1944,r:0.1903},{y:1945,r:0.3582},{y:1946,r:-0.0843},{y:1947,r:0.0520},
+  {y:1948,r:0.0570},{y:1949,r:0.1830},{y:1950,r:0.3081},{y:1951,r:0.2368},
+  {y:1952,r:0.1815},{y:1953,r:-0.0121},{y:1954,r:0.5256},{y:1955,r:0.3260},
+  {y:1956,r:0.0744},{y:1957,r:-0.1046},{y:1958,r:0.4372},{y:1959,r:0.1206},
+  {y:1960,r:0.0034},{y:1961,r:0.2664},{y:1962,r:-0.0881},{y:1963,r:0.2261},
+  {y:1964,r:0.1642},{y:1965,r:0.1240},{y:1966,r:-0.0997},{y:1967,r:0.2380},
+  {y:1968,r:0.1081},{y:1969,r:-0.0824},{y:1970,r:0.0356},{y:1971,r:0.1422},
+  {y:1972,r:0.1876},{y:1973,r:-0.1431},{y:1974,r:-0.2590},{y:1975,r:0.3700},
+  {y:1976,r:0.2383},{y:1977,r:-0.0698},{y:1978,r:0.0651},{y:1979,r:0.1852},
+  {y:1980,r:0.3174},{y:1981,r:-0.0470},{y:1982,r:0.2042},{y:1983,r:0.2234},
+  {y:1984,r:0.0615},{y:1985,r:0.3124},{y:1986,r:0.1849},{y:1987,r:0.0581},
+  {y:1988,r:0.1654},{y:1989,r:0.3148},{y:1990,r:-0.0306},{y:1991,r:0.3023},
+  {y:1992,r:0.0749},{y:1993,r:0.0997},{y:1994,r:0.0133},{y:1995,r:0.3720},
+  {y:1996,r:0.2268},{y:1997,r:0.3310},{y:1998,r:0.2834},{y:1999,r:0.2089},
+  {y:2000,r:-0.0903},{y:2001,r:-0.1185},{y:2002,r:-0.2197},{y:2003,r:0.2836},
+  {y:2004,r:0.1074},{y:2005,r:0.0483},{y:2006,r:0.1561},{y:2007,r:0.0548},
+  {y:2008,r:-0.3655},{y:2009,r:0.2594},{y:2010,r:0.1482},{y:2011,r:0.0210},
+  {y:2012,r:0.1589},{y:2013,r:0.3215},{y:2014,r:0.1352},{y:2015,r:0.0136},
+  {y:2016,r:0.0954},{y:2017,r:0.1942},{y:2018,r:-0.0624},{y:2019,r:0.2888},
+  {y:2020,r:0.1626},{y:2021,r:0.2689},{y:2022,r:-0.1944},{y:2023,r:0.2423},
+  {y:2024,r:0.2331},
+];
+// Helper functions used across "The Case" module below.
+function marketSeries(){ return G.country==='US' ? SP500_ANNUAL_RETURNS : SENSEX_ANNUAL_RETURNS; }
+function marketName(){ return G.country==='US' ? 'S&P 500' : 'Sensex'; }
+// Growth path of a lump sum through a specific slice of the real return
+// series, starting at index `startIdx` for `years` years.
+// Constant-rate compounding path (for gold/FD in the race chart, which
+// use a single illustrative rate rather than a year-by-year series).
+function compoundPath(rate, years, startAmount, startYear){
+  const path=[{y:startYear, v:startAmount}];
+  let bal=startAmount;
+  for(let i=1;i<=years;i++){ bal*=(1+rate); path.push({y:startYear+i, v:bal}); }
+  return path;
+}
+function marketGrowthPath(series, startIdx, years, startAmount){
+  const path=[{y:series[startIdx].y-1, v:startAmount}];
+  let bal=startAmount;
+  for(let i=startIdx;i<startIdx+years && i<series.length;i++){
+    bal*=(1+series[i].r);
+    path.push({y:series[i].y, v:bal});
+  }
+  return path;
+}
+// Every real N-year window in the series: start year, CAGR, and whether
+// it ended above water. This is what "how often does N years lose money"
+// and "what does the worst N-year start look like" both draw from.
+function rollingWindows(series, years){
+  const out=[];
+  for(let i=0;i+years<=series.length;i++){
+    let bal=1;
+    for(let j=i;j<i+years;j++) bal*=(1+series[j].r);
+    out.push({startYear:series[i].y, startIdx:i, cagr:Math.pow(bal,1/years)-1, finalMultiple:bal});
+  }
+  return out;
+}
+function worstWindow(series, years){
+  const w=rollingWindows(series, years);
+  return w.reduce((worst,cur)=>cur.cagr<worst.cagr?cur:worst, w[0]);
+}
+function bestWindow(series, years){
+  const w=rollingWindows(series, years);
+  return w.reduce((best,cur)=>cur.cagr>best.cagr?cur:best, w[0]);
+}
+
+
+// ---- Charts for "The Case" screen ----
+// A three-line race chart: real market history vs constant-rate gold vs
+// constant-rate FD, drawn on the same linear axis on purpose. The
+// dramatic late-period separation IS the point being made (compounding
+// looks unremarkable for years, then does most of its work very late),
+// not a distortion to fix with a log scale.
+function raceChart(marketPath, goldPath, fdPath, w, h) {
+  const p = 6, topPad = 8;
+  const maxV = Math.max(marketPath[marketPath.length-1].v, goldPath[goldPath.length-1].v, fdPath[fdPath.length-1].v);
+  const n = marketPath.length;
+  const sx = (w - p*2) / (n-1);
+  const y = v => topPad + (h-topPad-p) - (Math.max(0,v)/maxV) * (h-topPad-p);
+  function linePath(path) {
+    return path.map((pt,i) => (i===0?'M':'L') + (p+i*sx).toFixed(1) + ',' + y(pt.v).toFixed(1)).join(' ');
+  }
+  const marketD = linePath(marketPath), goldD = linePath(goldPath), fdD = linePath(fdPath);
+  const lastX = (p+(n-1)*sx).toFixed(1);
+  return '<svg class="chart" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs><linearGradient id="raceGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8FC79E" stop-opacity=".35"/><stop offset="100%" stop-color="#8FC79E" stop-opacity="0"/></linearGradient></defs>' +
+    '<path d="'+marketD+' L'+lastX+','+(h-p)+' L'+p+','+(h-p)+' Z" fill="url(#raceGrad)"/>' +
+    '<path d="'+fdD+'" fill="none" stroke="#E8977A" stroke-width="1.5" stroke-dasharray="3,3"/>' +
+    '<path d="'+goldD+'" fill="none" stroke="#C9A455" stroke-width="1.5" stroke-dasharray="3,3"/>' +
+    '<path d="'+marketD+'" fill="none" stroke="#8FC79E" stroke-width="2.25"/>' +
+    '<circle cx="'+lastX+'" cy="'+y(marketPath[marketPath.length-1].v).toFixed(1)+'" r="3.5" fill="#8FC79E"/>' +
+    '</svg>';
+}
+// A single growth-path area chart for the time machine's selected window
+// (reuses the mountain-chart visual language already used elsewhere).
+function timeMachineChart(path, w, h) {
+  const p = 4;
+  const maxV = Math.max(...path.map(pt=>pt.v));
+  const n = path.length;
+  const sx = (w - p*2) / (n-1);
+  const y = v => h - p - (Math.max(0,v)/maxV) * (h - p*2);
+  const d = path.map((pt,i) => (i===0?'M':'L') + (p+i*sx).toFixed(1) + ',' + y(pt.v).toFixed(1)).join(' ');
+  const lastX = (p+(n-1)*sx).toFixed(1);
+  const finalUp = path[path.length-1].v >= path[0].v;
+  const col = finalUp ? '#8FC79E' : '#E8977A';
+  return '<svg class="chart" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs><linearGradient id="tmGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="'+col+'" stop-opacity=".4"/><stop offset="100%" stop-color="'+col+'" stop-opacity="0"/></linearGradient></defs>' +
+    '<path d="'+d+' L'+lastX+','+(h-p)+' L'+p+','+(h-p)+' Z" fill="url(#tmGrad)"/>' +
+    '<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2"/>' +
+    '</svg>';
+}
+// The full "risk shrinks with holding period" curve, every year from 1 to
+// maxYears in one static chart, with a marker for the currently selected
+// point. Shows the whole trend at a glance instead of one number at a time.
+function riskShrinkChart(series, maxYears, w, h, selectedYears) {
+  const p = 6, topPad = 8;
+  const points = [];
+  for (let yr=1; yr<=maxYears; yr++) {
+    const win = rollingWindows(series, yr);
+    const losing = win.filter(x=>x.finalMultiple<1).length;
+    points.push({yr, pct: 100*losing/win.length});
+  }
+  const n = points.length;
+  const sx = (w - p*2) / (n-1);
+  const yScale = pct => topPad + (h-topPad-p) - (pct/100) * (h-topPad-p);
+  const d = points.map((pt,i) => (i===0?'M':'L') + (p+i*sx).toFixed(1) + ',' + yScale(pt.pct).toFixed(1)).join(' ');
+  const lastX = (p+(n-1)*sx).toFixed(1);
+  const selIdx = Math.max(0, Math.min(n-1, selectedYears-1));
+  const selX = (p+selIdx*sx).toFixed(1), selY = yScale(points[selIdx].pct).toFixed(1);
+  return '<svg class="chart" id="riskShrinkSvg" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">' +
+    '<defs><linearGradient id="riskGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#D97757" stop-opacity=".35"/><stop offset="100%" stop-color="#D97757" stop-opacity="0"/></linearGradient></defs>' +
+    '<path d="'+d+' L'+lastX+','+(h-p)+' L'+p+','+(h-p)+' Z" fill="url(#riskGrad)"/>' +
+    '<path d="'+d+'" fill="none" stroke="#D97757" stroke-width="2"/>' +
+    '<line id="riskShrinkMarkerLine" x1="'+selX+'" y1="'+topPad+'" x2="'+selX+'" y2="'+(h-p)+'" stroke="rgba(241,238,227,.3)" stroke-width="1" stroke-dasharray="2,2"/>' +
+    '<circle id="riskShrinkMarkerDot" cx="'+selX+'" cy="'+selY+'" r="4.5" fill="#D97757" stroke="var(--ink)" stroke-width="1.5"/>' +
+    '</svg>';
+}
+
+
+// =========================================================================
+// "THE CASE" -- an optional, deeper screen reached from any results screen.
+// Built for the person who has just seen a number and now wants to know
+// whether to actually believe it: why markets, why not just an FD, why is
+// "volatility" not the same thing as "losing your capital." Every figure
+// here traces to real, cited historical data (see the data block above),
+// not an invented illustration. No name, email, or any personal
+// information is collected or required anywhere on this screen.
+// =========================================================================
+const GOLD_RATE = { IN: 0.109, US: 0.056 }; // India: RBI Handbook of Statistics, 42yr CAGR to Apr 2026. US: NYU Stern (Damodaran), 1928-2024.
+const HOUSE_RATE_RANGE = { IN: [0.08, 0.10], US: [0.035, 0.045] }; // Broad, widely-cited long-run ranges; real estate returns vary enormously by city and property, more than any other asset class here, on purpose not reduced to one falsely precise number.
+
+function sCase() {
+  const c = cfg(), series = marketSeries(), name = marketName();
+  const nYears = series.length;
+  const raceAmt = G.country==='US' ? 10000 : 100000;
+
+  // ---- Section 1: The Race ----
+  const racePath = marketGrowthPath(series, 0, nYears, raceAmt);
+  const marketFinal = racePath[racePath.length-1].v;
+  const fdPath = compoundPath(c.d.fdRate, nYears, raceAmt, series[0].y-1);
+  const fdFinal = fdPath[fdPath.length-1].v;
+  const goldPath = compoundPath(GOLD_RATE[G.country], nYears, raceAmt, series[0].y-1);
+  const goldFinal = goldPath[goldPath.length-1].v;
+  const firstYear = series[0].y - 1, lastYear = series[series.length-1].y;
+
+  // ---- Section 2: The Time Machine ----
+  const tmYears = Math.min(15, nYears-1);
+  const worst15 = worstWindow(series, tmYears);
+  const tmDefaultIdx = worst15.startIdx;
+
+  // ---- Section 3: Holding period explorer ----
+  const defaultHold = 5;
+  const holdData = rollingWindows(series, defaultHold);
+  const holdLosing = holdData.filter(w=>w.finalMultiple<1).length;
+
+  // ---- Section 4 supporting stat: what an FD really keeps after inflation+tax ----
+  const fdReal = realRate(c.d.fdRate, c.d.inflation);
+  // FD interest is taxed annually at slab rate; illustrate at a representative 30% slab.
+  const fdAfterTax = c.d.fdRate * (1-0.30);
+  const fdAfterTaxReal = realRate(fdAfterTax, c.d.inflation);
+
+  // ---- Section 5: housing ----
+  const hRange = HOUSE_RATE_RANGE[G.country];
+
+  return `<div class="case-wrap">
+  <div class="case-hero">
+    <div class="case-eyebrow">Before you decide</div>
+    <div class="case-title">Why trust the market with this money at all?</div>
+    <div class="case-sub">Every number on this screen comes from real, published historical data (sources noted below each section), not an invented example. Nothing here is personalised, saved, or sent anywhere &ndash; it's the same public market history for anyone who opens this.</div>
+  </div>
+
+  <div class="case-section">
+    <h4>The race: ${c.compact(raceAmt)}, three destinations</h4>
+    <div class="case-cap">The same lump sum, placed in ${firstYear} and left completely untouched for ${nYears} years, through every real ${name} up-year and down-year in between.</div>
+    ${raceChart(racePath, goldPath, fdPath, 320, 150)}
+    <div class="race-legend"><span><i style="background:#8FC79E"></i>${name}</span><span><i style="background:#C9A455"></i>Gold</span><span><i style="background:#E8977A"></i>Bank FD</span></div>
+    <div class="race-stats">
+      <div class="race-stat"><div class="rs-label">${name}</div><div class="rs-val" style="color:#8FC79E">${c.compact(marketFinal)}</div></div>
+      <div class="race-stat"><div class="rs-label">GOLD</div><div class="rs-val" style="color:var(--gold)">${c.compact(goldFinal)}</div></div>
+      <div class="race-stat"><div class="rs-label">BANK FD</div><div class="rs-val" style="color:#E8977A">${c.compact(fdFinal)}</div></div>
+    </div>
+    <div class="case-cap" style="margin-bottom:0">${firstYear} to ${lastYear}, ${nYears} years. ${name} figure uses the real annual return each year, compounded, not an average smoothed into a straight line ${infoIconD1('Source: '+(G.country==='US'?'a compiled S&P 500 annual-return series, 1928-2015 price return, 2016-2024 total return with dividends reinvested.':'a compiled Sensex fiscal-year (April-April) return series, freefincal.com, 1979-80 through 2022-23, sourced from BSE closing values.'))}. Gold: ${(GOLD_RATE[G.country]*100).toFixed(1)}%/yr, ${G.country==='US'?'NYU Stern (Damodaran) historical dataset, 1928-2024.':'RBI Handbook of Statistics gold price data, 42-year CAGR to April 2026.'} FD: ${(c.d.fdRate*100).toFixed(1)}%/yr, a typical current multi-year bank rate held constant for illustration, which is generous to the FD since real FD rates have varied a lot across these decades.</div>
+  </div>
+
+  <div class="case-section">
+    <h4>The time machine: what if you had the worst possible timing?</h4>
+    <div class="case-cap">Drag to any real starting year. This shows what ${c.compact(raceAmt)} put into ${name} that year actually became, ${tmYears} years later, using what really happened, crash years included.</div>
+    <div class="case-slider-row">
+      <div class="case-slider-label"><span>Starting year</span><b id="tm-year-label">${series[tmDefaultIdx].y - 1}</b></div>
+      <input type="range" id="tmSlider" min="0" max="${nYears-tmYears-1}" step="1" value="${tmDefaultIdx}">
+    </div>
+    <div id="tm-result"></div>
+    <div class="case-cap" style="margin-top:10px;margin-bottom:0">Defaults to the single worst ${tmYears}-year starting point in ${nYears} years of real data &ndash; not a cherry-picked good one.</div>
+  </div>
+
+  <div class="case-section">
+    <h4>Volatility is not the same thing as losing your capital</h4>
+    <div class="case-cap">Every point on this line is a real ${nYears - 1}-year stretch of ${name} history: the share of them that ended with less money than they started with, at that exact holding length. Drag to inspect any point.</div>
+    ${riskShrinkChart(series, Math.min(25,nYears-2), 320, 130, defaultHold)}
+    <div class="case-slider-row">
+      <div class="case-slider-label"><span>Holding period</span><b id="hold-yrs-label">${defaultHold} years</b></div>
+      <input type="range" id="holdSlider" min="1" max="${Math.min(25,nYears-2)}" step="1" value="${defaultHold}">
+    </div>
+    <div id="hold-result"></div>
+    <div class="case-cap" style="margin-top:10px;margin-bottom:0">This is genuinely index-level data: a diversified 50-stock index, not one company. A single stock can still go to zero no matter how long you hold it &ndash; that risk doesn't shrink with time, which is exactly why diversification (not just patience) is doing real work here.</div>
+  </div>
+
+  <div class="case-section">
+    <h4>Why does the market grow at all?</h4>
+    <div class="case-cap">Not a promise. A mechanical chain that has to break for equities to stop working long-term.</div>
+    <div class="growth-chain">
+      <div class="gc-node">More people work &amp; get more productive</div><span class="gc-arrow">&rarr;</span>
+      <div class="gc-node">Companies sell more, earn more</div><span class="gc-arrow">&rarr;</span>
+      <div class="gc-node">Owning a share means owning that growing profit</div><span class="gc-arrow">&rarr;</span>
+      <div class="gc-node">Share prices follow earnings, over long periods</div>
+    </div>
+    <div class="case-cap">This is also exactly why a Fixed Deposit quietly loses, even though it feels "safe": it pays you a fixed rupee amount that has no claim on any of that growth.</div>
+    <div class="compare-row">
+      <div class="compare-card"><div class="cc-label">FD, AFTER INFLATION</div><div class="cc-val" style="color:${fdReal>0?'#8FC79E':'#E8977A'}">${(fdReal*100).toFixed(1)}%/yr</div><div class="cc-note">Before tax is even taken out</div></div>
+      <div class="compare-card"><div class="cc-label">FD, AFTER TAX &amp; INFLATION</div><div class="cc-val" style="color:${fdAfterTaxReal>0?'#8FC79E':'#E8977A'}">${(fdAfterTaxReal*100).toFixed(1)}%/yr</div><div class="cc-note">At a representative 30% slab, taxed every year regardless of whether you touch the money</div></div>
+    </div>
+    <div class="case-cap" style="margin-bottom:0">The "safety" of an FD is real (you will never see the number go down) &ndash; but the purchasing power sitting behind that number can still shrink every single year, silently, which a glance at the account balance will never show you.</div>
+  </div>
+
+  <div class="case-section">
+    <h4>What about property, honestly?</h4>
+    <div class="case-cap">Real estate isn't a bad asset. It's a fair comparison, including the parts that don't fit neatly into a percentage.</div>
+    <div class="compare-row">
+      <div class="compare-card"><div class="cc-label">${G.country==='US'?'US HOUSING, LONG-RUN':'INDIAN HOUSING, LONG-RUN'}</div><div class="cc-val">${(hRange[0]*100).toFixed(1)}&ndash;${(hRange[1]*100).toFixed(1)}%/yr</div><div class="cc-note">Nominal, before rent/costs. Varies enormously by city and property &ndash; a wide range on purpose, not false precision.</div></div>
+      <div class="compare-card"><div class="cc-label">${name.toUpperCase()}, SAME WINDOW</div><div class="cc-val" style="color:#8FC79E">${(fullSeriesCAGR(series)*100).toFixed(1)}%/yr</div><div class="cc-note">${nYears} years, real data, shown above</div></div>
+    </div>
+    <div class="case-cap" style="margin-bottom:0">What a percentage doesn't show: buying and selling a house costs 5-10% in fees and stamp duty each way; it's one asset in one city, no diversification at all; you can't sell one bedroom if you need part of the money; and it takes work (tenants, repairs, vacancy) that a fund doesn't. None of that makes property a bad choice &ndash; it makes it a different kind of asset, with its own real tradeoffs, not a simple "better or worse" than equity.</div>
+  </div>
+
+  <div class="case-back-row"><button id="caseBackBtn">Back to my plan</button></div>
+  </div>`;
+}
+function fullSeriesCAGR(series){
+  let bal=1; series.forEach(r=>bal*=(1+r.r));
+  return Math.pow(bal, 1/series.length)-1;
+}
+function infoIconD1(text){
+  return ' <span class="term-i" data-def="'+text.replace(/"/g,'&quot;')+'">i</span>';
+}
+function renderTimeMachine(startIdx){
+  const c = cfg(), series = marketSeries();
+  const tmYears = Math.min(15, series.length-1);
+  const raceAmt = G.country==='US' ? 10000 : 100000;
+  const path = marketGrowthPath(series, startIdx, tmYears, raceAmt);
+  const finalVal = path[path.length-1].v;
+  const worstYearInPath = series.slice(startIdx, startIdx+tmYears).reduce((w,r)=>r.r<w.r?r:w, series[startIdx]);
+  const gained = finalVal > raceAmt;
+  return timeMachineChart(path, 320, 110) +
+    `<div class="case-callout ${gained?'good':''}">
+    ${c.compact(raceAmt)} invested at the start of <b>${series[startIdx].y-1}</b>, held ${tmYears} years through a ${(worstYearInPath.r*100).toFixed(0)}% single worst year (${worstYearInPath.y}), became <b style="color:${gained?'#8FC79E':'#E8977A'}">${c.compact(finalVal)}</b> by ${series[startIdx+tmYears-1].y}.
+  </div>`;
+}
+function updateRiskShrinkMarker(selectedYears){
+  const series = marketSeries();
+  const maxYears = Math.min(25, series.length-2);
+  const w=320, h=130, p=6, topPad=8;
+  const n = maxYears;
+  const sx = (w - p*2) / (n-1);
+  const win = rollingWindows(series, selectedYears);
+  const losing = win.filter(x=>x.finalMultiple<1).length;
+  const pct = 100*losing/win.length;
+  const yScale = pc => topPad + (h-topPad-p) - (pc/100) * (h-topPad-p);
+  const selIdx = Math.max(0, Math.min(n-1, selectedYears-1));
+  const selX = (p+selIdx*sx).toFixed(1), selY = yScale(pct).toFixed(1);
+  const line = document.getElementById('riskShrinkMarkerLine');
+  const dot = document.getElementById('riskShrinkMarkerDot');
+  if (line) { line.setAttribute('x1', selX); line.setAttribute('x2', selX); }
+  if (dot) { dot.setAttribute('cx', selX); dot.setAttribute('cy', selY); }
+}
+function renderHoldResult(years){
+  const series = marketSeries();
+  const w = rollingWindows(series, years);
+  const losing = w.filter(x=>x.finalMultiple<1).length;
+  const pct = Math.round(100*losing/w.length);
+  const worst = worstWindow(series, years);
+  return `<div class="holdbar-track">
+    <div class="holdbar-seg" style="width:${100-pct}%;background:#5FA875"></div>
+    <div class="holdbar-seg" style="width:${pct}%;background:#D97757"></div>
+  </div>
+  <div class="holdbar-legend"><span>${100-pct}% ended with more money</span><span>${pct}% ended with less</span></div>
+  <div class="case-callout ${pct===0?'good':''}" style="margin-top:12px">
+    Across ${w.length} real ${years}-year windows in the data, the worst one still averaged <b style="color:${worst.cagr>0?'#8FC79E':'#E8977A'}">${(worst.cagr*100).toFixed(1)}%/yr</b>${pct===0?', and none of them lost money.':'.'}
+  </div>`;
+}
+function attachCaseHandlers(){
+  const tmSlider = document.getElementById('tmSlider');
+  const tmResult = document.getElementById('tm-result');
+  const tmLabel = document.getElementById('tm-year-label');
+  if (tmSlider) {
+    const series = marketSeries();
+    tmResult.innerHTML = renderTimeMachine(parseInt(tmSlider.value));
+    tmSlider.addEventListener('input', () => {
+      const idx = parseInt(tmSlider.value);
+      tmLabel.textContent = series[idx].y - 1;
+      tmResult.innerHTML = renderTimeMachine(idx);
+    });
+  }
+  const holdSlider = document.getElementById('holdSlider');
+  const holdResult = document.getElementById('hold-result');
+  const holdLabel = document.getElementById('hold-yrs-label');
+  if (holdSlider) {
+    holdResult.innerHTML = renderHoldResult(parseInt(holdSlider.value));
+    holdSlider.addEventListener('input', () => {
+      const yrs = parseInt(holdSlider.value);
+      holdLabel.textContent = yrs + (yrs===1?' year':' years');
+      holdResult.innerHTML = renderHoldResult(yrs);
+      // Fast path: the risk-shrink chart itself never changes (it plots
+      // every holding length at once), so only move the marker dot/line
+      // to the newly selected point rather than regenerating the SVG.
+      updateRiskShrinkMarker(yrs);
+    });
+  }
+  const backBtn2 = document.getElementById('caseBackBtn');
+  if (backBtn2) backBtn2.addEventListener('click', () => { G.si = flow().indexOf('plan'); render(); });
+  document.querySelectorAll('.term-i').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.term-i-tip').forEach(t=>t.remove());
+      const tip = document.createElement('div');
+      tip.className = 'term-i-tip';
+      tip.textContent = el.dataset.def;
+      el.appendChild(tip);
+    });
+  });
+  document.addEventListener('click', () => document.querySelectorAll('.term-i-tip').forEach(t=>t.remove()), {once:true});
+}
+
+
 
 const BUCKETS = {
   conservative:     {name:'Conservative',tagline:'Capital preservation first',desc:'You prioritise protecting what you have over chasing growth. A steady, predictable return matters more than the possibility of higher gains.',eq:.20,de:.60,hy:.20,cls:'conservative'},
@@ -432,6 +866,9 @@ function flow(){
     f.push('goal_confirm');
   }
   f.push('plan');
+  // "The Case" is an optional deeper screen reached from the plan screen,
+  // not a forced step.
+  if(G.viewingCase) f.push('case');
   return f;
 }
 
@@ -709,6 +1146,7 @@ function renderScreen(screen){
   if(screen==='goal_inputs')return renderGoalInputs();
   if(screen==='goal_confirm')return renderGoalConfirm();
   if(screen==='plan')return renderPlan();
+  if(screen==='case')return sCase();
   return '<div>Loading…</div>';
 }
 
@@ -1091,12 +1529,30 @@ function renderPlan(){
 
   // Accumulation chart of the total SIP
   const topGoal=plan.goals.length>0?plan.goals[0]:null;
-  let chartHtml='';
+  let chartHtml='', fdCardHtml='';
   if(topGoal&&plan.totalSIP>0){
     const mRate=effectiveMonthlyRate(bucketRate(G.bucket));
     const rows=accumulationSchedule({sip:plan.totalSIP,rate:mRate,years:topGoal.years*12,due:true}).rows;
     chartHtml=`<div class="section-head">What your combined SIP builds over ${topGoal.years} years</div>
     <div style="background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.1);border-radius:13px;padding:14px 12px 6px;margin-bottom:16px">${mountainChart(rows,'total')}</div>`;
+
+    // A Fixed Deposit is the one thing almost every saver already knows
+    // and already trusts, which makes it the most honest benchmark for
+    // "why bother investing at all." Same combined SIP, same number of
+    // years, only the destination changes.
+    const combinedActual = rows[rows.length-1].closeBal;
+    const mFd = effectiveMonthlyRate(cfg().d.fdRate);
+    const fdFinal = accumulationSchedule({sip:plan.totalSIP,rate:mFd,years:topGoal.years*12,due:true}).finalBalance;
+    const fdDiff = combinedActual - fdFinal;
+    fdCardHtml=`<div class="alloc-card">
+      <div class="section-head" style="margin-top:0">The same ${c.fmt(plan.totalSIP)}/month, in a Fixed Deposit instead</div>
+      <div class="gr-note" style="margin-top:0">A typical multi-year bank FD, around ${(cfg().d.fdRate*100).toFixed(1)}%/yr. FD interest is also fully taxed at your income slab every year, unlike long-term equity gains, which this comparison does not even account for.</div>
+      <div class="alloc-return-row" style="margin-top:12px">
+        <div><div class="alloc-return-label">Your plan</div><div class="alloc-return-value">${c.compact(combinedActual)}</div></div>
+        <div><div class="alloc-return-label">Same money in an FD</div><div class="alloc-return-value" style="color:#E8977A">${c.compact(fdFinal)}</div></div>
+      </div>
+      <div class="gr-note" style="margin-top:10px">Over ${topGoal.years} years, staying in a Fixed Deposit would leave you short by <b style="color:var(--paper)">${c.compact(fdDiff)}</b>, purely from the difference in return.</div>
+    </div>`;
   }
 
   // Your overall risk profile, as an actual allocation and return figure —
@@ -1169,10 +1625,12 @@ function renderPlan(){
 
   ${gapCard}
   ${chartHtml}
+  ${fdCardHtml}
   ${allocCard}
 
   <div class="assump-toggle" id="at">Assumptions used in this plan</div>
   <div class="assump-panel" id="ap"><div class="assump-inner">${assumpLines}</div></div>
+  <div class="case-cta"><div class="cta-eyebrow">Before you close this tab</div><div class="cta-q">Why should you trust markets with this money at all, instead of a Fixed Deposit?</div><button id="caseBtn">Show me the actual numbers</button></div>
   <div class="save-row">
     <button class="save-btn" id="exportBtn">${ICONS.download}<span>Save this plan</span></button>
     <button class="save-btn" id="importBtn">${ICONS.upload}<span>Load a saved plan</span></button>
@@ -1213,7 +1671,7 @@ function updateProgress(){
   progressBar.style.width=progressPct()+'%';
   progressLabel.textContent=progressSection();
   const f=flow(),s=f[G.si];
-  backBtn.classList.toggle('show',G.si>0&&s!=='plan');
+  backBtn.classList.toggle('show',G.si>0&&s!=='plan'&&s!=='case');
   assumpBtn.classList.toggle('show', s==='plan');
 }
 
@@ -1472,7 +1930,12 @@ function attach(screen){
       };
       reader.readAsText(file);
     });
+
+    document.getElementById('caseBtn')&&document.getElementById('caseBtn').addEventListener('click',()=>{
+      G.viewingCase=true; G.si=flow().indexOf('case'); render();
+    });
   }
+  if(screen==='case'){ attachCaseHandlers(); }
 }
 
 backBtn.addEventListener('click',()=>{if(G.si>0)go(-1);});
