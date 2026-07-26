@@ -110,10 +110,16 @@ svg.chart{width:100%;height:auto;display:block}
    elsewhere in this project (max-height transition + an .open class),
    wired ONCE via delegation below rather than per-instance, so it works
    for every current and future explain-toggle without extra JS. */
-.explain-toggle{display:flex;align-items:center;gap:6px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(241,238,227,.5);padding:8px 0 2px;cursor:pointer;user-select:none}
-.explain-toggle:hover{color:rgba(241,238,227,.75)}
-.explain-toggle .explain-chevron{display:inline-block;transition:transform .2s ease;font-size:9px}
-.explain-toggle.open .explain-chevron{transform:rotate(90deg)}
+/* Made deliberately button-like, not just underlined text: a filled
+   pill with a real border and a circular +/- badge, so the affordance to
+   click reads clearly on its own, without relying on color or a caption
+   to explain it. */
+.explain-toggle{display:inline-flex;align-items:center;gap:7px;font-family:'Figtree',sans-serif;font-size:12px;font-weight:600;color:var(--gold);background:rgba(201,164,85,.1);border:1px solid rgba(201,164,85,.4);border-radius:3px 12px 12px 12px;padding:7px 13px 7px 10px;margin:10px 0 2px;cursor:pointer;user-select:none;transition:background .15s ease,border-color .15s ease}
+.explain-toggle:hover{background:rgba(201,164,85,.18);border-color:rgba(201,164,85,.6)}
+.explain-toggle .explain-chevron{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--gold);color:var(--ink);font-size:11px;font-weight:700;flex-shrink:0;line-height:1}
+.explain-toggle .explain-chevron:before{content:"+"}
+.explain-toggle.open .explain-chevron:before{content:"\2212"}
+.explain-toggle.open{background:rgba(201,164,85,.18)}
 .explain-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
 .explain-panel.open{max-height:600px}
 .explain-panel-inner{font-size:12px;color:rgba(241,238,227,.68);line-height:1.6;padding:8px 2px 4px}
@@ -865,7 +871,7 @@ function infoIcon(text){
 // out of the way for anyone who doesn't want it, one click for anyone
 // who does.
 function explainDropdown(label, html){
-  return `<div class="explain-toggle"><span class="explain-chevron">&#9656;</span>${label}</div>
+  return `<div class="explain-toggle"><span class="explain-chevron"></span>${label}</div>
   <div class="explain-panel"><div class="explain-panel-inner">${html}</div></div>`;
 }
 
