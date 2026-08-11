@@ -38,8 +38,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .slim-back{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(241,238,227,.6);background:transparent;border:none;cursor:pointer;flex-shrink:0;padding:4px 0}
 .slim-back:hover{color:var(--gold)}
 .slim-current{font-family:'Newsreader',serif;font-style:italic;font-size:14px;color:var(--gold);flex-shrink:0}
-.tabs-slim{gap:6px}
-.tabs-slim .tab{font-size:10.5px;padding:6px 12px}
+/* All 10 tools, by full name, cannot wrap here without the "slim" bar
+   growing back into the multi-row block it was built to replace (this
+   was measured, not assumed: 338px at 1400px wide before this fix).
+   Scrolls horizontally instead, so the bar stays one line at any width. */
+.tabs-slim{gap:6px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin;flex:1;min-width:0}
+.tabs-slim .tab{font-size:10.5px;padding:6px 12px;flex-shrink:0}
+.slim-row{flex-wrap:nowrap}
+.slim-back,.slim-current{flex-shrink:0}
 .country-toggle{display:flex;font-family:'Spline Sans Mono',monospace;font-size:11.5px;border:1px solid rgba(241,238,227,.2);border-radius:3px}
 .ctbtn{padding:6px 13px;border:none;background:transparent;color:rgba(241,238,227,.55);cursor:pointer}
 .ctbtn:first-child{border-right:1px solid rgba(241,238,227,.15)}
@@ -157,7 +163,36 @@ svg.chart{width:100%;height:auto;display:block}
 .explain-toggle.open{background:rgba(201,164,85,.18)}
 .explain-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
 .explain-panel.open{max-height:600px}
+/* Same collapsible mechanism, reused for panels that hold real controls
+   or several bundled cards rather than a paragraph of prose (portfolio
+   cluster accordions, the "go deeper" bundles below) -- these can run
+   well past 600px of real content. */
+.explain-panel.open.tall{max-height:3200px}
 .explain-panel-inner{font-size:12px;color:rgba(241,238,227,.68);line-height:1.6;padding:8px 2px 4px}
+/* Cluster accordions and "go deeper" bundles hold real controls and
+   nested .card blocks, not prose, so they get the app's normal type
+   sizes and spacing back rather than the small prose defaults above. */
+.explain-panel-inner.controls{font-size:inherit;color:inherit;line-height:inherit;padding-top:14px}
+.explain-panel-inner.controls .card + .card{margin-top:12px}
+
+/* --- portfolio: preset mixes + cluster accordion headers --- */
+.pf-preset-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px}
+.pf-preset-btn{font-family:'Spline Sans Mono',monospace;font-size:10.5px;padding:9px 4px;border-radius:2px 10px 10px 10px;border:1px solid rgba(241,238,227,.16);background:rgba(241,238,227,.04);color:rgba(241,238,227,.75);cursor:pointer;text-align:center;border-left-width:3px;transition:all .15s}
+.pf-preset-btn:hover{background:rgba(241,238,227,.08);color:var(--paper)}
+.pf-preset-btn[data-pfpreset=conservative]{border-left-color:#5FA875}
+.pf-preset-btn[data-pfpreset=balanced]{border-left-color:var(--gold)}
+.pf-preset-btn[data-pfpreset=aggressive]{border-left-color:var(--red)}
+.pf-preset-btn[data-pfpreset=equal]{border-left-color:rgba(241,238,227,.35)}
+.port-cluster-toggle{display:flex;align-items:center;gap:8px;width:100%;font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:rgba(241,238,227,.75);background:transparent;border:none;border-top:1px dashed rgba(241,238,227,.14);padding:12px 2px 10px;margin:0;cursor:pointer;text-align:left}
+.port-cluster:first-child .port-cluster-toggle{border-top:none}
+.port-cluster-toggle:hover{color:var(--paper)}
+.port-cluster-toggle .explain-chevron{background:rgba(241,238,227,.14);color:var(--paper);flex-shrink:0}
+.port-cluster-toggle.open .explain-chevron{background:var(--gold);color:var(--ink)}
+.port-cluster-icon{width:15px;height:15px;color:var(--gold);flex-shrink:0}
+.port-cluster-icon svg{width:100%;height:100%}
+.port-cluster-name{flex:1}
+.port-cluster-total{color:var(--gold);font-weight:600}
+.lab-gopdeeper-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(201,164,85,.65);margin:4px 0 -6px}
 .explain-panel-inner b{color:rgba(241,238,227,.9)}
 .stress-row{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-bottom:1px solid rgba(241,238,227,.06)}
 .stress-row:last-child{border-bottom:none}
@@ -213,9 +248,7 @@ svg.chart .fx-hover-target{cursor:pointer}
 .term:hover{border-bottom-color:var(--gold);color:var(--gold)}
 
 /* --- cluster-grouped portfolio sliders --- */
-.port-cluster{margin-bottom:6px}
-.port-cluster-head{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);padding:10px 0 8px;border-top:1px dashed rgba(241,238,227,.14);margin-top:10px}
-.port-cluster:first-child .port-cluster-head{border-top:none;margin-top:0}
+.port-cluster{margin-bottom:0}
 .pf-total-banner{display:flex;align-items:baseline;justify-content:space-between;background:rgba(201,164,85,.1);border:1px solid rgba(201,164,85,.35);border-radius:8px;padding:10px 14px;margin-bottom:16px}
 .pf-total-banner .ttl-label{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(241,238,227,.6);letter-spacing:.04em}
 .pf-total-banner .ttl-value{font-family:'Spline Sans Mono',monospace;font-size:16px;font-weight:600;color:var(--gold)}
@@ -907,6 +940,18 @@ function infoIcon(text){
 function explainDropdown(label, html){
   return `<div class="explain-toggle"><span class="explain-chevron"></span>${label}</div>
   <div class="explain-panel"><div class="explain-panel-inner">${html}</div></div>`;
+}
+// Same collapsible mechanism and delegated click handler as explainDropdown
+// above, for panels holding real controls or several bundled .card blocks
+// rather than a paragraph of prose: normal type sizes inside instead of the
+// small prose defaults, and a much taller max-height ceiling (portfolio
+// cluster accordions and the "go deeper" bundles can run well past 600px
+// of real content). extraToggleClass lets a caller restyle the header
+// entirely (the cluster accordions use it to look like a plain row instead
+// of the gold "learn more" pill).
+function collapsibleSection(extraToggleClass, toggleHtml, bodyHtml){
+  return `<div class="explain-toggle${extraToggleClass?' '+extraToggleClass:''}"><span class="explain-chevron"></span>${toggleHtml}</div>
+  <div class="explain-panel tall"><div class="explain-panel-inner controls">${bodyHtml}</div></div>`;
 }
 
 function attachChartHovers(scope){
@@ -1784,6 +1829,36 @@ function renderInstruments(){
    TAB: PORTFOLIO & EFFICIENT FRONTIER
    ===================================================================== */
 const PORT_CLUSTER_LABELS={growth:'Growth equity',income:'Income-oriented equity',debt:'Debt',hybrid:'Hybrid',gold:'Precious metals',intl:'International',alt:'Real assets'};
+// Small stroke-icon glyph per cluster, same 14x14 convention as the
+// info-icon elsewhere on this page, so a cluster reads as a distinct
+// shape even collapsed, not just a text label.
+const PORT_CLUSTER_ICONS={
+  growth:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/></svg>`,
+  income:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9 10h4.5a1.5 1.5 0 0 1 0 3H10a1.5 1.5 0 0 0 0 3h5"/></svg>`,
+  debt:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7l8-4z"/></svg>`,
+  hybrid:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>`,
+  gold:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M9.5 15.5V9.5l2.5 3 2.5-3v6"/></svg>`,
+  intl:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.3 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.3-3.6-8.5S9.6 5.8 12 3.5z"/></svg>`,
+  alt:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6"/></svg>`,
+};
+// One-click starting mixes, expressed as a target weight fraction per
+// cluster (not per individual asset -- split evenly across whichever
+// assets a given cluster happens to contain, so the same table works
+// unmodified for both the IN and US asset lists, which share cluster
+// ids but not asset counts). Most people never touch a slider; this is
+// the single biggest usability lever available on this tab.
+const PORTFOLIO_PRESETS={
+  conservative:{growth:0.15, income:0.10, debt:0.45, hybrid:0.15, gold:0.10, intl:0.03, alt:0.02},
+  balanced:    {growth:0.35, income:0.10, debt:0.25, hybrid:0.15, gold:0.08, intl:0.05, alt:0.02},
+  aggressive:  {growth:0.60, income:0.10, debt:0.05, hybrid:0.05, gold:0.05, intl:0.12, alt:0.03},
+};
+function portfolioPresetWeights(key, assets){
+  if(key==='equal' || !PORTFOLIO_PRESETS[key]) return assets.map(()=>Math.round(100/assets.length));
+  const alloc = PORTFOLIO_PRESETS[key];
+  const counts = {};
+  assets.forEach(a=>{ counts[a.cluster]=(counts[a.cluster]||0)+1; });
+  return assets.map(a=>Math.round((alloc[a.cluster]||0)*100/(counts[a.cluster]||1)));
+}
 
 function riskCompositionBar(decomp, concentratedDecomp, w, h){
   if(w===undefined)w=620; if(h===undefined)h=76;
@@ -1911,48 +1986,6 @@ function portfolioRiskContribHTML(d, assets, corr){
   return `<div class="rc-legend"><span><i style="background:#C9A455"></i>Share of your money</span><span><i style="background:#D97757"></i>Share of your risk</span></div>
   ${body}`;
 }
-// Maps a correlation value in [-1,1] to a color: teal for negative,
-// dark-neutral near zero, gold for positive -- reusing the same color
-// language (gold=growth-like, teal=debt-like) already used everywhere
-// else in this app, rather than an arbitrary red-green scale.
-function corrCellColor(v){
-  const clamp = Math.max(-1, Math.min(1, v));
-  if(clamp >= 0){
-    const t = clamp;
-    const r = Math.round(38 + t*(201-38)), g = Math.round(58 + t*(164-58)), b = Math.round(48 + t*(85-48));
-    return `rgb(${r},${g},${b})`;
-  } else {
-    const t = -clamp;
-    const r = Math.round(38 + t*(45-38)), g = Math.round(58 + t*(110-58)), b = Math.round(48 + t*(110-48));
-    return `rgb(${r},${g},${b})`;
-  }
-}
-function portfolioHeatmapHTML(assets, corr){
-  // Cluster-ordered so correlated blocks (all "growth" assets, all "debt"
-  // assets) visually group together rather than sitting in raw list order.
-  const clusterOrder=['growth','income','debt','hybrid','gold','intl','alt'];
-  const order = [];
-  clusterOrder.forEach(cl=>{
-    assets.forEach((a,i)=>{ if(a.cluster===cl) order.push(i); });
-  });
-  const n = order.length;
-  const cell = n>20 ? 17 : 20;
-  let rows = '';
-  for(let r=0; r<n; r++){
-    let cellsHtml = '';
-    for(let c=0; c<n; c++){
-      const i = order[r], j = order[c];
-      const v = corr[i][j];
-      const title = `${assets[i].name} vs ${assets[j].name}: ${v.toFixed(2)}`;
-      cellsHtml += `<div class="heat-cell" style="width:${cell}px;height:${cell}px;background:${corrCellColor(v)}" title="${title}"></div>`;
-    }
-    rows += `<div class="heat-row">${cellsHtml}</div>`;
-  }
-  return `<div class="heat-grid-wrap"><div class="heat-grid">${rows}</div></div>
-  <div class="heat-legend">
-    <span>-1.0</span><div class="heat-legend-bar"></div><span>0</span><div class="heat-legend-bar heat-legend-bar-pos"></div><span>+1.0</span>
-  </div>`;
-}
 // Approximate stress-test: scale each real historical crash episode's
 // market-level move by this mix's own beta, the same logic already used
 // in "Reading beta" elsewhere on this tab (if the market moves X%, a
@@ -2032,9 +2065,16 @@ function updatePortfolioLive(){
   const tailEl=document.getElementById('pf-tailrisk'); if(tailEl) tailEl.innerHTML=portfolioTailRiskHTML(d);
   const stressEl=document.getElementById('pf-stress'); if(stressEl) stressEl.innerHTML=portfolioStressHTML(d, c);
   const rcEl=document.getElementById('pf-riskcontrib'); if(rcEl) rcEl.innerHTML=portfolioRiskContribHTML(d, assets, corr);
-  // Correlation heatmap intentionally excluded here: the matrix itself is
-  // fixed and does not change as weights move, so re-rendering 576 cells
-  // on every drag tick would be pure wasted work.
+  // Cluster accordion headers: every drag renormalizes ALL weights, not
+  // just the dragged asset's own cluster, so every cluster's running
+  // total needs refreshing here too, not only the one being dragged.
+  const pct = roundPercentsTo100(d.w);
+  const clusterPct = {};
+  assets.forEach((a,i)=>{ clusterPct[a.cluster]=(clusterPct[a.cluster]||0)+pct[i]; });
+  Object.keys(clusterPct).forEach(cl=>{
+    const el=document.querySelector(`[data-cluster-total="${cl}"]`);
+    if(el) el.textContent = clusterPct[cl]+'%';
+  });
   // .term and .info-icon tooltips are pure CSS (:hover), so no JS re-attachment is needed here
 }
 
@@ -2063,16 +2103,22 @@ function renderPortfolio(){
   const rawW = d.rawW, w = d.w;
   const pct = roundPercentsTo100(w);
 
-  // Group sliders by cluster so 15 assets stay navigable
+  // Group sliders by cluster so 24 assets stay navigable: each cluster is
+  // a collapsed-by-default accordion (reusing the explainDropdown
+  // mechanism) whose header still shows its live running total, so the
+  // summary reads correctly without opening anything.
   const clusterOrder=['growth','income','debt','hybrid','gold','intl','alt'];
+  const clusterPct={};
+  clusterOrder.forEach(cl=>{ clusterPct[cl]=0; });
+  assets.forEach((a,i)=>{ clusterPct[a.cluster]=(clusterPct[a.cluster]||0)+pct[i]; });
   let sliders='';
   clusterOrder.forEach(cl=>{
     const idxs=assets.map((a,i)=>a.cluster===cl?i:null).filter(i=>i!==null);
     if(!idxs.length) return;
-    sliders+=`<div class="port-cluster"><div class="port-cluster-head">${PORT_CLUSTER_LABELS[cl]}</div>`;
+    let fields='';
     idxs.forEach(i=>{
       const a=assets[i];
-      sliders+=`<div class="field">
+      fields+=`<div class="field">
         <label>${a.name}<span class="port-asset-meta">typically ${(a.ret*100).toFixed(1)}%/yr${infoIcon('The illustrative long-run expected return for this building block, same figure used everywhere else in Goalden. This is what actually moves your overall expected return when you drag its bar.')} &middot; ${(a.vol*100).toFixed(0)}% volatility, how much a bad year here typically swings</span></label>
         <div class="port-pct-row"><span class="port-pct-badge" data-pf-label="${i}">${pct[i]}%</span><span class="port-pct-of">of your total portfolio</span></div>
         <div class="slider-row">
@@ -2081,13 +2127,22 @@ function renderPortfolio(){
         </div>
       </div>`;
     });
-    sliders+=`</div>`;
+    const header=`<span class="port-cluster-icon">${PORT_CLUSTER_ICONS[cl]}</span><span class="port-cluster-name">${PORT_CLUSTER_LABELS[cl]} <span style="color:rgba(241,238,227,.4);text-transform:none">(${idxs.length})</span></span><span class="port-cluster-total" data-cluster-total="${cl}">${clusterPct[cl]}%</span>`;
+    sliders+=`<div class="port-cluster">${collapsibleSection('port-cluster-toggle', header, fields)}</div>`;
   });
+
+  const presetRow=`<div class="pf-preset-row">
+    <button class="pf-preset-btn" data-pfpreset="conservative">Conservative</button>
+    <button class="pf-preset-btn" data-pfpreset="balanced">Balanced</button>
+    <button class="pf-preset-btn" data-pfpreset="aggressive">Aggressive</button>
+    <button class="pf-preset-btn" data-pfpreset="equal">Equal weight</button>
+  </div>`;
 
   return `<div class="grid">
   <div class="panel">
     <h3>Build a portfolio</h3>
-    <div class="cap" style="margin-bottom:14px">${assets.length} building blocks across ${clusterOrder.filter(cl=>assets.some(a=>a.cluster===cl)).length} categories, each with its own return and volatility below. The bar and number you drag are a relative weight, not the final percentage. All ${assets.length} weights get automatically rescaled against each other so the bold percentage next to each name always reflects its true share, and the total below always reads exactly 100%. Named after the real SEBI categories and indices you would actually shop from, with long-run category-level assumptions; not any specific fund house's live performance.</div>
+    <div class="cap" style="margin-bottom:14px">${assets.length} building blocks across ${clusterOrder.filter(cl=>assets.some(a=>a.cluster===cl)).length} categories. Start from a preset below or open any category to drag its sliders yourself &ndash; either way, all ${assets.length} weights stay automatically rescaled against each other so the total always reads exactly 100%. Named after the real SEBI categories and indices you would actually shop from, with long-run category-level assumptions; not any specific fund house's live performance.</div>
+    ${presetRow}
     <div class="pf-total-banner"><span class="ttl-label">Total allocated${infoIcon('Every mix, however you drag it, is rescaled to sum to exactly 100%. This checks out to the rupee (or point) by construction, not by luck.')}</span><span class="ttl-value" id="pf-total-check">${pct.reduce((a,b)=>a+b,0)}%</span></div>
     ${sliders}
     <button id="reseedFrontierBtn" style="width:100%;margin-top:14px;background:transparent;border:1px solid rgba(241,238,227,.18);color:rgba(241,238,227,.6);border-radius:3px;padding:9px;font-size:11px;cursor:pointer;font-family:'Spline Sans Mono',monospace">Resample the frontier cloud</button>
@@ -2134,62 +2189,54 @@ function renderPortfolio(){
 
     <div class="card">
       <h4>How much of your risk is diversifiable, right now${infoIcon('This updates live as you move the sliders. Systematic risk comes from the market as a whole and cannot be diversified away. Unsystematic risk is specific to your particular mix of holdings, and shrinks as you spread across less-correlated building blocks.')}</h4>
-      <div class="cap">Drag any slider on the left and watch the split shift.</div>
+      <div class="cap">Drag any slider above and watch the split shift.</div>
       <div id="pf-riskbar">${portfolioRiskBarHTML(d)}</div>
     </div>
 
-    <div class="card">
-      <h4>What diversifying actually bought you</h4>
-      <div class="gr-note" id="pf-diversify" style="margin-top:0">${portfolioDiversifyHTML(d, assets)}</div>
-    </div>
+    <div class="lab-gopdeeper-label">Go deeper</div>
+    ${collapsibleSection('', 'Risk analysis: diversification, beta, Sharpe/Sortino, VaR/CVaR, where your risk actually comes from', `
+      <div class="card">
+        <h4>What diversifying actually bought you</h4>
+        <div class="gr-note" id="pf-diversify" style="margin-top:0">${portfolioDiversifyHTML(d, assets)}</div>
+      </div>
+      <div class="card">
+        <h4>Reading beta</h4>
+        <div class="gr-note" id="pf-beta-text" style="margin-top:0">${portfolioBetaTextHTML(d, assets)}</div>
+      </div>
+      <div class="card">
+        <h4>Risk-adjusted return, in one glance${infoIcon('The numbers a research analyst or portfolio manager would actually pull up first. All computed live from the mix you are building above, not a separate example.')}</h4>
+        <div class="cap">How much return this mix earns per unit of risk taken, and how spread out it actually is.</div>
+        <div class="stat-row" id="pf-ratios" style="grid-template-columns:repeat(4,1fr)">${portfolioRatiosHTML(d, c)}</div>
+        <div class="cap" style="margin-top:16px;margin-bottom:8px">In a genuinely bad year, not the average one:</div>
+        <div class="stat-row" id="pf-tailrisk" style="grid-template-columns:repeat(2,1fr)">${portfolioTailRiskHTML(d)}</div>
+        ${explainDropdown('What do these actually mean?', `
+          <b>Sharpe and Sortino</b> both ask the same question, return per unit of risk, but count risk differently. Sharpe uses total volatility: every swing, up or down, counts against it. Sortino only counts the downside swings. A mix that goes up in big, choppy jumps and down smoothly will have a lower Sharpe than its Sortino, because Sharpe is penalising the good kind of unpredictability along with the bad.<br><br>
+          <b>Diversification ratio</b> compares the volatility you would get if these holdings all moved in perfect lockstep (the weighted average of their individual volatilities) against the volatility you are actually getting. The gap between them is diversification doing real work: assets that do not move together smooth out the ride without needing to lower expected return.<br><br>
+          <b>Effective holdings</b> answers "how concentrated am I, really?" You might hold 24 building blocks, but if one of them is 70% of your money, this number will land much closer to 1 than to 24, exposing concentration that a simple headcount would hide entirely.<br><br>
+          <b>VaR and CVaR</b> are both about the bad tail, not the average year. VaR marks the threshold: a loss at least this size happens roughly 1 year in 20. CVaR goes one step further and asks, given that you are already in one of those bad years, how bad does it tend to be, on average. CVaR is always the larger loss of the two, because it is describing something further out in the tail.
+        `)}
+      </div>
+      <div class="card">
+        <h4>Where your risk actually comes from${infoIcon('Money weight is what percentage of your rupees sit in each building block. Risk contribution is what percentage of your portfolio\'s actual volatility traces back to that same building block -- and these two numbers are very often not the same. A holding can carry far more (or, for a genuine hedge, far less than zero) risk than its money weight alone would suggest.')}</h4>
+        <div class="cap">Sorted by risk contribution, largest first. A green bar means that holding is working against your portfolio's swings on net, not just sitting still.</div>
+        <div id="pf-riskcontrib">${portfolioRiskContribHTML(d, assets, corr)}</div>
+        ${explainDropdown('Why would money weight and risk not match?', `
+          Two things drive the gap: how volatile a holding is on its own, and how it moves relative to everything else you hold. A small, jumpy holding can punch far above its money weight in the risk column. A holding that tends to move the <i>opposite</i> way from the rest of your mix (gold against equity, for instance, though the relationship is a mild one historically, not a strong guarantee) can actually show up with very little risk contribution, or even a genuinely negative one, despite sitting there with real money in it.<br><br>
+          A negative number is not a typo. It means that, given how this specific holding has historically correlated with the rest of your mix, it was on net working <i>against</i> the portfolio's swings, not just failing to add to them. That is the clearest, most literal definition of a hedge this page can show you.
+        `)}
+      </div>
+    `)}
 
-    <div class="card">
-      <h4>Reading beta</h4>
-      <div class="gr-note" id="pf-beta-text" style="margin-top:0">${portfolioBetaTextHTML(d, assets)}</div>
-    </div>
-
-    <div class="card">
-      <h4>Risk-adjusted return, in one glance${infoIcon('The numbers a research analyst or portfolio manager would actually pull up first. All computed live from the mix you are building above, not a separate example.')}</h4>
-      <div class="cap">How much return this mix earns per unit of risk taken, and how spread out it actually is.</div>
-      <div class="stat-row" id="pf-ratios" style="grid-template-columns:repeat(4,1fr)">${portfolioRatiosHTML(d, c)}</div>
-      <div class="cap" style="margin-top:16px;margin-bottom:8px">In a genuinely bad year, not the average one:</div>
-      <div class="stat-row" id="pf-tailrisk" style="grid-template-columns:repeat(2,1fr)">${portfolioTailRiskHTML(d)}</div>
-      ${explainDropdown('What do these actually mean?', `
-        <b>Sharpe and Sortino</b> both ask the same question, return per unit of risk, but count risk differently. Sharpe uses total volatility: every swing, up or down, counts against it. Sortino only counts the downside swings. A mix that goes up in big, choppy jumps and down smoothly will have a lower Sharpe than its Sortino, because Sharpe is penalising the good kind of unpredictability along with the bad.<br><br>
-        <b>Diversification ratio</b> compares the volatility you would get if these holdings all moved in perfect lockstep (the weighted average of their individual volatilities) against the volatility you are actually getting. The gap between them is diversification doing real work: assets that do not move together smooth out the ride without needing to lower expected return.<br><br>
-        <b>Effective holdings</b> answers "how concentrated am I, really?" You might hold 24 building blocks, but if one of them is 70% of your money, this number will land much closer to 1 than to 24, exposing concentration that a simple headcount would hide entirely.<br><br>
-        <b>VaR and CVaR</b> are both about the bad tail, not the average year. VaR marks the threshold: a loss at least this size happens roughly 1 year in 20. CVaR goes one step further and asks, given that you are already in one of those bad years, how bad does it tend to be, on average. CVaR is always the larger loss of the two, because it is describing something further out in the tail.
-      `)}
-    </div>
-
-    <div class="card">
-      <h4>Where your risk actually comes from${infoIcon('Money weight is what percentage of your rupees sit in each building block. Risk contribution is what percentage of your portfolio\'s actual volatility traces back to that same building block -- and these two numbers are very often not the same. A holding can carry far more (or, for a genuine hedge, far less than zero) risk than its money weight alone would suggest.')}</h4>
-      <div class="cap">Sorted by risk contribution, largest first. A green bar means that holding is working against your portfolio's swings on net, not just sitting still.</div>
-      <div id="pf-riskcontrib">${portfolioRiskContribHTML(d, assets, corr)}</div>
-      ${explainDropdown('Why would money weight and risk not match?', `
-        Two things drive the gap: how volatile a holding is on its own, and how it moves relative to everything else you hold. A small, jumpy holding can punch far above its money weight in the risk column. A holding that tends to move the <i>opposite</i> way from the rest of your mix (gold against equity, for instance, though the relationship is a mild one historically, not a strong guarantee) can actually show up with very little risk contribution, or even a genuinely negative one, despite sitting there with real money in it.<br><br>
-        A negative number is not a typo. It means that, given how this specific holding has historically correlated with the rest of your mix, it was on net working <i>against</i> the portfolio's swings, not just failing to add to them. That is the clearest, most literal definition of a hedge this page can show you.
-      `)}
-    </div>
-
-    <div class="card">
-      <h4>Stress this exact mix${infoIcon('Applies each real historical crash episode to your live portfolio, scaled by its own beta. See the note below for exactly what this does and does not capture.')}</h4>
-      <div id="pf-stress">${portfolioStressHTML(d, c)}</div>
-      ${explainDropdown('How is this actually calculated, and what does it miss?', `
-        Each row starts from the real, verified market-level move in that historical episode (see the note under each one for the source). That figure is then scaled by your mix's own beta, the same relationship the "Reading beta" section above already uses: if the broad market fell 50% and your mix has a beta of 0.6, the estimate here is roughly 0.6 &times; 50% = 30%.<br><br>
-        What this leaves out: beta is a long-run average relationship, not a guarantee that holds precisely in any one specific crisis. Correlations across asset classes also tend to rise in a real crash (the well-known "everything correlates in a panic" effect), which this approximation does not separately model. A full, honest re-simulation would replay each of these building blocks individually through each historical event using its own actual return that year, which needs return data at a granularity this app does not have. Treat this as a reasonable order-of-magnitude estimate, not a precise forecast.
-      `)}
-    </div>
-
-    <div class="card">
-      <h4>How the ${assets.length} building blocks move together${infoIcon('Each cell is the correlation between two building blocks, from -1 (always move opposite) through 0 (unrelated) to +1 (always move together). Grouped by category, so you can see entire blocks -- all growth equity, for instance -- correlate strongly with each other even before you look at a single specific pair. Hover any cell for the exact figure and the two names.')}</h4>
-      <div class="cap">This is the correlation matrix that drives every diversification number on this page. It does not change as you drag the sliders above -- only which of these blocks you hold, and how much, does.</div>
-      ${portfolioHeatmapHTML(assets, corr)}
-      ${explainDropdown('How should I actually read this grid?', `
-        Look for whole blocks of similar colour before looking at any single pair. The growth-equity block near the top-left should read as a solid, strongly-gold cluster: these are all forms of Indian equity, and they tend to rise and fall together, which is exactly why holding six of them is nowhere near as diversifying as it might feel. The real diversification value on this page comes from the pairs that sit far apart in colour: a growth holding against a debt holding, or against gold, where the cell reads closer to neutral or even leans teal.<br><br>
-        A cell reading close to +1.0 does not mean two holdings are the same asset, only that they have historically moved together closely. A cell near -1.0 (rare here, and worth actually clicking into if you see one) means they have tended to move in opposite directions, which is the single most valuable kind of pairing for smoothing out a portfolio's ride.
-      `)}
-    </div>
+    ${collapsibleSection('', 'Stress testing: how this exact mix would have handled real historical crashes', `
+      <div class="card">
+        <h4>Stress this exact mix${infoIcon('Applies each real historical crash episode to your live portfolio, scaled by its own beta. See the note below for exactly what this does and does not capture.')}</h4>
+        <div id="pf-stress">${portfolioStressHTML(d, c)}</div>
+        ${explainDropdown('How is this actually calculated, and what does it miss?', `
+          Each row starts from the real, verified market-level move in that historical episode (see the note under each one for the source). That figure is then scaled by your mix's own beta, the same relationship the "Reading beta" section above already uses: if the broad market fell 50% and your mix has a beta of 0.6, the estimate here is roughly 0.6 &times; 50% = 30%.<br><br>
+          What this leaves out: beta is a long-run average relationship, not a guarantee that holds precisely in any one specific crisis. Correlations across asset classes also tend to rise in a real crash (the well-known "everything correlates in a panic" effect), which this approximation does not separately model. A full, honest re-simulation would replay each of these building blocks individually through each historical event using its own actual return that year, which needs return data at a granularity this app does not have. Treat this as a reasonable order-of-magnitude estimate, not a precise forecast.
+        `)}
+      </div>
+    `)}
 
     <div class="card">
       <h4>Take this mix elsewhere in the Lab</h4>
@@ -2631,6 +2678,14 @@ function attach(){
   document.getElementById('reseedFrontierBtn')&&document.getElementById('reseedFrontierBtn').addEventListener('click',()=>{
     L.portfolio.seed=Math.floor(Math.random()*100000);
     render();
+  });
+  document.querySelectorAll('[data-pfpreset]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const c=cfg();
+      const assets = c.code==='IN' ? PORTFOLIO_ASSETS_IN : PORTFOLIO_ASSETS_US;
+      L.portfolio.weights = portfolioPresetWeights(el.dataset.pfpreset, assets);
+      render();
+    });
   });
 
   // Chart hover tooltip — event delegation over every .fx-hover-target circle
