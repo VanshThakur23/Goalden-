@@ -1259,17 +1259,6 @@ function renderRetirement(){
     </div>
 
     <div class="card">
-      <h4>Amortization schedule${infoIcon('Here, the year-by-year record of the saving phase: what you contributed, what growth was earned, and the closing balance, aggregated up from monthly compounding.')}: the saving phase, year by year</h4>
-      <div class="cap">Aggregated from monthly compounding · this is the proof behind the chart above</div>
-      <div class="table-scroll"><table class="dtable">
-      <thead><tr><th>Year</th><th>Contributed</th><th>Growth earned</th><th>Closing balance</th></tr></thead>
-      <tbody>
-      ${yearlyAmortization(res.accRows).map(row=>`<tr>
-        <td>${row.year}</td><td>${c.compact(row.contributedThisYear)}</td><td>${c.compact(row.growthThisYear)}</td><td>${c.compact(row.closeBal)}</td></tr>`).join('')}
-      </tbody></table></div>
-    </div>
-
-    <div class="card">
       <h4>Drawdown${infoIcon('The spending-down phase after retirement: withdrawals rise with inflation every year while the remaining pot keeps earning the post-retirement rate.')} ${res.shockInfo?`with ${res.shockInfo.ep.label} injected`:'(baseline)'}</h4>
       <div class="cap">${res.shockInfo ?
         (res.shockInfo.ranOutYear ? `Runs out in drawdown year ${res.shockInfo.ranOutYear}, ${res.drawYrs-res.shockInfo.ranOutYear} years short of plan.` : 'Survives the shock without running out.')
@@ -1277,21 +1266,34 @@ function renderRetirement(){
       ${drawdownChart(res.ddRows, c)}
     </div>
 
-    <div class="card">
-      <h4>Year-by-year drawdown table</h4>
-      <div class="cap">The verification proof: every rupee accounted for</div>
-      <div class="table-scroll"><table class="dtable">
-      <thead><tr><th>Year</th><th>Open</th><th>Withdraw</th><th>Return</th><th>Close</th></tr></thead>
-      <tbody>
-      ${res.ddRows.map(row=>{
-        const isShock = res.shockInfo && row.rate !== undefined && row.rate < -0.05;
-        const isNeg = row.closeBal < 0;
-        return `<tr class="${isShock?'shock':''}${isNeg?' negative':''}">
-          <td>${row.year}</td><td>${c.compact(row.openBal)}</td><td>${c.compact(row.withdrawal)}</td>
-          <td>${row.rate!==undefined?(row.rate*100).toFixed(1)+'%':'—'}</td><td>${c.compact(row.closeBal)}</td></tr>`;
-      }).join('')}
-      </tbody></table></div>
-    </div>
+    <div class="lab-gopdeeper-label">Go deeper</div>
+    ${collapsibleSection('', 'Year-by-year tables: the saving phase and the drawdown phase, rupee by rupee', `
+      <div class="card">
+        <h4>Amortization schedule${infoIcon('Here, the year-by-year record of the saving phase: what you contributed, what growth was earned, and the closing balance, aggregated up from monthly compounding.')}: the saving phase, year by year</h4>
+        <div class="cap">Aggregated from monthly compounding &middot; this is the proof behind the chart above</div>
+        <div class="table-scroll"><table class="dtable">
+        <thead><tr><th>Year</th><th>Contributed</th><th>Growth earned</th><th>Closing balance</th></tr></thead>
+        <tbody>
+        ${yearlyAmortization(res.accRows).map(row=>`<tr>
+          <td>${row.year}</td><td>${c.compact(row.contributedThisYear)}</td><td>${c.compact(row.growthThisYear)}</td><td>${c.compact(row.closeBal)}</td></tr>`).join('')}
+        </tbody></table></div>
+      </div>
+      <div class="card">
+        <h4>Year-by-year drawdown table</h4>
+        <div class="cap">The verification proof: every rupee accounted for</div>
+        <div class="table-scroll"><table class="dtable">
+        <thead><tr><th>Year</th><th>Open</th><th>Withdraw</th><th>Return</th><th>Close</th></tr></thead>
+        <tbody>
+        ${res.ddRows.map(row=>{
+          const isShock = res.shockInfo && row.rate !== undefined && row.rate < -0.05;
+          const isNeg = row.closeBal < 0;
+          return `<tr class="${isShock?'shock':''}${isNeg?' negative':''}">
+            <td>${row.year}</td><td>${c.compact(row.openBal)}</td><td>${c.compact(row.withdrawal)}</td>
+            <td>${row.rate!==undefined?(row.rate*100).toFixed(1)+'%':'—'}</td><td>${c.compact(row.closeBal)}</td></tr>`;
+        }).join('')}
+        </tbody></table></div>
+      </div>
+    `)}
 
     <div class="card">
       <h4>Drawdown Monte Carlo: does the ORDER of returns matter?${infoIcon('The chart above assumes one fixed post-retirement return every single year. Real markets never behave that steadily. This runs 1,000 random drawdown paths with the same average return and lets volatility land differently in each one, which is the only way to see sequence-of-returns risk: two paths with an identical long-run average can still end in ruin or comfort depending purely on WHEN the bad years happen to fall.')}</h4>
