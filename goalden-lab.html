@@ -20,20 +20,55 @@ h1,h2,h3{font-family:'Newsreader',serif}
 header{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid rgba(241,238,227,.12)}
 .brand{font-family:'Newsreader',serif;font-weight:700;font-size:19px;color:var(--gold);text-decoration:none;display:inline-block}
 .brand span{color:var(--paper);font-weight:400;font-style:italic;font-size:13px;margin-left:6px;opacity:.65}
-/* The nine tools are the whole point of this page, so the tab bar gets its
-   own full-width strip instead of hiding as thin text in the header:
-   pill-shaped tabs with real padding, a labelled heading, and a filled
-   active state that is unmissable. */
-.tabbar{background:linear-gradient(180deg,rgba(201,164,85,.09),rgba(201,164,85,.03));border-bottom:1px solid rgba(201,164,85,.25);padding:12px 24px 14px}
-.tabbar-label{font-family:'Spline Sans Mono',monospace;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:rgba(201,164,85,.75);margin-bottom:9px}
+/* Two very different jobs share this strip: a first-visit chooser (big,
+   unmissable) and a quick tool-switcher once something is already open
+   (small, out of the way). Splitting them into .is-home/.is-slim instead
+   of one fixed-size bar is what actually fixes the "183px of chrome on
+   every single tab" problem -- making the pills bigger again (tried once
+   already, see the old comment this replaced) just moves the clutter
+   around instead of removing it. */
+.tabbar{background:linear-gradient(180deg,rgba(201,164,85,.09),rgba(201,164,85,.03));border-bottom:1px solid rgba(201,164,85,.25)}
+.tabbar.is-home{display:none} /* the home screen itself, in #main, is the chooser */
+.tabbar.is-slim{padding:10px 24px}
 .tabs{display:flex;gap:8px;flex-wrap:wrap}
 .tab{font-family:'Spline Sans Mono',monospace;font-size:11.5px;letter-spacing:.02em;color:rgba(241,238,227,.68);background:rgba(241,238,227,.05);border:1px solid rgba(241,238,227,.16);border-radius:2px 12px 12px 12px;padding:9px 16px;cursor:pointer;transition:all .15s}
 .tab:hover{color:var(--paper);border-color:rgba(201,164,85,.5);background:rgba(241,238,227,.08)}
 .tab.active{color:var(--ink);background:var(--gold);border-color:var(--gold);font-weight:600}
+.slim-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.slim-back{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(241,238,227,.6);background:transparent;border:none;cursor:pointer;flex-shrink:0;padding:4px 0}
+.slim-back:hover{color:var(--gold)}
+.slim-current{font-family:'Newsreader',serif;font-style:italic;font-size:14px;color:var(--gold);flex-shrink:0}
+.tabs-slim{gap:6px}
+.tabs-slim .tab{font-size:10.5px;padding:6px 12px}
 .country-toggle{display:flex;font-family:'Spline Sans Mono',monospace;font-size:11.5px;border:1px solid rgba(241,238,227,.2);border-radius:3px}
 .ctbtn{padding:6px 13px;border:none;background:transparent;color:rgba(241,238,227,.55);cursor:pointer}
 .ctbtn:first-child{border-right:1px solid rgba(241,238,227,.15)}
 .ctbtn.active{background:rgba(201,164,85,.15);color:var(--gold)}
+
+/* --- Lab home: a first-visit chooser, not a permanently-docked bar.
+   The 3 primary tools get real card presence (mirrors index.html's own
+   .door treatment, so the Lab's front door and its own home screen speak
+   the same visual language); the other 7 sit underneath, quiet but one
+   click away. Returning visitors skip straight past this -- see the
+   localStorage read near consumeDoor2Handoff(). --- */
+.lab-home{padding:28px 4px 4px}
+.lab-home-head{margin-bottom:24px}
+.lab-home-head h2{font-size:27px;margin-bottom:7px}
+.lab-home-head .cap{font-size:13px;color:rgba(241,238,227,.6)}
+.lab-home-primary{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px}
+@media(max-width:860px){.lab-home-primary{grid-template-columns:1fr}}
+.lab-tool-card{background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.14);border-radius:3px 22px 22px 22px;padding:24px 22px;text-align:left;cursor:pointer;color:inherit;font-family:'Figtree',sans-serif;display:flex;flex-direction:column;transition:all .2s}
+.lab-tool-card:hover{background:rgba(241,238,227,.07);border-color:rgba(201,164,85,.5);transform:translateY(-2px)}
+.lab-tool-card:nth-child(2){border-radius:22px 3px 22px 22px}
+.lab-tool-card:nth-child(3){border-radius:22px 22px 3px 22px}
+.tc-icon{width:46px;height:46px;color:var(--ink);background:var(--gold);border-radius:50% 50% 50% 4px;display:flex;align-items:center;justify-content:center;padding:11px;margin-bottom:14px;box-shadow:0 5px 16px rgba(201,164,85,.25)}
+.tc-icon svg{width:100%;height:100%}
+.lab-tool-card h3{font-size:18px;margin-bottom:8px;color:var(--paper)}
+.tc-blurb{font-size:12.5px;color:rgba(241,238,227,.6);line-height:1.55;flex:1;margin-bottom:14px}
+.tc-cta{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--gold);display:flex;align-items:center;gap:5px}
+.tc-cta svg{width:12px;height:12px}
+.lab-home-secondary-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(201,164,85,.7);margin-bottom:10px}
+.lab-home-secondary{display:flex;gap:8px;flex-wrap:wrap}
 
 main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 .grid{display:grid;grid-template-columns:340px 1fr;gap:26px;align-items:start}
@@ -241,9 +276,8 @@ svg.chart .fx-hover-target{cursor:pointer}
   <a href="index.html" class="brand">Goalden<span>the lab</span></a>
   <div class="country-toggle" id="countryToggle"></div>
 </header>
-<nav class="tabbar">
-  <div class="tabbar-label">Nine tools, pick one</div>
-  <div class="tabs" id="tabs"></div>
+<nav class="tabbar" id="tabbar">
+  <div id="tabbarInner"></div>
 </nav>
 <div class="print-header" id="printHeader"></div>
 <main id="main"></main>
@@ -833,7 +867,7 @@ const FX_DEPRECIATION_DEFAULT = 0.04; // INR/USD, verified Jul 2026
    STATE
    ===================================================================== */
 const L = {
-  country:'IN', tab:'retirement',
+  country:'IN', tab:'home',
   ret:{ age:30, retireAge:60, monthlyExpense:50000, lifestyleFactor:75,
         preRate:10, postRate:9, inflation:6, lifeExp:78, due:true, realTerms:false, shock:null,
         corpusMode:'expenses', customCorpus:30000000, customBasis:'future',
@@ -2234,21 +2268,66 @@ function renderHealth(){
 /* =====================================================================
    RENDER ENGINE
    ===================================================================== */
+// Three icon chips for the home-screen primary cards, same stroke-icon
+// convention as index.html's .door-icon (viewBox 24x24, stroke-width
+// 1.5, round caps) so the Lab's own front door reads as the same family.
+const ICON_RETIREMENT=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h6v6"/></svg>`;
+const ICON_PORTFOLIO=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l7 4"/></svg>`;
+const ICON_LIVEFRONTIER=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15 11 10 15 12 19 6" stroke-dasharray="1.5 3"/><circle cx="7" cy="15" r="1.3" fill="currentColor" stroke="none"/><circle cx="11" cy="10" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="19" cy="6" r="1.3" fill="currentColor" stroke="none"/></svg>`;
+
 const TABS=[
-  {id:'retirement', label:'Retirement Lab'},
+  {id:'retirement', label:'Retirement Lab', primary:true, icon:ICON_RETIREMENT,
+    blurb:'How much you need to save, and whether that number actually survives a real retirement.'},
+  {id:'portfolio', label:'Build a Portfolio', primary:true, icon:ICON_PORTFOLIO,
+    blurb:'Mix real fund categories with presets or your own sliders, and watch the efficient frontier move live.'},
+  {id:'livefrontier', label:'Live Frontier', primary:true, icon:ICON_LIVEFRONTIER,
+    blurb:'Pull real market data for any stocks or funds and compute the frontier and tangency portfolio live.'},
   {id:'stepup', label:'Step-Up SIP'},
   {id:'swp', label:'Sustainable Withdrawal'},
   {id:'fx', label:'Cross-Border'},
   {id:'joint', label:'Joint Children Corpus'},
   {id:'mc', label:'Monte Carlo'},
-  {id:'portfolio', label:'Build a Portfolio'},
   {id:'instruments', label:'Instrument Explorer'},
   {id:'health', label:'Plan Health'},
 ];
 
+function renderHome(){
+  const primary=TABS.filter(t=>t.primary), secondary=TABS.filter(t=>!t.primary);
+  return `<div class="lab-home">
+    <div class="lab-home-head">
+      <h2>The Lab</h2>
+      <div class="cap">Three main tools to start with. Seven more below if you want to go deeper on something specific.</div>
+    </div>
+    <div class="lab-home-primary">
+      ${primary.map(t=>`<button class="lab-tool-card" data-tab-switch="${t.id}">
+        <div class="tc-icon">${t.icon}</div>
+        <h3>${t.label}</h3>
+        <div class="tc-blurb">${t.blurb}</div>
+        <div class="tc-cta">Open<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
+      </button>`).join('')}
+    </div>
+    <div class="lab-home-secondary-label">More tools</div>
+    <div class="lab-home-secondary">
+      ${secondary.map(t=>`<button class="tab" data-tab-switch="${t.id}">${t.label}</button>`).join('')}
+    </div>
+  </div>`;
+}
+
 function renderTabs(){
-  document.getElementById('tabs').innerHTML = TABS.map(t=>
-    `<button class="tab${L.tab===t.id?' active':''}" data-tab-switch="${t.id}">${t.label}</button>`).join('');
+  const bar=document.getElementById('tabbar');
+  if(L.tab==='home'){
+    bar.className='tabbar is-home';
+    document.getElementById('tabbarInner').innerHTML='';
+  } else {
+    bar.className='tabbar is-slim';
+    const current=TABS.find(t=>t.id===L.tab)||{};
+    document.getElementById('tabbarInner').innerHTML=`<div class="slim-row">
+      <button class="slim-back" data-tab-switch="home">&larr; All tools</button>
+      <span class="slim-current">${current.label||''}</span>
+      <div class="tabs tabs-slim">${TABS.map(t=>
+        `<button class="tab${L.tab===t.id?' active':''}" data-tab-switch="${t.id}">${t.label}</button>`).join('')}</div>
+    </div>`;
+  }
   document.getElementById('countryToggle').innerHTML = Object.values(C).map(c=>
     `<button class="ctbtn${L.country===c.code?' active':''}" data-country="${c.code}">${c.sym} ${c.code}</button>`).join('');
 }
@@ -2256,24 +2335,42 @@ function renderTabs(){
 function render(){
   renderTabs();
   const main=document.getElementById('main');
-  if(L.tab==='retirement') main.innerHTML=renderRetirement();
+  if(L.tab==='home') main.innerHTML=renderHome();
+  else if(L.tab==='retirement') main.innerHTML=renderRetirement();
   else if(L.tab==='stepup') main.innerHTML=renderStepUp();
   else if(L.tab==='swp') main.innerHTML=renderSWP();
   else if(L.tab==='fx') main.innerHTML=renderFX();
   else if(L.tab==='joint') main.innerHTML=renderJoint();
   else if(L.tab==='mc') main.innerHTML=renderMC();
   else if(L.tab==='portfolio') main.innerHTML=renderPortfolio();
+  else if(L.tab==='livefrontier') main.innerHTML=renderLiveFrontier();
   else if(L.tab==='instruments') main.innerHTML=renderInstruments();
   else if(L.tab==='health') main.innerHTML=renderHealth();
-  const tabLabel=(TABS.find(t=>t.id===L.tab)||{}).label||'';
+  const tabLabel=L.tab==='home' ? 'Home' : (TABS.find(t=>t.id===L.tab)||{}).label||'';
   document.getElementById('printHeader').innerHTML=
     '<div class="pt">Goalden Lab &middot; '+tabLabel+'</div>'+
     '<div class="ps">'+cfg().name+' &middot; printed '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})+'</div>';
   attach();
 }
 
+// Live Frontier's real implementation (real market data, closed-form
+// two-asset frontier, tangency portfolio, CAL) lands in Track B of the
+// Lab redesign plan. This stub exists so the home screen and the tab
+// bar have somewhere to point in the meantime.
+function renderLiveFrontier(){
+  return `<div class="card" style="max-width:640px">
+    <h4>Live Frontier</h4>
+    <div class="cap">This tool is being built: type in any stocks or funds, pull real historical prices, and see the efficient frontier, tangency portfolio and Capital Allocation Line computed live, the same way the "Build a Portfolio" tab works but from real data instead of illustrative assumptions.</div>
+    <div class="gr-note">Coming shortly &ndash; in the meantime, <button class="tab" style="display:inline" data-tab-switch="portfolio">Build a Portfolio</button> uses the same efficient-frontier math with long-run category assumptions.</div>
+  </div>`;
+}
+
 function attach(){
-  document.querySelectorAll('[data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{L.tab=el.dataset.tabSwitch;render();}));
+  document.querySelectorAll('[data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{
+    L.tab=el.dataset.tabSwitch;
+    try{ localStorage.setItem('goaldenLabLastTab', L.tab); }catch(e){}
+    render();
+  }));
   document.querySelectorAll('[data-country]').forEach(el=>el.addEventListener('click',()=>{L.country=el.dataset.country;L.instCategory='all';render();}));
 
   let mcRenderTimer=null;
@@ -2621,22 +2718,36 @@ function attach(){
 // via its "Open this plan in the Lab" button. Read and cleared immediately
 // so a later, unrelated visit to the Lab never silently replays a stale
 // plan from localStorage -- the button click is the only signal that this
-// data is actually meant to apply right now.
-(function consumeDoor2Handoff(){
+// data is actually meant to apply right now. Returns whether it applied,
+// so the landing logic below knows whether it still gets to decide L.tab.
+function consumeDoor2Handoff(){
   let raw;
-  try{ raw = localStorage.getItem('goaldenLabHandoff'); }catch(e){ return; }
-  if(!raw) return;
+  try{ raw = localStorage.getItem('goaldenLabHandoff'); }catch(e){ return false; }
+  if(!raw) return false;
   try{ localStorage.removeItem('goaldenLabHandoff'); }catch(e){}
   let data;
-  try{ data = JSON.parse(raw); }catch(e){ return; }
-  if(!data || data._goalden!=='lab-handoff') return;
+  try{ data = JSON.parse(raw); }catch(e){ return false; }
+  if(!data || data._goalden!=='lab-handoff') return false;
   if(data.country==='IN' || data.country==='US') L.country = data.country;
   if(data.totalSIP>0) L.health.totalSIP = Math.min(300000, Math.max(5000, Math.round(data.totalSIP)));
   if(data.capacity>0) L.health.capacity = Math.min(300000, Math.max(5000, Math.round(data.capacity)));
   if(data.emergencyStatus) L.health.emergencyStatus = data.emergencyStatus;
   L.health.fromDoor2Plan = true;
   L.tab = 'health';
-})();
+  return true;
+}
+
+// Landing behaviour: a Door 2 handoff always wins -- it's an explicit,
+// one-shot "take me there" signal. Otherwise, if this browser has used
+// the Lab before, skip the three-card chooser and reopen whatever tool
+// it last used; only a genuinely first-ever visit sees L.tab's default
+// of 'home'.
+if(!consumeDoor2Handoff()){
+  try{
+    const last = localStorage.getItem('goaldenLabLastTab');
+    if(last==='home' || TABS.some(t=>t.id===last)) L.tab = last;
+  }catch(e){}
+}
 
 document.getElementById('printBtn').addEventListener('click',()=>window.print());
 // Delegated once here rather than re-wired after every render(): works
