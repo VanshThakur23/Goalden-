@@ -1636,6 +1636,12 @@ function renderPlan(){
   ${fdCardHtml}
   ${allocCard}
 
+  <div class="alloc-card" style="text-align:center">
+    <div class="section-head" style="margin-top:0">Want the deeper tools?</div>
+    <div class="gr-note" style="margin-top:0;margin-bottom:12px">Opens the Lab with this plan's total SIP, savings capacity, and country already filled in, so the Plan Health tab does not make you retype what you just built here.</div>
+    <button id="openLabBtn" style="width:100%;background:rgba(201,164,85,.14);border:1px solid rgba(201,164,85,.5);color:var(--gold);border-radius:9px;padding:13px;font-family:'Figtree',sans-serif;font-weight:600;font-size:14px;cursor:pointer">Open this plan in the Lab →</button>
+  </div>
+
   <div class="assump-toggle" id="at">Assumptions used in this plan</div>
   <div class="assump-panel" id="ap"><div class="assump-inner">${assumpLines}</div></div>
   <div class="case-cta"><div class="cta-eyebrow">Before you close this tab</div><div class="cta-q">Why should you trust markets with this money at all, instead of a Fixed Deposit?</div><button id="caseBtn">Show me the actual numbers</button></div>
@@ -1941,6 +1947,18 @@ function attach(screen){
 
     document.getElementById('caseBtn')&&document.getElementById('caseBtn').addEventListener('click',()=>{
       G.viewingCase=true; G.si=flow().indexOf('case'); render();
+    });
+
+    document.getElementById('openLabBtn')&&document.getElementById('openLabBtn').addEventListener('click',()=>{
+      const p=buildPlan();
+      const handoff={
+        _goalden:'lab-handoff', _version:1, savedAt:new Date().toISOString(),
+        country:G.country, totalSIP:p.totalSIP, capacity:p.cap,
+        emergencyStatus:G.emergencyStatus, bucket:G.bucket,
+        goals:p.goals.map(g=>({type:g.type,label:g.label,sip:g.sip,corpus:g.corpus,years:g.years})),
+      };
+      try{ localStorage.setItem('goaldenLabHandoff', JSON.stringify(handoff)); }catch(e){}
+      window.location.href='goalden-lab.html';
     });
   }
   if(screen==='case'){ attachCaseHandlers(); }

@@ -2188,6 +2188,7 @@ function renderHealth(){
   return `<div class="grid">
   <div class="panel">
     <h3>Plan health inputs</h3>
+    ${h.fromDoor2Plan?`<div class="gr-note" style="margin-top:0;margin-bottom:14px;color:var(--gold)">Capacity and total SIP filled in from your Full Plan (Door 2). Adjust the sliders below if anything's changed.</div>`:''}
     <div class="field"><label>Your savings capacity <b>${c.fmt(h.capacity)}</b>/mo</label><input type="range" min="5000" max="300000" step="1000" value="${h.capacity}" data-k="capacity" data-tab="health"></div>
     <div class="field"><label>Total your goals need <b>${c.fmt(h.totalSIP)}</b>/mo</label><input type="range" min="5000" max="300000" step="1000" value="${h.totalSIP}" data-k="totalSIP" data-tab="health"></div>
     <div class="section-label">Emergency fund</div>
@@ -2615,6 +2616,27 @@ function attach(){
     });
   });
 }
+
+// One-time handoff from a finished Door 2 plan, if the user arrived here
+// via its "Open this plan in the Lab" button. Read and cleared immediately
+// so a later, unrelated visit to the Lab never silently replays a stale
+// plan from localStorage -- the button click is the only signal that this
+// data is actually meant to apply right now.
+(function consumeDoor2Handoff(){
+  let raw;
+  try{ raw = localStorage.getItem('goaldenLabHandoff'); }catch(e){ return; }
+  if(!raw) return;
+  try{ localStorage.removeItem('goaldenLabHandoff'); }catch(e){}
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){ return; }
+  if(!data || data._goalden!=='lab-handoff') return;
+  if(data.country==='IN' || data.country==='US') L.country = data.country;
+  if(data.totalSIP>0) L.health.totalSIP = Math.min(300000, Math.max(5000, Math.round(data.totalSIP)));
+  if(data.capacity>0) L.health.capacity = Math.min(300000, Math.max(5000, Math.round(data.capacity)));
+  if(data.emergencyStatus) L.health.emergencyStatus = data.emergencyStatus;
+  L.health.fromDoor2Plan = true;
+  L.tab = 'health';
+})();
 
 document.getElementById('printBtn').addEventListener('click',()=>window.print());
 // Delegated once here rather than re-wired after every render(): works
