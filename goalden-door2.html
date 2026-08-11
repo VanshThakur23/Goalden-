@@ -778,10 +778,13 @@ const BUCKET_ORDER = ['conservative','mod_conservative','moderate','mod_aggressi
 // 5 Capacity questions
 const CAP_QS = [
   {ey:'Financial foundation · 1 of 4',title:'How reliable is your income month to month?',
+   why:'This measures capacity, not comfort: how much room you actually have to keep investing if income gets tight. Your comfort with risk gets asked separately, later.',
    opts:[{t:'Very steady: government or large company job',s:4},{t:'Mostly steady: private sector, established firm',s:3},{t:'Variable: self-employed or commission-based',s:2},{t:'Uncertain, or not currently earning: freelance, startup, between roles, a student, or supported by family',s:1}]},
   {ey:'Financial foundation · 2 of 4',title:'How many people rely on your income?',
+   why:'More people counting on your income means less room to absorb a setback, whatever your comfort with risk turns out to be.',
    opts:[{t:'Just me',s:4},{t:'Partner or one child',s:3},{t:'Partner and children, or also supporting parents',s:2},{t:'Large family with significant responsibilities',s:1}]},
   {ey:'Financial foundation · 3 of 4',title:'How much of your monthly income goes to loan EMIs?',
+   why:'Money already committed to loan payments each month is money that can\'t also cushion a market shock.',
    opts:[{t:'None',s:4},{t:'Below 20%',s:3},{t:'20% to 40%',s:2},{t:'More than 40%',s:1}]},
   // NOT "when will you need this money" — that gets asked once per goal,
   // precisely, when the goal is actually created, and a single generic
@@ -791,6 +794,7 @@ const CAP_QS = [
   // of what you have can absorb more risk than money that's most of what
   // you own, independent of timing.
   {ey:'Financial foundation · 4 of 4',title:'How much of your total savings would this represent?',
+   why:'Money that\'s a small slice of what you own can absorb more risk than money that\'s most of what you have.',
    opts:[{t:'A small slice, most of my money sits elsewhere',s:4},{t:'A meaningful chunk, but not most of it',s:3},{t:'More than half of what I have',s:2},{t:'Nearly everything I have saved so far',s:1}]},
 ];
 // Emergency-fund status (asked once, on its own screen) now also contributes
@@ -1176,6 +1180,7 @@ function renderQ(section,idx){
   const saved=section==='cap'?G.capA[idx]:G.tolA[idx];
   return `<div class="eyebrow">${q.ey}</div>
   <div class="qtitle">${q.title}</div>
+  ${q.why?`<div class="qsub">${q.why}</div>`:''}
   <div class="qbody">
   ${q.opts.map(o=>`
     <div class="opt${saved===o.s?' sel':''}" data-score="${o.s}" data-sec="${section}" data-idx="${idx}">
