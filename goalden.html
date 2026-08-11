@@ -543,6 +543,26 @@ function calcRetirement() {
   return {corpus, sip, realCorpus, preRate, expAtRet, yrs, drawYrs, accRows, drawRows, delay, d, existing, existingFV, gapCorpus, alreadyMet};
 }
 
+// A one-tap "what if I retired at a different age" comparison. Reuses
+// calcRetirement's exact math for each candidate age (by temporarily
+// swapping S.retireAge and restoring it) rather than a separate
+// approximation, so this can never quietly disagree with the main result.
+function calcRetireAgeCompare() {
+  const base = S.retireAge;
+  const candidates = Array.from(new Set([base - 5, base, base + 5]))
+    .filter(age => age > S.age && age <= 75)
+    .sort((a, b) => a - b);
+  if (candidates.length < 2) return null;
+  const saved = S.retireAge;
+  const rows = candidates.map(age => {
+    S.retireAge = age;
+    const r = calcRetirement();
+    return { age, sip: r.sip, alreadyMet: r.alreadyMet, isCurrent: age === base };
+  });
+  S.retireAge = saved;
+  return rows;
+}
+
 function calcEducation() {
   const d = cfg().d, c = cfg();
   const feeAtCollege = inflateExpense(S.annualFee, [{rate: d.eduInflation, years: S.yearsToCollege}]);
@@ -777,6 +797,18 @@ function feeBarChart(feeYears) {
 /* =====================================================================
    DELAY CARD
    ===================================================================== */
+function retireAgeCompareCard(rows, c) {
+  if (!rows) return '';
+  const body = rows.map(row => {
+    const label = row.isCurrent ? 'Retire at '+row.age+' (this plan)' : 'Retire at '+row.age;
+    const value = row.alreadyMet ? 'No SIP needed' : c.fmt(Math.round(row.sip))+'/mo';
+    const attrs = row.isCurrent ? '' : ' data-retire-preview="'+row.age+'" style="cursor:pointer"';
+    return '<div class="delay-row"'+attrs+'><span class="delay-label"'+(row.isCurrent?' style="color:var(--gold)"':'')+'>'+label+'</span><span class="delay-value">'+value+'</span></div>';
+  }).join('');
+  return '<div class="delay-card"><div class="delay-title">What if you retired at a different age?</div>' + body +
+    '<div class="hero-sub" style="text-align:left;margin-top:10px;font-size:11.5px">Tap an age to see the full result for that plan.</div></div>';
+}
+
 function delayCard(delay, yearsRemaining) {
   const c = cfg();
   if (!delay || yearsRemaining <= 3) return '';
@@ -1327,6 +1359,7 @@ function sResultsRetirement() {
     potChart(r.drawRows, c)+'</div>' +
     allocationCardHtml(r.preRate, r.d, rLabel) +
     (!r.alreadyMet ? fdComparisonCardHtml(r.sip, r.yrs, r.corpus, r.d, c) : '') +
+    retireAgeCompareCard(calcRetireAgeCompare(), c) +
     delayCard(r.delay, r.yrs) +
     '<div class="assump-toggle" id="st">'+caretSvg()+'See the full month-by-month schedule</div>' +
     '<div class="assump-panel" id="sp"><div class="schedule-scroll"><table class="schedule-table">' +
@@ -1693,6 +1726,7 @@ function attach(screen) {
 
   if (screen==='results') {
     document.querySelectorAll('[data-jump]').forEach(el => el.addEventListener('click', () => jumpEdit(el.dataset.jump)));
+    document.querySelectorAll('[data-retire-preview]').forEach(el => el.addEventListener('click', () => { S.retireAge = parseInt(el.dataset.retirePreview); render(); }));
     const at = document.getElementById('at'), ap = document.getElementById('ap');
     if (at && ap) at.addEventListener('click', () => ap.classList.toggle('open'));
     const st = document.getElementById('st'), sp = document.getElementById('sp');
