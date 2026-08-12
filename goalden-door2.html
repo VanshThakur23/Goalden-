@@ -6,6 +6,7 @@
 <title>Goalden — your full plan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Figtree:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="vendor/echarts.min.js"></script>
 <style>
 :root{
   --ink:#1C3A2D;--ink2:#274A3A;--paper:#F1EEE3;
@@ -248,7 +249,7 @@ body{background:var(--ink);color:var(--paper);font-family:'Figtree',system-ui,sa
    the page stays genuinely full-width -- this was the actual fix needed,
    not shrinking the whole app into a narrow column, which is worse: it
    leaves most of a normal monitor empty and looks broken. */
-svg.chart{width:100%;max-width:480px;height:auto;display:block;margin-left:auto;margin-right:auto}
+.echart{width:100%;max-width:480px;margin:0 auto}
 .gr-chart-card{background:rgba(241,238,227,.035);border:1px solid rgba(241,238,227,.09);border-radius:10px;padding:10px 10px 4px;margin-top:8px}
 .gr-chart-cap{font-family:monospace;font-size:10px;color:var(--dim);padding:0 2px 6px}
 .gr-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -279,6 +280,32 @@ svg.chart{width:100%;max-width:480px;height:auto;display:block;margin-left:auto;
 
 <script>
 'use strict';
+
+echarts.registerTheme('goalden', {
+  color: ['#C9A455','#8FC79E','#D97757','#5FA875','#E8977A','#F1EEE3'],
+  backgroundColor: 'transparent',
+  textStyle: { fontFamily: "'Spline Sans Mono', monospace", color: 'rgba(241,238,227,.75)' },
+  title: { textStyle: { fontFamily: "'Newsreader', serif", color: '#F1EEE3', fontWeight: 600 } },
+  grid: { left: 44, right: 16, top: 16, bottom: 30, containLabel: true },
+  categoryAxis: { axisLine:{lineStyle:{color:'rgba(241,238,227,.2)'}}, axisLabel:{color:'rgba(241,238,227,.5)'}, splitLine:{show:false} },
+  valueAxis: { axisLine:{show:false}, axisLabel:{color:'rgba(241,238,227,.5)'}, splitLine:{lineStyle:{color:'rgba(241,238,227,.08)'}} },
+  tooltip: { backgroundColor:'#12261C', borderColor:'rgba(201,164,85,.4)', borderWidth:1, textStyle:{color:'#F1EEE3', fontFamily:"'Spline Sans Mono',monospace", fontSize:11}, extraCssText:'border-radius:3px 8px 8px 8px;box-shadow:0 4px 14px rgba(0,0,0,.35)' },
+});
+const chartInstances = {};
+function initChart(id, option, optsOverride){
+  const dom = document.getElementById(id);
+  if(!dom) return null;
+  let entry = chartInstances[id];
+  if(entry && entry.dom !== dom){ entry.inst.dispose(); entry = null; }
+  if(!entry){
+    const inst = echarts.init(dom, 'goalden', Object.assign({renderer:'svg'}, optsOverride));
+    entry = chartInstances[id] = { inst, dom };
+  }
+  entry.inst.setOption(option, true);
+  return entry.inst;
+}
+function disposeChart(id){ if(chartInstances[id]){ chartInstances[id].inst.dispose(); delete chartInstances[id]; } }
+function deferChartInit(fn){ setTimeout(fn, 0); }
 
 /* =====================================================================
    ENGINE — same functions as goalden.html, copy-pasted verbatim
@@ -484,69 +511,103 @@ function bestWindow(series, years){
 // dramatic late-period separation IS the point being made (compounding
 // looks unremarkable for years, then does most of its work very late),
 // not a distortion to fix with a log scale.
-function raceChart(marketPath, goldPath, fdPath, w, h) {
-  const p = 6, topPad = 8;
-  const maxV = Math.max(marketPath[marketPath.length-1].v, goldPath[goldPath.length-1].v, fdPath[fdPath.length-1].v);
-  const n = marketPath.length;
-  const sx = (w - p*2) / (n-1);
-  const y = v => topPad + (h-topPad-p) - (Math.max(0,v)/maxV) * (h-topPad-p);
-  function linePath(path) {
-    return path.map((pt,i) => (i===0?'M':'L') + (p+i*sx).toFixed(1) + ',' + y(pt.v).toFixed(1)).join(' ');
-  }
-  const marketD = linePath(marketPath), goldD = linePath(goldPath), fdD = linePath(fdPath);
-  const lastX = (p+(n-1)*sx).toFixed(1);
-  return '<svg class="chart" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">' +
-    '<defs><linearGradient id="raceGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8FC79E" stop-opacity=".35"/><stop offset="100%" stop-color="#8FC79E" stop-opacity="0"/></linearGradient></defs>' +
-    '<path d="'+marketD+' L'+lastX+','+(h-p)+' L'+p+','+(h-p)+' Z" fill="url(#raceGrad)"/>' +
-    '<path d="'+fdD+'" fill="none" stroke="#E8977A" stroke-width="1.5" stroke-dasharray="3,3"/>' +
-    '<path d="'+goldD+'" fill="none" stroke="#C9A455" stroke-width="1.5" stroke-dasharray="3,3"/>' +
-    '<path d="'+marketD+'" fill="none" stroke="#8FC79E" stroke-width="2.25"/>' +
-    '<circle cx="'+lastX+'" cy="'+y(marketPath[marketPath.length-1].v).toFixed(1)+'" r="3.5" fill="#8FC79E"/>' +
-    '</svg>';
+function raceChart(marketPath, goldPath, fdPath, chartId, h) {
+  if(h===undefined) h=150;
+  deferChartInit(()=>renderRaceChartOption(chartId, marketPath, goldPath, fdPath));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderRaceChartOption(chartId, marketPath, goldPath, fdPath){
+  const c = cfg();
+  initChart(chartId, {
+    grid:{left:2,right:2,top:8,bottom:2,containLabel:false},
+    xAxis:{type:'category', data:marketPath.map((pt,i)=>i+1), show:false, boundaryGap:false},
+    yAxis:{type:'value', show:false, min:0},
+    tooltip:{trigger:'axis', formatter(params){
+      const m=params.find(p=>p.seriesName==='Market'), g=params.find(p=>p.seriesName==='Gold'), f=params.find(p=>p.seriesName==='Bank FD');
+      return `Year ${m.axisValueLabel}<br/>Market: ${c.compact(m.value)}<br/>Gold: ${c.compact(g.value)}<br/>Bank FD: ${c.compact(f.value)}`;
+    }},
+    series:[
+      { name:'Bank FD', type:'line', data:fdPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#E8977A', width:1.5, type:'dashed'}, z:1 },
+      { name:'Gold', type:'line', data:goldPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#C9A455', width:1.5, type:'dashed'}, z:2 },
+      { name:'Market', type:'line', data:marketPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#8FC79E', width:2.25},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(143,199,158,.35)'},{offset:1,color:'rgba(143,199,158,0)'}]}}, z:3,
+        markPoint:{symbol:'circle', symbolSize:7, itemStyle:{color:'#8FC79E'}, label:{show:false}, data:[{coord:[marketPath.length-1, marketPath[marketPath.length-1].v]}]} },
+    ],
+  });
 }
 // A single growth-path area chart for the time machine's selected window
 // (reuses the mountain-chart visual language already used elsewhere).
-function timeMachineChart(path, w, h) {
-  const p = 4;
-  const maxV = Math.max(...path.map(pt=>pt.v));
-  const n = path.length;
-  const sx = (w - p*2) / (n-1);
-  const y = v => h - p - (Math.max(0,v)/maxV) * (h - p*2);
-  const d = path.map((pt,i) => (i===0?'M':'L') + (p+i*sx).toFixed(1) + ',' + y(pt.v).toFixed(1)).join(' ');
-  const lastX = (p+(n-1)*sx).toFixed(1);
+function timeMachineChart(path, chartId, h) {
+  if(h===undefined) h=110;
+  deferChartInit(()=>renderTimeMachineChartOption(chartId, path));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderTimeMachineChartOption(chartId, path){
+  const c = cfg();
   const finalUp = path[path.length-1].v >= path[0].v;
-  const col = finalUp ? '#8FC79E' : '#E8977A';
-  return '<svg class="chart" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">' +
-    '<defs><linearGradient id="tmGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="'+col+'" stop-opacity=".4"/><stop offset="100%" stop-color="'+col+'" stop-opacity="0"/></linearGradient></defs>' +
-    '<path d="'+d+' L'+lastX+','+(h-p)+' L'+p+','+(h-p)+' Z" fill="url(#tmGrad)"/>' +
-    '<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2"/>' +
-    '</svg>';
+  const lineColor = finalUp ? '#8FC79E' : '#E8977A';
+  const fillTop = finalUp ? 'rgba(143,199,158,.4)' : 'rgba(232,151,122,.4)';
+  const fillBot = finalUp ? 'rgba(143,199,158,0)' : 'rgba(232,151,122,0)';
+  initChart(chartId, {
+    grid:{left:2,right:2,top:6,bottom:2,containLabel:false},
+    xAxis:{type:'category', data:path.map((pt,i)=>i+1), show:false, boundaryGap:false},
+    yAxis:{type:'value', show:false, min:0},
+    tooltip:{trigger:'axis', formatter(params){
+      const p=params[0];
+      return `Year ${p.axisValueLabel}<br/>Value: ${c.compact(p.value)}`;
+    }},
+    series:[{ type:'line', data:path.map(pt=>pt.v), showSymbol:false, lineStyle:{color:lineColor, width:2},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:fillTop},{offset:1,color:fillBot}]}} }],
+  });
 }
 // The full "risk shrinks with holding period" curve, every year from 1 to
 // maxYears in one static chart, with a marker for the currently selected
 // point. Shows the whole trend at a glance instead of one number at a time.
-function riskShrinkChart(series, maxYears, w, h, selectedYears) {
-  const p = 6, topPad = 8;
+// The curve itself is expensive to build (a rollingWindows() pass per
+// year), so it's built once on mount; dragging the holding-period slider
+// only recomputes the ONE selected year and moves the marker via
+// updateRiskShrinkMarker() below, a merge-only setOption that leaves the
+// curve series untouched.
+function riskShrinkPoints(series, maxYears){
   const points = [];
   for (let yr=1; yr<=maxYears; yr++) {
     const win = rollingWindows(series, yr);
     const losing = win.filter(x=>x.finalMultiple<1).length;
-    points.push({yr, pct: 100*losing/win.length});
+    points.push([yr, 100*losing/win.length]);
   }
-  const n = points.length;
-  const sx = (w - p*2) / (n-1);
-  const yScale = pct => topPad + (h-topPad-p) - (pct/100) * (h-topPad-p);
-  const d = points.map((pt,i) => (i===0?'M':'L') + (p+i*sx).toFixed(1) + ',' + yScale(pt.pct).toFixed(1)).join(' ');
-  const lastX = (p+(n-1)*sx).toFixed(1);
-  const selIdx = Math.max(0, Math.min(n-1, selectedYears-1));
-  const selX = (p+selIdx*sx).toFixed(1), selY = yScale(points[selIdx].pct).toFixed(1);
-  return '<svg class="chart" id="riskShrinkSvg" viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">' +
-    '<defs><linearGradient id="riskGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#D97757" stop-opacity=".35"/><stop offset="100%" stop-color="#D97757" stop-opacity="0"/></linearGradient></defs>' +
-    '<path d="'+d+' L'+lastX+','+(h-p)+' L'+p+','+(h-p)+' Z" fill="url(#riskGrad)"/>' +
-    '<path d="'+d+'" fill="none" stroke="#D97757" stroke-width="2"/>' +
-    '<line id="riskShrinkMarkerLine" x1="'+selX+'" y1="'+topPad+'" x2="'+selX+'" y2="'+(h-p)+'" stroke="rgba(241,238,227,.3)" stroke-width="1" stroke-dasharray="2,2"/>' +
-    '<circle id="riskShrinkMarkerDot" cx="'+selX+'" cy="'+selY+'" r="4.5" fill="#D97757" stroke="var(--ink)" stroke-width="1.5"/>' +
-    '</svg>';
+  return points;
+}
+function riskShrinkPctAt(series, selectedYears){
+  const win = rollingWindows(series, selectedYears);
+  const losing = win.filter(x=>x.finalMultiple<1).length;
+  return 100*losing/win.length;
+}
+function riskShrinkMarkerOption(selectedYears, pct){
+  return { id:'risk',
+    markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(241,238,227,.3)', type:'dashed'}, data:[{xAxis:selectedYears}]},
+    markPoint:{symbol:'circle', symbolSize:9, itemStyle:{color:'#D97757', borderColor:'var(--ink)', borderWidth:1.5}, label:{show:false}, data:[{coord:[selectedYears, pct]}]},
+  };
+}
+function riskShrinkChart(series, maxYears, chartId, h, selectedYears) {
+  if(h===undefined) h=130;
+  deferChartInit(()=>renderRiskShrinkChartOption(chartId, series, maxYears, selectedYears));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderRiskShrinkChartOption(chartId, series, maxYears, selectedYears){
+  const points = riskShrinkPoints(series, maxYears);
+  const selPct = riskShrinkPctAt(series, selectedYears);
+  initChart(chartId, {
+    grid:{left:2,right:2,top:8,bottom:2,containLabel:false},
+    xAxis:{type:'value', min:1, max:maxYears, show:false},
+    yAxis:{type:'value', show:false, min:0, max:100},
+    tooltip:{trigger:'axis', formatter(params){
+      const p=params.find(pp=>pp.seriesId==='risk')||params[0];
+      return `${p.value[0]}-year holds<br/>${p.value[1].toFixed(0)}% ended down`;
+    }},
+    series:[Object.assign({ id:'risk', type:'line', data:points, showSymbol:false, lineStyle:{color:'#D97757', width:2},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(217,119,87,.35)'},{offset:1,color:'rgba(217,119,87,0)'}]}} },
+      riskShrinkMarkerOption(selectedYears, selPct))],
+  });
 }
 
 
@@ -605,7 +666,7 @@ function sCase() {
   <div class="case-section">
     <h4>The race: ${c.compact(raceAmt)}, three destinations</h4>
     <div class="case-cap">The same lump sum, placed in ${firstYear} and left completely untouched for ${nYears} years, through every real ${name} up-year and down-year in between.</div>
-    ${raceChart(racePath, goldPath, fdPath, 320, 150)}
+    ${raceChart(racePath, goldPath, fdPath, 'case-race')}
     <div class="race-legend"><span><i style="background:#8FC79E"></i>${name}</span><span><i style="background:#C9A455"></i>Gold</span><span><i style="background:#E8977A"></i>Bank FD</span></div>
     <div class="race-stats">
       <div class="race-stat"><div class="rs-label">${name}</div><div class="rs-val" style="color:#8FC79E">${c.compact(marketFinal)}</div></div>
@@ -629,7 +690,7 @@ function sCase() {
   <div class="case-section">
     <h4>Volatility is not the same thing as losing your capital</h4>
     <div class="case-cap">Every point on this line is a real ${nYears - 1}-year stretch of ${name} history: the share of them that ended with less money than they started with, at that exact holding length. Drag to inspect any point.</div>
-    ${riskShrinkChart(series, Math.min(25,nYears-2), 320, 130, defaultHold)}
+    ${riskShrinkChart(series, Math.min(25,nYears-2), 'case-riskshrink', 130, defaultHold)}
     <div class="case-slider-row">
       <div class="case-slider-label"><span>Holding period</span><b id="hold-yrs-label">${defaultHold} years</b></div>
       <input type="range" id="holdSlider" min="1" max="${Math.min(25,nYears-2)}" step="1" value="${defaultHold}">
@@ -683,27 +744,17 @@ function renderTimeMachine(startIdx){
   const finalVal = path[path.length-1].v;
   const worstYearInPath = series.slice(startIdx, startIdx+tmYears).reduce((w,r)=>r.r<w.r?r:w, series[startIdx]);
   const gained = finalVal > raceAmt;
-  return timeMachineChart(path, 320, 110) +
+  return timeMachineChart(path, 'case-timemachine') +
     `<div class="case-callout ${gained?'good':''}">
     ${c.compact(raceAmt)} invested at the start of <b>${series[startIdx].y-1}</b>, held ${tmYears} years through a ${(worstYearInPath.r*100).toFixed(0)}% single worst year (${worstYearInPath.y}), became <b style="color:${gained?'#8FC79E':'#E8977A'}">${c.compact(finalVal)}</b> by ${series[startIdx+tmYears-1].y}.
   </div>`;
 }
 function updateRiskShrinkMarker(selectedYears){
+  const entry = chartInstances['case-riskshrink'];
+  if(!entry) return;
   const series = marketSeries();
-  const maxYears = Math.min(25, series.length-2);
-  const w=320, h=130, p=6, topPad=8;
-  const n = maxYears;
-  const sx = (w - p*2) / (n-1);
-  const win = rollingWindows(series, selectedYears);
-  const losing = win.filter(x=>x.finalMultiple<1).length;
-  const pct = 100*losing/win.length;
-  const yScale = pc => topPad + (h-topPad-p) - (pc/100) * (h-topPad-p);
-  const selIdx = Math.max(0, Math.min(n-1, selectedYears-1));
-  const selX = (p+selIdx*sx).toFixed(1), selY = yScale(pct).toFixed(1);
-  const line = document.getElementById('riskShrinkMarkerLine');
-  const dot = document.getElementById('riskShrinkMarkerDot');
-  if (line) { line.setAttribute('x1', selX); line.setAttribute('x2', selX); }
-  if (dot) { dot.setAttribute('cx', selX); dot.setAttribute('cy', selY); }
+  const pct = riskShrinkPctAt(series, selectedYears);
+  entry.inst.setOption({series:[riskShrinkMarkerOption(selectedYears, pct)]});
 }
 function renderHoldResult(years){
   const series = marketSeries();
@@ -1066,18 +1117,21 @@ function buildPlan(){
    CHART
    ===================================================================== */
 function allocationDonut(eq, de, hy, uid){
-  const size=132, r=50, cx=66, cy=66, sw=22;
-  const circ=2*Math.PI*r;
-  const segs=[{pct:eq,color:'#C9A455'},{pct:de,color:'#2D6E6E'},{pct:hy,color:'#8FC79E'}].filter(s=>s.pct>0.001);
-  let cum=0;
-  const arcs=segs.map(s=>{
-    const len=circ*s.pct;
-    const dash=`${len.toFixed(2)} ${(circ-len).toFixed(2)}`;
-    const dashoffset=(-cum).toFixed(2);
-    cum+=len;
-    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${sw}" stroke-dasharray="${dash}" stroke-dashoffset="${dashoffset}" stroke-linecap="butt"/>`;
-  }).join('');
-  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="transform:rotate(-90deg);flex-shrink:0">${arcs}</svg>`;
+  const chartId = 'chart-donut'+(uid!==undefined?'-'+uid:'');
+  deferChartInit(()=>renderAllocationDonutOption(chartId, eq, de, hy));
+  return `<div id="${chartId}" class="echart" style="height:132px;max-width:132px;flex-shrink:0"></div>`;
+}
+function renderAllocationDonutOption(chartId, eq, de, hy){
+  const segs = [
+    { value: Math.round(eq*100), name: 'Equity', itemStyle:{color:'#C9A455'} },
+    { value: Math.round(de*100), name: 'Debt', itemStyle:{color:'#2D6E6E'} },
+    { value: Math.round(hy*100), name: 'Hybrid', itemStyle:{color:'#8FC79E'} },
+  ].filter(s => s.value > 0);
+  initChart(chartId, {
+    tooltip:{trigger:'item', formatter:p=>`${p.name}: ${p.value}%`},
+    series:[{ type:'pie', radius:['58%','86%'], center:['50%','50%'], data:segs, avoidLabelOverlap:false,
+      label:{show:false}, labelLine:{show:false}, itemStyle:{borderColor:'#1C3A2D', borderWidth:2} }],
+  });
 }
 function allocationLegend(eq, de, hy){
   const rows=[{pct:eq,color:'#C9A455',label:'Equity'},{pct:de,color:'#2D6E6E',label:'Debt'},{pct:hy,color:'#8FC79E',label:'Hybrid'}].filter(s=>s.pct>0.001);
@@ -1085,20 +1139,23 @@ function allocationLegend(eq, de, hy){
 }
 function mountainChart(rows, uid){
   if(!rows||!rows.length)return'';
-  const gid='mg'+(uid!==undefined?'-'+uid:'');
-  const w=320,h=120,p=4;
-  const maxV=rows[rows.length-1].closeBal;
-  const n=rows.length,sx=(w-p*2)/(n-1);
-  const y=v=>h-p-(Math.max(0,v)/maxV)*(h-p*2);
-  let gp='M'+p+','+h;
-  rows.forEach((r,i)=>{gp+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1);});
-  const lx=(p+(n-1)*sx).toFixed(1);
-  return`<svg class="chart" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
-  <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-  <stop offset="0%" stop-color="#C9A455" stop-opacity=".8"/><stop offset="100%" stop-color="#C9A455" stop-opacity=".06"/></linearGradient></defs>
-  <path d="${gp} L${lx},${h} L${p},${h} Z" fill="url(#${gid})"/>
-  <line x1="${p}" y1="${h}" x2="${w-p}" y2="${h}" stroke="rgba(241,238,227,.18)" stroke-width="1"/>
-  </svg>`;
+  const chartId = 'chart-mountain'+(uid!==undefined?'-'+uid:'');
+  deferChartInit(()=>renderMountainChartOption(chartId, rows));
+  return `<div id="${chartId}" class="echart" style="height:120px"></div>`;
+}
+function renderMountainChartOption(chartId, rows){
+  const c = cfg();
+  initChart(chartId, {
+    grid:{left:2,right:2,top:8,bottom:2,containLabel:false},
+    xAxis:{type:'category', data:rows.map((r,i)=>i+1), show:false, boundaryGap:false},
+    yAxis:{type:'value', show:false, min:0},
+    tooltip:{trigger:'axis', formatter(params){
+      const p=params[0];
+      return `Year ${p.axisValueLabel}<br/>Balance: ${c.compact(p.value)}`;
+    }},
+    series:[{ type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#C9A455', width:1.5},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(201,164,85,.8)'},{offset:1,color:'rgba(201,164,85,.06)'}]}} }],
+  });
 }
 // A bare filled shape with no readable numbers isn't information, it's
 // decoration. Always show the actual starting/ending amounts, the years
@@ -1107,40 +1164,41 @@ function mountainChart(rows, uid){
 // guess from the shape of the line.
 function potChart(rows, c, uid){
   if(!rows||!rows.length)return'';
-  const gid='pg'+(uid!==undefined?'-'+uid:'');
-  const w=320,h=134,p=4,topPad=20,botPad=20;
-  const chartH=h-topPad-botPad;
-  const maxV=rows[0].openBal;
-  const n=rows.length,sx=(w-p*2)/(n-1||1);
-  const y=v=>topPad+chartH-(Math.max(0,v)/maxV)*chartH;
-  let depletedYear=null;
-  for(const r of rows){ if(r.closeBal<=0){ depletedYear=r.year; break; } }
-  // Reaching exactly zero AT the final year is the plan working correctly
-  // (that's what "lasts N years" means); only flag it when the money runs
-  // out BEFORE that.
-  const prematureDepletion = depletedYear!==null && depletedYear<n;
-  let pts='M'+p+','+y(rows[0].openBal).toFixed(1);
-  rows.forEach((r,i)=>{pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1);});
-  const lx=(p+(n-1)*sx).toFixed(1);
-  const baseY=y(0).toFixed(1);
-  const endVal=rows[rows.length-1].closeBal;
-  const endYv=y(endVal).toFixed(1);
-  const fmt=c?(v=>c.compact(v)):(v=>Math.round(v).toLocaleString());
-  const markX=prematureDepletion?(p+(depletedYear-1)*sx).toFixed(1):null;
-  const markY=prematureDepletion?y(0).toFixed(1):null;
-  return`<svg class="chart" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
-  <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-  <stop offset="0%" stop-color="#3D7A4F" stop-opacity=".65"/><stop offset="100%" stop-color="#3D7A4F" stop-opacity=".05"/></linearGradient></defs>
-  <path d="${pts} L${lx},${baseY} L${p},${baseY} Z" fill="url(#${gid})"/>
-  <path d="${pts}" fill="none" stroke="#8FC79E" stroke-width="1.4"/>
-  <line x1="${p}" y1="${baseY}" x2="${w-p}" y2="${baseY}" stroke="rgba(241,238,227,.18)" stroke-width="1"/>
-  <text x="${p}" y="12" font-family="Spline Sans Mono,monospace" font-size="9" fill="rgba(241,238,227,.55)">Starts at ${fmt(maxV)}</text>
-  ${prematureDepletion
-    ? `<circle cx="${markX}" cy="${markY}" r="3" fill="#E8977A"/><text x="${markX}" y="${(parseFloat(markY)-6).toFixed(1)}" text-anchor="middle" font-family="Spline Sans Mono,monospace" font-size="9" font-weight="600" fill="#E8977A">Runs out, yr ${depletedYear}</text>`
-    : `<circle cx="${lx}" cy="${endYv}" r="2.8" fill="#8FC79E"/><text x="${w-p}" y="12" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="9" font-weight="600" fill="#8FC79E">${endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal)}</text>`}
-  <text x="${p}" y="${h-6}" font-family="Spline Sans Mono,monospace" font-size="8.5" fill="rgba(241,238,227,.4)">Yr 1</text>
-  <text x="${w-p}" y="${h-6}" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="8.5" fill="rgba(241,238,227,.4)">Yr ${n}</text>
-  </svg>`;
+  const chartId = 'chart-pot'+(uid!==undefined?'-'+uid:'');
+  deferChartInit(()=>renderPotChartOption(chartId, rows, c));
+  return `<div id="${chartId}" class="echart" style="height:134px"></div>`;
+}
+// Reaching exactly zero AT the final year is the plan working correctly
+// (that's what "lasts N years" means); only flag it when the money runs
+// out BEFORE that.
+function renderPotChartOption(chartId, rows, c){
+  const fmt = c ? (v => c.compact(v)) : (v => Math.round(v).toLocaleString());
+  const n = rows.length;
+  let depletedYear = null;
+  for (const r of rows) { if (r.closeBal <= 0) { depletedYear = r.year; break; } }
+  const prematureDepletion = depletedYear !== null && depletedYear < n;
+  const startVal = rows[0].openBal;
+  const endVal = rows[n-1].closeBal;
+  const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal));
+  const endLabelColor = prematureDepletion ? '#E8977A' : '#8FC79E';
+  initChart(chartId, {
+    grid:{left:2,right:2,top:26,bottom:20,containLabel:false},
+    xAxis:{type:'category', data:rows.map((r,i)=>'Yr '+(r.year!==undefined?r.year:i+1)), boundaryGap:false,
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, color:'rgba(241,238,227,.4)', fontSize:8.5},
+      axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}},
+    yAxis:{type:'value', show:false, min:0},
+    tooltip:{trigger:'axis', formatter(params){
+      const p=params[0];
+      return `${p.axisValueLabel}<br/>Balance: ${fmt(p.value)}`;
+    }},
+    graphic:[{type:'text', left:2, top:2, style:{text:'Starts at '+fmt(startVal), fill:'rgba(241,238,227,.55)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}}],
+    series:[
+      { type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#8FC79E', width:1.4},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(61,122,79,.65)'},{offset:1,color:'rgba(61,122,79,.05)'}]}},
+        markPoint:{symbol:'circle', symbolSize:7, data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
+          label:{show:true, formatter:()=>endLabelText, position:'top', color:endLabelColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:9}} },
+    ],
+  });
 }
 
 /* =====================================================================
