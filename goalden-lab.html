@@ -6,6 +6,9 @@
 <title>Goalden Lab · full assumption control</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Figtree:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Self-hosted, not a CDN: the deployed site's chart rendering should
+     not depend on a third party's uptime. Apache ECharts 5.6.0. -->
+<script src="vendor/echarts.min.js"></script>
 <style>
 :root{
   --ink:#1C3A2D;--ink2:#22402F;--paper:#F1EEE3;
@@ -142,6 +145,7 @@ svg.chart{width:100%;height:auto;display:block}
 
 /* --- efficient frontier chart --- */
 .fx-chart-wrap{position:relative}
+.echart{width:100%}
 .fx-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:11px;color:rgba(241,238,227,.55)}
 .fx-legend span{display:flex;align-items:center;gap:6px}
 .fx-legend i{display:inline-block;width:16px;height:3px;flex-shrink:0}
@@ -318,6 +322,70 @@ svg.chart .fx-hover-target{cursor:pointer}
 
 <script>
 'use strict';
+/* =====================================================================
+   ECHARTS: theme + chart lifecycle
+   One shared theme so every chart instance is just echarts.init(dom,
+   'goalden', {renderer:'svg'}) -- svg keeps this app's real print/PDF
+   output vector-sharp instead of a rasterized canvas snapshot.
+   ===================================================================== */
+echarts.registerTheme('goalden', {
+  color: ['#C9A455','#8FC79E','#D97757','#5FA875','#E8977A','#F1EEE3'],
+  backgroundColor: 'transparent',
+  textStyle: { fontFamily: "'Spline Sans Mono', monospace", color: 'rgba(241,238,227,.75)' },
+  title: { textStyle: { fontFamily: "'Newsreader', serif", color: '#F1EEE3', fontWeight: 600 } },
+  grid: { left: 44, right: 16, top: 16, bottom: 30, containLabel: true },
+  categoryAxis: {
+    axisLine: { lineStyle: { color: 'rgba(241,238,227,.2)' } },
+    axisLabel: { color: 'rgba(241,238,227,.5)', fontSize: 10 },
+    splitLine: { show: false },
+  },
+  valueAxis: {
+    axisLine: { show: false },
+    axisLabel: { color: 'rgba(241,238,227,.5)', fontSize: 10 },
+    splitLine: { lineStyle: { color: 'rgba(241,238,227,.06)' } },
+  },
+  tooltip: {
+    backgroundColor: '#12261C', borderColor: 'rgba(201,164,85,.4)', borderWidth: 1,
+    textStyle: { color: '#F1EEE3', fontFamily: "'Spline Sans Mono', monospace", fontSize: 11.5 },
+    extraCssText: 'border-radius:3px 8px 8px 8px;box-shadow:0 4px 14px rgba(0,0,0,.35)',
+  },
+});
+// Registry of live chart instances, keyed by container id. A tab switch
+// or any full re-render replaces #main's innerHTML wholesale, which
+// detaches the old container node without disposing the ECharts instance
+// bound to it -- this registry is what lets re-renders dispose stale
+// instances instead of silently leaking one on every render() call.
+// initChart() also doubles as the fast path for high-frequency updates
+// (a slider mid-drag): pass the SAME id across ticks and it calls
+// setOption() on the still-live instance instead of dispose+recreate,
+// so ECharts animates the transition between old and new values for
+// free, the same way the old hand-rolled fast-path patching did.
+const chartInstances = {};
+function initChart(id, option, optsOverride){
+  const dom = document.getElementById(id);
+  if(!dom) return null;
+  let entry = chartInstances[id];
+  if(entry && entry.dom !== dom){ entry.inst.dispose(); entry = null; }
+  if(!entry){
+    const inst = echarts.init(dom, 'goalden', Object.assign({renderer:'svg'}, optsOverride));
+    entry = chartInstances[id] = { inst, dom };
+  }
+  entry.inst.setOption(option, true);
+  return entry.inst;
+}
+function disposeChart(id){
+  if(chartInstances[id]){ chartInstances[id].inst.dispose(); delete chartInstances[id]; }
+}
+// Charts are placed into the DOM as part of a synchronous innerHTML
+// string (same convention as the old SVG-string chart functions), so the
+// container div does not exist yet at the moment a chart-producing
+// function runs. Scheduling the actual echarts.init/setOption call via
+// setTimeout(fn,0) defers it to right after the current synchronous
+// script (which includes the innerHTML assignment) finishes -- the
+// container is guaranteed to exist by the time this callback runs, with
+// no caller-side changes needed at any of this app's many call sites.
+function deferChartInit(fn){ setTimeout(fn, 0); }
+
 /* =====================================================================
    ENGINE (verbatim port)
    ===================================================================== */
@@ -1472,104 +1540,109 @@ function renderFX(){
   </div>`;
 }
 
-function smoothPath(points, xFn, yFn){
-  // Catmull-Rom to cubic-bezier conversion for a smooth curve through the frontier points
-  if(points.length<3) return points.map((p,i)=>(i===0?'M':'L')+xFn(p.vol).toFixed(1)+','+yFn(p.ret).toFixed(1)).join(' ');
-  const pts=points.map(p=>[xFn(p.vol), yFn(p.ret)]);
-  let d=`M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
-  for(let i=0;i<pts.length-1;i++){
-    const p0=pts[i-1]||pts[i], p1=pts[i], p2=pts[i+1], p3=pts[i+2]||p2;
-    const c1x=p1[0]+(p2[0]-p0[0])/6, c1y=p1[1]+(p2[1]-p0[1])/6;
-    const c2x=p2[0]-(p3[0]-p1[0])/6, c2y=p2[1]-(p3[1]-p1[1])/6;
-    d+=` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`;
-  }
-  return d;
-}
-
-function frontierChart(cloud, frontier, assetPoints, currentPoint, w, h){
-  if(w===undefined)w=640; if(h===undefined)h=400;
-  const pL=54, pR=18, pT=20, pB=44;
-  const allX=[...cloud.map(p=>p.vol),...assetPoints.map(p=>p.vol),currentPoint.vol];
-  const allY=[...cloud.map(p=>p.ret),...assetPoints.map(p=>p.ret),currentPoint.ret];
-  const maxX=Math.max(...allX)*1.08, minX=0;
-  const maxY=Math.max(...allY)*1.1, minY=Math.min(0,Math.min(...allY)*0.9);
-  const x=v=>pL+((v-minX)/(maxX-minX))*(w-pL-pR);
-  const y=v=>h-pB-((v-minY)/(maxY-minY))*(h-pT-pB);
-
-  let grid='';
-  for(let i=0;i<=4;i++){
-    const gx=pL+i*(w-pL-pR)/4, vx=minX+i*(maxX-minX)/4;
-    grid+=`<line x1="${gx.toFixed(1)}" y1="${pT}" x2="${gx.toFixed(1)}" y2="${h-pB}" stroke="rgba(241,238,227,.05)" stroke-width="1"/>`;
-    grid+=`<text x="${gx.toFixed(1)}" y="${h-pB+18}" fill="rgba(241,238,227,.42)" font-size="10" font-family="'Spline Sans Mono',monospace" text-anchor="middle">${(vx*100).toFixed(0)}%</text>`;
-    const gy=h-pB-i*(h-pT-pB)/4, vy=minY+i*(maxY-minY)/4;
-    grid+=`<line x1="${pL}" y1="${gy.toFixed(1)}" x2="${w-pR}" y2="${gy.toFixed(1)}" stroke="rgba(241,238,227,.05)" stroke-width="1"/>`;
-    grid+=`<text x="${pL-9}" y="${(gy+3).toFixed(1)}" fill="rgba(241,238,227,.42)" font-size="10" font-family="'Spline Sans Mono',monospace" text-anchor="end">${(vy*100).toFixed(0)}%</text>`;
-  }
-  grid+=`<text x="${(pL+(w-pL-pR)/2).toFixed(1)}" y="${h-6}" fill="rgba(241,238,227,.5)" font-size="10.5" font-family="'Spline Sans Mono',monospace" text-anchor="middle">RISK: how much this bounces around, per year</text>`;
-  grid+=`<text x="15" y="${(pT+(h-pT-pB)/2).toFixed(1)}" fill="rgba(241,238,227,.5)" font-size="10.5" font-family="'Spline Sans Mono',monospace" text-anchor="middle" transform="rotate(-90,15,${(pT+(h-pT-pB)/2).toFixed(1)})">RETURN: what you'd expect to earn</text>`;
-
-  // Cloud: faded, small, so it reads as a soft field rather than competing with the frontier
-  const dots=cloud.map(p=>`<circle cx="${x(p.vol).toFixed(1)}" cy="${y(p.ret).toFixed(1)}" r="1.3" fill="rgba(201,164,85,.10)"/>`).join('');
-
-  const frontierD=smoothPath(frontier, x, y);
-  const lastFx=x(frontier[frontier.length-1].vol).toFixed(1);
-  const firstFx=x(frontier[0].vol).toFixed(1);
-  const fillD=frontierD+` L${lastFx},${(h-pB).toFixed(1)} L${firstFx},${(h-pB).toFixed(1)} Z`;
-
-  // Hoverable frontier markers — sparse (every ~4th point) so they don't clutter the curve
-  const hoverPts=frontier.filter((_,i)=>i%4===0 || i===frontier.length-1);
-  const frontierHovers=hoverPts.map(p=>
-    `<circle class="fx-hover-target" cx="${x(p.vol).toFixed(1)}" cy="${y(p.ret).toFixed(1)}" r="9" fill="transparent"
-      data-tip-ret="${(p.ret*100).toFixed(2)}%" data-tip-vol="${(p.vol*100).toFixed(2)}%" data-tip-label="On the frontier"/>`
-  ).join('');
-
-  const assetDots=assetPoints.map(p=>
-    `<circle class="fx-hover-target" cx="${x(p.vol).toFixed(1)}" cy="${y(p.ret).toFixed(1)}" r="4" fill="#8FC79E" stroke="#1C3A2D" stroke-width="1"
-      data-tip-ret="${(p.ret*100).toFixed(2)}%" data-tip-vol="${(p.vol*100).toFixed(2)}%" data-tip-label="${p.fullLabel||p.label}"/>
-     <text x="${x(p.vol).toFixed(1)}" y="${(y(p.ret)-9).toFixed(1)}" fill="rgba(241,238,227,.6)" font-size="9" font-family="'Spline Sans Mono',monospace" text-anchor="middle" pointer-events="none">${p.label}</text>`
-  ).join('');
-
-  const curX=x(currentPoint.vol).toFixed(1), curY=y(currentPoint.ret).toFixed(1);
-  const currentMarker=`<circle cx="${curX}" cy="${curY}" r="8" fill="none" stroke="#F1EEE3" stroke-width="2"/>
-    <circle class="fx-hover-target" cx="${curX}" cy="${curY}" r="10" fill="#F1EEE3" fill-opacity="0"
-      data-tip-ret="${(currentPoint.ret*100).toFixed(2)}%" data-tip-vol="${(currentPoint.vol*100).toFixed(2)}%" data-tip-label="Your current mix"/>
-    <circle cx="${curX}" cy="${curY}" r="3" fill="#F1EEE3" pointer-events="none"/>`;
-
-  // Gap to frontier: interpolate the frontier's return at the same risk
-  // level as the current mix, and show the difference if it's meaningful.
-  let gapAnnotation = '';
-  let gapPct = null;
+// Gap to frontier: interpolate the frontier's return at the same risk
+// level as the current mix. Returns null if the gap isn't meaningful.
+function frontierGap(frontier, currentPoint){
   for(let i=0;i<frontier.length-1;i++){
     const a=frontier[i], b=frontier[i+1];
     if(currentPoint.vol>=a.vol && currentPoint.vol<=b.vol){
       const t=(b.vol-a.vol)>1e-9 ? (currentPoint.vol-a.vol)/(b.vol-a.vol) : 0;
       const frontierRetHere = a.ret + t*(b.ret-a.ret);
-      gapPct = frontierRetHere - currentPoint.ret;
-      if(gapPct > 0.0015){
-        const fy=y(frontierRetHere).toFixed(1);
-        gapAnnotation = `<line x1="${curX}" y1="${curY}" x2="${curX}" y2="${fy}" stroke="#F1EEE3" stroke-width="1.5" stroke-dasharray="3,3" opacity=".6"/>
-          <text x="${(parseFloat(curX)+8).toFixed(1)}" y="${((parseFloat(curY)+parseFloat(fy))/2+3).toFixed(1)}" fill="#F1EEE3" font-size="10" font-family="'Spline Sans Mono',monospace" opacity=".85">+${(gapPct*100).toFixed(1)}% possible</text>`;
-      }
-      break;
+      const gapPct = frontierRetHere - currentPoint.ret;
+      if(gapPct > 0.0015) return {frontierRetHere, gapPct};
+      return null;
     }
   }
+  return null;
+}
 
-  return `<div class="fx-chart-wrap">${svgOpen(w,h)}
-    <defs><linearGradient id="frontierFill" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#C9A455" stop-opacity=".28"/><stop offset="100%" stop-color="#C9A455" stop-opacity="0"/>
-    </linearGradient></defs>
-    ${grid}${dots}
-    <path d="${fillD}" fill="url(#frontierFill)"/>
-    <path d="${frontierD}" fill="none" stroke="#C9A455" stroke-width="2.25" stroke-linecap="round"/>
-    ${gapAnnotation}${frontierHovers}${assetDots}${currentMarker}
-    </svg>
+// Builds the ECharts option for the efficient-frontier chart. Every cloud
+// and frontier point carries its own weight vector (`w`, from
+// generateFrontier()), so a click handler elsewhere can read
+// params.dataIndex straight back into an allocation with no extra lookup.
+function frontierChartOption(cloud, frontier, assetPoints, currentPoint){
+  const gap = frontierGap(frontier, currentPoint);
+  const markLine = gap ? {
+    silent:true, symbol:['none','none'],
+    lineStyle:{color:'#F1EEE3', type:'dashed', width:1.5, opacity:.6},
+    label:{formatter:`+${(gap.gapPct*100).toFixed(1)}% possible`, color:'#F1EEE3', fontFamily:"'Spline Sans Mono',monospace", fontSize:10, position:'end'},
+    data:[[{coord:[currentPoint.vol, currentPoint.ret]}, {coord:[currentPoint.vol, gap.frontierRetHere]}]],
+  } : undefined;
+  const pct=v=>(v*100).toFixed(2)+'%';
+  return {
+    animationDurationUpdate: 450,
+    animationEasingUpdate: 'cubicOut',
+    grid:{left:54, right:20, top:24, bottom:52, containLabel:true},
+    xAxis:{
+      type:'value', min:0, name:'RISK: how much this bounces around, per year', nameLocation:'middle', nameGap:30,
+      nameTextStyle:{fontSize:10.5, color:'rgba(241,238,227,.5)'},
+      axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
+      splitLine:{lineStyle:{color:'rgba(241,238,227,.05)'}},
+    },
+    yAxis:{
+      type:'value', name:"RETURN: what you'd expect to earn", nameLocation:'middle', nameGap:44,
+      nameTextStyle:{fontSize:10.5, color:'rgba(241,238,227,.5)'},
+      axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
+      splitLine:{lineStyle:{color:'rgba(241,238,227,.05)'}},
+    },
+    dataZoom:[{type:'inside', xAxisIndex:0}, {type:'inside', yAxisIndex:0}],
+    tooltip:{
+      trigger:'item',
+      formatter(p){
+        if(p.seriesName==='Cloud') return `Sample mix<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+        if(p.seriesName==='Frontier') return `On the frontier<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+        if(p.seriesName==='Assets'){
+          const a=assetPoints[p.dataIndex];
+          return `${a?(a.fullLabel||a.label):''}<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+        }
+        if(p.seriesName==='Current mix') return `Your current mix<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+        return '';
+      },
+    },
+    series:[
+      { name:'Cloud', type:'scatter', data:cloud.map(p=>[p.vol,p.ret]), symbolSize:6,
+        itemStyle:{color:'rgba(201,164,85,.14)'}, emphasis:{itemStyle:{color:'rgba(201,164,85,.6)'}}, z:1 },
+      { name:'Frontier', type:'line', data:frontier.map(p=>[p.vol,p.ret]), smooth:.3, symbol:'circle', symbolSize:6,
+        showSymbol:true, itemStyle:{color:'#C9A455'}, lineStyle:{color:'#C9A455', width:2.25},
+        areaStyle:{color:{type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(201,164,85,.28)'},{offset:1,color:'rgba(201,164,85,0)'}]}},
+        emphasis:{itemStyle:{color:'#F1EEE3', borderColor:'#C9A455', borderWidth:2}}, z:2,
+        markLine },
+      { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
+        itemStyle:{color:'#8FC79E', borderColor:'#1C3A2D', borderWidth:1},
+        label:{show:true, formatter:p=>assetPoints[p.dataIndex].label, position:'top', color:'rgba(241,238,227,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
+      { name:'Current mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
+        itemStyle:{color:'transparent', borderColor:'#F1EEE3', borderWidth:2}, silent:true, z:4 },
+      { name:'Current mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
+        itemStyle:{color:'#F1EEE3'}, tooltip:{show:false}, silent:true, z:4 },
+    ],
+  };
+}
+
+// Renders (or refreshes) the frontier chart in-place. Only Cloud/Frontier
+// points carry a stored weight vector `w`, so a click on either calls
+// onPointClick with that mix; other series are silent or non-selectable.
+function renderFrontierChartOption(chartId, cloud, frontier, assetPoints, currentPoint, onPointClick){
+  const chart=initChart(chartId, frontierChartOption(cloud, frontier, assetPoints, currentPoint));
+  if(!chart) return;
+  chart.off('click');
+  if(onPointClick){
+    chart.on('click', params=>{
+      if(params.seriesName==='Cloud' && cloud[params.dataIndex]) onPointClick(cloud[params.dataIndex].w);
+      else if(params.seriesName==='Frontier' && frontier[params.dataIndex]) onPointClick(frontier[params.dataIndex].w);
+    });
+  }
+}
+
+function frontierChart(cloud, frontier, assetPoints, currentPoint, chartId, onPointClick){
+  deferChartInit(()=>renderFrontierChartOption(chartId, cloud, frontier, assetPoints, currentPoint, onPointClick));
+  return `<div class="fx-chart-wrap">
+    <div id="${chartId}" class="echart" style="height:400px"></div>
     <div class="fx-legend">
       <span><i style="background:#C9A455"></i>The frontier: the best return possible at each risk level</span>
       <span><i style="background:#8FC79E;border-radius:50%"></i>A single building block on its own</span>
       <span><i style="border:2px solid #F1EEE3;background:transparent"></i>Your current mix</span>
-      <span><i style="border-top:2px dashed rgba(241,238,227,.7);background:transparent"></i>Return you're leaving on the table at this risk level</span>
+      <span><i style="border-top:2px dashed rgba(241,238,227,.7);background:transparent"></i>Return left on the table at this risk level &middot; click any point to try that mix</span>
     </div>
-    <div class="fx-tooltip" id="fxTooltip"></div>
   </div>`;
 }
 
@@ -2018,10 +2091,25 @@ function portfolioTailRiskHTML(d){
   return `<div class="stat"><div class="stat-label">VaR, 1-in-20 year${infoIcon('Value at Risk, 95% confidence: in roughly 1 year out of 20, this mix would be expected to be down at least this much. It says nothing about how much worse the other 5% of years could get, only that a loss at least this size is the 1-in-20 threshold. Closed-form for a normal return distribution, verified against simulation before use.')}</div><div class="stat-value" style="color:#E8977A">-${(t.var95*100).toFixed(1)}%</div></div>
   <div class="stat"><div class="stat-label">CVaR, average of those bad years${infoIcon('Conditional VaR (expected shortfall): averaged only across that worst-1-in-20 tail, not the whole distribution. This is always a bigger number than VaR, and answers the question VaR does not: given that you are already in a bad year, how bad does it tend to be.')}</div><div class="stat-value" style="color:#E8977A">-${(t.cvar95*100).toFixed(1)}%</div></div>`;
 }
-function portfolioChartHTML(d, assets, corr){
+// Shared by the full render and the debounced live-update fast path, so
+// both build the identical cloud/frontier/assetPoints/currentPoint shape.
+function computePortfolioFrontierData(d, assets, corr){
   const {cloud, frontier} = generateFrontier(d.returns, d.vols, corr, 3000, L.portfolio.seed);
   const assetPoints = assets.map((a,i)=>({vol:a.vol, ret:a.ret, label:a.name.split(' ')[0], fullLabel:a.name}));
-  return frontierChart(cloud, frontier, assetPoints, {vol:d.decomp.totalVol, ret:d.portRet});
+  const currentPoint = {vol:d.decomp.totalVol, ret:d.portRet};
+  return {cloud, frontier, assetPoints, currentPoint};
+}
+// Clicking a cloud or frontier point in the chart adopts that mix's own
+// weight vector as the portfolio's weights — the "movable" chart behaviour.
+function onPortfolioFrontierPick(w){
+  const assets = cfg().code==='IN' ? PORTFOLIO_ASSETS_IN : PORTFOLIO_ASSETS_US;
+  L.portfolio.weights = w.map(x=>Math.round(x*100));
+  if(L.portfolio.weights.length!==assets.length) return;
+  render();
+}
+function portfolioChartHTML(d, assets, corr){
+  const {cloud, frontier, assetPoints, currentPoint} = computePortfolioFrontierData(d, assets, corr);
+  return frontierChart(cloud, frontier, assetPoints, currentPoint, 'pf-frontier-echart', onPortfolioFrontierPick);
 }
 
 // Called on every slider tick (input event fires continuously during a
@@ -2090,7 +2178,17 @@ function schedulePortfolioChartUpdate(delay){
     const corr = c.code==='IN' ? PORTFOLIO_CORR_IN : PORTFOLIO_CORR_US;
     const d = computePortfolioDerived(assets, corr);
     const chartEl=document.getElementById('pf-chart');
-    if(chartEl){ chartEl.innerHTML=portfolioChartHTML(d, assets, corr); attachChartHovers(chartEl); }
+    if(!chartEl) return;
+    if(document.getElementById('pf-frontier-echart')){
+      // Chart already mounted: update the persistent ECharts instance in
+      // place via setOption so the transition animates, instead of
+      // replacing the DOM (which would dispose/recreate the instance and
+      // interrupt the drag gesture the browser is mid-tracking).
+      const {cloud, frontier, assetPoints, currentPoint} = computePortfolioFrontierData(d, assets, corr);
+      renderFrontierChartOption('pf-frontier-echart', cloud, frontier, assetPoints, currentPoint, onPortfolioFrontierPick);
+    } else {
+      chartEl.innerHTML=portfolioChartHTML(d, assets, corr);
+    }
   }, delay===undefined?130:delay);
 }
 
