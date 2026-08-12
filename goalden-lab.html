@@ -113,7 +113,6 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 .card{background:rgba(241,238,227,.04);border:1px solid rgba(241,238,227,.1);border-radius:2px 2px 18px 18px;padding:22px}
 .card h4{font-size:15px;margin-bottom:4px;color:var(--paper)}
 .card .cap{font-size:12px;color:rgba(241,238,227,.5);margin-bottom:14px}
-svg.chart{width:100%;height:auto;display:block}
 
 /* --- table --- */
 .dtable{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11.5px}
@@ -224,20 +223,8 @@ svg.chart{width:100%;height:auto;display:block}
 .rc-vals{grid-column:2/3;grid-row:1/3;font-size:10.5px;color:rgba(241,238,227,.5);text-align:right;font-family:'Spline Sans Mono',monospace;line-height:1.4}
 .rc-flag-hot{color:#E8977A}
 .rc-flag-cool{color:#8FC79E}
-/* Correlation heatmap */
-.heat-grid-wrap{overflow-x:auto;padding-bottom:6px}
-.heat-grid{display:inline-flex;flex-direction:column;gap:1px}
-.heat-row{display:flex;gap:1px}
-.heat-cell{flex-shrink:0;cursor:default}
-.heat-legend{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:10.5px;color:rgba(241,238,227,.5);font-family:'Spline Sans Mono',monospace}
-.heat-legend-bar{width:60px;height:8px;border-radius:2px;background:linear-gradient(90deg,rgb(38,58,48),rgb(45,110,110))}
-.heat-legend-bar-pos{background:linear-gradient(90deg,rgb(38,58,48),rgb(201,164,85))}
 .risk-comp-legend span{display:flex;align-items:flex-start;gap:8px}
 .risk-comp-legend i{display:inline-block;width:11px;height:11px;border-radius:2px;flex-shrink:0;margin-top:3px}
-.fx-tooltip{position:absolute;pointer-events:none;background:#12261C;border:1px solid rgba(201,164,85,.4);border-radius:3px 8px 8px 8px;padding:8px 11px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--paper);opacity:0;transition:opacity .1s;white-space:nowrap;z-index:20;box-shadow:0 4px 14px rgba(0,0,0,.35)}
-.fx-tooltip.show{opacity:1}
-.fx-tooltip .tt-label{color:var(--gold);font-weight:600;margin-bottom:3px;display:block}
-svg.chart .fx-hover-target{cursor:pointer}
 
 /* --- info icon hover tooltip (for stat labels, term explanations) --- */
 .info-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(241,238,227,.35);color:rgba(241,238,227,.55);font-size:9.5px;font-family:'Spline Sans Mono',monospace;font-style:normal;cursor:help;margin-left:5px;position:relative;flex-shrink:0}
@@ -286,7 +273,6 @@ svg.chart .fx-hover-target{cursor:pointer}
   .card,.stat{background:#fff;border:1px solid #ccc;break-inside:avoid;box-shadow:none}
   .stat-value,.hero-figure,h3,h4{color:#1C3A2D !important}
   .gr-note,.cap,.stat-label{color:#555 !important}
-  svg.chart line,svg.chart path{filter:none}
   .print-header{display:block !important;margin-bottom:24px;border-bottom:2px solid #1C3A2D;padding-bottom:12px}
   .print-header .pt{font-family:'Newsreader',serif;font-size:22px;font-weight:700}
   .print-header .ps{font-family:'Spline Sans Mono',monospace;font-size:11px;color:#666;margin-top:4px}
@@ -996,7 +982,6 @@ function cfg(){ return C[L.country]; }
 /* =====================================================================
    CHARTS
    ===================================================================== */
-function svgOpen(w,h){return `<svg class="chart" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">`;}
 
 function infoIcon(text){
   return `<span class="info-icon">i<span class="ii-tip">${text}</span></span>`;
@@ -1020,25 +1005,6 @@ function explainDropdown(label, html){
 function collapsibleSection(extraToggleClass, toggleHtml, bodyHtml){
   return `<div class="explain-toggle${extraToggleClass?' '+extraToggleClass:''}"><span class="explain-chevron"></span>${toggleHtml}</div>
   <div class="explain-panel tall"><div class="explain-panel-inner controls">${bodyHtml}</div></div>`;
-}
-
-function attachChartHovers(scope){
-  scope.querySelectorAll('.fx-chart-wrap').forEach(wrap=>{
-    const tip=wrap.querySelector('.fx-tooltip');
-    if(!tip) return;
-    wrap.querySelectorAll('.fx-hover-target').forEach(el=>{
-      el.addEventListener('mouseenter',()=>{
-        tip.innerHTML=`<span class="tt-label">${el.dataset.tipLabel}</span>Return: ${el.dataset.tipRet} &nbsp; Risk: ${el.dataset.tipVol}`;
-        tip.classList.add('show');
-      });
-      el.addEventListener('mousemove',(e)=>{
-        const rect=wrap.getBoundingClientRect();
-        let tx=e.clientX-rect.left+14, ty=e.clientY-rect.top-14;
-        tip.style.left=tx+'px'; tip.style.top=ty+'px';
-      });
-      el.addEventListener('mouseleave',()=>{ tip.classList.remove('show'); });
-    });
-  });
 }
 
 function yearlyAmortization(monthlyRows){
@@ -1065,78 +1031,95 @@ function yearlyAmortization(monthlyRows){
 // years spanned, and exactly where the pot runs dry if it does — with a
 // real marker, not left for the reader to guess from the shape of the
 // line. Shock-year markers (existing feature) are preserved as-is.
-function drawdownChart(rows, c, w, h){
-  if(w===undefined)w=760; if(h===undefined)h=240;
-  const p=6, topPad=26, botPad=22;
-  const chartH=h-topPad-botPad;
-  const maxV=Math.max(rows[0].openBal, 0);
-  const minV=Math.min(0, ...rows.map(r=>r.closeBal));
-  const range=maxV-minV || 1;
-  const n=rows.length, sx=(w-p*2)/(n-1||1);
-  const y=v=>topPad+chartH-((v-minV)/range)*chartH;
-  const zeroY=y(0);
+function drawdownChart(rows, c, chartId, h){
+  if(h===undefined)h=240;
+  deferChartInit(()=>renderDrawdownChartOption(chartId, rows, c));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderDrawdownChartOption(chartId, rows, c){
+  const fmt=c?(v=>c.compact(v)):(v=>Math.round(v).toLocaleString());
+  const n=rows.length;
   let depletedYear=null;
   for(const r of rows){ if(r.closeBal<=0){ depletedYear=r.year; break; } }
   const prematureDepletion = depletedYear!==null && depletedYear<n;
-  let pts='M'+p+','+y(rows[0].openBal).toFixed(1);
-  rows.forEach((r,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1));
-  const lx=(p+(n-1)*sx).toFixed(1);
-  let shockMarks='';
-  rows.forEach((r,i)=>{
-    if(r.rate!==undefined && r.rate < -0.05){
-      const cx=(p+i*sx).toFixed(1);
-      shockMarks+=`<circle cx="${cx}" cy="${y(r.closeBal).toFixed(1)}" r="4" fill="#E8977A"/>`;
-    }
+  const startVal=Math.max(rows[0].openBal, 0);
+  const endVal=rows[n-1].closeBal;
+  const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal));
+  const endLabelColor = prematureDepletion ? '#E8977A' : '#8FC79E';
+  const shockPoints = rows.map((r,i)=>(r.rate!==undefined && r.rate<-0.05) ? [i, r.closeBal] : null).filter(Boolean);
+  const series=[
+    { name:'Balance', type:'line', data:rows.map(r=>r.closeBal), showSymbol:false,
+      lineStyle:{color:'#8FC79E', width:1.75},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(61,122,79,.55)'},{offset:1,color:'rgba(61,122,79,.04)'}]}},
+      markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(241,238,227,.35)', type:'dashed'}, data:[{yAxis:0}]},
+      markPoint:{symbol:'circle', symbolSize:9,
+        data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
+        label:{show:true, formatter:()=>endLabelText, position:'top', color:endLabelColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:12}},
+      z:2 },
+  ];
+  if(shockPoints.length) series.push({ name:'Shock year', type:'scatter', data:shockPoints, symbolSize:8, itemStyle:{color:'#E8977A'}, z:3,
+    tooltip:{formatter:p=>`Shock year<br/>Balance: ${fmt(p.value[1])}`} });
+  initChart(chartId, {
+    grid:{left:4,right:4,top:28,bottom:24,containLabel:false},
+    xAxis:{type:'category', data:rows.map((r,i)=>'Yr '+(r.year!==undefined?r.year:i+1)), boundaryGap:false,
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, color:'rgba(241,238,227,.4)', fontSize:11},
+      axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}},
+    yAxis:{type:'value', show:false, min: Math.min(0, ...rows.map(r=>r.closeBal))},
+    tooltip:{trigger:'axis', formatter(params){
+      const p=params.find(pp=>pp.seriesName==='Balance')||params[0];
+      return `${p.axisValueLabel}<br/>Balance: ${fmt(p.value)}`;
+    }},
+    graphic:[{type:'text', left:4, top:4, style:{text:'Starts at '+fmt(startVal), fill:'rgba(241,238,227,.6)', fontSize:12, fontFamily:"'Spline Sans Mono',monospace"}}],
+    series,
   });
-  const endVal=rows[rows.length-1].closeBal;
-  const fmt=c?(v=>c.compact(v)):(v=>Math.round(v).toLocaleString());
-  const markX=prematureDepletion?(p+(depletedYear-1)*sx).toFixed(1):null;
-  const markY=prematureDepletion?zeroY.toFixed(1):null;
-  return svgOpen(w,h)+
-    `<defs><linearGradient id="ddg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#3D7A4F" stop-opacity=".55"/><stop offset="100%" stop-color="#3D7A4F" stop-opacity=".04"/></linearGradient></defs>
-    <path d="${pts} L${lx},${zeroY.toFixed(1)} L${p},${zeroY.toFixed(1)} Z" fill="url(#ddg)"/>
-    <line x1="${p}" y1="${zeroY.toFixed(1)}" x2="${w-p}" y2="${zeroY.toFixed(1)}" stroke="rgba(241,238,227,.35)" stroke-width="1" stroke-dasharray="3,3"/>
-    <path d="${pts}" fill="none" stroke="#8FC79E" stroke-width="1.75"/>
-    ${shockMarks}
-    <text x="${p}" y="16" font-family="Spline Sans Mono,monospace" font-size="12" fill="rgba(241,238,227,.6)">Starts at ${fmt(maxV)}</text>
-    ${prematureDepletion
-      ? `<circle cx="${markX}" cy="${markY}" r="4" fill="#E8977A"/><text x="${markX}" y="${(parseFloat(markY)-9).toFixed(1)}" text-anchor="middle" font-family="Spline Sans Mono,monospace" font-size="12" font-weight="600" fill="#E8977A">Runs out, yr ${depletedYear}</text>`
-      : `<circle cx="${lx}" cy="${y(endVal).toFixed(1)}" r="3.5" fill="#8FC79E"/><text x="${w-p}" y="16" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="12" font-weight="600" fill="#8FC79E">${endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal)}</text>`}
-    <text x="${p}" y="${h-6}" font-family="Spline Sans Mono,monospace" font-size="11" fill="rgba(241,238,227,.4)">Yr 1</text>
-    <text x="${w-p}" y="${h-6}" text-anchor="end" font-family="Spline Sans Mono,monospace" font-size="11" fill="rgba(241,238,227,.4)">Yr ${n}</text>
-    </svg>`;
 }
 
-function mountainChart(rows, w, h){
-  if(w===undefined)w=760; if(h===undefined)h=200;
-  const p=6, maxV=rows[rows.length-1].closeBal, n=rows.length, sx=(w-p*2)/(n-1||1);
-  const y=v=>h-p-(Math.max(0,v)/maxV)*(h-p*2);
-  let gp='M'+p+','+h, cp='M'+p+','+h;
-  rows.forEach((r,i)=>{const x=(p+i*sx).toFixed(1); gp+=' L'+x+','+y(r.closeBal).toFixed(1); cp+=' L'+x+','+y(r.contributed).toFixed(1);});
-  const lx=(p+(n-1)*sx).toFixed(1);
-  return svgOpen(w,h)+
-    `<defs><linearGradient id="mg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C9A455" stop-opacity=".8"/><stop offset="100%" stop-color="#C9A455" stop-opacity=".06"/></linearGradient></defs>
-    <path d="${gp} L${lx},${h} L${p},${h} Z" fill="url(#mg2)"/>
-    <path d="${cp} L${lx},${h} L${p},${h} Z" fill="rgba(241,238,227,.14)"/>
-    <line x1="${p}" y1="${h}" x2="${w-p}" y2="${h}" stroke="rgba(241,238,227,.2)" stroke-width="1"/>
-    </svg>`;
+function mountainChart(rows, chartId, h){
+  if(h===undefined)h=200;
+  deferChartInit(()=>renderMountainChartOption(chartId, rows));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderMountainChartOption(chartId, rows){
+  const c=cfg();
+  initChart(chartId, {
+    grid:{left:4,right:4,top:8,bottom:4,containLabel:false},
+    xAxis:{type:'category', data:rows.map((r,i)=>r.year!==undefined?r.year:i+1), show:false, boundaryGap:false},
+    yAxis:{type:'value', show:false, min:0},
+    tooltip:{trigger:'axis', formatter(params){
+      const grown=params.find(p=>p.seriesName==='Grows to'), contrib=params.find(p=>p.seriesName==='Contributed');
+      return `Year ${grown.axisValueLabel}<br/>Grows to: ${c.compact(grown.value)}<br/>Contributed: ${c.compact(contrib?contrib.value:0)}`;
+    }},
+    series:[
+      { name:'Contributed', type:'line', data:rows.map(r=>r.contributed), showSymbol:false,
+        lineStyle:{opacity:0}, areaStyle:{color:'rgba(241,238,227,.14)'}, z:1 },
+      { name:'Grows to', type:'line', data:rows.map(r=>r.closeBal), showSymbol:false,
+        lineStyle:{color:'#C9A455', width:1.5},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(201,164,85,.8)'},{offset:1,color:'rgba(201,164,85,.06)'}]}}, z:2 },
+    ],
+  });
 }
 
-function twinFatesChart(rowsA, rowsB, w, h){
-  if(w===undefined)w=760; if(h===undefined)h=200;
-  const p=6;
-  const allVals=[...rowsA.map(r=>r.closeBal),...rowsB.map(r=>r.closeBal),0];
-  const maxV=Math.max(...allVals), minV=Math.min(...allVals);
-  const range=(maxV-minV)||1;
-  const n=rowsA.length, sx=(w-p*2)/(n-1||1);
-  const y=v=>h-p-((v-minV)/range)*(h-p*2);
-  const zeroY=y(0);
-  function pathFor(rows){let pts='M'+p+','+y(rows[0].openBal).toFixed(1);rows.forEach((r,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.closeBal).toFixed(1));return pts;}
-  return svgOpen(w,h)+
-    `<line x1="${p}" y1="${zeroY}" x2="${w-p}" y2="${zeroY}" stroke="rgba(241,238,227,.3)" stroke-width="1" stroke-dasharray="3,3"/>
-    <path d="${pathFor(rowsA)}" fill="none" stroke="#E8977A" stroke-width="2"/>
-    <path d="${pathFor(rowsB)}" fill="none" stroke="#8FC79E" stroke-width="2"/>
-    </svg>`;
+function twinFatesChart(rowsA, rowsB, chartId, h){
+  if(h===undefined)h=200;
+  deferChartInit(()=>renderTwinFatesChartOption(chartId, rowsA, rowsB));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderTwinFatesChartOption(chartId, rowsA, rowsB){
+  const c=cfg();
+  initChart(chartId, {
+    grid:{left:4,right:4,top:8,bottom:4,containLabel:false},
+    xAxis:{type:'category', data:rowsA.map((r,i)=>i+1), show:false, boundaryGap:false},
+    yAxis:{type:'value', show:false},
+    tooltip:{trigger:'axis', formatter(params){
+      const a=params.find(p=>p.seriesName==='Flat SIP'), b=params.find(p=>p.seriesName==='Step-up SIP');
+      return `Year ${a.axisValueLabel}<br/>Flat: ${c.compact(a.value)}<br/>Step-up: ${c.compact(b.value)}`;
+    }},
+    series:[
+      { name:'Flat SIP', type:'line', data:rowsA.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#E8977A', width:2},
+        markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(241,238,227,.3)', type:'dashed'}, data:[{yAxis:0}]}, z:2 },
+      { name:'Step-up SIP', type:'line', data:rowsB.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#8FC79E', width:2}, z:2 },
+    ],
+  });
 }
 
 /* =====================================================================
@@ -1221,7 +1204,7 @@ function renderDDMCBody(res){
     <div class="stat"><div class="stat-label">P50 outcome${infoIcon('The median simulated path: half did better than this, half worse. If survival is below 50%, the typical path itself runs out, which is exactly what this is reporting.')}</div><div class="stat-value" style="font-size:22px">${p50Html}</div></div>
   </div>
   <div class="cap" style="margin-top:10px">Fan of 1,000 simulated drawdown paths, seed ${r.ddSeed}</div>
-  ${fanChart(mc.yearBands)}`;
+  ${fanChart(mc.yearBands, 'ret-ddmc-fan')}`;
   lastDDMCHtml=html;
   return html;
 }
@@ -1323,7 +1306,7 @@ function renderRetirement(){
     <div class="card">
       <h4>Accumulation: how the pot grows</h4>
       <div class="cap">Gold = growth earned · grey = what you put in</div>
-      ${mountainChart(res.accRows)}
+      ${mountainChart(res.accRows, 'ret-mountain')}
     </div>
 
     <div class="card">
@@ -1331,7 +1314,7 @@ function renderRetirement(){
       <div class="cap">${res.shockInfo ?
         (res.shockInfo.ranOutYear ? `Runs out in drawdown year ${res.shockInfo.ranOutYear}, ${res.drawYrs-res.shockInfo.ranOutYear} years short of plan.` : 'Survives the shock without running out.')
         : 'Dashed line marks zero. Built to reach exactly zero at the end of the plan.'}</div>
-      ${drawdownChart(res.ddRows, c)}
+      ${drawdownChart(res.ddRows, c, 'ret-drawdown')}
     </div>
 
     <div class="lab-gopdeeper-label">Go deeper</div>
@@ -1441,7 +1424,8 @@ function renderStepUp(){
       <div class="cap">Red = flat SIP · Green = step-up SIP, rising ${s.stepUpPct}%/yr</div>
       ${twinFatesChart(
         flatAcc.map(r=>({openBal:0,closeBal:r.closeBal})),
-        stepAcc.map(r=>({openBal:0,closeBal:r.closeBal}))
+        stepAcc.map(r=>({openBal:0,closeBal:r.closeBal})),
+        'step-twinfates'
       )}
     </div>
   </div>
@@ -1486,7 +1470,7 @@ function renderSWP(){
     <div class="card">
       <h4>Drawdown schedule${shockEp?` with ${shockEp.label} injected`:''}</h4>
       <div class="cap">${shockEp?(sim.ranOutYear?`The same withdrawals now empty the pot in year ${sim.ranOutYear}, ${s.years-sim.ranOutYear} years short of plan. Sequence matters: the earlier the shock, the worse the damage.`:'Absorbs the shock and still lasts the full period.'):`Built to reach zero in year ${s.years}`}</div>
-      ${drawdownChart(rows, c)}
+      ${drawdownChart(rows, c, 'swp-drawdown')}
     </div>
   </div>
   </div>`;
@@ -1646,24 +1630,63 @@ function frontierChart(cloud, frontier, assetPoints, currentPoint, chartId, onPo
   </div>`;
 }
 
-function fanChart(yearBands, w, h){
-  if(w===undefined)w=760; if(h===undefined)h=240;
-  const p=6;
-  const maxV=Math.max(...yearBands.map(b=>b.p90));
-  const n=yearBands.length, sx=(w-p*2)/(n-1||1);
-  const y=v=>h-p-(Math.max(0,v)/maxV)*(h-p*2);
-  function pathFor(key){let pts='M'+p+','+y(yearBands[0][key]).toFixed(1);yearBands.forEach((b,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(b[key]).toFixed(1));return pts;}
-  function bandFor(lo,hi){
-    let pts='M'+p+','+y(yearBands[0][lo]).toFixed(1);
-    yearBands.forEach((b,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(b[lo]).toFixed(1));
-    for(let i=n-1;i>=0;i--) pts+=' L'+(p+i*sx).toFixed(1)+','+y(yearBands[i][hi]).toFixed(1);
-    return pts+' Z';
-  }
-  return svgOpen(w,h)+
-    `<path d="${bandFor('p10','p90')}" fill="rgba(201,164,85,.12)"/>
-    <path d="${bandFor('p25','p75')}" fill="rgba(201,164,85,.22)"/>
-    <path d="${pathFor('p50')}" fill="none" stroke="#C9A455" stroke-width="2"/>
-    </svg>`;
+function fanChart(yearBands, chartId, h){
+  if(h===undefined)h=240;
+  deferChartInit(()=>renderFanChartOption(chartId, yearBands));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+// Bands are two stacked area series each (an invisible base up to the low
+// bound, then a visible fill for low-to-high), a standard ECharts technique
+// for a shaded range that isn't anchored to zero — matches the original
+// hand-rolled polygon-band shape exactly, but now genuinely hoverable.
+function renderFanChartOption(chartId, yearBands){
+  const c=cfg();
+  const n=yearBands.length;
+  initChart(chartId, {
+    grid:{left:4,right:4,top:8,bottom:20,containLabel:false},
+    xAxis:{type:'category', data:yearBands.map((b,i)=>'Yr '+(i+1)), boundaryGap:false,
+      axisLabel:{color:'rgba(241,238,227,.4)', fontSize:10, interval:(idx)=>idx===0||idx===n-1},
+      axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}},
+    yAxis:{type:'value', show:false, min:0},
+    tooltip:{trigger:'axis', formatter(params){
+      const idx=params[0].dataIndex, b=yearBands[idx];
+      return `Year ${idx+1}<br/>P90: ${c.compact(b.p90)} &middot; P75: ${c.compact(b.p75)}<br/>P50: ${c.compact(b.p50)}<br/>P25: ${c.compact(b.p25)} &middot; P10: ${c.compact(b.p10)}`;
+    }},
+    series:[
+      { name:'base90', type:'line', stack:'s90', data:yearBands.map(b=>b.p10), showSymbol:false, lineStyle:{opacity:0}, tooltip:{show:false}, z:1 },
+      { name:'P10-P90', type:'line', stack:'s90', data:yearBands.map(b=>b.p90-b.p10), showSymbol:false, lineStyle:{opacity:0}, areaStyle:{color:'rgba(201,164,85,.12)'}, tooltip:{show:false}, z:1 },
+      { name:'base75', type:'line', stack:'s75', data:yearBands.map(b=>b.p25), showSymbol:false, lineStyle:{opacity:0}, tooltip:{show:false}, z:2 },
+      { name:'P25-P75', type:'line', stack:'s75', data:yearBands.map(b=>b.p75-b.p25), showSymbol:false, lineStyle:{opacity:0}, areaStyle:{color:'rgba(201,164,85,.22)'}, tooltip:{show:false}, z:2 },
+      { name:'Median', type:'line', data:yearBands.map(b=>b.p50), showSymbol:false, lineStyle:{color:'#C9A455', width:2}, z:3 },
+    ],
+  });
+}
+
+function jointTimelineChart(rows, chartId, h){
+  if(h===undefined)h=160;
+  deferChartInit(()=>renderJointTimelineChartOption(chartId, rows));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderJointTimelineChartOption(chartId, rows){
+  const c=cfg();
+  const feePoints = rows.map((r,i)=>r.fees>0 ? [i, r.close] : null).filter(Boolean);
+  const series=[
+    { name:'Balance', type:'line', data:rows.map(r=>r.close), showSymbol:false,
+      lineStyle:{color:'#C9A455', width:1.75},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(201,164,85,.55)'},{offset:1,color:'rgba(201,164,85,.05)'}]}}, z:1 },
+  ];
+  if(feePoints.length) series.push({ name:'Fee withdrawal', type:'scatter', data:feePoints, symbolSize:7, itemStyle:{color:'#E8977A'}, z:2,
+    tooltip:{formatter:p=>`Fee withdrawal<br/>Balance: ${c.compact(p.value[1])}`} });
+  initChart(chartId, {
+    grid:{left:4,right:4,top:8,bottom:4,containLabel:false},
+    xAxis:{type:'category', data:rows.map((r,i)=>i+1), show:false, boundaryGap:false},
+    yAxis:{type:'value', show:false, min:0},
+    tooltip:{trigger:'axis', formatter(params){
+      const p=params.find(pp=>pp.seriesName==='Balance')||params[0];
+      return `Year ${p.axisValueLabel}<br/>Balance: ${c.compact(p.value)}`;
+    }},
+    series,
+  });
 }
 
 /* =====================================================================
@@ -1680,20 +1703,7 @@ function renderJoint(){
   const saved=separate-joint.sip;
 
   const timelineRows=joint.rows;
-  const maxBal=Math.max(...timelineRows.map(r=>r.close), 1);
-  const w=760,h=160,p=6,n=timelineRows.length,sx=(w-p*2)/(n-1||1);
-  const y=v=>h-p-(Math.max(0,v)/maxBal)*(h-p*2);
-  let pts='M'+p+','+h;
-  timelineRows.forEach((r,i)=>pts+=' L'+(p+i*sx).toFixed(1)+','+y(r.close).toFixed(1));
-  const lx=(p+(n-1)*sx).toFixed(1);
-  let feeMarks='';
-  timelineRows.forEach((r,i)=>{if(r.fees>0){const cx=(p+i*sx).toFixed(1);feeMarks+=`<circle cx="${cx}" cy="${y(r.close).toFixed(1)}" r="3" fill="#E8977A"/>`;}});
-  const timelineChart = svgOpen(w,h)+
-    `<defs><linearGradient id="jg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C9A455" stop-opacity=".55"/><stop offset="100%" stop-color="#C9A455" stop-opacity=".05"/></linearGradient></defs>
-    <path d="${pts} L${lx},${h} L${p},${h} Z" fill="url(#jg)"/>
-    <path d="${pts}" fill="none" stroke="#C9A455" stroke-width="1.75"/>
-    ${feeMarks}
-    </svg>`;
+  const timelineChart = jointTimelineChart(timelineRows, 'joint-timeline');
 
   const childRows = j.children.map((ch,i)=>{
     if(j.editingChild===i){
@@ -1794,7 +1804,7 @@ function renderMC(){
     <div class="card">
       <h4>Fan chart: the range of outcomes, not just one number</h4>
       <div class="cap">Gold line = median · dark band = 25th-75th percentile · light band = 10th-90th percentile</div>
-      ${fanChart(res.yearBands)}
+      ${fanChart(res.yearBands, 'mc-fan')}
     </div>
     <div class="card">
       <h4>Twin fates: same plan, two futures</h4>
@@ -1802,11 +1812,11 @@ function renderMC(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px">
         <div>
           <div class="mono" style="font-size:11px;color:#8FC79E;margin-bottom:6px">BULL RUN → ${c.compact(bull.p50)}</div>
-          ${fanChart(bull.yearBands, 360, 150)}
+          ${fanChart(bull.yearBands, 'mc-fan-bull', 150)}
         </div>
         <div>
           <div class="mono" style="font-size:11px;color:#E8977A;margin-bottom:6px">EXTENDED SLUMP → ${c.compact(bear.p50)}</div>
-          ${fanChart(bear.yearBands, 360, 150)}
+          ${fanChart(bear.yearBands, 'mc-fan-bear', 150)}
         </div>
       </div>
     </div>
@@ -1935,27 +1945,35 @@ function portfolioPresetWeights(key, assets){
   return assets.map(a=>Math.round((alloc[a.cluster]||0)*100/(counts[a.cluster]||1)));
 }
 
-function riskCompositionBar(decomp, concentratedDecomp, w, h){
-  if(w===undefined)w=620; if(h===undefined)h=76;
-  const barH=30, barY=14, pL=4, pR=4;
-  const barW=w-pL-pR;
-  const sysW=decomp.systematicPct*barW;
-  const unsysW=decomp.unsystematicPct*barW;
-  const markerX=pL+concentratedDecomp.unsystematicPct*barW; // where 100%-in-top-holding would sit, for reference
-
-  return svgOpen(w,h)+
-    `<defs>
-      <linearGradient id="sysGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#8FC79E"/><stop offset="100%" stop-color="#5FA875"/></linearGradient>
-      <linearGradient id="unsysGrad" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#E8977A"/><stop offset="100%" stop-color="#D97757"/></linearGradient>
-    </defs>
-    <rect x="${pL}" y="${barY}" width="${barW.toFixed(1)}" height="${barH}" rx="3" fill="rgba(241,238,227,.06)"/>
-    <rect x="${pL}" y="${barY}" width="${sysW.toFixed(1)}" height="${barH}" rx="3" fill="url(#sysGrad)"/>
-    <rect x="${(pL+sysW).toFixed(1)}" y="${barY}" width="${unsysW.toFixed(1)}" height="${barH}" fill="url(#unsysGrad)" rx="3"/>
-    ${decomp.systematicPct>0.14?`<text x="${(pL+sysW/2).toFixed(1)}" y="${barY+barH/2+4}" fill="#12261C" font-size="12" font-weight="700" font-family="'Spline Sans Mono',monospace" text-anchor="middle">${(decomp.systematicPct*100).toFixed(0)}%</text>`:''}
-    ${decomp.unsystematicPct>0.10?`<text x="${(pL+sysW+unsysW/2).toFixed(1)}" y="${barY+barH/2+4}" fill="#12261C" font-size="12" font-weight="700" font-family="'Spline Sans Mono',monospace" text-anchor="middle">${(decomp.unsystematicPct*100).toFixed(0)}%</text>`:''}
-    <line x1="${markerX.toFixed(1)}" y1="${barY-6}" x2="${markerX.toFixed(1)}" y2="${barY+barH+6}" stroke="#F1EEE3" stroke-width="1.5" stroke-dasharray="3,2"/>
-    <text x="${markerX.toFixed(1)}" y="${barY+barH+20}" fill="rgba(241,238,227,.55)" font-size="9" font-family="'Spline Sans Mono',monospace" text-anchor="middle">if 100% in your biggest holding</text>
-    </svg>`;
+function riskCompositionBar(decomp, concentratedDecomp, chartId, h){
+  if(h===undefined)h=76;
+  deferChartInit(()=>renderRiskBarOption(chartId, decomp, concentratedDecomp));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderRiskBarOption(chartId, decomp, concentratedDecomp){
+  const sysPct=decomp.systematicPct*100, unsysPct=decomp.unsystematicPct*100;
+  const markerPct=concentratedDecomp.unsystematicPct*100; // where 100%-in-top-holding would sit, for reference
+  initChart(chartId, {
+    grid:{left:4,right:4,top:16,bottom:26,containLabel:false},
+    xAxis:{type:'value', max:100, show:false},
+    yAxis:{type:'category', data:['Risk'], show:false},
+    tooltip:{trigger:'item', formatter(p){
+      if(p.seriesName==='Systematic') return `Systematic (market) risk<br/>${sysPct.toFixed(1)}%`;
+      if(p.seriesName==='Unsystematic') return `Unsystematic (diversifiable) risk<br/>${unsysPct.toFixed(1)}%`;
+      return '';
+    }},
+    series:[
+      { name:'Systematic', type:'bar', stack:'risk', data:[sysPct], barWidth:30,
+        itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#8FC79E'},{offset:1,color:'#5FA875'}]}, borderRadius:[3,0,0,3]},
+        label:{show:sysPct>14, formatter:()=>sysPct.toFixed(0)+'%', color:'#12261C', fontWeight:700, fontFamily:"'Spline Sans Mono',monospace", position:'inside'},
+        markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'#F1EEE3', type:'dashed', width:1.5},
+          label:{formatter:'if 100% in your biggest holding', position:'end', color:'rgba(241,238,227,.55)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"},
+          data:[{xAxis:markerPct}]} },
+      { name:'Unsystematic', type:'bar', stack:'risk', data:[unsysPct], barWidth:30,
+        itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#E8977A'},{offset:1,color:'#D97757'}]}, borderRadius:[0,3,3,0]},
+        label:{show:unsysPct>10, formatter:()=>unsysPct.toFixed(0)+'%', color:'#12261C', fontWeight:700, fontFamily:"'Spline Sans Mono',monospace", position:'inside'} },
+    ],
+  });
 }
 
 function computePortfolioDerived(assets, corr){
@@ -2009,12 +2027,13 @@ function portfolioStatsHTML(d){
   <div class="stat"><div class="stat-label">Beta${infoIcon('How much your portfolio moves when the overall market moves. 1.0 = moves with the market. Above 1.0 = bigger swings than the market. Below 1.0 = smaller swings. Near zero or negative = little relationship, sometimes moves the opposite way. Computed directly from the correlation structure, not a rough estimate.')}</div><div class="stat-value">${d.decomp.beta.toFixed(2)}</div><div class="stat-sub">${d.decomp.beta>1?'more volatile than the market':d.decomp.beta<1&&d.decomp.beta>0?'less volatile than the market':d.decomp.beta<=0?'moves opposite to / independent of the market':''}</div></div>`;
 }
 
+function riskBarLegendHTML(d){
+  return `<span><i style="background:#5FA875"></i>Systematic ${(d.decomp.systematicPct*100).toFixed(0)}% (${(d.decomp.systematicVol*100).toFixed(1)}% volatility): the market-wide risk you can't remove</span>
+    <span><i style="background:#D97757"></i>Unsystematic ${(d.decomp.unsystematicPct*100).toFixed(0)}% (${(d.decomp.unsystematicVol*100).toFixed(1)}% volatility): specific to your mix, this is what diversifying reduces</span>`;
+}
 function portfolioRiskBarHTML(d){
-  return `${riskCompositionBar(d.decomp, d.concentratedDecomp)}
-  <div class="risk-comp-legend">
-    <span><i style="background:#5FA875"></i>Systematic ${(d.decomp.systematicPct*100).toFixed(0)}% (${(d.decomp.systematicVol*100).toFixed(1)}% volatility): the market-wide risk you can't remove</span>
-    <span><i style="background:#D97757"></i>Unsystematic ${(d.decomp.unsystematicPct*100).toFixed(0)}% (${(d.decomp.unsystematicVol*100).toFixed(1)}% volatility): specific to your mix, this is what diversifying reduces</span>
-  </div>`;
+  return `${riskCompositionBar(d.decomp, d.concentratedDecomp, 'pf-riskbar-echart')}
+  <div class="risk-comp-legend" id="pf-riskbar-legend">${riskBarLegendHTML(d)}</div>`;
 }
 
 function portfolioDiversifyHTML(d, assets){
@@ -2148,7 +2167,17 @@ function updatePortfolioLive(){
   const d = computePortfolioDerived(assets, corr);
   const statsEl=document.getElementById('pf-stats'); if(statsEl) statsEl.innerHTML=portfolioStatsHTML(d);
   const moneyEl=document.getElementById('pf-money'); if(moneyEl) moneyEl.innerHTML=portfolioMoneyHTML(d);
-  const barEl=document.getElementById('pf-riskbar'); if(barEl) barEl.innerHTML=portfolioRiskBarHTML(d);
+  // Same setOption-in-place fast path as the frontier chart: on the hot
+  // slider-drag tick, update the bar's segments and the legend text
+  // directly rather than replacing the whole container (which would
+  // dispose and recreate the chart on every keystroke).
+  if(document.getElementById('pf-riskbar-echart')){
+    renderRiskBarOption('pf-riskbar-echart', d.decomp, d.concentratedDecomp);
+    const legendEl=document.getElementById('pf-riskbar-legend');
+    if(legendEl) legendEl.innerHTML=riskBarLegendHTML(d);
+  } else {
+    const barEl=document.getElementById('pf-riskbar'); if(barEl) barEl.innerHTML=portfolioRiskBarHTML(d);
+  }
   const divEl=document.getElementById('pf-diversify'); if(divEl) divEl.innerHTML=portfolioDiversifyHTML(d, assets);
   const betaEl=document.getElementById('pf-beta-text'); if(betaEl) betaEl.innerHTML=portfolioBetaTextHTML(d, assets);
   const ratiosEl=document.getElementById('pf-ratios'); if(ratiosEl) ratiosEl.innerHTML=portfolioRatiosHTML(d, c);
@@ -2787,11 +2816,6 @@ function attach(){
       render();
     });
   });
-
-  // Chart hover tooltip — event delegation over every .fx-hover-target circle
-  // (frontier points, asset dots, the current-portfolio marker) inside any
-  // .fx-chart-wrap. One handler serves every chart of this type.
-  attachChartHovers(document);
 
   document.getElementById('reseedBtn')&&document.getElementById('reseedBtn').addEventListener('click',()=>{
     L.mc.seed = Math.floor(Math.random()*100000);
