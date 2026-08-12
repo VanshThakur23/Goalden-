@@ -1,0 +1,11 @@
+name = "goalden"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
+
+# Serves the existing static files (index.html, goalden.html,
+# goalden-door2.html, goalden-lab.html, vendor/*) directly from the repo
+# root. The worker's fetch handler only intercepts /api/*; everything else
+# falls through to this binding via env.ASSETS.fetch(request).
+[assets]
+directory = "."
+binding = "ASSETS"
