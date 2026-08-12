@@ -292,6 +292,42 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 .gp-iconbtn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(241,238,227,.16);background:rgba(241,238,227,.04);color:rgba(241,238,227,.5);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:5px;flex-shrink:0}
 .gp-iconbtn:hover{color:var(--paper)}
 .gp-iconbtn svg{width:100%;height:100%}
+
+/* --- Live Frontier: instrument search, chips, weight-combination table --- */
+.live-mode-row{display:flex;gap:1px;margin-bottom:10px;border:1px solid rgba(241,238,227,.18);border-radius:3px;overflow:hidden}
+.live-searchbox{width:100%;background:rgba(241,238,227,.05);border:1px solid rgba(241,238,227,.18);border-radius:3px;padding:10px 12px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:12px;outline:none}
+.live-searchbox:focus{border-color:rgba(201,164,85,.5)}
+.live-results{display:flex;flex-direction:column;gap:1px;margin-top:8px;max-height:220px;overflow-y:auto;border-radius:3px}
+.live-result-btn{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:rgba(241,238,227,.03);border:1px solid rgba(241,238,227,.1);border-top-width:0;padding:8px 11px;color:rgba(241,238,227,.8);font-family:'Figtree',sans-serif;font-size:12.5px;cursor:pointer}
+.live-results .live-result-btn:first-child{border-top-width:1px;border-radius:3px 3px 0 0}
+.live-results .live-result-btn:last-child{border-radius:0 0 3px 3px}
+.live-result-btn:hover{background:rgba(201,164,85,.1);color:var(--paper)}
+.live-result-sym{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--gold);flex-shrink:0}
+.live-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.live-chip{display:flex;align-items:center;gap:8px;background:rgba(201,164,85,.1);border:1px solid rgba(201,164,85,.4);border-radius:3px 12px 12px 12px;padding:7px 8px 7px 12px;font-size:12px;color:var(--paper)}
+.live-chip-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.live-chip-status.st-loading{background:var(--gold);animation:live-pulse 1s ease-in-out infinite}
+.live-chip-status.st-ready{background:#8FC79E}
+.live-chip-status.st-error{background:var(--red)}
+@keyframes live-pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.live-chip-x{background:none;border:none;color:rgba(241,238,227,.5);cursor:pointer;font-size:15px;line-height:1;padding:2px 3px}
+.live-chip-x:hover{color:var(--red)}
+.live-freetext{display:flex;gap:8px;margin-top:10px}
+.live-freetext input{flex:1;background:rgba(241,238,227,.05);border:1px solid rgba(241,238,227,.18);border-radius:3px;padding:9px 11px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:12px;outline:none}
+.live-freetext button{background:rgba(201,164,85,.14);border:1px solid rgba(201,164,85,.5);color:var(--gold);border-radius:3px;padding:0 16px;font-family:'Spline Sans Mono',monospace;font-size:11.5px;cursor:pointer;white-space:nowrap}
+.live-error-box{background:rgba(160,58,34,.1);border-left:2px solid var(--red);border-radius:0 8px 8px 0;padding:10px 13px;font-size:12px;color:#F0C4B4;margin-top:8px;line-height:1.55}
+.live-empty{padding:30px 20px;text-align:center;color:rgba(241,238,227,.4);font-size:13px}
+.live-wc-wrap{overflow-x:auto;margin-top:4px;border-radius:3px 14px 14px 14px;border:1px solid rgba(241,238,227,.1)}
+.live-wc-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11.5px;white-space:nowrap}
+.live-wc-table th{text-align:right;padding:9px 12px;color:rgba(241,238,227,.45);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em;background:rgba(241,238,227,.04);position:sticky;top:0}
+.live-wc-table th:first-child,.live-wc-table td:first-child{text-align:left}
+.live-wc-table td{text-align:right;padding:8px 12px;color:rgba(241,238,227,.75);border-top:1px solid rgba(241,238,227,.06);cursor:pointer}
+.live-wc-table tr:hover td{background:rgba(241,238,227,.05)}
+.live-wc-table tr.wc-current td{background:rgba(241,238,227,.09);color:var(--paper);font-weight:600}
+.live-wc-table tr.wc-best td{background:rgba(201,164,85,.1)}
+.live-wc-badge{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:8px;margin-left:6px;vertical-align:middle}
+.live-wc-badge.best{background:rgba(201,164,85,.22);color:var(--gold)}
+.live-wc-badge.minvar{background:rgba(143,199,158,.18);color:#8FC79E}
 </style>
 </head>
 <body>
@@ -975,6 +1011,16 @@ const L = {
   instCategory:'all',
   instSearch:'',
   portfolio:{ weights:[35,15,10,25,10,5], seed:11, inflation:null, investAmount:null, investYears:null },
+  live:{
+    items:[],           // [{key, symbol, label, type:'equity'|'fund'}], key doubles as the /api/history cache key
+    data:{},             // key -> {status:'loading'|'ready'|'error', prices, stats, currency, label, error}
+    weight:50,           // exactly-2-instrument case: % held in items[0], rest in items[1]
+    selectedWeights:null,// 3+-instrument case: weight vector chosen by clicking the chart or the combinations table
+    rf:null,             // risk-free rate override, %; null = use the country default (fdRate) until touched
+    searchMode:'equity', search:'', fundResults:[], fundSearching:false, fundSearchError:null,
+    freeText:'', freeTextError:null, freeTextLoading:false,
+    seed:19,
+  },
 };
 
 function cfg(){ return C[L.country]; }
@@ -2442,6 +2488,598 @@ function renderHealth(){
 }
 
 /* =====================================================================
+   TAB: LIVE FRONTIER (Track B — real market data)
+   Real, network-fetched prices through the Cloudflare Worker proxy
+   (src/worker.js) instead of "Build a Portfolio"'s illustrative long-run
+   category assumptions. Reuses the same underlying frontier math where
+   it overlaps (portfolioReturn/portfolioVariance/generateFrontier above),
+   just fed by actually-fetched daily prices instead of hand-set numbers.
+   ===================================================================== */
+
+/* --- B2: bundled instrument index ---
+   Yahoo's own search is unusable for Indian names (verified live:
+   searching "titan" returns Shenzhen/Kuala Lumpur/Frankfurt listings,
+   never TITAN.NS), so search here is a bundled, curated list rather than
+   a live autocomplete call — also faster and rate-limit-free. Sourced
+   from each index's standard, slow-moving large-cap membership;
+   spot-checked live against /api/history for a cross-section (RELIANCE.NS,
+   GOLDBEES.NS, JUNIORBEES.NS, BRK-B and others) rather than re-verifying
+   all ~155 entries individually — membership drifts slowly, and the
+   free-text ticker box further down validates any exact symbol live at
+   the moment it's actually added, so a stale bundled entry surfaces as
+   an honest fetch error, never silently wrong data. Mutual funds use
+   MFAPI's own working search instead of a bundled list — funds are too
+   numerous and change too often (new NFOs) to bundle sensibly. */
+const INSTRUMENT_INDEX_IN = [
+  // NIFTY 50
+  {symbol:'RELIANCE.NS',name:'Reliance Industries'},{symbol:'TCS.NS',name:'Tata Consultancy Services'},
+  {symbol:'HDFCBANK.NS',name:'HDFC Bank'},{symbol:'ICICIBANK.NS',name:'ICICI Bank'},
+  {symbol:'INFY.NS',name:'Infosys'},{symbol:'HINDUNILVR.NS',name:'Hindustan Unilever'},
+  {symbol:'ITC.NS',name:'ITC'},{symbol:'SBIN.NS',name:'State Bank of India'},
+  {symbol:'BHARTIARTL.NS',name:'Bharti Airtel'},{symbol:'KOTAKBANK.NS',name:'Kotak Mahindra Bank'},
+  {symbol:'LT.NS',name:'Larsen & Toubro'},{symbol:'AXISBANK.NS',name:'Axis Bank'},
+  {symbol:'BAJFINANCE.NS',name:'Bajaj Finance'},{symbol:'ASIANPAINT.NS',name:'Asian Paints'},
+  {symbol:'MARUTI.NS',name:'Maruti Suzuki'},{symbol:'HCLTECH.NS',name:'HCL Technologies'},
+  {symbol:'SUNPHARMA.NS',name:'Sun Pharmaceutical'},{symbol:'TITAN.NS',name:'Titan Company'},
+  {symbol:'ULTRACEMCO.NS',name:'UltraTech Cement'},{symbol:'WIPRO.NS',name:'Wipro'},
+  {symbol:'NESTLEIND.NS',name:'Nestle India'},{symbol:'ONGC.NS',name:'Oil & Natural Gas Corp'},
+  {symbol:'NTPC.NS',name:'NTPC'},{symbol:'POWERGRID.NS',name:'Power Grid Corp'},
+  {symbol:'M&M.NS',name:'Mahindra & Mahindra'},{symbol:'TATAMOTORS.NS',name:'Tata Motors'},
+  {symbol:'TATASTEEL.NS',name:'Tata Steel'},{symbol:'ADANIENT.NS',name:'Adani Enterprises'},
+  {symbol:'ADANIPORTS.NS',name:'Adani Ports & SEZ'},{symbol:'JSWSTEEL.NS',name:'JSW Steel'},
+  {symbol:'BAJAJFINSV.NS',name:'Bajaj Finserv'},{symbol:'HDFCLIFE.NS',name:'HDFC Life Insurance'},
+  {symbol:'SBILIFE.NS',name:'SBI Life Insurance'},{symbol:'INDUSINDBK.NS',name:'IndusInd Bank'},
+  {symbol:'GRASIM.NS',name:'Grasim Industries'},{symbol:'DRREDDY.NS',name:"Dr. Reddy's Labs"},
+  {symbol:'CIPLA.NS',name:'Cipla'},{symbol:'EICHERMOT.NS',name:'Eicher Motors'},
+  {symbol:'BPCL.NS',name:'Bharat Petroleum'},{symbol:'COALINDIA.NS',name:'Coal India'},
+  {symbol:'HEROMOTOCO.NS',name:'Hero MotoCorp'},{symbol:'BAJAJ-AUTO.NS',name:'Bajaj Auto'},
+  {symbol:'DIVISLAB.NS',name:"Divi's Laboratories"},{symbol:'TECHM.NS',name:'Tech Mahindra'},
+  {symbol:'BRITANNIA.NS',name:'Britannia Industries'},{symbol:'APOLLOHOSP.NS',name:'Apollo Hospitals'},
+  {symbol:'UPL.NS',name:'UPL'},{symbol:'SHRIRAMFIN.NS',name:'Shriram Finance'},
+  {symbol:'LTIM.NS',name:'LTIMindtree'},{symbol:'HINDALCO.NS',name:'Hindalco Industries'},
+  // ETFs: gold, silver, broad index, sector index — verified live (GOLDBEES.NS, JUNIORBEES.NS)
+  {symbol:'GOLDBEES.NS',name:'Nippon India Gold ETF'},{symbol:'SILVERBEES.NS',name:'Nippon India Silver ETF'},
+  {symbol:'NIFTYBEES.NS',name:'Nippon India Nifty 50 ETF'},{symbol:'JUNIORBEES.NS',name:'Nippon India Nifty Next 50 ETF'},
+  {symbol:'BANKBEES.NS',name:'Nippon India Nifty Bank ETF'},{symbol:'ICICIB22.NS',name:'ICICI Prudential Bharat 22 ETF'},
+].map(x=>({...x, type:'equity'}));
+
+const INSTRUMENT_INDEX_US = [
+  {symbol:'AAPL',name:'Apple'},{symbol:'MSFT',name:'Microsoft'},{symbol:'AMZN',name:'Amazon'},
+  {symbol:'GOOGL',name:'Alphabet (Class A)'},{symbol:'META',name:'Meta Platforms'},{symbol:'NVDA',name:'NVIDIA'},
+  {symbol:'BRK-B',name:'Berkshire Hathaway'},{symbol:'TSLA',name:'Tesla'},{symbol:'JPM',name:'JPMorgan Chase'},
+  {symbol:'V',name:'Visa'},{symbol:'UNH',name:'UnitedHealth Group'},{symbol:'JNJ',name:'Johnson & Johnson'},
+  {symbol:'WMT',name:'Walmart'},{symbol:'PG',name:'Procter & Gamble'},{symbol:'MA',name:'Mastercard'},
+  {symbol:'HD',name:'Home Depot'},{symbol:'CVX',name:'Chevron'},{symbol:'MRK',name:'Merck'},
+  {symbol:'ABBV',name:'AbbVie'},{symbol:'PEP',name:'PepsiCo'},{symbol:'KO',name:'Coca-Cola'},
+  {symbol:'COST',name:'Costco'},{symbol:'AVGO',name:'Broadcom'},{symbol:'MCD',name:"McDonald's"},
+  {symbol:'CSCO',name:'Cisco Systems'},{symbol:'TMO',name:'Thermo Fisher Scientific'},{symbol:'ACN',name:'Accenture'},
+  {symbol:'ABT',name:'Abbott Laboratories'},{symbol:'DHR',name:'Danaher'},{symbol:'NKE',name:'Nike'},
+  {symbol:'LIN',name:'Linde'},{symbol:'ADBE',name:'Adobe'},{symbol:'CRM',name:'Salesforce'},
+  {symbol:'TXN',name:'Texas Instruments'},{symbol:'NEE',name:'NextEra Energy'},{symbol:'PM',name:'Philip Morris Intl'},
+  {symbol:'VZ',name:'Verizon'},{symbol:'CMCSA',name:'Comcast'},{symbol:'RTX',name:'RTX Corp'},
+  {symbol:'WFC',name:'Wells Fargo'},{symbol:'UPS',name:'United Parcel Service'},{symbol:'INTC',name:'Intel'},
+  {symbol:'T',name:'AT&T'},{symbol:'HON',name:'Honeywell'},{symbol:'COP',name:'ConocoPhillips'},
+  {symbol:'ORCL',name:'Oracle'},{symbol:'QCOM',name:'Qualcomm'},{symbol:'BMY',name:'Bristol Myers Squibb'},
+  {symbol:'UNP',name:'Union Pacific'},{symbol:'IBM',name:'IBM'},{symbol:'LOW',name:"Lowe's"},
+  {symbol:'INTU',name:'Intuit'},{symbol:'AMGN',name:'Amgen'},{symbol:'CAT',name:'Caterpillar'},
+  {symbol:'GE',name:'General Electric'},{symbol:'SBUX',name:'Starbucks'},{symbol:'BA',name:'Boeing'},
+  {symbol:'ELV',name:'Elevance Health'},{symbol:'PLD',name:'Prologis'},{symbol:'DE',name:'Deere & Co'},
+  {symbol:'SPGI',name:'S&P Global'},{symbol:'GS',name:'Goldman Sachs'},{symbol:'BLK',name:'BlackRock'},
+  {symbol:'AMD',name:'Advanced Micro Devices'},{symbol:'AXP',name:'American Express'},{symbol:'MDT',name:'Medtronic'},
+  {symbol:'LMT',name:'Lockheed Martin'},{symbol:'GILD',name:'Gilead Sciences'},{symbol:'ADP',name:'ADP'},
+  {symbol:'SYK',name:'Stryker'},{symbol:'C',name:'Citigroup'},{symbol:'MDLZ',name:'Mondelez'},
+  {symbol:'ISRG',name:'Intuitive Surgical'},{symbol:'TJX',name:'TJX Companies'},{symbol:'MMC',name:'Marsh & McLennan'},
+  {symbol:'ADI',name:'Analog Devices'},{symbol:'VRTX',name:'Vertex Pharmaceuticals'},{symbol:'REGN',name:'Regeneron'},
+  {symbol:'BKNG',name:'Booking Holdings'},{symbol:'SCHW',name:'Charles Schwab'},{symbol:'ZTS',name:'Zoetis'},
+  {symbol:'CB',name:'Chubb'},{symbol:'MO',name:'Altria'},{symbol:'SO',name:'Southern Company'},
+  {symbol:'DUK',name:'Duke Energy'},{symbol:'BDX',name:'Becton Dickinson'},{symbol:'CI',name:'Cigna'},
+  {symbol:'PGR',name:'Progressive Corp'},{symbol:'EOG',name:'EOG Resources'},{symbol:'ITW',name:'Illinois Tool Works'},
+  {symbol:'APD',name:'Air Products'},{symbol:'NOC',name:'Northrop Grumman'},{symbol:'TGT',name:'Target'},
+  {symbol:'FI',name:'Fiserv'},{symbol:'HUM',name:'Humana'},{symbol:'SLB',name:'SLB (Schlumberger)'},
+  {symbol:'EQIX',name:'Equinix'},{symbol:'USB',name:'US Bancorp'},{symbol:'PYPL',name:'PayPal'},
+  {symbol:'GM',name:'General Motors'},{symbol:'FDX',name:'FedEx'},{symbol:'CSX',name:'CSX Corp'},
+  // ETFs: broad index, gold, real estate — for parity with the India list's ETF coverage
+  {symbol:'SPY',name:'SPDR S&P 500 ETF'},{symbol:'QQQ',name:'Invesco QQQ (Nasdaq 100 ETF)'},
+  {symbol:'GLD',name:'SPDR Gold Shares'},{symbol:'VNQ',name:'Vanguard Real Estate ETF'},
+].map(x=>({...x, type:'equity'}));
+
+function searchInstrumentIndex(query, countryCode){
+  const list = countryCode==='IN' ? INSTRUMENT_INDEX_IN : INSTRUMENT_INDEX_US;
+  const q=(query||'').trim().toLowerCase();
+  if(!q) return list.slice(0,10);
+  return list.filter(i=>i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q)).slice(0,12);
+}
+
+/* --- B3: calculation engine ---
+   Same statistical convention as the class exercise this extends
+   (wealth class1.csv / Capital Allocation Line.xlsx): daily simple
+   returns, POPULATION standard deviation and covariance (matches Excel's
+   STDEV.P / COVAR, not the sample STDEV.S), annualised via
+   (1+dailyMean)^tradingDaysPerYear - 1. One deliberate change from the
+   worksheet: tradingDaysPerYear is measured from the actual fetched
+   series (observation count / calendar-day span in years) rather than
+   hardcoded to 246, so a thinly-traded instrument or a different
+   exchange calendar never silently inherits NSE's specific convention.
+   Hand cross-checked against the worksheet's own SBI figures before use
+   (~29.9% annualised return, ~21.3% annualised stdev over the same
+   251-session window) — see build notes. */
+
+async function liveApiGet(path){
+  const res = await fetch(path);
+  let body;
+  try { body = await res.json(); } catch(e){ throw new Error('The server sent back something that was not valid data.'); }
+  if(!res.ok || (body && body.error)) throw new Error((body && body.error) || `Request failed (HTTP ${res.status})`);
+  return body;
+}
+// Routes to the right /api/history query and hands back the normalised
+// {id,label,currency,prices} shape src/worker.js promises. No client-side
+// fallback numbers on failure, per this project's core rule — callers
+// must surface the real error, never paper over it with a guess.
+function liveFetchHistory(instrument){
+  return instrument.type==='fund'
+    ? liveApiGet(`/api/history?type=fund&scheme=${encodeURIComponent(instrument.symbol)}`)
+    : liveApiGet(`/api/history?type=equity&symbol=${encodeURIComponent(instrument.symbol)}`);
+}
+
+function computeDailyReturns(prices){
+  const rets=[];
+  for(let i=1;i<prices.length;i++){
+    const p0=prices[i-1].close, p1=prices[i].close;
+    if(p0>0) rets.push({date:prices[i].date, r:(p1-p0)/p0});
+  }
+  return rets;
+}
+function computeReturnStats(prices){
+  const rets=computeDailyReturns(prices);
+  const n=rets.length;
+  const mean=rets.reduce((s,x)=>s+x.r,0)/n;
+  const variance=rets.reduce((s,x)=>s+(x.r-mean)*(x.r-mean),0)/n; // population, matches STDEV.P
+  const sd=Math.sqrt(variance);
+  const first=new Date(prices[0].date), last=new Date(prices[prices.length-1].date);
+  const spanYears=Math.max(0.05, (last-first)/(365.25*24*3600*1000));
+  const tradingDaysPerYear=n/spanYears;
+  const annualReturn=Math.pow(1+mean, tradingDaysPerYear)-1;
+  const annualVol=sd*Math.sqrt(tradingDaysPerYear);
+  return {returns:rets, n, dailyMean:mean, dailySd:sd, tradingDaysPerYear, annualReturn, annualVol};
+}
+// Aligns two return series by date (different instruments can carry
+// different trading calendars/holidays) before computing covariance.
+function alignReturns(retsA, retsB){
+  const mapB=new Map(retsB.map(x=>[x.date,x.r]));
+  const a=[], b=[];
+  retsA.forEach(x=>{ if(mapB.has(x.date)){ a.push(x.r); b.push(mapB.get(x.date)); } });
+  return {a, b};
+}
+function populationCovariance(a, b){
+  const n=a.length;
+  const meanA=a.reduce((s,x)=>s+x,0)/n, meanB=b.reduce((s,x)=>s+x,0)/n;
+  let cov=0; for(let i=0;i<n;i++) cov+=(a[i]-meanA)*(b[i]-meanB);
+  return cov/n;
+}
+// Pairwise annualised covariance/correlation matrices, asset-count-agnostic.
+function computeCovarianceMatrix(statsList){
+  const n=statsList.length;
+  const covAnnual=Array.from({length:n},()=>new Array(n).fill(0));
+  const corr=Array.from({length:n},()=>new Array(n).fill(0));
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++){
+    if(i===j){ covAnnual[i][j]=statsList[i].annualVol*statsList[i].annualVol; corr[i][j]=1; continue; }
+    const {a,b}=alignReturns(statsList[i].returns, statsList[j].returns);
+    const dailyCov = a.length>10 ? populationCovariance(a,b) : 0;
+    const days=(statsList[i].tradingDaysPerYear+statsList[j].tradingDaysPerYear)/2;
+    covAnnual[i][j]=dailyCov*days;
+    corr[i][j]=statsList[i].annualVol>0 && statsList[j].annualVol>0 ? covAnnual[i][j]/(statsList[i].annualVol*statsList[j].annualVol) : 0;
+  }
+  return {covAnnual, corr};
+}
+// Exactly-2-instrument closed-form frontier: sweep w across [0,1] (the
+// worksheet's own approach for the two-risky-asset case — 5% steps
+// there, finer here since it costs nothing). Uses the same
+// portfolioReturn()/portfolioVariance() as every other frontier in this
+// file, just called with n=2.
+function twoAssetFrontier(retA, retB, sdA, sdB, corr, steps){
+  if(steps===undefined) steps=101;
+  const pts=[];
+  for(let i=0;i<steps;i++){
+    const w=i/(steps-1);
+    const weights=[w,1-w];
+    pts.push({ w, ret:portfolioReturn(weights,[retA,retB]), vol:Math.sqrt(portfolioVariance(weights,[sdA,sdB],[[1,corr],[corr,1]])) });
+  }
+  return pts;
+}
+// Closed-form global-minimum-variance weight for two assets, clamped to
+// [0,1] since this app never offers shorting (true unconstrained min-var
+// can fall outside that range at high correlation).
+function minVarianceWeightTwoAsset(sdA, sdB, corr){
+  const covAB=corr*sdA*sdB;
+  const denom=sdA*sdA+sdB*sdB-2*covAB;
+  if(Math.abs(denom)<1e-12) return 0.5;
+  return Math.max(0, Math.min(1, (sdB*sdB-covAB)/denom));
+}
+// Closed-form tangency weight for two risky assets given a risk-free
+// rate — the standard two-fund-separation result. Clamped to [0,1] for
+// the same no-shorting reason as above.
+function tangencyWeightTwoAsset(retA, retB, sdA, sdB, corr, rf){
+  const covAB=corr*sdA*sdB;
+  const exA=retA-rf, exB=retB-rf;
+  const num=exA*sdB*sdB - exB*covAB;
+  const den=exA*sdB*sdB + exB*sdA*sdA - (exA+exB)*covAB;
+  if(Math.abs(den)<1e-12) return 0.5;
+  return Math.max(0, Math.min(1, num/den));
+}
+// Capital Allocation Line: a straight line from (0, rf) through the
+// tangency point, extended to maxLeverage x the tangency risk/return —
+// mirrors the worksheet's own 0% / 100% / 200% three-point construction
+// (borrowing at the risk-free rate to lever up past the tangency mix).
+function capitalAllocationLine(rf, tanRet, tanVol, maxLeverage){
+  if(maxLeverage===undefined) maxLeverage=2;
+  if(tanVol<=0) return [{vol:0,ret:rf},{vol:0,ret:rf}];
+  const sharpe=(tanRet-rf)/tanVol;
+  const pts=[];
+  for(let lev=0; lev<=maxLeverage+1e-9; lev+=maxLeverage/20) pts.push({vol:tanVol*lev, ret:rf+sharpe*tanVol*lev});
+  return pts;
+}
+
+/* --- B4: UI --- */
+function liveDefaultRf(){ return L.live.rf==null ? cfg().d.fdRate*100 : L.live.rf; }
+function liveReadyItems(){ return L.live.items.filter(it=>L.live.data[it.key] && L.live.data[it.key].status==='ready'); }
+
+async function liveLoadInstrument(item){
+  L.live.data[item.key]={status:'loading', label:item.label};
+  const chipsEl=document.querySelector('.live-chips');
+  if(chipsEl) chipsEl.innerHTML = L.live.items.map(it=>liveChipHTML(it)).join('') || '<span class="cap">Add two or more to see a frontier.</span>';
+  try{
+    const raw=await liveFetchHistory(item);
+    L.live.data[item.key]={status:'ready', label:raw.label||item.label, currency:raw.currency, prices:raw.prices, stats:computeReturnStats(raw.prices)};
+  }catch(e){
+    L.live.data[item.key]={status:'error', label:item.label, error:(e&&e.message)||'Could not fetch this instrument.'};
+  }
+  render();
+}
+function liveAddInstrument(item){
+  if(L.live.items.some(it=>it.key===item.key)) return;
+  L.live.items.push(item);
+  liveLoadInstrument(item); // async — re-renders itself once the fetch settles
+  render();
+}
+async function liveAddFreeText(){
+  const raw=(L.live.freeText||'').trim();
+  if(!raw) return;
+  const symbol=raw.toUpperCase();
+  if(L.live.items.some(it=>it.key===symbol)){ L.live.freeTextError='Already added.'; render(); return; }
+  L.live.freeTextLoading=true; L.live.freeTextError=null; render();
+  try{
+    const raw2=await liveFetchHistory({type:'equity', symbol});
+    const item={key:symbol, symbol, label:raw2.label||symbol, type:'equity'};
+    L.live.items.push(item);
+    L.live.data[item.key]={status:'ready', label:raw2.label||symbol, currency:raw2.currency, prices:raw2.prices, stats:computeReturnStats(raw2.prices)};
+    L.live.freeText=''; L.live.freeTextError=null;
+  }catch(e){
+    L.live.freeTextError=(e&&e.message)||'Could not find that ticker.';
+  }
+  L.live.freeTextLoading=false;
+  render();
+}
+async function liveRunFundSearch(){
+  const q=(L.live.search||'').trim();
+  if(!q){ L.live.fundResults=[]; L.live.fundSearchError=null; const el=document.getElementById('liveFundResults'); if(el) el.innerHTML=liveFundResultsHTML(); return; }
+  L.live.fundSearching=true; L.live.fundSearchError=null;
+  const el0=document.getElementById('liveFundResults'); if(el0) el0.innerHTML=liveFundResultsHTML();
+  try{
+    L.live.fundResults = await liveApiGet(`/api/fundsearch?q=${encodeURIComponent(q)}`);
+  }catch(e){
+    L.live.fundResults=[]; L.live.fundSearchError=(e&&e.message)||'Fund search failed.';
+  }
+  L.live.fundSearching=false;
+  const el=document.getElementById('liveFundResults'); if(el) el.innerHTML=liveFundResultsHTML();
+}
+function onLiveFrontierPick(w){ L.live.weight=Math.round(w*100); render(); }
+function liveComputeMulti(){
+  const items=liveReadyItems();
+  const stats=items.map(it=>L.live.data[it.key].stats);
+  const returns=stats.map(s=>s.annualReturn), vols=stats.map(s=>s.annualVol);
+  const {corr}=computeCovarianceMatrix(stats);
+  const {cloud,frontier}=generateFrontier(returns, vols, corr, 3000, L.live.seed);
+  return {items, stats, returns, vols, corr, cloud, frontier};
+}
+function onLiveMultiFrontierPick(w){ L.live.selectedWeights=w; render(); }
+
+function liveEquityResultsHTML(){
+  const c=cfg();
+  const results=searchInstrumentIndex(L.live.search, c.code);
+  const already=new Set(L.live.items.map(it=>it.key));
+  if(!results.length) return `<div class="cap" style="padding:8px 2px">No matches. Try a shorter word, or use the exact-ticker box below.</div>`;
+  return results.map(r=>{
+    const disabled=already.has(r.symbol);
+    return `<button class="live-result-btn"${disabled?' disabled style="opacity:.35;cursor:default"':` data-live-add-equity="${r.symbol}" data-live-add-name="${r.name}"`}>
+      <span>${r.name}${disabled?' <span class="cap" style="font-size:10.5px">(added)</span>':''}</span>
+      <span class="live-result-sym">${r.symbol}</span>
+    </button>`;
+  }).join('');
+}
+function liveFundResultsHTML(){
+  const live=L.live;
+  if(live.fundSearching) return `<div class="cap" style="padding:8px 2px">Searching&hellip;</div>`;
+  if(live.fundSearchError) return `<div class="live-error-box">${live.fundSearchError}</div>`;
+  if(!live.search) return `<div class="cap" style="padding:8px 2px">Type a fund name or category, e.g. "gilt" or "banking".</div>`;
+  if(!live.fundResults.length) return `<div class="cap" style="padding:8px 2px">No matches for "${live.search}".</div>`;
+  const already=new Set(live.items.map(it=>it.key));
+  return live.fundResults.map(r=>{
+    const key='MF'+r.schemeCode;
+    const disabled=already.has(key);
+    return `<button class="live-result-btn"${disabled?' disabled style="opacity:.35;cursor:default"':` data-live-add-fund="${r.schemeCode}" data-live-add-name="${(r.schemeName||'').replace(/"/g,'&quot;')}"`}>
+      <span>${r.schemeName}${disabled?' <span class="cap" style="font-size:10.5px">(added)</span>':''}</span>
+    </button>`;
+  }).join('');
+}
+function liveChipHTML(it){
+  const d=L.live.data[it.key]||{status:'loading'};
+  const statusCls = d.status==='ready'?'st-ready':d.status==='error'?'st-error':'st-loading';
+  return `<div class="live-chip" title="${d.status==='error'?(d.error||''):''}">
+    <span class="live-chip-status ${statusCls}"></span>
+    <span>${d.label||it.symbol}</span>
+    <button class="live-chip-x" data-live-remove="${it.key}" title="Remove">&times;</button>
+  </div>`;
+}
+
+function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint){
+  const pct=v=>(v*100).toFixed(2)+'%';
+  return {
+    animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
+    grid:{left:54,right:20,top:24,bottom:52,containLabel:true},
+    xAxis:{type:'value', min:0, name:'RISK: annualised volatility, from real daily prices', nameLocation:'middle', nameGap:30,
+      nameTextStyle:{fontSize:10.5,color:'rgba(241,238,227,.5)'}, axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
+      splitLine:{lineStyle:{color:'rgba(241,238,227,.05)'}}},
+    yAxis:{type:'value', name:'RETURN: annualised, from real daily prices', nameLocation:'middle', nameGap:44,
+      nameTextStyle:{fontSize:10.5,color:'rgba(241,238,227,.5)'}, axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
+      splitLine:{lineStyle:{color:'rgba(241,238,227,.05)'}}},
+    dataZoom:[{type:'inside',xAxisIndex:0},{type:'inside',yAxisIndex:0}],
+    tooltip:{trigger:'item', formatter(p){
+      if(p.seriesName==='Frontier') return `Weight split<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='CAL') return `Capital Allocation Line<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='Assets'){ const a=assetPoints[p.dataIndex]; return `${a?(a.fullLabel||a.label):''}<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`; }
+      if(p.seriesName==='Your mix') return `Your mix<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='Tangency') return `Best Sharpe ratio (tangency)<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      return '';
+    }},
+    series:[
+      { name:'Frontier', type:'line', data:frontier.map(p=>[p.vol,p.ret]), smooth:.2, showSymbol:false,
+        itemStyle:{color:'#C9A455'}, lineStyle:{color:'#C9A455',width:2.25}, z:2 },
+      { name:'CAL', type:'line', data:cal.map(p=>[p.vol,p.ret]), showSymbol:false,
+        lineStyle:{color:'#F1EEE3', width:1.5, type:'dashed'}, z:1 },
+      { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
+        itemStyle:{color:'#8FC79E', borderColor:'#1C3A2D', borderWidth:1},
+        label:{show:true, formatter:p=>assetPoints[p.dataIndex].label, position:'top', color:'rgba(241,238,227,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
+      { name:'Tangency', type:'scatter', data:[[tangencyPoint.vol,tangencyPoint.ret]], symbolSize:11,
+        itemStyle:{color:'#F1EEE3', borderColor:'#C9A455', borderWidth:2}, z:4 },
+      { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:14,
+        itemStyle:{color:'transparent', borderColor:'#F1EEE3', borderWidth:2}, silent:true, z:5 },
+      { name:'Your mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
+        itemStyle:{color:'#F1EEE3'}, tooltip:{show:false}, silent:true, z:5 },
+    ],
+  };
+}
+function renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick){
+  const chart=initChart(chartId, liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint));
+  if(!chart) return;
+  chart.off('click');
+  if(onPointClick) chart.on('click', params=>{ if(params.seriesName==='Frontier' && frontier[params.dataIndex]) onPointClick(frontier[params.dataIndex].w); });
+}
+function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoint, chartId, onPointClick){
+  deferChartInit(()=>renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick));
+  return `<div class="fx-chart-wrap">
+    <div id="${chartId}" class="echart" style="height:400px"></div>
+    <div class="fx-legend">
+      <span><i style="background:#C9A455"></i>The frontier: every weight split between the two instruments</span>
+      <span><i style="border-top:2px dashed rgba(241,238,227,.9);background:transparent"></i>Capital Allocation Line: risk-free rate blended with the best-Sharpe mix, extended past 100% for leverage</span>
+      <span><i style="background:#8FC79E;border-radius:50%"></i>Each instrument on its own</span>
+      <span><i style="border:2px solid #F1EEE3;background:transparent"></i>Your current mix &middot; click the curve to move there</span>
+    </div>
+  </div>`;
+}
+
+// The weight-combination table: the same sweep as the chart, in rows —
+// every observation the chart can only show as a curve, laid out so it
+// can actually be read and compared, click any row to adopt that split.
+function liveCombinationsTable(points, a, b, rf, currentW){
+  let bestIdx=0, bestSharpe=-Infinity, minVarIdx=0, minVar=Infinity;
+  const rows=points.map((p,i)=>{
+    const sharpe = p.vol>0 ? (p.ret-rf)/p.vol : 0;
+    if(sharpe>bestSharpe){ bestSharpe=sharpe; bestIdx=i; }
+    if(p.vol<minVar){ minVar=p.vol; minVarIdx=i; }
+    return {...p, sharpe};
+  });
+  const closestIdx = rows.reduce((best,r,i)=> Math.abs(r.w-currentW)<Math.abs(rows[best].w-currentW)?i:best, 0);
+  return `<div class="live-wc-wrap"><table class="live-wc-table">
+    <thead><tr><th>${a.symbol}</th><th>${b.symbol}</th><th>Return</th><th>Risk</th><th>Sharpe</th></tr></thead>
+    <tbody>
+    ${rows.map((r,i)=>{
+      const cls=[i===closestIdx?'wc-current':'', i===bestIdx?'wc-best':''].filter(Boolean).join(' ');
+      return `<tr class="${cls}" data-live-weight-pick="${Math.round(r.w*100)}">
+        <td>${(r.w*100).toFixed(0)}%</td>
+        <td>${((1-r.w)*100).toFixed(0)}%</td>
+        <td>${(r.ret*100).toFixed(1)}%</td>
+        <td>${(r.vol*100).toFixed(1)}%${i===minVarIdx?'<span class="live-wc-badge minvar">Min risk</span>':''}</td>
+        <td>${r.sharpe.toFixed(2)}${i===bestIdx?'<span class="live-wc-badge best">Best</span>':''}</td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table></div>`;
+}
+// Mirrors the worksheet's own Q53:U56 construction directly: at least
+// three points blending the risk-free asset with the single best-Sharpe
+// (tangency) mix, from all-cash through all-tangency to levered beyond
+// it. "Lending" (parking some money at the risk-free rate, below 100%
+// tangency) suits a risk-averse investor; "borrowing" (past 100%,
+// financing extra tangency exposure at the risk-free rate) suits a
+// risk-seeking one — same framing as the worksheet's own notes.
+function liveCalTable(rf, tanRet, tanVol, aSym, bSym, wTan){
+  const levels=[0, 0.5, 1, 1.5, 2];
+  return `<div class="live-wc-wrap"><table class="live-wc-table">
+    <thead><tr><th>Optimal portfolio</th><th>Risk-free</th><th>Return</th><th>Risk</th></tr></thead>
+    <tbody>
+    ${levels.map(lev=>{
+      const ret=rf + (tanRet-rf)*lev, vol=tanVol*lev;
+      return `<tr class="${lev===1?'wc-best':''}"><td>${(lev*100).toFixed(0)}%</td><td>${((1-lev)*100).toFixed(0)}%</td><td>${(ret*100).toFixed(1)}%</td><td>${(vol*100).toFixed(1)}%</td></tr>`;
+    }).join('')}
+    </tbody>
+  </table></div>
+  <div class="gr-note" style="margin-top:8px">At 100% optimal portfolio, all money sits in the <b style="color:var(--paper)">${(wTan*100).toFixed(0)}% ${aSym} / ${((1-wTan)*100).toFixed(0)}% ${bSym}</b> mix. Below 100% is <b>lending</b> &ndash; some money parked at the risk-free rate, the safer side. Above 100% is <b>borrowing</b> at the risk-free rate to buy more of the optimal portfolio &ndash; leveraged, for a risk-seeking investor.</div>`;
+}
+function liveMultiCombinationsTable(frontier, items, rf, currentVol){
+  let bestIdx=0, bestSharpe=-Infinity, minVarIdx=0, minVar=Infinity;
+  frontier.forEach((p,i)=>{
+    const sharpe=p.vol>0?(p.ret-rf)/p.vol:0;
+    if(sharpe>bestSharpe){ bestSharpe=sharpe; bestIdx=i; }
+    if(p.vol<minVar){ minVar=p.vol; minVarIdx=i; }
+  });
+  const closestIdx=frontier.reduce((best,p,i)=>Math.abs(p.vol-currentVol)<Math.abs(frontier[best].vol-currentVol)?i:best,0);
+  return `<div class="live-wc-wrap"><table class="live-wc-table">
+    <thead><tr>${items.map(it=>`<th>${it.symbol}</th>`).join('')}<th>Return</th><th>Risk</th><th>Sharpe</th></tr></thead>
+    <tbody>
+    ${frontier.map((p,i)=>{
+      const sharpe=p.vol>0?(p.ret-rf)/p.vol:0;
+      const cls=[i===closestIdx?'wc-current':'', i===bestIdx?'wc-best':''].filter(Boolean).join(' ');
+      return `<tr class="${cls}" data-live-multi-pick="${i}">
+        ${p.w.map(wi=>`<td>${(wi*100).toFixed(0)}%</td>`).join('')}
+        <td>${(p.ret*100).toFixed(1)}%</td>
+        <td>${(p.vol*100).toFixed(1)}%${i===minVarIdx?'<span class="live-wc-badge minvar">Min risk</span>':''}</td>
+        <td>${sharpe.toFixed(2)}${i===bestIdx?'<span class="live-wc-badge best">Best</span>':''}</td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+function liveTwoAssetHTML(items, rfPct){
+  const rf=rfPct/100;
+  const [a,b]=items;
+  const sa=L.live.data[a.key].stats, sb=L.live.data[b.key].stats;
+  const {corr}=computeCovarianceMatrix([sa,sb]);
+  const c12=corr[0][1];
+  const frontier=twoAssetFrontier(sa.annualReturn, sb.annualReturn, sa.annualVol, sb.annualVol, c12);
+  const wMinVar=minVarianceWeightTwoAsset(sa.annualVol, sb.annualVol, c12);
+  const wTan=tangencyWeightTwoAsset(sa.annualReturn, sb.annualReturn, sa.annualVol, sb.annualVol, c12, rf);
+  const tanRet=portfolioReturn([wTan,1-wTan],[sa.annualReturn,sb.annualReturn]);
+  const tanVol=Math.sqrt(portfolioVariance([wTan,1-wTan],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
+  const cal=capitalAllocationLine(rf, tanRet, tanVol, 2);
+  const w=L.live.weight/100;
+  const currentRet=portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]);
+  const currentVol=Math.sqrt(portfolioVariance([w,1-w],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
+  const currentSharpe=currentVol>0?(currentRet-rf)/currentVol:0;
+  const assetPoints=[
+    {label:a.symbol, fullLabel:L.live.data[a.key].label, vol:sa.annualVol, ret:sa.annualReturn},
+    {label:b.symbol, fullLabel:L.live.data[b.key].label, vol:sb.annualVol, ret:sb.annualReturn},
+  ];
+  return `<div class="stat-row">
+    <div class="stat"><div class="stat-label">Correlation</div><div class="stat-value">${c12.toFixed(2)}</div></div>
+    <div class="stat"><div class="stat-label">Your mix return</div><div class="stat-value">${(currentRet*100).toFixed(1)}%</div></div>
+    <div class="stat"><div class="stat-label">Your mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
+  </div>
+  <div class="card">
+    <h4>${a.symbol} / ${b.symbol}${infoIcon('Every point on the gold curve is one weight split between these two instruments, swept from 100% '+b.symbol+' to 100% '+a.symbol+'. The dashed line is the Capital Allocation Line: the risk-free rate blended with the best-Sharpe (tangency) mix, extended past 100% to show what borrowing at the risk-free rate to lever up would do.')}</h4>
+    <div class="cap">Annualised from ${sa.n} and ${sb.n} real daily observations.</div>
+    ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'live-frontier-echart', onLiveFrontierPick)}
+  </div>
+  <div class="card">
+    <h4>Weight: <b>${(w*100).toFixed(0)}% ${a.symbol}</b> / <b>${((1-w)*100).toFixed(0)}% ${b.symbol}</b></h4>
+    <div class="slider-row"><input type="range" min="0" max="100" step="1" value="${L.live.weight}" data-live-weight></div>
+    <div class="gr-note" style="margin-top:10px">Best Sharpe ratio at <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> &middot; minimum risk at <b style="color:#8FC79E">${(wMinVar*100).toFixed(0)}% ${a.symbol}</b>.</div>
+  </div>
+  <div class="card">
+    <h4>Capital Allocation Line: risk-free + optimal portfolio${infoIcon('Blending the risk-free asset with the single best-Sharpe (tangency) mix of '+a.symbol+' and '+b.symbol+', at five leverage levels from all-cash to 2x.')}</h4>
+    ${liveCalTable(rf, tanRet, tanVol, a.symbol, b.symbol, wTan)}
+  </div>
+  <div class="card">
+    <h4>Every combination${infoIcon('The same weight sweep as the chart above, in table form, 5% at a time — click any row to move the slider there. Sharpe uses the risk-free rate set on the left.')}</h4>
+    ${liveCombinationsTable(frontier.filter((p,i)=>i%5===0), a, b, rf, w)}
+  </div>`;
+}
+
+function liveMultiAssetHTML(computed, rfPct){
+  const rf=rfPct/100;
+  const {items, vols, corr, cloud, frontier}=computed;
+  const returns=computed.returns;
+  const assetPoints=items.map((it,i)=>({vol:vols[i], ret:returns[i], label:it.symbol, fullLabel:L.live.data[it.key].label}));
+  let weights=L.live.selectedWeights;
+  if(!weights || weights.length!==items.length) weights=items.map(()=>1/items.length);
+  const currentPoint={vol:Math.sqrt(portfolioVariance(weights,vols,corr)), ret:portfolioReturn(weights,returns)};
+  const currentSharpe=currentPoint.vol>0?(currentPoint.ret-rf)/currentPoint.vol:0;
+  return `<div class="stat-row">
+    <div class="stat"><div class="stat-label">Instruments</div><div class="stat-value">${items.length}</div></div>
+    <div class="stat"><div class="stat-label">Selected mix return</div><div class="stat-value">${(currentPoint.ret*100).toFixed(1)}%</div></div>
+    <div class="stat"><div class="stat-label">Selected mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
+  </div>
+  <div class="card">
+    <h4>Simulated frontier${infoIcon('With 3 or more instruments there is no single sweepable weight, so this samples 3,000 random weight combinations (seeded, so it repeats identically) and keeps the best-return mix at each risk level — the same technique Build a Portfolio uses.')}</h4>
+    <div class="cap">Annualised from real daily prices: ${items.map(it=>it.symbol).join(', ')}.</div>
+    ${frontierChart(cloud, frontier, assetPoints, currentPoint, 'live-multi-frontier-echart', onLiveMultiFrontierPick)}
+  </div>
+  <div class="card">
+    <h4>Notable combinations${infoIcon('Every distinct risk level the simulation found, best-return mix at each — click any row (or any point on the chart) to adopt that weight split.')}</h4>
+    ${liveMultiCombinationsTable(frontier, items, rf, currentPoint.vol)}
+  </div>`;
+}
+
+function liveOutputHTML(ready, rfPct){
+  const items=L.live.items;
+  const errored=items.filter(it=>L.live.data[it.key] && L.live.data[it.key].status==='error');
+  const loading=items.filter(it=>!L.live.data[it.key] || L.live.data[it.key].status==='loading');
+  const errorBanner = errored.length ? `<div class="card"><h4>Couldn't fetch ${errored.length>1?'these':'this'}</h4>
+      ${errored.map(it=>`<div class="live-error-box"><b>${L.live.data[it.key].label||it.symbol}:</b> ${L.live.data[it.key].error}</div>`).join('')}
+      <div class="cap" style="margin-top:8px">Remove it and try again, or double-check the exact ticker and exchange suffix.</div>
+    </div>` : '';
+  if(ready.length<2){
+    return errorBanner + `<div class="card live-empty">
+      ${loading.length? 'Fetching real prices&hellip;' : 'Add at least two instruments on the left to compute a frontier.<br><span class="cap">Two gives the exact closed-form curve from your class exercise; three or more switches to a simulated cloud, same as Build a Portfolio.</span>'}
+    </div>`;
+  }
+  return errorBanner + (ready.length===2 ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(liveComputeMulti(), rfPct));
+}
+
+function renderLiveFrontier(){
+  const c=cfg(), live=L.live;
+  const ready=liveReadyItems();
+  const rf=liveDefaultRf();
+  const equityMode = live.searchMode==='equity' || c.code!=='IN';
+  return `<div class="grid">
+  <div class="panel">
+    <h3>Live Frontier</h3>
+    <div class="cap" style="margin-bottom:14px">Real historical prices, fetched live: the same efficient-frontier math as Build a Portfolio, computed from actual daily returns instead of long-run assumptions.</div>
+
+    <div class="section-label">Add an instrument</div>
+    ${c.code==='IN' ? `<div class="live-mode-row">
+      <button class="tglbtn${live.searchMode==='equity'?' active':''}" data-live-mode="equity">Stocks &amp; ETFs</button>
+      <button class="tglbtn${live.searchMode==='fund'?' active':''}" data-live-mode="fund">Mutual Funds</button>
+    </div>`:''}
+    ${equityMode ? `
+      <input id="liveSearchBox" class="live-searchbox" type="text" placeholder="Search ${c.code==='IN'?'NIFTY 50 stocks and ETFs':'S&amp;P 100 stocks and ETFs'}: try reliance, gold, apple" value="${live.search||''}" autocomplete="off" spellcheck="false">
+      <div class="live-results" id="liveResults">${liveEquityResultsHTML()}</div>
+    ` : `
+      <input id="liveFundSearchBox" class="live-searchbox" type="text" placeholder="Search Indian mutual funds by name: try gilt, banking, small cap" value="${live.search||''}" autocomplete="off" spellcheck="false">
+      <div class="live-results" id="liveFundResults">${liveFundResultsHTML()}</div>
+    `}
+
+    <div class="gr-note" style="margin-top:10px">Can't find it? Enter the exact ticker Yahoo Finance uses (India needs a .NS or .BO suffix, e.g. RELIANCE.NS).</div>
+    <div class="live-freetext">
+      <input id="liveFreeText" type="text" placeholder="e.g. RELIANCE.NS" value="${live.freeText||''}" autocomplete="off" spellcheck="false">
+      <button id="liveFreeAddBtn"${live.freeTextLoading?' disabled':''}>${live.freeTextLoading?'Checking&hellip;':'Add'}</button>
+    </div>
+    ${live.freeTextError?`<div class="live-error-box">${live.freeTextError}</div>`:''}
+
+    <div class="section-label" style="margin-top:20px">Selected (${live.items.length})</div>
+    <div class="live-chips">${live.items.length? live.items.map(it=>liveChipHTML(it)).join('') : '<span class="cap">Add two or more to see a frontier.</span>'}</div>
+
+    <div class="field" style="margin-top:8px"><label>Risk-free rate${infoIcon("The return on the safest available asset — a Treasury bill or a bank fixed deposit. Anchors the Sharpe ratio and the Capital Allocation Line.")} <b>${rf.toFixed(2)}%</b></label>
+      <input type="range" min="0" max="12" step="0.25" value="${rf}" data-live-rf>
+    </div>
+  </div>
+  <div class="output">
+    ${liveOutputHTML(ready, rf)}
+  </div>
+  </div>`;
+}
+
+/* =====================================================================
    RENDER ENGINE
    ===================================================================== */
 // Three icon chips for the home-screen primary cards, same stroke-icon
@@ -2529,25 +3167,21 @@ function render(){
   attach();
 }
 
-// Live Frontier's real implementation (real market data, closed-form
-// two-asset frontier, tangency portfolio, CAL) lands in Track B of the
-// Lab redesign plan. This stub exists so the home screen and the tab
-// bar have somewhere to point in the meantime.
-function renderLiveFrontier(){
-  return `<div class="card" style="max-width:640px">
-    <h4>Live Frontier</h4>
-    <div class="cap">This tool is being built: type in any stocks or funds, pull real historical prices, and see the efficient frontier, tangency portfolio and Capital Allocation Line computed live, the same way the "Build a Portfolio" tab works but from real data instead of illustrative assumptions.</div>
-    <div class="gr-note">Coming shortly &ndash; in the meantime, <button class="tab" style="display:inline" data-tab-switch="portfolio">Build a Portfolio</button> uses the same efficient-frontier math with long-run category assumptions.</div>
-  </div>`;
-}
-
 function attach(){
   document.querySelectorAll('[data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{
     L.tab=el.dataset.tabSwitch;
     try{ localStorage.setItem('goaldenLabLastTab', L.tab); }catch(e){}
     render();
   }));
-  document.querySelectorAll('[data-country]').forEach(el=>el.addEventListener('click',()=>{L.country=el.dataset.country;L.instCategory='all';render();}));
+  document.querySelectorAll('[data-country]').forEach(el=>el.addEventListener('click',()=>{
+    L.country=el.dataset.country;L.instCategory='all';
+    // Live Frontier's instrument list is per-country (different tickers,
+    // different currency); switching countries mid-session would silently
+    // mix INR and USD return series into one "portfolio" with no FX
+    // adjustment, so it resets rather than carrying over.
+    L.live.items=[]; L.live.data={}; L.live.selectedWeights=null; L.live.search=''; L.live.fundResults=[];
+    render();
+  }));
 
   let mcRenderTimer=null;
   document.querySelectorAll('input[type=range][data-k]').forEach(el=>{
@@ -2888,6 +3522,83 @@ function attach(){
   document.querySelectorAll('[data-cancel-child]').forEach(el=>{
     el.addEventListener('click',()=>{
       L.joint.editingChild=null;
+      render();
+    });
+  });
+
+  /* --- Live Frontier --- */
+  document.querySelectorAll('[data-live-mode]').forEach(el=>el.addEventListener('click',()=>{
+    L.live.searchMode=el.dataset.liveMode; L.live.search=''; L.live.fundResults=[]; L.live.fundSearchError=null;
+    render();
+  }));
+  const liveSearchEl=document.getElementById('liveSearchBox');
+  if(liveSearchEl){
+    liveSearchEl.addEventListener('input',()=>{
+      L.live.search=liveSearchEl.value;
+      const el=document.getElementById('liveResults');
+      if(el) el.innerHTML=liveEquityResultsHTML();
+    });
+  }
+  let liveFundTimer=null;
+  const liveFundSearchEl=document.getElementById('liveFundSearchBox');
+  if(liveFundSearchEl){
+    liveFundSearchEl.addEventListener('input',()=>{
+      L.live.search=liveFundSearchEl.value;
+      if(liveFundTimer) clearTimeout(liveFundTimer);
+      liveFundTimer=setTimeout(()=>{ liveFundTimer=null; liveRunFundSearch(); }, 350);
+    });
+  }
+  document.querySelectorAll('[data-live-add-equity]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      liveAddInstrument({key:el.dataset.liveAddEquity, symbol:el.dataset.liveAddEquity, label:el.dataset.liveAddName, type:'equity'});
+    });
+  });
+  document.querySelectorAll('[data-live-add-fund]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const scheme=el.dataset.liveAddFund;
+      liveAddInstrument({key:'MF'+scheme, symbol:scheme, label:el.dataset.liveAddName, type:'fund'});
+    });
+  });
+  document.querySelectorAll('[data-live-remove]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const key=el.dataset.liveRemove;
+      L.live.items=L.live.items.filter(it=>it.key!==key);
+      delete L.live.data[key];
+      if(L.live.selectedWeights && L.live.selectedWeights.length!==L.live.items.length) L.live.selectedWeights=null;
+      render();
+    });
+  });
+  const liveFreeTextEl=document.getElementById('liveFreeText');
+  if(liveFreeTextEl){
+    liveFreeTextEl.addEventListener('input',()=>{ L.live.freeText=liveFreeTextEl.value; });
+    liveFreeTextEl.addEventListener('keydown',e=>{ if(e.key==='Enter') liveAddFreeText(); });
+  }
+  document.getElementById('liveFreeAddBtn')&&document.getElementById('liveFreeAddBtn').addEventListener('click',liveAddFreeText);
+
+  let liveRfTimer=null;
+  document.querySelectorAll('input[data-live-rf]').forEach(el=>{
+    el.addEventListener('input',()=>{
+      L.live.rf=parseFloat(el.value);
+      if(liveRfTimer) clearTimeout(liveRfTimer);
+      liveRfTimer=setTimeout(()=>{ liveRfTimer=null; render(); }, 130);
+    });
+  });
+  let liveWeightTimer=null;
+  document.querySelectorAll('input[data-live-weight]').forEach(el=>{
+    el.addEventListener('input',()=>{
+      L.live.weight=parseInt(el.value);
+      if(liveWeightTimer) clearTimeout(liveWeightTimer);
+      liveWeightTimer=setTimeout(()=>{ liveWeightTimer=null; render(); }, 90);
+    });
+  });
+  document.querySelectorAll('[data-live-weight-pick]').forEach(el=>{
+    el.addEventListener('click',()=>{ L.live.weight=parseInt(el.dataset.liveWeightPick); render(); });
+  });
+  document.querySelectorAll('[data-live-multi-pick]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const idx=parseInt(el.dataset.liveMultiPick);
+      const {frontier}=liveComputeMulti();
+      if(frontier[idx]) L.live.selectedWeights=frontier[idx].w;
       render();
     });
   });
