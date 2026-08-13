@@ -380,6 +380,17 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .fc-money-out .stat-value{color:#5FA875}
 .fc-action{width:100%;background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:10px;font-size:12px;cursor:pointer;font-family:'Spline Sans Mono',monospace;margin-bottom:10px;transition:background .15s}
 .fc-action:hover{background:rgba(37,87,199,.22)}
+.fc-dests{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.fc-dest{background:rgba(20,40,63,.03);border:1px solid rgba(20,40,63,.1);border-radius:2px 2px 10px 10px;padding:12px 10px;text-align:left;cursor:pointer;transition:transform .15s,box-shadow .15s;font-family:inherit}
+.fc-dest:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(20,40,63,.1)}
+.fc-dest-label{font-family:'Spline Sans Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:6px}
+.fc-dest-split{font-size:12.5px;font-weight:600;color:var(--paper);margin-bottom:4px;line-height:1.35}
+.fc-dest-nums{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6)}
+.fc-dest-rec{border-color:rgba(37,87,199,.45);background:rgba(37,87,199,.06)}
+.fc-dest-rec .fc-dest-label{color:var(--gold)}
+.fc-dest.is-current{border-color:rgba(217,119,87,.6);box-shadow:inset 0 0 0 1px rgba(217,119,87,.3)}
+.fc-dest.is-current .fc-dest-label{color:#D97757}
+@media(max-width:860px){.fc-dests{grid-template-columns:1fr}}
 
 /* --- map card: reset/resample header, declutter toggles, held-cluster chips --- */
 .pf-map-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
@@ -3711,15 +3722,24 @@ function liveChipHTML(it){
   </div>`;
 }
 
-function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel){
+function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel, minVarPoint){
   const pct=v=>(v*100).toFixed(2)+'%';
+  // Suppress the SAFEST label when it would land on top of an asset dot
+  // or the BEST BALANCE dot (common with 2 assets, where the min-variance
+  // mix often sits very close to one of those) -- three overlapping
+  // labels reads worse than two clear ones.
+  const vols=frontier.map(p=>p.vol), rets=frontier.map(p=>p.ret);
+  const volTol=(Math.max(...vols)-Math.min(...vols))*0.04 || 0.001;
+  const retTol=(Math.max(...rets)-Math.min(...rets))*0.04 || 0.001;
+  const near=(p,q)=>Math.abs(p.vol-q.vol)<volTol && Math.abs(p.ret-q.ret)<retTol;
+  const showSafest = minVarPoint && !near(minVarPoint,tangencyPoint) && !assetPoints.some(ap=>near(minVarPoint,{vol:ap.vol,ret:ap.ret}));
   return {
     animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
     grid:{left:54,right:20,top:24,bottom:52,containLabel:true},
-    xAxis:{type:'value', min:0, name:'RISK: annualised volatility, from real daily prices', nameLocation:'middle', nameGap:30,
+    xAxis:{type:'value', min:0, name:'RISK (per year)', nameLocation:'middle', nameGap:30,
       nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.5)'}, axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
       splitLine:{lineStyle:{color:'rgba(20,40,63,.05)'}}},
-    yAxis:{type:'value', name:'RETURN: expected, annualised from average daily moves', nameLocation:'middle', nameGap:44,
+    yAxis:{type:'value', name:'RETURN (per year)', nameLocation:'middle', nameGap:44,
       nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.5)'}, axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
       splitLine:{lineStyle:{color:'rgba(20,40,63,.05)'}}},
     dataZoom:[{type:'inside',xAxisIndex:0},{type:'inside',yAxisIndex:0}],
@@ -3738,8 +3758,9 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         if(!a) return '';
         return `<b>${a.fullLabel||a.label} on its own:</b><br/>${pct(a.ret)} for ${pct(a.vol)} risk.`;
       }
-      if(p.seriesName==='Your mix') return `<b>Your current mix${currentMixLabel?': '+currentMixLabel:''}.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/>This marks where the slider below is set right now &ndash; it isn't clickable itself. Click the <b style="color:#14283F">BEST SHARPE</b> dot or the blue curve to move it.`;
-      if(p.seriesName==='Tangency') return `<b>The single best trade-off between risk and reward here.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/><span style="color:#2557C7">Click to move here.</span>`;
+      if(p.seriesName==='Your mix') return `<b>Your current mix${currentMixLabel?': '+currentMixLabel:''}.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/>This marks where the slider below is set right now &ndash; it isn't clickable itself. Click the <b style="color:#14283F">BEST BALANCE</b> dot or the blue curve to move it.`;
+      if(p.seriesName==='Safest') return `<b>The lowest-risk mix these two instruments can make.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='Tangency') return `<b>Best balance of risk and reward (the tangency / best-Sharpe point).</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/><span style="color:#2557C7">Click to move here.</span>`;
       return '';
     }},
     series:[
@@ -3756,7 +3777,10 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
       { name:'Tangency', type:'scatter', data:[[tangencyPoint.vol,tangencyPoint.ret]], symbolSize:11,
         itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
-        label:{show:true, formatter:'BEST SHARPE', position:'bottom', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} },
+        label:{show:true, formatter:'BEST BALANCE', position:'bottom', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} },
+      ...(showSafest ? [{ name:'Safest', type:'scatter', data:[[minVarPoint.vol,minVarPoint.ret]], symbolSize:10,
+        itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1.5}, z:4,
+        label:{show:true, formatter:'SAFEST', position:'top', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} }] : []),
       { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
         itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, z:5,
         label:{show:true, formatter:'YOUR MIX', position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
@@ -3765,22 +3789,22 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
     ],
   };
 }
-function renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick, currentMixLabel){
-  const chart=initChart(chartId, liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel));
+function renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick, currentMixLabel, minVarPoint){
+  const chart=initChart(chartId, liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel, minVarPoint));
   if(!chart) return;
   chart.off('click');
   if(onPointClick) chart.on('click', params=>{ if(params.seriesName==='Frontier' && frontier[params.dataIndex]) onPointClick(frontier[params.dataIndex].w); });
 }
-function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoint, chartId, onPointClick, currentMixLabel){
-  deferChartInit(()=>renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick, currentMixLabel));
+function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoint, chartId, onPointClick, currentMixLabel, minVarPoint){
+  deferChartInit(()=>renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick, currentMixLabel, minVarPoint));
   return `<div class="fx-chart-wrap">
     <div id="${chartId}" class="echart" style="height:400px"></div>
     <div class="fx-legend">
-      <span><i style="background:#2557C7"></i>The frontier: every weight split between the two instruments</span>
-      <span><i style="border-top:2px dashed rgba(20,40,63,.9);background:transparent"></i>Capital Allocation Line: risk-free rate blended with the best-Sharpe mix, extended past 100% for leverage</span>
-      <span><i style="background:#8FC79E;border-radius:50%"></i>Each instrument on its own</span>
-      <span><i style="border:2px solid #14283F;background:#14283F"></i>Best Sharpe ratio (tangency): the single best risk/reward trade-off available</span>
-      <span><i style="border:2px solid #D97757;background:transparent"></i>Your current mix, from the slider below &middot; hover for detail, click the curve to move it</span>
+      <span><i style="background:#2557C7"></i>The frontier: every possible split</span>
+      <span><i style="border-top:2px dashed rgba(20,40,63,.9);background:transparent"></i>Capital Allocation Line: risk-free + best mix, extended for leverage</span>
+      <span><i style="background:#8FC79E;border-radius:50%"></i>Each instrument alone</span>
+      <span><i style="border:2px solid #14283F;background:#14283F"></i>Best balance of risk and reward</span>
+      <span><i style="border:2px solid #D97757;background:transparent"></i>Your mix &middot; hover for detail, click the curve to move it</span>
     </div>
   </div>`;
 }
@@ -3905,25 +3929,55 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
     ? `<div style="margin-top:8px">Notice the best-Sharpe point sits right at the edge of the curve, not in the middle. That's because <b style="color:var(--paper)">${otherAsset.symbol}</b> returned less than the ${(rf*100).toFixed(1)}% risk-free rate over this window &ndash; blending any of it in would only pull the mix's Sharpe ratio down, not up. Holding it would only pay off if you could bet against it, which this tool doesn't offer, so 100% ${edgeAsset.symbol} genuinely is the best combination of these two available here.</div>`
     : '';
 
-  const detail = `<div>${corrLine}</div>
-  <div style="margin-top:8px">Your mix earns <b style="color:var(--paper)">${pct(currentRet)}</b> a year for <b style="color:var(--paper)">${pct(currentVol)}</b> risk &ndash; Sharpe <b style="color:var(--gold)">${currentSharpe.toFixed(2)}</b>.</div>
-  <div style="margin-top:8px">${hasGap
-    ? `The single best trade-off between risk and reward here (the <span class="term" data-def="The point on the curve with the highest Sharpe ratio: the mix that earns the most extra return per unit of extra risk, above the risk-free rate. Where the Capital Allocation Line touches the frontier.">tangency point</span>) is <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--gold)">${((1-wTan)*100).toFixed(0)}% ${b.symbol}</b>, earning ${pct(tanRet)} for ${pct(tanVol)} risk (Sharpe ${tanSharpe.toFixed(2)}). Drag the slider toward it, click the dark dot on the chart, or use the button above, to close the gap.`
-    : `The single best trade-off between risk and reward these two instruments can offer is ${(wTan*100).toFixed(0)}% ${a.symbol} / ${((1-wTan)*100).toFixed(0)}% ${b.symbol} &ndash; your split is already close to it.`}</div>${edgeLine}`;
-
   const cfgC = cfg();
   const illustrateAmt = cfgC.code==='IN' ? 100000 : 1000;
   const illustrateYrs = 10;
   const compoundedApprox = currentRet - (currentVol*currentVol)/2;
   const illustrateFv = illustrateAmt*Math.pow(1+compoundedApprox, illustrateYrs);
   const weightLabel = `<b style="color:var(--paper)">${(w*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--paper)">${((1-w)*100).toFixed(0)}% ${b.symbol}</b>`;
-  const moneyLine = `<div class="gr-note" style="margin-top:10px">Put <b style="color:var(--paper)">${cfgC.compact(illustrateAmt)}</b> into your current split &ndash; ${weightLabel} &ndash; and leave it for ${illustrateYrs} years: at this mix's compounded rate of <b style="color:var(--gold)">${(compoundedApprox*100).toFixed(1)}%</b>/yr, it would grow to roughly <b style="color:var(--paper)">${cfgC.compact(illustrateFv)}</b>. That uses the compounded figure, not the higher expected-return figure above, because that's closer to what an account statement would actually show.</div>`;
+  const moneyDetailLine = `<div style="margin-top:8px">Put <b style="color:var(--paper)">${cfgC.compact(illustrateAmt)}</b> into your current split &ndash; ${weightLabel} &ndash; and leave it for ${illustrateYrs} years: at this mix's compounded rate of <b style="color:var(--gold)">${(compoundedApprox*100).toFixed(1)}%</b>/yr, it would grow to roughly <b style="color:var(--paper)">${cfgC.compact(illustrateFv)}</b>. That uses the compounded figure, not the higher expected-return figure above, because that's closer to what an account statement would actually show.</div>`;
+  const shortMoneyLine = `<div class="gr-note" style="margin-top:10px">Grown using the compounded rate (<b style="color:var(--gold)">${(compoundedApprox*100).toFixed(1)}%</b>/yr), not the higher expected-return figure above &ndash; that's closer to what an account statement would actually show.</div>`;
 
   const minVarRet = portfolioReturn([wMinVar,1-wMinVar],[retA,retB]);
   const minVarVol = Math.sqrt(portfolioVariance([wMinVar,1-wMinVar],[volA,volB],[[1,c12],[c12,1]]));
   const hiIsA = retA >= retB;
   const hiEnd = hiIsA ? {sym:a.symbol, ret:retA, vol:volA} : {sym:b.symbol, ret:retB, vol:volB};
-  const rangeLine = `<div class="gr-note" style="margin-top:10px">Moving up the efficient part of this curve, from the lowest-risk mix &ndash; <b style="color:var(--paper)">${(wMinVar*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--paper)">${((1-wMinVar)*100).toFixed(0)}% ${b.symbol}</b>, earning ${pct(minVarRet)} for ${pct(minVarVol)} risk &ndash; up to 100% <b style="color:var(--paper)">${hiEnd.sym}</b>, earning ${pct(hiEnd.ret)} for ${pct(hiEnd.vol)} risk, both return and risk magnify together. Taking more risk on this line always buys more expected return; there's no way to get one without the other.</div>`;
+  const dominatedEnd = hiIsA ? {sym:b.symbol} : {sym:a.symbol};
+  const wGrowth = hiIsA ? 1 : 0;
+  // If the min-variance mix and the max-return mix round to the same
+  // weight, one instrument beat the other on both return and risk this
+  // window -- there's no efficient trade-off segment to climb, just a
+  // single dominant point. Showing three destination cards (or a "risk
+  // and return magnify together" sentence) in that case would be false.
+  const noTradeoff = Math.round(wMinVar*100)===Math.round(wGrowth*100);
+
+  const rangeLine = noTradeoff
+    ? `<div class="gr-note" style="margin-top:10px">There's no trade-off to make here. <b style="color:var(--paper)">${hiEnd.sym}</b> earned more than <b style="color:var(--paper)">${dominatedEnd.sym}</b> and swung less over this window, so every efficient mix is just 100% ${hiEnd.sym}.</div>`
+    : '';
+  const rangeDetailLine = noTradeoff ? '' : `<div style="margin-top:8px">Moving up the efficient part of this curve, from the lowest-risk mix &ndash; <b style="color:var(--paper)">${(wMinVar*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--paper)">${((1-wMinVar)*100).toFixed(0)}% ${b.symbol}</b>, earning ${pct(minVarRet)} for ${pct(minVarVol)} risk &ndash; up to 100% <b style="color:var(--paper)">${hiEnd.sym}</b>, earning ${pct(hiEnd.ret)} for ${pct(hiEnd.vol)} risk, both return and risk magnify together. Taking more risk on this line always buys more expected return; there's no way to get one without the other.</div>`;
+
+  const destCard = (label, wDest, retDest, volDest, extraClass)=>{
+    const wPct = Math.round(wDest*100);
+    const isCurrent = Math.round(w*100)===wPct;
+    return `<button class="fc-dest${extraClass?' '+extraClass:''}${isCurrent?' is-current':''}" data-live-goto-w="${wPct}">
+      <div class="fc-dest-label">${label}</div>
+      <div class="fc-dest-split">${wPct}% ${a.symbol} / ${100-wPct}% ${b.symbol}</div>
+      <div class="fc-dest-nums">${pct(retDest)} return &middot; ${pct(volDest)} risk</div>
+    </button>`;
+  };
+  const destsHTML = noTradeoff ? '' : `<div class="fc-dests">
+    ${destCard('Play it safe', wMinVar, minVarRet, minVarVol)}
+    ${destCard('Best balance', wTan, tanRet, tanVol, 'fc-dest-rec')}
+    ${destCard('Go for growth', wGrowth, hiEnd.ret, hiEnd.vol)}
+  </div>`;
+
+  const detail = `<div>${corrLine}</div>
+  <div style="margin-top:8px">Your mix earns <b style="color:var(--paper)">${pct(currentRet)}</b> a year for <b style="color:var(--paper)">${pct(currentVol)}</b> risk &ndash; Sharpe <b style="color:var(--gold)">${currentSharpe.toFixed(2)}</b>.</div>
+  <div style="margin-top:8px">${hasGap
+    ? `The single best trade-off between risk and reward here (the <span class="term" data-def="The point on the curve with the highest Sharpe ratio: the mix that earns the most extra return per unit of extra risk, above the risk-free rate. Where the Capital Allocation Line touches the frontier.">tangency point</span>) is <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--gold)">${((1-wTan)*100).toFixed(0)}% ${b.symbol}</b>, earning ${pct(tanRet)} for ${pct(tanVol)} risk (Sharpe ${tanSharpe.toFixed(2)}). Drag the slider toward it, click the dark dot on the chart, or use the button above, to close the gap.`
+    : `The single best trade-off between risk and reward these two instruments can offer is ${(wTan*100).toFixed(0)}% ${a.symbol} / ${((1-wTan)*100).toFixed(0)}% ${b.symbol} &ndash; your split is already close to it.`}</div>${edgeLine}
+  ${moneyDetailLine}
+  ${rangeDetailLine}`;
 
   return `<div class="fcard">
     <div class="fc-verdict" style="color:${verdictColor}">${verdictText}</div>
@@ -3936,7 +3990,8 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
       <div class="stat fc-money-tile fc-money-in"><div class="stat-label">You put in</div><div class="stat-value">${cfgC.compact(illustrateAmt)}</div></div>
       <div class="stat fc-money-tile fc-money-out"><div class="stat-label">Grows to in ${illustrateYrs} yrs</div><div class="stat-value">${cfgC.compact(illustrateFv)}</div></div>
     </div>
-    ${moneyLine}
+    ${destsHTML}
+    ${shortMoneyLine}
     ${rangeLine}
     ${jumpBtn}
     ${explainDropdown('Show the full breakdown', detail)}
@@ -3963,6 +4018,8 @@ function liveTwoAssetHTML(items, rfPct){
     {label:b.symbol, fullLabel:L.live.data[b.key].label, vol:sb.annualVol, ret:sb.annualReturn},
   ];
   const compoundedApprox = currentRet - (currentVol*currentVol)/2;
+  const minVarRet=portfolioReturn([wMinVar,1-wMinVar],[sa.annualReturn,sb.annualReturn]);
+  const minVarVol=Math.sqrt(portfolioVariance([wMinVar,1-wMinVar],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
   return `<div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
     <div class="stat"><div class="stat-label">Correlation</div><div class="stat-value">${c12.toFixed(2)}</div></div>
     <div class="stat"><div class="stat-label">Your mix return</div><div class="stat-value">${(currentRet*100).toFixed(1)}%</div></div>
@@ -3972,7 +4029,7 @@ function liveTwoAssetHTML(items, rfPct){
   <div class="card is-primary">
     <h4>${a.symbol} / ${b.symbol}${infoIcon('Every point on the blue curve is one weight split between these two instruments, swept from 100% '+b.symbol+' to 100% '+a.symbol+'. The dashed line is the Capital Allocation Line: the risk-free rate blended with the best-Sharpe (tangency) mix, extended past 100% to show what borrowing at the risk-free rate to lever up would do.')}</h4>
     <div class="cap">Annualised from ${sa.n} and ${sb.n} real daily observations. Higher up is more return, further right is more risk.</div>
-    ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'live-frontier-echart', onLiveFrontierPick, `${(w*100).toFixed(0)}% ${a.symbol} / ${((1-w)*100).toFixed(0)}% ${b.symbol}`)}
+    ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'live-frontier-echart', onLiveFrontierPick, `${(w*100).toFixed(0)}% ${a.symbol} / ${((1-w)*100).toFixed(0)}% ${b.symbol}`, {vol:minVarVol,ret:minVarRet})}
     <div class="gr-note" style="margin-top:10px">${liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentSharpe, wTan, tanVol, tanRet, rf, w, wMinVar, sa.annualReturn, sa.annualVol, sb.annualReturn, sb.annualVol)}</div>
   </div>
   <div class="card">
@@ -4825,6 +4882,16 @@ document.body.addEventListener('click', e=>{
   const btn = e.target.closest('[data-frontier-jump]');
   if(!btn || !frontierJumpHandler) return;
   frontierJumpHandler();
+});
+// Test Real Investments 2-asset destination cards (Play it safe / Best
+// balance / Go for growth): each carries its own target weight in a data
+// attribute rather than reusing frontierJumpHandler, since that variable
+// only ever holds one target and these three buttons need three.
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-live-goto-w]');
+  if(!el) return;
+  L.live.weight = parseInt(el.dataset.liveGotoW, 10);
+  render();
 });
 // Delegated once here rather than re-wired after every render(): works
 // for any .explain-toggle / .explain-panel pair anywhere in the app,
