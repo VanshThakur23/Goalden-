@@ -44,7 +44,6 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
    box and got silently clipped by overflow:hidden with no scrollbar. This
    was never actually applied here before, only in Door 2. */
 .screen.active{opacity:1;transform:translateX(0);pointer-events:auto;position:relative;height:100%;min-height:0}
-.screen.leaving{opacity:0;transform:translateX(-24px)}
 
 .q-eyebrow{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
 .q-title{font-family:'Newsreader',serif;font-weight:600;font-size:clamp(22px,7vw,30px);line-height:1.18;color:var(--paper);margin-bottom:8px}
@@ -222,6 +221,12 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .edit-chip::before{content:'edit \2192  ';opacity:.5;font-size:9.5px}
 .assump-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
 .assump-panel.open{max-height:500px}
+/* The breakdown toggle holds two charts plus several comparison cards --
+   much taller than the single schedule table the default 500px cap was
+   sized for -- so it gets its own higher ceiling instead of raising the
+   shared .assump-panel.open cap (which would also loosen the schedule/
+   assumptions panels for no reason). */
+.assump-panel.detail-panel.open{max-height:8000px}
 .assump-inner{padding:4px 2px 18px;font-size:12.5px;color:rgba(20,40,63,.6);line-height:1.8}
 .assump-inner b{color:var(--paper)}
 /* Advanced allocation override -- attached inline to a flat post-goal
@@ -574,8 +579,8 @@ const S = {
 function flow() {
   if (!S.goalType) return ['country', 'goal'];
   let f;
-  if (S.goalType === 'retirement') f = ['country','goal','age','retire','expense','risk','results'];
-  else if (S.goalType === 'education')  f = ['country','goal','edu_fee','edu_years','edu_duration','risk','results'];
+  if (S.goalType === 'retirement') f = ['country','goal','age','expense','risk','results'];
+  else if (S.goalType === 'education')  f = ['country','goal','edu_fee','edu_years','risk','results'];
   else if (S.goalType === 'generic')    f = ['country','goal','gen_type','gen_amount','gen_years','risk','results'];
   else if (S.goalType === 'delay')      f = ['country','goal','delay_corpus','delay_years','results'];
   else return ['country','goal'];
@@ -1109,32 +1114,24 @@ function sGoal() {
 
 function sAge() {
   const c = cfg();
+  const retMin = Math.max(35, (S.age||30)+1);
   return '<div class="q-eyebrow">Question 1</div>' +
-    '<div class="q-title">How old are you today?</div>' +
+    '<div class="q-title">How old are you, and when do you want to stop working?</div>' +
     '<div class="q-body">' +
-    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="30" value="'+(S.age||'')+'"><span class="num-suffix">years old</span></div>' +
+    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="30" value="'+(S.age||'')+'"><span class="num-suffix">years old today</span></div>' +
     valueSlider('inpSlider', S.age||30, 18, 70, 1, '18', '70') +
     '<div class="chips-label">Or pick a common age</div>' +
     '<div class="chips">'+c.ageChips.map(a=>'<div class="chip'+(S.age===a?' selected':'')+'" data-age="'+a+'">'+a+'</div>').join('')+'</div>' +
     '<div class="inline-error" id="err"></div>' +
-    '</div>' +
-    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.age?'':' disabled')+'>Continue</button></div>';
-}
-
-function sRetire() {
-  const c = cfg();
-  const retMin = Math.max(35, (S.age||30)+1);
-  return '<div class="q-eyebrow">Question 2</div>' +
-    '<div class="q-title">When do you want to stop working?</div>' +
-    '<div class="q-sub">Your best guess is fine.</div>' +
-    '<div class="q-body">' +
-    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="60" value="'+(S.retireAge||'')+'"><span class="num-suffix">years old</span></div>' +
-    valueSlider('inpSlider', S.retireAge||60, retMin, 85, 1, retMin, '85') +
+    '<div class="optional-field"><div class="optional-label">When do you want to stop working?</div>' +
+    '<div class="num-wrap"><input class="num-input" id="inp2" type="number" inputmode="numeric" placeholder="60" value="'+(S.retireAge||'')+'"><span class="num-suffix">years old</span></div>' +
+    valueSlider('inpSlider2', S.retireAge||60, retMin, 85, 1, retMin, '85') +
     '<div class="chips-label">Or pick a common age</div>' +
     '<div class="chips">'+c.retireChips.map(a=>'<div class="chip'+(S.retireAge===a?' selected':'')+'" data-retire="'+a+'">'+a+'</div>').join('')+'</div>' +
-    '<div class="inline-error" id="err"></div>' +
+    '<div class="inline-error" id="err2"></div>' +
     '</div>' +
-    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.retireAge?'':' disabled')+'>Continue</button></div>';
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.age&&S.retireAge?'':' disabled')+'>Continue</button></div>';
 }
 
 function sExpense() {
@@ -1178,28 +1175,22 @@ function sEduFee() {
 function sEduYears() {
   const c = cfg();
   return '<div class="q-eyebrow">Education fund · step 2</div>' +
-    '<div class="q-title">How many years until college starts?</div>' +
+    '<div class="q-title">How many years until college starts, and how long is the course?</div>' +
     '<div class="q-body">' +
-    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="10" value="'+(S.yearsToCollege||'')+'"><span class="num-suffix">years</span></div>' +
+    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="10" value="'+(S.yearsToCollege||'')+'"><span class="num-suffix">years until it starts</span></div>' +
     valueSlider('inpSlider', S.yearsToCollege||10, 1, 22, 1, '1', '22') +
     '<div class="chips-label">Or pick a common span</div>' +
     '<div class="chips">'+c.collegeChips.map(a=>'<div class="chip'+(S.yearsToCollege===a?' selected':'')+'" data-cy="'+a+'">'+a+' yrs</div>').join('')+'</div>' +
     '<div class="inline-error" id="err"></div>' +
-    '</div>' +
-    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.yearsToCollege?'':' disabled')+'>Continue</button></div>';
-}
-
-function sEduDuration() {
-  return '<div class="q-eyebrow">Education fund · step 3</div>' +
-    '<div class="q-title">How many years will the course take?</div>' +
-    '<div class="q-body">' +
-    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="4" value="'+(S.courseDuration||'')+'"><span class="num-suffix">years of study</span></div>' +
-    valueSlider('inpSlider', S.courseDuration||4, 1, 8, 1, '1', '8') +
+    '<div class="optional-field"><div class="optional-label">How many years will the course take?</div>' +
+    '<div class="num-wrap"><input class="num-input" id="inp2" type="number" inputmode="numeric" placeholder="4" value="'+(S.courseDuration||'')+'"><span class="num-suffix">years of study</span></div>' +
+    valueSlider('inpSlider2', S.courseDuration||4, 1, 8, 1, '1', '8') +
     '<div class="chips-label">Or pick a common length</div>' +
     '<div class="chips">'+[2,3,4,5].map(a=>'<div class="chip'+(S.courseDuration===a?' selected':'')+'" data-cd="'+a+'">'+a+' yrs</div>').join('')+'</div>' +
-    '<div class="inline-error" id="err"></div>' +
+    '<div class="inline-error" id="err2"></div>' +
     '</div>' +
-    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.courseDuration?'':' disabled')+'>Continue</button></div>';
+    '</div>' +
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.yearsToCollege&&S.courseDuration?'':' disabled')+'>Continue</button></div>';
 }
 
 function sGenType() {
@@ -1517,7 +1508,7 @@ function sResultsRetirement() {
     '<div class="result-intro">Good news: this is a solvable problem. Here is exactly what it takes.</div>' +
     '<div class="edit-row">' +
     '<div class="edit-chip" data-jump="age">Age '+S.age+'</div>' +
-    '<div class="edit-chip" data-jump="retire">Retire '+S.retireAge+'</div>' +
+    '<div class="edit-chip" data-jump="age">Retire '+S.retireAge+'</div>' +
     '<div class="edit-chip" data-jump="expense">'+c.compact(S.monthlyExpense)+'/mo</div>' +
     '<div class="edit-chip" data-jump="risk">'+rLabel+'</div>' +
     '</div>' +
@@ -1527,6 +1518,8 @@ function sResultsRetirement() {
     '<div class="hero-sub">About '+c.compact(r.realCorpus)+' in today\'s money. Prices will be higher by then, but your spending power stays the same.'+existingNote+'</div>' +
     '</div>' +
     actionCard +
+    '<div class="assump-toggle detail-toggle" id="bt">'+caretSvg()+'See how we got this number: charts, allocation, comparisons</div>' +
+    '<div class="assump-panel detail-panel" id="bp"><div class="assump-inner">' +
     '<div class="chart-card"><div class="chart-title">How the pot grows</div>' +
     '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
     mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' +
@@ -1537,6 +1530,7 @@ function sResultsRetirement() {
     (!r.alreadyMet ? fdComparisonCardHtml(r.sip, r.yrs, r.corpus, r.d, c) : '') +
     retireAgeCompareCard(calcRetireAgeCompare(), c) +
     delayCard(r.delay, r.yrs) +
+    '</div></div>' +
     '<div class="assump-toggle" id="st">'+caretSvg()+'See the full month-by-month schedule</div>' +
     '<div class="assump-panel" id="sp"><div class="schedule-scroll"><table class="schedule-table">' +
     '<thead><tr><th>Year</th><th>You paid in</th><th>Growth earned</th><th>Balance</th></tr></thead><tbody>' +
@@ -1569,7 +1563,7 @@ function sResultsEducation() {
     '<div class="edit-row">' +
     '<div class="edit-chip" data-jump="edu_fee">'+c.compact(S.annualFee)+'/yr</div>' +
     '<div class="edit-chip" data-jump="edu_years">'+S.yearsToCollege+' yrs away</div>' +
-    '<div class="edit-chip" data-jump="edu_duration">'+S.courseDuration+'-yr course</div>' +
+    '<div class="edit-chip" data-jump="edu_years">'+S.courseDuration+'-yr course</div>' +
     '<div class="edit-chip" data-jump="risk">'+rLabel+'</div>' +
     '</div>' +
     '<div class="hero-number">' +
@@ -1578,6 +1572,8 @@ function sResultsEducation() {
     '<div class="hero-sub">This covers '+S.courseDuration+' years of fees. Year 1 alone costs '+c.compact(r.feeAtCollege)+', and fees keep rising while your child studies.'+existingNote+'</div>' +
     '</div>' +
     actionCard +
+    '<div class="assump-toggle detail-toggle" id="bt">'+caretSvg()+'See how we got this number: charts, allocation, comparisons</div>' +
+    '<div class="assump-panel detail-panel" id="bp"><div class="assump-inner">' +
     '<div class="chart-card"><div class="chart-title">How the college fund grows</div>' +
     '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
     mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' +
@@ -1587,6 +1583,7 @@ function sResultsEducation() {
     allocationCardHtml(r.preRate, r.d, rLabel) +
     (!r.alreadyMet ? fdComparisonCardHtml(r.sip, S.yearsToCollege, r.corpus, r.d, c) : '') +
     delayCard(r.delay, S.yearsToCollege) +
+    '</div></div>' +
     '<div class="assump-toggle" id="st">'+caretSvg()+'See the full month-by-month schedule</div>' +
     '<div class="assump-panel" id="sp"><div class="schedule-scroll"><table class="schedule-table">' +
     '<thead><tr><th>Year</th><th>You paid in</th><th>Growth earned</th><th>Balance</th></tr></thead><tbody>' +
@@ -1624,13 +1621,17 @@ function sResultsGeneric() {
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
       '<div class="as">For '+S.genYears+' years at "'+rLabel+'". Covers the gap after your existing savings grow.</div></div>'
     ) +
-    (r.accRows.length > 0 ?
-      '<div class="chart-card"><div class="chart-title">How the fund grows</div>' +
-      '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
-      mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' : '') +
-    (r.gap > 0 ? allocationCardHtml(r.preRate, r.d, rLabel) : '') +
-    (r.gap > 0 ? fdComparisonCardHtml(r.sip, S.genYears, r.gap, r.d, c) : '') +
-    (r.delay ? delayCard(r.delay, S.genYears) : '') +
+    (r.accRows.length > 0 || r.gap > 0 || r.delay ?
+      '<div class="assump-toggle detail-toggle" id="bt">'+caretSvg()+'See how we got this number: charts, allocation, comparisons</div>' +
+      '<div class="assump-panel detail-panel" id="bp"><div class="assump-inner">' +
+      (r.accRows.length > 0 ?
+        '<div class="chart-card"><div class="chart-title">How the fund grows</div>' +
+        '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
+        mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' : '') +
+      (r.gap > 0 ? allocationCardHtml(r.preRate, r.d, rLabel) : '') +
+      (r.gap > 0 ? fdComparisonCardHtml(r.sip, S.genYears, r.gap, r.d, c) : '') +
+      (r.delay ? delayCard(r.delay, S.genYears) : '') +
+      '</div></div>' : '') +
     (r.accRows.length > 0 ?
       '<div class="assump-toggle" id="st">'+caretSvg()+'See the full month-by-month schedule</div>' +
       '<div class="assump-panel" id="sp"><div class="schedule-scroll"><table class="schedule-table">' +
@@ -1736,11 +1737,9 @@ function render() {
   if (screen==='country')      html = sCountry();
   else if (screen==='goal')    html = sGoal();
   else if (screen==='age')     html = sAge();
-  else if (screen==='retire')  html = sRetire();
   else if (screen==='expense') html = sExpense();
   else if (screen==='edu_fee') html = sEduFee();
   else if (screen==='edu_years')     html = sEduYears();
-  else if (screen==='edu_duration')  html = sEduDuration();
   else if (screen==='gen_type')   html = sGenType();
   else if (screen==='gen_amount') html = sGenAmount();
   else if (screen==='gen_years')  html = sGenYears();
@@ -1749,10 +1748,18 @@ function render() {
   else if (screen==='case')    html = sCase();
 
   const wrap = document.createElement('div');
-  wrap.className = 'screen active';
+  wrap.className = 'screen';
   wrap.innerHTML = html;
   stage.innerHTML = '';
   stage.appendChild(wrap);
+  // Forcing a layout read here (rather than deferring the class add to
+  // requestAnimationFrame) flushes the browser's style calc with the
+  // pre-transition state already applied, so the .active transition still
+  // fires correctly without depending on a paint callback -- rAF doesn't
+  // reliably fire on a backgrounded/non-composited tab, which would leave
+  // the screen permanently stuck at opacity:0.
+  void wrap.offsetHeight;
+  wrap.classList.add('active');
   backBtn.classList.toggle('show', S.si > 0);
   assumpBtn.classList.toggle('show', screen==='results');
   if (screen==='case') window.scrollTo(0,0);
@@ -1790,27 +1797,33 @@ function attach(screen) {
   if (screen==='age') {
     const inp = document.getElementById('inp'), err = document.getElementById('err');
     const sl = document.getElementById('inpSlider');
-    const set = v => { S.age = v; nb.disabled = !v; err.textContent = ''; };
-    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.age, 18, 70); });
-    wireSlider('inpSlider', inp, 18, 70, set);
-    document.querySelectorAll('[data-age]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.age; syncSliderToValue(sl, parseInt(el.dataset.age), 18, 70); set(parseInt(el.dataset.age)); }));
+    const inp2 = document.getElementById('inp2'), err2 = document.getElementById('err2');
+    const sl2 = document.getElementById('inpSlider2');
+    let retMin = Math.max(35, (S.age||30)+1);
+    const updateContinue = () => { nb.disabled = !(S.age && S.retireAge); };
+    const setAge = v => {
+      S.age = v; err.textContent = '';
+      // The retire-age floor depends on the current age, and both fields now
+      // live on one screen -- if the user drags age after already answering
+      // retire age, the retire slider's min (baked into the DOM at render
+      // time) would go stale, so keep it live here instead of only at render.
+      retMin = Math.max(35, (v||30)+1);
+      sl2.min = retMin;
+      if (parseInt(sl2.value) < retMin) sl2.value = retMin;
+      if (S.retireAge && S.retireAge <= v) { S.retireAge = null; inp2.value = ''; }
+      updateContinue();
+    };
+    const setRetire = v => { S.retireAge = v; err2.textContent = ''; updateContinue(); };
+    inp.addEventListener('input', () => { setAge(parseInt(inp.value)||null); syncSliderToValue(sl, S.age, 18, 70); });
+    wireSlider('inpSlider', inp, 18, 70, setAge);
+    document.querySelectorAll('[data-age]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.age; syncSliderToValue(sl, parseInt(el.dataset.age), 18, 70); setAge(parseInt(el.dataset.age)); }));
+    inp2.addEventListener('input', () => { setRetire(parseInt(inp2.value)||null); syncSliderToValue(sl2, S.retireAge, retMin, 85); });
+    wireSlider('inpSlider2', inp2, retMin, 85, setRetire);
+    document.querySelectorAll('[data-retire]').forEach(el => el.addEventListener('click', () => { inp2.value=el.dataset.retire; syncSliderToValue(sl2, parseInt(el.dataset.retire), retMin, 85); setRetire(parseInt(el.dataset.retire)); }));
     nb.addEventListener('click', () => {
       if (!S.age||S.age<16||S.age>75){err.textContent='Enter an age between 16 and 75.';return;}
-      go(1);
-    });
-  }
-
-  if (screen==='retire') {
-    const inp = document.getElementById('inp'), err = document.getElementById('err');
-    const sl = document.getElementById('inpSlider');
-    const retMin = Math.max(35, (S.age||30)+1);
-    const set = v => { S.retireAge = v; nb.disabled = !v; err.textContent=''; };
-    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.retireAge, retMin, 85); });
-    wireSlider('inpSlider', inp, retMin, 85, set);
-    document.querySelectorAll('[data-retire]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.retire; syncSliderToValue(sl, parseInt(el.dataset.retire), retMin, 85); set(parseInt(el.dataset.retire)); }));
-    nb.addEventListener('click', () => {
-      if (!S.retireAge||S.retireAge<=S.age){err.textContent='This should be after your current age ('+S.age+').';return;}
-      if (S.retireAge>85){err.textContent='Try an age up to 85.';return;}
+      if (!S.retireAge||S.retireAge<=S.age){err2.textContent='This should be after your current age ('+S.age+').';return;}
+      if (S.retireAge>85){err2.textContent='Try an age up to 85.';return;}
       advance();
     });
   }
@@ -1846,24 +1859,22 @@ function attach(screen) {
   if (screen==='edu_years') {
     const inp = document.getElementById('inp'), err = document.getElementById('err');
     const sl = document.getElementById('inpSlider');
-    const set = v => { S.yearsToCollege = v; nb.disabled = !v; err.textContent=''; };
+    const inp2 = document.getElementById('inp2'), err2 = document.getElementById('err2');
+    const sl2 = document.getElementById('inpSlider2');
+    const updateContinue = () => { nb.disabled = !(S.yearsToCollege && S.courseDuration); };
+    const set = v => { S.yearsToCollege = v; err.textContent=''; updateContinue(); };
+    const set2 = v => { S.courseDuration = v; err2.textContent=''; updateContinue(); };
     inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.yearsToCollege, 1, 22); });
     wireSlider('inpSlider', inp, 1, 22, set);
     document.querySelectorAll('[data-cy]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.cy; syncSliderToValue(sl, parseInt(el.dataset.cy), 1, 22); set(parseInt(el.dataset.cy)); }));
+    inp2.addEventListener('input', () => { set2(parseInt(inp2.value)||null); syncSliderToValue(sl2, S.courseDuration, 1, 8); });
+    wireSlider('inpSlider2', inp2, 1, 8, set2);
+    document.querySelectorAll('[data-cd]').forEach(el => el.addEventListener('click', () => { inp2.value=el.dataset.cd; syncSliderToValue(sl2, parseInt(el.dataset.cd), 1, 8); set2(parseInt(el.dataset.cd)); }));
     nb.addEventListener('click', () => {
       if(!S.yearsToCollege||S.yearsToCollege<1){err.textContent='Enter years until college starts.';return;}
+      if(!S.courseDuration){err2.textContent='Enter course duration.';return;}
       advance();
     });
-  }
-
-  if (screen==='edu_duration') {
-    const inp = document.getElementById('inp'), err = document.getElementById('err');
-    const sl = document.getElementById('inpSlider');
-    const set = v => { S.courseDuration = v; nb.disabled = !v; err.textContent=''; };
-    inp.addEventListener('input', () => { set(parseInt(inp.value)||null); syncSliderToValue(sl, S.courseDuration, 1, 8); });
-    wireSlider('inpSlider', inp, 1, 8, set);
-    document.querySelectorAll('[data-cd]').forEach(el => el.addEventListener('click', () => { inp.value=el.dataset.cd; syncSliderToValue(sl, parseInt(el.dataset.cd), 1, 8); set(parseInt(el.dataset.cd)); }));
-    nb.addEventListener('click', () => { if(!S.courseDuration){err.textContent='Enter course duration.';return;} advance(); });
   }
 
   if (screen==='gen_type') {
@@ -1909,6 +1920,8 @@ function attach(screen) {
     if (st && sp) st.addEventListener('click', () => { sp.classList.toggle('open'); st.classList.toggle('open'); });
     const dt = document.getElementById('dt'), dp = document.getElementById('dp');
     if (dt && dp) dt.addEventListener('click', () => { dp.classList.toggle('open'); dt.classList.toggle('open'); });
+    const bt = document.getElementById('bt'), bp = document.getElementById('bp');
+    if (bt && bp) bt.addEventListener('click', () => { bp.classList.toggle('open'); bt.classList.toggle('open'); });
     wireAdvAlloc('ret'); wireAdvAlloc('edu');
     const rb = document.getElementById('rb');
     if (rb) rb.addEventListener('click', () => {

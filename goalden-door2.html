@@ -54,6 +54,13 @@ h1,h2,h3{line-height:1.25}
 .qtitle{font-family:'Newsreader',serif;font-weight:600;font-size:clamp(20px,6.5vw,28px);line-height:1.2;color:var(--paper);margin-bottom:7px}
 .qsub{font-size:13.5px;color:rgba(20,40,63,.6);margin-bottom:20px;line-height:1.5;max-width:38ch}
 .qbody{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:11px;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+/* A batched question screen (renderQGroup) stacks 2-3 of these inside one
+   .qbody -- smaller than .qtitle since there's more than one per screen now,
+   and the dashed top divider (matching Door 1's .optional-field idiom) marks
+   where the next question starts. */
+.qgroup-title{font-family:'Newsreader',serif;font-weight:600;font-size:17px;line-height:1.3;color:var(--paper);margin-bottom:10px}
+.qgroup-item{display:flex;flex-direction:column;gap:9px}
+.qgroup-item-sep{padding-top:18px;border-top:1px dashed rgba(20,40,63,.16)}
 
 /* --- option cards --- */
 .opt{background:rgba(20,40,63,.06);border:1.5px solid rgba(20,40,63,.13);border-radius:3px 15px 15px 15px;padding:16px 17px;cursor:pointer;transition:all .17s;text-align:left}
@@ -216,6 +223,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .inst-toggle{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.45);padding:8px 15px 4px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .inst-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
 .inst-panel.open{max-height:900px}
+/* #bp (growth chart + FD comparison + allocation, on the plan screen) holds
+   more than the per-goal instrument panels this class is shared with -- an
+   ID-scoped override keeps its cap generous without loosening every other
+   .inst-panel on the page. */
+#bp.open{max-height:6000px}
 .inst-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 2px 4px}
 .inst-card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.12);border-radius:3px 10px 10px 10px;padding:11px 12px}
 .inst-name{font-family:'Newsreader',serif;font-size:13.5px;color:var(--paper);line-height:1.3;margin-bottom:3px}
@@ -910,6 +922,15 @@ const TOL_QS = [
    opts:[{t:'Higher expected return with meaningful ups and downs',s:4},{t:'Reasonable return with limited swings',s:3},{t:'Modest but consistent return, low volatility',s:2},{t:'Guaranteed return, even if it is smaller',s:1}]},
 ];
 
+// Grouping two or three short tap-to-answer questions onto one screen
+// instead of one screen each -- 9 single-question screens felt like an
+// unusually long click-through for what's really a handful of quick taps.
+// renderQGroup() below renders every question in a group as its own titled
+// block on the same screen; nothing about attach()'s [data-score] handling
+// needs to change since it was already unscoped to a single question.
+const CAP_GROUPS = [[0,1],[2,3]];
+const TOL_GROUPS = [[0,1,2],[3,4]];
+
 const ICONS = {
   retirement: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.1 5.1l2.1 2.1M16.8 16.8l2.1 2.1M5.1 18.9L7.2 16.8M16.8 7.2l2.1-2.1"/></svg>',
   education: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5-10-5z"/><path d="M6 11.2v4.8c0 1.5 3 3 6 3s6-1.5 6-3v-4.8"/><path d="M22 9v6.5"/></svg>',
@@ -955,7 +976,7 @@ function cfg(){return C[G.country]}
    ===================================================================== */
 function flow(){
   const f=['country'];
-  CAP_QS.forEach((_,i)=>f.push('cap_'+i));
+  CAP_GROUPS.forEach((_,i)=>f.push('cap_'+i));
   f.push('emergency');
   // Only ask the prioritization choice if there's actually a gap to fill —
   // a full emergency fund needs no decision.
@@ -963,7 +984,7 @@ function flow(){
     f.push('emergency_choice');
   }
   f.push('budget');
-  TOL_QS.forEach((_,i)=>f.push('tol_'+i));
+  TOL_GROUPS.forEach((_,i)=>f.push('tol_'+i));
   f.push('profile');
   f.push('goals_hub');
   // include goal sub-screens when the user has clicked "Add goal"
@@ -977,8 +998,6 @@ function flow(){
   if(G.viewingCase) f.push('case');
   return f;
 }
-
-function totalSteps(){return 10+4}// 10 profiling questions + 4 setup screens
 
 function progressPct(){
   const f=flow();
@@ -1263,8 +1282,8 @@ function renderPotChartOption(chartId, rows, c){
    ===================================================================== */
 function renderScreen(screen){
   if(screen==='country')return renderCountry();
-  if(screen.startsWith('cap_'))return renderQ('cap',parseInt(screen.slice(4)));
-  if(screen.startsWith('tol_'))return renderQ('tol',parseInt(screen.slice(4)));
+  if(screen.startsWith('cap_'))return renderQGroup('cap',CAP_GROUPS[parseInt(screen.slice(4))]);
+  if(screen.startsWith('tol_'))return renderQGroup('tol',TOL_GROUPS[parseInt(screen.slice(4))]);
   if(screen==='profile')return renderProfile();
   if(screen==='budget')return renderBudget();
   if(screen==='emergency')return renderEmergency();
@@ -1289,20 +1308,32 @@ function renderCountry(){
   <div class="cta-zone"><button class="cta" id="nb"${G.country?'':' disabled'}>Continue</button></div>`;
 }
 
-function renderQ(section,idx){
+function renderQGroup(section,indices){
   const qs=section==='cap'?CAP_QS:TOL_QS;
-  const q=qs[idx];
-  const saved=section==='cap'?G.capA[idx]:G.tolA[idx];
-  return `<div class="eyebrow">${q.ey}</div>
-  <div class="qtitle">${q.title}</div>
-  ${q.why?`<div class="qsub">${q.why}</div>`:''}
-  <div class="qbody">
-  ${q.opts.map(o=>`
-    <div class="opt${saved===o.s?' sel':''}" data-score="${o.s}" data-sec="${section}" data-idx="${idx}">
-      <div class="opt-main">${o.t}</div>
-    </div>`).join('')}
-  </div>
-  <div class="cta-zone"><button class="cta" id="nb"${saved!==null?'':' disabled'}>Continue</button></div>`;
+  const label=section==='cap'?'Your financial foundation':'Your comfort with risk';
+  const allAnswered=indices.every(idx=>(section==='cap'?G.capA[idx]:G.tolA[idx])!=null);
+  // One shared .qbody for the whole group (not one per question) -- .qbody
+  // is the screen's single flex/scroll container everywhere else in this
+  // file, and .term-tip's clipping-safety is only proven inside that one
+  // container (see the profile screen), not inside a stack of nested ones.
+  const blocks=indices.map((idx,n)=>{
+    const q=qs[idx], saved=section==='cap'?G.capA[idx]:G.tolA[idx];
+    // The why sentence used to sit under the title on its own dedicated
+    // screen; stacking 2-3 of those in full on one screen would just
+    // reintroduce the wall of text the batching was meant to cut, so it's
+    // tap-to-reveal now via the same .term pattern already used elsewhere
+    // in this file (attach() wires it up screen-agnostically already).
+    return `<div class="qgroup-item${n>0?' qgroup-item-sep':''}">
+    <div class="qgroup-title">${q.title}${q.why?` <span class="term" data-def="${q.why.replace(/"/g,'&quot;')}">why we ask</span>`:''}</div>
+    ${q.opts.map(o=>`
+      <div class="opt${saved===o.s?' sel':''}" data-score="${o.s}" data-sec="${section}" data-idx="${idx}">
+        <div class="opt-main">${o.t}</div>
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+  return `<div class="eyebrow">${label}</div>
+  <div class="qbody">${blocks}</div>
+  <div class="cta-zone"><button class="cta" id="nb"${allAnswered?'':' disabled'}>Continue</button></div>`;
 }
 
 function renderProfile(){
@@ -1780,9 +1811,9 @@ function renderPlan(){
   </div>
 
   ${gapCard}
-  ${chartHtml}
-  ${fdCardHtml}
-  ${allocCard}
+  ${(chartHtml||fdCardHtml)?`
+  <div class="inst-toggle" id="bt">See the growth chart, FD comparison, and allocation</div>
+  <div class="inst-panel" id="bp">${chartHtml}${fdCardHtml}${allocCard}</div>` : allocCard}
 
   <div class="alloc-card" style="text-align:center">
     <div class="section-head" style="margin-top:0">Want the deeper tools?</div>
@@ -1842,10 +1873,18 @@ function go(delta){G.si=Math.max(0,Math.min(flow().length-1,G.si+delta));render(
 function render(){
   const screen=flow()[G.si];
   const wrap=document.createElement('div');
-  wrap.className='screen active';
+  wrap.className='screen';
   wrap.innerHTML=renderScreen(screen);
   stage.innerHTML='';
   stage.appendChild(wrap);
+  // Forcing a layout read here (rather than deferring the class add to
+  // requestAnimationFrame) flushes the browser's style calc with the
+  // pre-transition state already applied, so the .active transition still
+  // fires correctly without depending on a paint callback -- rAF doesn't
+  // reliably fire on a backgrounded/non-composited tab, which would leave
+  // the screen permanently stuck at opacity:0.
+  void wrap.offsetHeight;
+  wrap.classList.add('active');
   updateProgress();
   attach(screen);
 }
@@ -2032,6 +2071,9 @@ function attach(screen){
   if(screen==='plan'){
     document.getElementById('at')&&document.getElementById('at').addEventListener('click',()=>{
       document.getElementById('ap').classList.toggle('open');
+    });
+    document.getElementById('bt')&&document.getElementById('bt').addEventListener('click',()=>{
+      document.getElementById('bp').classList.toggle('open');
     });
     document.querySelectorAll('[id^="it-"]').forEach(el=>{
       el.addEventListener('click',()=>{
