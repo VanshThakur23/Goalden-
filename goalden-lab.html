@@ -367,6 +367,17 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .fc-tile{background:rgba(20,40,63,.03);border-radius:2px 2px 10px 10px;padding:12px 10px}
 .fc-tile .stat-value{font-size:18px}
 .fc-tile .stat-label{font-size:10px}
+.fc-tiles-sm .fc-tile{padding:8px 8px}
+.fc-tiles-sm .fc-tile .stat-value{font-size:14px}
+.fc-tiles-sm .fc-tile .stat-label{font-size:9px}
+.fc-money-tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+.fc-money-tile{border-radius:2px 2px 10px 10px;padding:16px 14px}
+.fc-money-tile .stat-value{font-size:24px}
+.fc-money-tile .stat-label{font-size:10.5px}
+.fc-money-in{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.3);border-left:3px solid rgba(37,87,199,.65)}
+.fc-money-in .stat-value{color:var(--gold)}
+.fc-money-out{background:rgba(95,168,117,.12);border:1px solid rgba(95,168,117,.4);border-left:3px solid rgba(95,168,117,.7)}
+.fc-money-out .stat-value{color:#5FA875}
 .fc-action{width:100%;background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:10px;font-size:12px;cursor:pointer;font-family:'Spline Sans Mono',monospace;margin-bottom:10px;transition:background .15s}
 .fc-action:hover{background:rgba(37,87,199,.22)}
 
@@ -3916,10 +3927,14 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
 
   return `<div class="fcard">
     <div class="fc-verdict" style="color:${verdictColor}">${verdictText}</div>
-    <div class="fc-tiles">
+    <div class="fc-tiles fc-tiles-sm">
       <div class="stat fc-tile"><div class="stat-label">Your return</div><div class="stat-value">${pct(currentRet)}</div></div>
       <div class="stat fc-tile"><div class="stat-label">Your risk</div><div class="stat-value">${pct(currentVol)}</div></div>
       <div class="stat fc-tile"><div class="stat-label">Sharpe ratio</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
+    </div>
+    <div class="fc-money-tiles">
+      <div class="stat fc-money-tile fc-money-in"><div class="stat-label">You put in</div><div class="stat-value">${cfgC.compact(illustrateAmt)}</div></div>
+      <div class="stat fc-money-tile fc-money-out"><div class="stat-label">Grows to in ${illustrateYrs} yrs</div><div class="stat-value">${cfgC.compact(illustrateFv)}</div></div>
     </div>
     ${moneyLine}
     ${rangeLine}
