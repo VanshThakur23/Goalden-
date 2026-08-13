@@ -145,7 +145,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 
 main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 main.enter{animation:mainEnter .3s ease-out}
-@keyframes mainEnter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+/* opacity-only: this class is added on *every* render(), including every
+   keystroke into an assumptions field, not just tab switches. A transform
+   here (even a resolving translateY) makes #main a transformed ancestor for
+   the .3s of each animation, and a transformed ancestor is a well-known way
+   to silently break position:sticky on the panel inside it -- exactly while
+   the user is typing into it. Opacity carries the same fade-in feel without
+   that side effect. */
+@keyframes mainEnter{from{opacity:0}to{opacity:1}}
 .grid{display:grid;grid-template-columns:340px 1fr;gap:26px;align-items:start}
 @media(max-width:860px){.grid{grid-template-columns:1fr}}
 
@@ -171,6 +178,16 @@ main.enter{animation:mainEnter .3s ease-out}
    and a scroll container would clip them. */
 .panel.is-sticky{position:sticky;top:14px}
 @media(max-width:860px){.panel.is-sticky{position:static;top:auto}}
+/* Shown only for the non-sticky case above (panel taller than its output --
+   e.g. Test Real Investments with nothing picked yet, all search/filter UI
+   visible). That panel can't sticky without trapping its own bottom out of
+   reach, so instead of fighting the height it gets a way back up: a floating
+   button that appears once the panel has scrolled past the top of the
+   viewport and jumps back to it on click. */
+.panel-jump-btn{position:fixed;left:24px;bottom:24px;z-index:60;background:var(--gold);color:#fff;border:none;border-radius:999px;padding:10px 18px 10px 16px;display:flex;align-items:center;gap:6px;font-family:'Spline Sans Mono',monospace;font-size:12px;font-weight:700;box-shadow:0 8px 20px rgba(37,87,199,.35);cursor:pointer;opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .2s ease,transform .2s ease}
+.panel-jump-btn.show{opacity:1;pointer-events:auto;transform:translateY(0)}
+.panel-jump-btn:hover{background:#1d47a8}
+@media(max-width:860px){.panel-jump-btn{left:16px;bottom:16px;padding:9px 14px 9px 12px;font-size:11px}}
 /* Per-tab panel hide/show, same idea as the whole-nav toggle: one button
    collapses this tool's left inputs panel down to a slim strip so the
    output column can reclaim the space, same as the "All tools" rail. The
@@ -391,6 +408,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .fc-dest.is-current{border-color:rgba(217,119,87,.6);box-shadow:inset 0 0 0 1px rgba(217,119,87,.3)}
 .fc-dest.is-current .fc-dest-label{color:#D97757}
 @media(max-width:860px){.fc-dests{grid-template-columns:1fr}}
+.fc-diversify{background:rgba(37,87,199,.06);border:1px solid rgba(37,87,199,.25);border-left:3px solid rgba(37,87,199,.55);border-radius:2px 2px 10px 10px;padding:14px;margin-bottom:14px}
+.fc-diversify-stat{font-family:'Newsreader',serif;font-size:22px;font-weight:700;color:var(--gold);margin-bottom:6px}
+.fc-diversify-headline{font-size:13px;line-height:1.55;color:rgba(20,40,63,.8)}
 
 /* --- map card: reset/resample header, declutter toggles, held-cluster chips --- */
 .pf-map-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
@@ -761,14 +781,19 @@ function monteCarloAccumulation({sip,meanReturn,volatility,years,due,seed,n}){
 // what a single average return can never show: two paths with the exact
 // same mean and volatility can survive or fail entirely depending on
 // WHEN the bad years land — sequence-of-returns risk.
-function monteCarloDrawdown({openingCorpus,firstWithdrawal,inflation,meanReturn,volatility,years,due,seed,n}){
+function monteCarloDrawdown({openingCorpus,firstWithdrawal,inflation,meanReturn,volatility,years,due,seed,n,shockYear,shockReturn}){
   const rng=mulberry32(seed);
   const finals=[],paths=[],ranOutYears=[];
   for(let sim=0;sim<n;sim++){
     let bal=openingCorpus,w=firstWithdrawal,ranOut=null;
     const path=[bal];
     for(let y=1;y<=years;y++){
-      const r=volatility===0?meanReturn:meanReturn+volatility*gaussian(rng);
+      // The historical-shock scenario picked above forces this one year to
+      // the real crash figure in every simulated path, while every other
+      // year still draws random volatility -- answering "does the plan
+      // survive normal randomness on top of a specific historical crash?"
+      // rather than treating the shock and the Monte Carlo as unrelated.
+      const r=(shockYear!=null && y===shockYear) ? shockReturn : (volatility===0?meanReturn:meanReturn+volatility*gaussian(rng));
       let close;
       if(due){const baw=bal-w;close=baw+baw*r;}else{close=(bal+bal*r)-w;}
       // A plan built to reach exactly zero can land a hair below it from
@@ -1553,8 +1578,11 @@ let ddmcTimer=null;
 let lastDDMCHtml='';
 function renderDDMCBody(res){
   const r=L.ret, c=cfg();
+  const shockEp = r.shock ? c.episodes.find(e=>e.id===r.shock.epId) : null;
+  const shockYear = shockEp ? Math.min(r.shock.year, res.drawYrs) : null;
   const mc=monteCarloDrawdown({openingCorpus:res.corpus, firstWithdrawal:res.expAtRet, inflation:r.inflation/100,
-    meanReturn:r.postRate/100, volatility:r.ddVol/100, years:res.drawYrs, due:r.due, seed:r.ddSeed, n:1000});
+    meanReturn:r.postRate/100, volatility:r.ddVol/100, years:res.drawYrs, due:r.due, seed:r.ddSeed, n:1000,
+    shockYear, shockReturn:shockEp?shockEp.rate:null});
   const survPct=Math.round(mc.survivalPct*100);
   // A zero-margin corpus (the plan is deliberately sized to reach exactly
   // zero with no buffer) means P10 and, very often, P50 too represent a
@@ -1576,7 +1604,7 @@ function renderDDMCBody(res){
     <div class="stat"><div class="stat-label">P10 outcome${infoIcon('The 10th-percentile path: 9 in 10 simulated paths did at least this well. If even this path ran out of money, the year shown is when, not a balance, since it never had one left.')}</div><div class="stat-value" style="font-size:22px">${p10Html}</div></div>
     <div class="stat"><div class="stat-label">P50 outcome${infoIcon('The median simulated path: half did better than this, half worse. If survival is below 50%, the typical path itself runs out, which is exactly what this is reporting.')}</div><div class="stat-value" style="font-size:22px">${p50Html}</div></div>
   </div>
-  <div class="cap" style="margin-top:10px">Fan of 1,000 simulated drawdown paths, seed ${r.ddSeed}</div>
+  <div class="cap" style="margin-top:10px">${shockEp?`With ${shockEp.label} forced into drawdown year ${shockYear} of every path, plus normal random volatility elsewhere. `:''}Fan of 1,000 simulated drawdown paths, seed ${r.ddSeed}</div>
   ${fanChart(mc.yearBands, 'ret-ddmc-fan')}`;
   lastDDMCHtml=html;
   return html;
@@ -3733,6 +3761,10 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
   const retTol=(Math.max(...rets)-Math.min(...rets))*0.04 || 0.001;
   const near=(p,q)=>Math.abs(p.vol-q.vol)<volTol && Math.abs(p.ret-q.ret)<retTol;
   const showSafest = minVarPoint && !near(minVarPoint,tangencyPoint) && !assetPoints.some(ap=>near(minVarPoint,{vol:ap.vol,ret:ap.ret}));
+  // capitalAllocationLine() always starts its sweep at leverage 0, i.e.
+  // cal[0] is exactly {vol:0, ret:rf} -- reading it back out here instead
+  // of threading a separate rf argument through the whole call chain.
+  const rfPoint = cal[0] || {vol:0, ret:0};
   return {
     animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
     grid:{left:54,right:20,top:24,bottom:52,containLabel:true},
@@ -3752,7 +3784,8 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         const split = w!=null ? `${(w*100).toFixed(0)}% ${labelA} / ${((1-w)*100).toFixed(0)}% ${labelB}<br/>` : '';
         return `${split}Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/><span style="color:#2557C7">Click to try this mix.</span>`;
       }
-      if(p.seriesName==='CAL') return `<b>Capital Allocation Line.</b><br/>Part safe cash, part the best-Sharpe mix.<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='CAL') return `<b>Capital Allocation Line.</b><br/>Starts at the risk-free rate (${pct(rfPoint.ret)}, 0% risk) and blends in more of the Best Balance mix as it climbs.<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='Risk-free') return `<b>The risk-free rate: ${pct(rfPoint.ret)}.</b><br/>The safe baseline this comparison uses &ndash; roughly a savings account or government bond. It sits at 0% risk because it's assumed not to move. The dashed line is what you get blending this with the Best Balance mix.`;
       if(p.seriesName==='Assets'){
         const a=assetPoints[p.dataIndex];
         if(!a) return '';
@@ -3768,6 +3801,9 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         itemStyle:{color:'#2557C7'}, lineStyle:{color:'#2557C7',width:2.25}, z:2 },
       { name:'CAL', type:'line', data:cal.map(p=>[p.vol,p.ret]), showSymbol:false,
         lineStyle:{color:'#14283F', width:1.5, type:'dashed'}, z:1 },
+      { name:'Risk-free', type:'scatter', data:[[rfPoint.vol,rfPoint.ret]], symbolSize:8,
+        itemStyle:{color:'#14283F', borderColor:'#14283F', borderWidth:1}, z:4,
+        label:{show:true, formatter:`RISK-FREE ${(rfPoint.ret*100).toFixed(1)}%`, position:'right', distance:8, color:'rgba(20,40,63,.6)', fontWeight:700, fontSize:8.5, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
         itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1},
         // Points built without a showLabel flag (e.g. the Test Real
@@ -3797,11 +3833,13 @@ function renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPo
 }
 function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoint, chartId, onPointClick, currentMixLabel, minVarPoint){
   deferChartInit(()=>renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick, currentMixLabel, minVarPoint));
+  const rfPct = cal[0] ? (cal[0].ret*100).toFixed(1) : '0';
   return `<div class="fx-chart-wrap">
     <div id="${chartId}" class="echart" style="height:400px"></div>
     <div class="fx-legend">
       <span><i style="background:#2557C7"></i>The frontier: every possible split</span>
-      <span><i style="border-top:2px dashed rgba(20,40,63,.9);background:transparent"></i>Capital Allocation Line: risk-free + best mix, extended for leverage</span>
+      <span><i style="border:2px solid #14283F;background:#14283F;border-radius:50%"></i>Risk-free rate (${rfPct}%) &middot; 0% risk by definition, where the dashed line starts</span>
+      <span><i style="border-top:2px dashed rgba(20,40,63,.9);background:transparent"></i>Capital Allocation Line: the risk-free rate blended with Best Balance, extended for leverage</span>
       <span><i style="background:#8FC79E;border-radius:50%"></i>Each instrument alone</span>
       <span><i style="border:2px solid #14283F;background:#14283F"></i>Best balance of risk and reward</span>
       <span><i style="border:2px solid #D97757;background:transparent"></i>Your mix &middot; hover for detail, click the curve to move it</span>
@@ -3926,7 +3964,7 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
   const edgeAsset = wTan<=0.001 ? b : wTan>=0.999 ? a : null;
   const otherAsset = edgeAsset===a ? b : a;
   const edgeLine = edgeAsset
-    ? `<div style="margin-top:8px">Notice the best-Sharpe point sits right at the edge of the curve, not in the middle. That's because <b style="color:var(--paper)">${otherAsset.symbol}</b> returned less than the ${(rf*100).toFixed(1)}% risk-free rate over this window &ndash; blending any of it in would only pull the mix's Sharpe ratio down, not up. Holding it would only pay off if you could bet against it, which this tool doesn't offer, so 100% ${edgeAsset.symbol} genuinely is the best combination of these two available here.</div>`
+    ? `<div class="gr-note" style="margin-top:10px">Notice the best-balance point sits right at the edge of the curve, not in the middle. That's because <b style="color:var(--paper)">${otherAsset.symbol}</b> returned less than the ${(rf*100).toFixed(1)}% risk-free rate over this window &ndash; blending any of it in would only pull the mix's Sharpe ratio down, not up. Holding it would only pay off if you could bet against it, which this tool doesn't offer, so 100% ${edgeAsset.symbol} genuinely is the best combination of these two available here.</div>`
     : '';
 
   const cfgC = cfg();
@@ -3937,6 +3975,21 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
   const weightLabel = `<b style="color:var(--paper)">${(w*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--paper)">${((1-w)*100).toFixed(0)}% ${b.symbol}</b>`;
   const moneyDetailLine = `<div style="margin-top:8px">Put <b style="color:var(--paper)">${cfgC.compact(illustrateAmt)}</b> into your current split &ndash; ${weightLabel} &ndash; and leave it for ${illustrateYrs} years: at this mix's compounded rate of <b style="color:var(--gold)">${(compoundedApprox*100).toFixed(1)}%</b>/yr, it would grow to roughly <b style="color:var(--paper)">${cfgC.compact(illustrateFv)}</b>. That uses the compounded figure, not the higher expected-return figure above, because that's closer to what an account statement would actually show.</div>`;
   const shortMoneyLine = `<div class="gr-note" style="margin-top:10px">Grown using the compounded rate (<b style="color:var(--gold)">${(compoundedApprox*100).toFixed(1)}%</b>/yr), not the higher expected-return figure above &ndash; that's closer to what an account statement would actually show.</div>`;
+
+  // Diversification benefit: how much risk this exact split avoids purely
+  // because the two instruments don't move in lockstep. If correlation
+  // were 1, this split's risk would be the plain weighted average of the
+  // two instruments' own volatilities (naiveVol) -- variance math
+  // guarantees actual risk is strictly lower than that for any
+  // correlation below 1, so this is always a true, non-negative number,
+  // never an inflated claim. Return is untouched by this -- mixing only
+  // ever changes risk, never the return you'd expect to earn.
+  const naiveVol = w*volA + (1-w)*volB;
+  const diversificationSaved = Math.max(0, naiveVol - currentVol);
+  const divBenefitHTML = diversificationSaved > 0.001 ? `<div class="fc-diversify">
+    <div class="fc-diversify-stat">${pct(diversificationSaved)} less risk</div>
+    <div class="fc-diversify-headline">That's what mixing ${a.symbol} and ${b.symbol} buys you at your current split. If the two moved in perfect lockstep, this exact ${weightLabel} would carry <b style="color:var(--paper)">${pct(naiveVol)}</b> risk. Because they don't (correlation <b style="color:var(--gold)">${c12.toFixed(2)}</b>), you actually carry only <b style="color:var(--paper)">${pct(currentVol)}</b> &ndash; the same <b style="color:var(--paper)">${pct(currentRet)}</b> return, for meaningfully less risk. That gap is the entire point of holding both instead of just one.</div>
+  </div>` : '';
 
   const minVarRet = portfolioReturn([wMinVar,1-wMinVar],[retA,retB]);
   const minVarVol = Math.sqrt(portfolioVariance([wMinVar,1-wMinVar],[volA,volB],[[1,c12],[c12,1]]));
@@ -3975,7 +4028,7 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
   <div style="margin-top:8px">Your mix earns <b style="color:var(--paper)">${pct(currentRet)}</b> a year for <b style="color:var(--paper)">${pct(currentVol)}</b> risk &ndash; Sharpe <b style="color:var(--gold)">${currentSharpe.toFixed(2)}</b>.</div>
   <div style="margin-top:8px">${hasGap
     ? `The single best trade-off between risk and reward here (the <span class="term" data-def="The point on the curve with the highest Sharpe ratio: the mix that earns the most extra return per unit of extra risk, above the risk-free rate. Where the Capital Allocation Line touches the frontier.">tangency point</span>) is <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--gold)">${((1-wTan)*100).toFixed(0)}% ${b.symbol}</b>, earning ${pct(tanRet)} for ${pct(tanVol)} risk (Sharpe ${tanSharpe.toFixed(2)}). Drag the slider toward it, click the dark dot on the chart, or use the button above, to close the gap.`
-    : `The single best trade-off between risk and reward these two instruments can offer is ${(wTan*100).toFixed(0)}% ${a.symbol} / ${((1-wTan)*100).toFixed(0)}% ${b.symbol} &ndash; your split is already close to it.`}</div>${edgeLine}
+    : `The single best trade-off between risk and reward these two instruments can offer is ${(wTan*100).toFixed(0)}% ${a.symbol} / ${((1-wTan)*100).toFixed(0)}% ${b.symbol} &ndash; your split is already close to it.`}</div>
   ${moneyDetailLine}
   ${rangeDetailLine}`;
 
@@ -3990,7 +4043,9 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
       <div class="stat fc-money-tile fc-money-in"><div class="stat-label">You put in</div><div class="stat-value">${cfgC.compact(illustrateAmt)}</div></div>
       <div class="stat fc-money-tile fc-money-out"><div class="stat-label">Grows to in ${illustrateYrs} yrs</div><div class="stat-value">${cfgC.compact(illustrateFv)}</div></div>
     </div>
+    ${divBenefitHTML}
     ${destsHTML}
+    ${edgeLine}
     ${shortMoneyLine}
     ${rangeLine}
     ${jumpBtn}
@@ -4321,6 +4376,38 @@ function syncStickyPanels(){
   const output=document.querySelector('main .grid > .output');
   if(!panel) return;
   panel.classList.toggle('is-sticky', !output || panel.offsetHeight <= output.offsetHeight);
+  syncPanelJumpBtn();
+}
+
+// Companion to the is-sticky check above, for the case that fails it: a
+// panel taller than its output can't sticky (no room to travel), so once it
+// scrolls past the top of the viewport it's gone until the user scrolls all
+// the way back up manually. This button is the way back. Lives outside
+// #main (created once, reused across renders) since #main gets replaced
+// wholesale on every render() and would otherwise take the button with it.
+let panelJumpBtn=null;
+let panelJumpScrollT=null;
+function syncPanelJumpBtn(){
+  if(!panelJumpBtn){
+    panelJumpBtn=document.createElement('button');
+    panelJumpBtn.id='panelJumpBtn';
+    panelJumpBtn.className='panel-jump-btn';
+    panelJumpBtn.type='button';
+    panelJumpBtn.innerHTML='&uarr; Back to assumptions';
+    panelJumpBtn.addEventListener('click', ()=>{
+      const p=document.querySelector('main .grid > .panel');
+      if(p) p.scrollIntoView({behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth', block:'start'});
+    });
+    document.body.appendChild(panelJumpBtn);
+    window.addEventListener('scroll', ()=>{
+      if(panelJumpScrollT) return;
+      panelJumpScrollT = requestAnimationFrame(()=>{ panelJumpScrollT=null; syncPanelJumpBtn(); });
+    }, {passive:true});
+  }
+  const panel=document.querySelector('main .grid > .panel');
+  if(!panel || panel.classList.contains('is-sticky')){ panelJumpBtn.classList.remove('show'); return; }
+  const scrolledPast = panel.getBoundingClientRect().bottom < 0;
+  panelJumpBtn.classList.toggle('show', scrolledPast);
 }
 
 function render(){
