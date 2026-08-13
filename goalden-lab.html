@@ -3700,7 +3700,7 @@ function liveChipHTML(it){
   </div>`;
 }
 
-function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint){
+function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel){
   const pct=v=>(v*100).toFixed(2)+'%';
   return {
     animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
@@ -3727,7 +3727,7 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         if(!a) return '';
         return `<b>${a.fullLabel||a.label} on its own:</b><br/>${pct(a.ret)} for ${pct(a.vol)} risk.`;
       }
-      if(p.seriesName==='Your mix') return `<b>You are here.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='Your mix') return `<b>Your current mix${currentMixLabel?': '+currentMixLabel:''}.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/>This marks where the slider below is set right now &ndash; it isn't clickable itself. Click the <b style="color:#14283F">BEST SHARPE</b> dot or the blue curve to move it.`;
       if(p.seriesName==='Tangency') return `<b>The single best trade-off between risk and reward here.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/><span style="color:#2557C7">Click to move here.</span>`;
       return '';
     }},
@@ -3747,21 +3747,21 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
         label:{show:true, formatter:'BEST SHARPE', position:'bottom', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
-        itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, silent:true, z:5,
+        itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, z:5,
         label:{show:true, formatter:'YOUR MIX', position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Your mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
         itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:5 },
     ],
   };
 }
-function renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick){
-  const chart=initChart(chartId, liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint));
+function renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick, currentMixLabel){
+  const chart=initChart(chartId, liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel));
   if(!chart) return;
   chart.off('click');
   if(onPointClick) chart.on('click', params=>{ if(params.seriesName==='Frontier' && frontier[params.dataIndex]) onPointClick(frontier[params.dataIndex].w); });
 }
-function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoint, chartId, onPointClick){
-  deferChartInit(()=>renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick));
+function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoint, chartId, onPointClick, currentMixLabel){
+  deferChartInit(()=>renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick, currentMixLabel));
   return `<div class="fx-chart-wrap">
     <div id="${chartId}" class="echart" style="height:400px"></div>
     <div class="fx-legend">
@@ -3769,7 +3769,7 @@ function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoi
       <span><i style="border-top:2px dashed rgba(20,40,63,.9);background:transparent"></i>Capital Allocation Line: risk-free rate blended with the best-Sharpe mix, extended past 100% for leverage</span>
       <span><i style="background:#8FC79E;border-radius:50%"></i>Each instrument on its own</span>
       <span><i style="border:2px solid #14283F;background:#14283F"></i>Best Sharpe ratio (tangency): the single best risk/reward trade-off available</span>
-      <span><i style="border:2px solid #D97757;background:transparent"></i>Your current mix &middot; click the curve to move there</span>
+      <span><i style="border:2px solid #D97757;background:transparent"></i>Your current mix, from the slider below &middot; hover for detail, click the curve to move it</span>
     </div>
   </div>`;
 }
@@ -3957,7 +3957,7 @@ function liveTwoAssetHTML(items, rfPct){
   <div class="card is-primary">
     <h4>${a.symbol} / ${b.symbol}${infoIcon('Every point on the blue curve is one weight split between these two instruments, swept from 100% '+b.symbol+' to 100% '+a.symbol+'. The dashed line is the Capital Allocation Line: the risk-free rate blended with the best-Sharpe (tangency) mix, extended past 100% to show what borrowing at the risk-free rate to lever up would do.')}</h4>
     <div class="cap">Annualised from ${sa.n} and ${sb.n} real daily observations. Higher up is more return, further right is more risk.</div>
-    ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'live-frontier-echart', onLiveFrontierPick)}
+    ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'live-frontier-echart', onLiveFrontierPick, `${(w*100).toFixed(0)}% ${a.symbol} / ${((1-w)*100).toFixed(0)}% ${b.symbol}`)}
     <div class="gr-note" style="margin-top:10px">${liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentSharpe, wTan, tanVol, tanRet, rf, w, wMinVar, sa.annualReturn, sa.annualVol, sb.annualReturn, sb.annualVol)}</div>
   </div>
   <div class="card">
