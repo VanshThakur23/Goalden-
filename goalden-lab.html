@@ -18,44 +18,84 @@
      flipped from a dark canvas to a light one -- --bg is the new light
      canvas colour that used to live in --ink. */
   --bg:#F5F8FC; --card:#FFFFFF;
-  --ink:#14283F;--ink2:#1B3A63;--paper:#16283F;
+  --ink:#14283F;--ink2:#1B3A63;--paper:#14283F;
   --gold:#2557C7;--red:#A03A22;--dim:#5E7290;--ok:#2E8B6F;--warn:#C99A45;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,sans-serif;min-height:100vh}
-h1,h2,h3{font-family:'Newsreader',serif}
+/* A flat single-colour canvas is what reads as "dull" at this scale -- a
+   very subtle radial falloff (brighter where content actually sits,
+   cooling off toward the far edges) gives the page real depth without
+   costing any contrast where it matters: text still sits on solid white
+   cards, this only affects the canvas showing through the gaps. */
+body{background:radial-gradient(120% 90% at 50% 0%,#FBFDFF 0%,#F5F8FC 45%,#E9F0FA 100%);background-attachment:fixed;color:var(--paper);font-family:'Figtree',system-ui,sans-serif;min-height:100vh;line-height:1.5}
+h1,h2,h3{font-family:'Newsreader',serif;line-height:1.25}
+main b,main strong{color:var(--ink2)}
 .mono{font-family:'Spline Sans Mono',monospace}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+:is(button,a,input,[tabindex]):focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 
 /* --- top nav --- */
 header{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid rgba(20,40,63,.12)}
 .brand{font-family:'Newsreader',serif;font-weight:700;font-size:19px;color:var(--gold);text-decoration:none;display:inline-block}
 .brand span{color:var(--paper);font-weight:400;font-style:italic;font-size:13px;margin-left:6px;opacity:.65}
-/* Two very different jobs share this strip: a first-visit chooser (big,
-   unmissable) and a quick tool-switcher once something is already open
-   (small, out of the way). Splitting them into .is-home/.is-slim instead
-   of one fixed-size bar is what actually fixes the "183px of chrome on
-   every single tab" problem -- making the pills bigger again (tried once
-   already, see the old comment this replaced) just moves the clutter
-   around instead of removing it. */
-.tabbar{background:linear-gradient(180deg,rgba(37,87,199,.09),rgba(37,87,199,.03));border-bottom:1px solid rgba(37,87,199,.25)}
+/* Two very different jobs share this space: a first-visit chooser (big,
+   unmissable, lives in #main as the home screen) and a quick tool-switcher
+   once something is already open. The switcher used to be a horizontal
+   pill row -- at 10 tools that meant a scrollbar even at 1400px wide, which
+   read as clutter rather than navigation. A vertical sidebar fixes that:
+   9 tools stack cleanly in one column with no scrolling and no wrapping,
+   and it reads as a map of the Lab rather than a strip of buttons. */
+.labshell{display:flex;align-items:flex-start}
+.labshell main{flex:1;min-width:0}
+.tabbar{background:linear-gradient(180deg,rgba(37,87,199,.06),rgba(37,87,199,.02));position:relative}
 .tabbar.is-home{display:none} /* the home screen itself, in #main, is the chooser */
-.tabbar.is-slim{padding:10px 24px}
+.tabbar.is-slim{width:228px;flex-shrink:0;border-right:1px solid rgba(37,87,199,.18);align-self:stretch;padding:22px 14px 24px;transition:width .18s ease,padding .18s ease}
+/* align-self:stretch above makes the nav's own box exactly as tall as the
+   output column, which is what draws the full-height border/gradient --
+   but it also means the box has zero scroll travel, so `position:sticky`
+   on the box itself is a no-op (verified: it scrolls off with the page).
+   Sticky belongs on the *inner* content instead, which is shorter than
+   the box and can travel within it. */
+#tabbarInner{position:sticky;top:14px}
 .tabs{display:flex;gap:8px;flex-wrap:wrap}
-.tab{font-family:'Spline Sans Mono',monospace;font-size:11.5px;letter-spacing:.02em;color:rgba(20,40,63,.68);background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:2px 12px 12px 12px;padding:9px 16px;cursor:pointer;transition:all .15s}
-.tab:hover{color:var(--paper);border-color:rgba(37,87,199,.5);background:rgba(20,40,63,.08)}
+.tab{font-family:'Spline Sans Mono',monospace;font-size:11.5px;letter-spacing:.02em;color:rgba(20,40,63,.68);background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:2px 12px 12px 12px;padding:9px 16px;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .1s}
+.tab:hover{color:var(--paper);border-color:rgba(37,87,199,.5);background:rgba(20,40,63,.08);transform:translateX(2px)}
 .tab.active{color:#fff;background:var(--gold);border-color:var(--gold);font-weight:600}
-.slim-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.slim-back{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.6);background:transparent;border:none;cursor:pointer;flex-shrink:0;padding:4px 0}
+.slim-row{display:flex;flex-direction:column;gap:2px}
+.slim-back{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.6);background:transparent;border:none;cursor:pointer;text-align:left;padding:4px 2px 14px;transition:color .15s}
 .slim-back:hover{color:var(--gold)}
-.slim-current{font-family:'Newsreader',serif;font-style:italic;font-size:14px;color:var(--gold);flex-shrink:0}
-/* All 10 tools, by full name, cannot wrap here without the "slim" bar
-   growing back into the multi-row block it was built to replace (this
-   was measured, not assumed: 338px at 1400px wide before this fix).
-   Scrolls horizontally instead, so the bar stays one line at any width. */
-.tabs-slim{gap:6px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin;flex:1;min-width:0}
-.tabs-slim .tab{font-size:10.5px;padding:6px 12px;flex-shrink:0}
-.slim-row{flex-wrap:nowrap}
-.slim-back,.slim-current{flex-shrink:0}
+.slim-current{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(20,40,63,.45);display:block;padding:0 2px 12px}
+/* Vertical stack instead of the old horizontal scroller -- full labels,
+   no clipping, no scrollbar at any width. */
+.tabs-slim{flex-direction:column;flex-wrap:nowrap;gap:3px}
+.tabs-slim .tab{font-size:11px;padding:9px 12px;text-align:left;display:flex;align-items:center;gap:8px;width:100%}
+.tabs-slim .tab svg{width:14px;height:14px;flex-shrink:0;opacity:.8}
+.tabs-slim .tab.active svg{opacity:1}
+/* Whole-rail collapse: one button toggles the entire "All tools" nav
+   between its full width and a slim strip holding just the toggle, so the
+   output column can reclaim the space. main{margin:0 auto} then re-centres
+   itself for free once the rail shrinks -- no JS needed on that side. */
+.nav-toggle-btn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.16);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(20,40,63,.5);flex-shrink:0;margin-bottom:10px;transition:background .15s,color .15s}
+.nav-toggle-btn:hover{background:rgba(37,87,199,.1);color:var(--gold)}
+.nav-toggle-btn svg{width:14px;height:14px;transition:transform .18s ease}
+.tabbar.is-slim.nav-collapsed{width:44px;padding:22px 8px 24px}
+.tabbar.is-slim.nav-collapsed #tabbarInner{display:none}
+.tabbar.is-slim.nav-collapsed .nav-toggle-btn{margin:0}
+.tabbar.is-slim.nav-collapsed .nav-toggle-btn svg{transform:rotate(180deg)}
+@media(max-width:860px){
+  .labshell{flex-direction:column}
+  .tabbar.is-slim{width:100%;border-right:none;border-bottom:1px solid rgba(37,87,199,.18);padding:12px 20px}
+  #tabbarInner{position:static}
+  .slim-row{flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px}
+  .slim-back{padding:4px 0}
+  .slim-current{display:none}
+  .tabbar.is-slim .explain-panel{max-height:none !important;overflow:visible !important}
+  .tabs-slim{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;flex:1;min-width:0}
+  .tabs-slim .tab{flex-shrink:0}
+  .nav-toggle-btn{display:none} /* narrow screens: no dead gutter to reclaim */
+  .tabbar.is-slim.nav-collapsed{width:100%;padding:12px 20px}
+  .tabbar.is-slim.nav-collapsed #tabbarInner{display:block}
+}
 .country-toggle{display:flex;font-family:'Spline Sans Mono',monospace;font-size:11.5px;border:1px solid rgba(20,40,63,.2);border-radius:3px}
 .ctbtn{padding:6px 13px;border:none;background:transparent;color:rgba(20,40,63,.55);cursor:pointer}
 .ctbtn:first-child{border-right:1px solid rgba(20,40,63,.15)}
@@ -73,34 +113,105 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .lab-home-head .cap{font-size:13px;color:rgba(20,40,63,.6)}
 .lab-home-primary{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px}
 @media(max-width:860px){.lab-home-primary{grid-template-columns:1fr}}
-.lab-tool-card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.14);border-radius:3px 22px 22px 22px;padding:24px 22px;text-align:left;cursor:pointer;color:inherit;font-family:'Figtree',sans-serif;display:flex;flex-direction:column;transition:all .2s}
+.lab-tool-card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.14);border-radius:3px 22px 22px 22px;padding:24px 22px;text-align:left;cursor:pointer;color:inherit;font-family:'Figtree',sans-serif;display:flex;flex-direction:column;transition:all .2s;position:relative;overflow:hidden;will-change:transform}
 .lab-tool-card:hover{background:rgba(20,40,63,.07);border-color:rgba(37,87,199,.5);transform:translateY(-2px)}
+/* Cursor-follow tilt + glare, mirroring index.html's own .door treatment
+   (see attach()'s mousemove delegation below) so the front door and this
+   home screen -- the two places in the app that are "choosing", not
+   "calculating" -- feel like the same surface. */
+.lab-tool-card::after{content:'';position:absolute;inset:0;border-radius:inherit;background:radial-gradient(220px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.4),transparent 55%);opacity:0;transition:opacity .25s ease;pointer-events:none}
+.lab-tool-card.tilting::after{opacity:1}
 .lab-tool-card:nth-child(2){border-radius:22px 3px 22px 22px}
 .lab-tool-card:nth-child(3){border-radius:22px 22px 3px 22px}
-.tc-icon{width:46px;height:46px;color:#fff;background:var(--gold);border-radius:50% 50% 50% 4px;display:flex;align-items:center;justify-content:center;padding:11px;margin-bottom:14px;box-shadow:0 5px 16px rgba(37,87,199,.25)}
+.tc-icon{width:46px;height:46px;color:#fff;background:var(--gold);border-radius:50% 50% 50% 4px;display:flex;align-items:center;justify-content:center;padding:11px;margin-bottom:14px;box-shadow:0 5px 16px rgba(37,87,199,.25);transition:transform .2s ease-out}
 .tc-icon svg{width:100%;height:100%}
 .lab-tool-card h3{font-size:18px;margin-bottom:8px;color:var(--paper)}
 .tc-blurb{font-size:12.5px;color:rgba(20,40,63,.6);line-height:1.55;flex:1;margin-bottom:14px}
 .tc-cta{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--gold);display:flex;align-items:center;gap:5px}
 .tc-cta svg{width:12px;height:12px}
 .lab-home-secondary-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(37,87,199,.7);margin-bottom:10px}
-.lab-home-secondary{display:flex;gap:8px;flex-wrap:wrap}
+.lab-home-secondary{display:flex;gap:10px;flex-wrap:wrap}
+/* These 7 used to be bare text pills -- no icon, no weight, nothing to
+   catch the eye or hint at what each one does. A small coloured icon
+   blob (same treatment as the 3 primary cards' .tc-icon, just smaller)
+   plus a bold label gives each one a real "gist" at a glance, and the
+   native title= tooltip surfaces the same one-line blurb the primary
+   cards show inline, without needing the extra vertical space here. */
+.lab-tool-chip{display:flex;align-items:center;gap:9px;background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.15);border-radius:24px;padding:8px 16px 8px 8px;cursor:pointer;color:inherit;font-family:'Figtree',sans-serif;transition:background .18s ease,border-color .18s ease,transform .18s ease}
+.lab-tool-chip:hover{background:rgba(37,87,199,.09);border-color:rgba(37,87,199,.45);transform:translateY(-1px)}
+.ltc-icon{width:28px;height:28px;flex-shrink:0;color:#fff;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;padding:6px;box-shadow:0 3px 8px rgba(37,87,199,.28)}
+.ltc-icon svg{width:100%;height:100%}
+.ltc-label{font-size:13.5px;font-weight:600;color:var(--paper)}
 
 main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
+main.enter{animation:mainEnter .3s ease-out}
+@keyframes mainEnter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .grid{display:grid;grid-template-columns:340px 1fr;gap:26px;align-items:start}
 @media(max-width:860px){.grid{grid-template-columns:1fr}}
 
 /* --- assumption panel --- */
-.panel{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.1);border-radius:3px 20px 20px 20px;padding:24px}
-.panel h3{font-size:16px;color:var(--paper);margin-bottom:16px}
+/* A colour-coded left edge marks this as the "controls" column at a
+   glance, distinct from the plain .card content boxes in the output
+   column -- the same visual language a form or settings rail uses
+   elsewhere on the web, applied consistently since every tab shares
+   this one class. */
+.panel{background:linear-gradient(160deg,rgba(37,87,199,.045),rgba(20,40,63,.03));border:1px solid rgba(20,40,63,.12);border-left:3px solid rgba(37,87,199,.35);border-radius:3px 20px 20px 20px;padding:24px}
+/* .grid's align-items:start (above) is what makes this possible: it lets
+   the panel's box be shorter than its grid row instead of stretching to
+   match the (usually much taller) output column, giving a sticky panel
+   real travel distance -- the row itself is always exactly as tall as the
+   taller sibling, so even a panel taller than the viewport has room to
+   unstick again near the end of the row rather than pinning its bottom
+   out of reach forever. Applied via JS (syncStickyPanels(), called at the
+   end of render()) rather than unconditionally in CSS only so a future
+   tab with a panel genuinely taller than its own output column (nothing
+   to travel across) can be exempted the same way. Deliberately not
+   solved with max-height+overflow:auto instead: the panel is full of
+   infoIcon() tooltips that are absolutely positioned and escape the box,
+   and a scroll container would clip them. */
+.panel.is-sticky{position:sticky;top:14px}
+@media(max-width:860px){.panel.is-sticky{position:static;top:auto}}
+/* Per-tab panel hide/show, same idea as the whole-nav toggle: one button
+   collapses this tool's left inputs panel down to a slim strip so the
+   output column can reclaim the space, same as the "All tools" rail. The
+   toggle button itself (emitted by panelHead(), first child of .panel)
+   stays visible; everything else in the panel is hidden. */
+.panel-toggle-btn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.16);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(20,40,63,.5);flex-shrink:0;margin-bottom:12px;transition:background .15s,color .15s}
+.panel-toggle-btn:hover{background:rgba(37,87,199,.1);color:var(--gold)}
+.panel-toggle-btn svg{width:14px;height:14px;transition:transform .18s ease}
+.grid.panel-collapsed{grid-template-columns:44px 1fr;transition:grid-template-columns .18s ease}
+.grid.panel-collapsed > .panel{padding:22px 8px}
+.grid.panel-collapsed > .panel > *:not(.panel-toggle-btn){display:none}
+.grid.panel-collapsed > .panel .panel-toggle-btn{margin-bottom:0}
+.grid.panel-collapsed > .panel .panel-toggle-btn svg{transform:rotate(180deg)}
+@media(max-width:860px){
+  .grid.panel-collapsed{grid-template-columns:1fr}
+  .grid.panel-collapsed > .panel{padding:12px 20px}
+}
+.panel h3{font-size:16px;font-weight:600;color:var(--paper);margin-bottom:16px}
 .field{margin-bottom:18px}
 .slider-row{display:flex;align-items:center;gap:10px}
-.slider-row input[type=range]{flex:1}
+.slider-row input[type=range]{flex:1;accent-color:var(--gold);height:20px}
 .field-num{width:64px !important;flex-shrink:0;background:rgba(20,40,63,.07);border:1px solid rgba(20,40,63,.2);border-radius:4px;padding:5px 6px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:11.5px;text-align:center}
 .field-num::-webkit-outer-spin-button,.field-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .field label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.6);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
 .field label b{color:var(--gold);font-weight:600}
 .field input[type=range]{width:100%;accent-color:var(--gold);height:20px}
+/* Custom slider thumb + track, matching goalden.html / goalden-door2.html.
+   Lab has ~40 range inputs across .field/.slider-row/portfolio weights --
+   every one of them was previously a bare, untinted OS control. */
+input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:rgba(20,40,63,.14)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:rgba(20,40,63,.14)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--gold)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--gold);margin-top:-6px;box-shadow:0 1px 4px rgba(20,40,63,.3);transition:transform .15s ease,box-shadow .15s ease;cursor:pointer}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--gold);box-shadow:0 1px 4px rgba(20,40,63,.3);transition:transform .15s ease,box-shadow .15s ease;cursor:pointer}
+input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.12)}
+input[type=range]:hover::-moz-range-thumb{transform:scale(1.12)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.22);box-shadow:0 2px 8px rgba(37,87,199,.4)}
+input[type=range]:active::-moz-range-thumb{transform:scale(1.22);box-shadow:0 2px 8px rgba(37,87,199,.4)}
+input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--gold);outline-offset:2px}
+input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);outline-offset:2px}
 .field input[type=number]{width:100%;background:rgba(20,40,63,.06);border:1px solid rgba(20,40,63,.16);border-radius:4px;padding:9px 11px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:13px}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .toggle-row{display:flex;gap:1px;margin-bottom:14px;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden}
@@ -113,20 +224,60 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 /* --- output area --- */
 .output{display:flex;flex-direction:column;gap:18px}
 .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.stat{background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.1);border-radius:3px 15px 15px 15px;padding:17px 18px}
+/* A flat 1px border in one uniform grey read as barely-there -- a
+   left-edge accent in the same blue as the rest of the app's emphasis
+   colour gives every parameter box a clear "read me" edge, and a
+   two-stop gradient background (rather than one flat tint) adds a touch
+   of real depth instead of a solid fill. */
+.stat{background:linear-gradient(135deg,rgba(37,87,199,.07),rgba(20,40,63,.03));border:1px solid rgba(20,40,63,.12);border-left:3px solid rgba(37,87,199,.4);border-radius:3px 15px 15px 15px;padding:17px 18px}
 .stat-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
-.stat-value{font-family:'Newsreader',serif;font-size:24px;font-weight:600;color:var(--paper)}
+.stat-value{font-family:'Newsreader',serif;font-size:26px;font-weight:700;letter-spacing:-.01em;color:var(--paper)}
 .stat-sub{font-size:11.5px;color:rgba(20,40,63,.5);margin-top:4px}
-.card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.1);border-radius:2px 2px 18px 18px;padding:22px}
-.card h4{font-size:15px;margin-bottom:4px;color:var(--paper)}
+.card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.13);border-radius:2px 2px 18px 18px;padding:22px}
+.card h4{font-size:15px;font-weight:600;margin-bottom:4px;color:var(--paper)}
 .card .cap{font-size:12px;color:rgba(20,40,63,.5);margin-bottom:14px}
+/* One .is-primary per tab: the card that IS the point of the screen (the
+   map on Build a Portfolio, the mix output on Test Real Investments) gets
+   lifted to solid white against the tinted default cards around it, so
+   the eye finds it first without reading any of the copy. A gradient
+   (bright where the chart sits, cooling toward the card's own edges)
+   plus a solid accent top border and a stronger shadow give it real
+   presence instead of just a slightly-paler background. */
+.card.is-primary{position:relative;background:radial-gradient(140% 100% at 50% 0%,#FFFFFF 0%,#FBFDFF 55%,#F2F7FE 100%);border-color:rgba(37,87,199,.32);border-top:3px solid var(--gold);border-radius:0 2px 18px 18px;box-shadow:0 8px 28px rgba(20,40,63,.09),0 1px 0 rgba(37,87,199,.15);padding-top:20px}
+.card.is-primary h4{font-size:17px;font-weight:600;position:relative;padding-left:13px}
+/* A small colour bar ahead of the heading marks this specific card as the
+   one worth reading first, echoing the same accent used on the panel's
+   own left edge -- reserved for the single .is-primary card per tab so
+   it stays a signal, not decoration repeated on every card. */
+.card.is-primary h4::before{content:'';position:absolute;left:0;top:3px;bottom:3px;width:3px;border-radius:2px;background:var(--gold)}
+
+/* Wayfinding footer: one or two suggested next tools, at the bottom of
+   every tab, so a person never has to guess "what do I do with this
+   number now". Plain data-tab-switch buttons -- attach()'s #main-scoped
+   listener already binds these on every render, no extra wiring needed. */
+.next-step-card{margin-top:4px}
+.ns-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(20,40,63,.4);margin-bottom:10px}
+.ns-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:rgba(37,87,199,.06);border:1px solid rgba(37,87,199,.22);border-radius:8px;padding:12px 14px;font-family:'Figtree',sans-serif;font-size:13px;color:var(--ink);cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.ns-btn:hover{background:rgba(37,87,199,.13);border-color:rgba(37,87,199,.4)}
+.ns-btn + .ns-btn{margin-top:8px}
+.ns-btn svg{width:14px;height:14px;flex-shrink:0;color:var(--gold)}
+
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:16px}
+.panel-head h3{margin-bottom:0;position:relative;padding-left:13px}
+.panel-head h3::before{content:'';position:absolute;left:0;top:2px;bottom:2px;width:3px;border-radius:2px;background:var(--gold)}
+.reset-tab-btn{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:rgba(20,40,63,.4);background:transparent;border:1px solid rgba(20,40,63,.15);border-radius:20px;padding:4px 10px;cursor:pointer;flex-shrink:0}
+.reset-tab-btn:hover{color:var(--gold);border-color:rgba(37,87,199,.4)}
 
 /* --- table --- */
 .dtable{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11.5px}
-.dtable th{text-align:right;padding:7px 8px;color:var(--dim);font-weight:500;border-bottom:1px solid rgba(20,40,63,.15);position:sticky;top:0;background:var(--bg)}
+.dtable th{text-align:right;padding:7px 8px;color:var(--dim);font-weight:600;border-bottom:2px solid rgba(37,87,199,.25);position:sticky;top:0;background:var(--bg)}
 .dtable th:first-child,.dtable td:first-child{text-align:left}
 .dtable td{text-align:right;padding:6px 8px;color:rgba(20,40,63,.75);border-bottom:1px solid rgba(20,40,63,.06)}
-.dtable tr.shock td{background:rgba(160,58,34,.18);color:#F0C4B4}
+/* Alternating row tint -- a wall of identically-white rows is where a
+   dense number table stops being scannable; this is the smallest
+   possible change that fixes that. */
+.dtable tbody tr:nth-child(even):not(.shock):not(.negative) td{background:rgba(37,87,199,.035)}
+.dtable tr.shock td{background:rgba(160,58,34,.18);color:#7A2517}
 .dtable tr.negative td{color:#E8977A}
 .table-scroll{max-height:340px;overflow-y:auto;border-radius:10px}
 
@@ -144,7 +295,7 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 .lab-inst-note{font-size:11.5px;color:rgba(20,40,63,.55);line-height:1.5}
 .lab-inst-flag{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;margin-bottom:6px}
 .lab-inst-card.flag-avoid{border-color:rgba(160,58,34,.4)}
-.lab-inst-card.flag-avoid .lab-inst-flag{background:rgba(160,58,34,.2);color:#F0C4B4}
+.lab-inst-card.flag-avoid .lab-inst-flag{background:rgba(160,58,34,.2);color:#7A2517}
 .lab-inst-card.flag-legacy{border-color:rgba(20,40,63,.15);opacity:.75}
 .lab-inst-card.flag-legacy .lab-inst-flag{background:rgba(20,40,63,.08);color:rgba(20,40,63,.6)}
 .lab-inst-card.flag-check .lab-inst-flag{background:rgba(37,87,199,.18);color:var(--gold)}
@@ -202,6 +353,40 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 .port-cluster-icon svg{width:100%;height:100%}
 .port-cluster-name{flex:1}
 .port-cluster-total{color:var(--gold);font-weight:600}
+
+/* --- frontier flashcard: verdict + 3 tiles + action, replaces the old
+   dense paragraph. Animates in via `animation` on freshly-inserted DOM
+   nodes (every render/settle replaces this element's innerHTML wholesale,
+   so a fresh .fcard is genuinely new each time -- no reflow-trick class
+   toggling needed), and is covered for free by the reduced-motion rule
+   above since that rule targets `*`. */
+@keyframes fcPop{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.fcard{animation:fcPop .3s ease}
+.fc-verdict{font-family:'Newsreader',serif;font-size:20px;line-height:1.35;font-weight:600;margin-bottom:14px}
+.fc-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.fc-tile{background:rgba(20,40,63,.03);border-radius:2px 2px 10px 10px;padding:12px 10px}
+.fc-tile .stat-value{font-size:18px}
+.fc-tile .stat-label{font-size:10px}
+.fc-action{width:100%;background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:10px;font-size:12px;cursor:pointer;font-family:'Spline Sans Mono',monospace;margin-bottom:10px;transition:background .15s}
+.fc-action:hover{background:rgba(37,87,199,.22)}
+
+/* --- map card: reset/resample header, declutter toggles, held-cluster chips --- */
+.pf-map-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.pf-map-btn{font-family:'Spline Sans Mono',monospace;font-size:10.5px;background:transparent;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.6);border-radius:3px;padding:8px 12px;cursor:pointer;transition:all .15s}
+.pf-map-btn:hover{background:rgba(20,40,63,.05);color:var(--paper)}
+.pf-declutter-row{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:12px}
+.pf-declutter-group{display:flex;align-items:center;gap:8px}
+.pf-declutter-label{font-family:'Spline Sans Mono',monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(20,40,63,.45)}
+.pf-declutter-opts{display:flex;gap:1px;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden}
+.pf-declutter-opt{font-family:'Spline Sans Mono',monospace;font-size:10px;background:transparent;border:none;border-right:1px solid rgba(20,40,63,.14);color:rgba(20,40,63,.55);padding:6px 9px;cursor:pointer}
+.pf-declutter-opt:last-child{border-right:none}
+.pf-declutter-opt.active{background:rgba(37,87,199,.16);color:var(--gold);font-weight:600}
+.klass-chip-row{display:flex;flex-wrap:wrap;gap:6px}
+.klass-chip{font-family:'Spline Sans Mono',monospace;font-size:10.5px;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:20px;color:rgba(20,40,63,.6);padding:6px 11px;cursor:pointer;white-space:nowrap}
+.klass-chip.active{background:rgba(37,87,199,.16);border-color:rgba(37,87,199,.4);color:var(--gold);font-weight:600}
+.pf-cluster-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.pf-cluster-chip{font-family:'Spline Sans Mono',monospace;font-size:10px;padding:4px 9px;border-radius:20px;background:rgba(37,87,199,.07);border:1px solid rgba(37,87,199,.22);color:rgba(20,40,63,.6)}
+.pf-cluster-chip b{color:var(--gold);font-weight:600}
 .lab-gopdeeper-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(37,87,199,.65);margin:4px 0 -6px}
 .explain-panel-inner b{color:rgba(20,40,63,.9)}
 .stress-row{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-bottom:1px solid rgba(20,40,63,.06)}
@@ -236,12 +421,12 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 /* --- info icon hover tooltip (for stat labels, term explanations) --- */
 .info-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.35);color:rgba(20,40,63,.55);font-size:9.5px;font-family:'Spline Sans Mono',monospace;font-style:normal;cursor:help;margin-left:5px;position:relative;flex-shrink:0}
 .info-icon:hover{border-color:var(--gold);color:var(--gold)}
-.info-icon .ii-tip{display:none;position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#FFFFFF;border:1px solid rgba(37,87,199,.4);border-radius:3px 8px 8px 8px;padding:9px 12px;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:400;color:rgba(20,40,63,.85);width:220px;line-height:1.5;text-align:left;z-index:30;box-shadow:0 4px 14px rgba(0,0,0,.35);white-space:normal}
+.info-icon .ii-tip{display:none;position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#FFFFFF;border:1px solid rgba(37,87,199,.4);border-radius:3px 8px 8px 8px;padding:9px 12px;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:400;color:rgba(20,40,63,.85);width:220px;line-height:1.5;text-align:left;z-index:30;box-shadow:0 6px 18px rgba(20,40,63,.16);white-space:normal}
 .info-icon:hover .ii-tip{display:block}
 .stat-label{display:flex;align-items:center}
 
 .term{border-bottom:1px dashed rgba(37,87,199,.6);cursor:help;position:relative}
-.term::after{content:attr(data-def);display:none;position:absolute;bottom:calc(100% + 7px);left:0;background:#FFFFFF;border:1px solid rgba(37,87,199,.4);border-radius:3px 8px 8px 8px;padding:9px 12px;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:400;color:rgba(20,40,63,.85);width:240px;line-height:1.5;white-space:normal;z-index:30;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+.term::after{content:attr(data-def);display:none;position:absolute;bottom:calc(100% + 7px);left:0;background:#FFFFFF;border:1px solid rgba(37,87,199,.4);border-radius:3px 8px 8px 8px;padding:9px 12px;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:400;color:rgba(20,40,63,.85);width:240px;line-height:1.5;white-space:normal;z-index:30;box-shadow:0 6px 18px rgba(20,40,63,.16)}
 .term:hover::after{display:block}
 .term:hover{border-bottom-color:var(--gold);color:var(--gold)}
 
@@ -255,7 +440,7 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 .port-pct-badge{font-family:'Spline Sans Mono',monospace;font-size:15px;font-weight:600;color:var(--paper)}
 .port-pct-of{font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(20,40,63,.4)}
 .epchip{font-family:'Spline Sans Mono',monospace;font-size:11px;padding:8px 8px;border-radius:2px;border:1px solid rgba(20,40,63,.16);background:rgba(20,40,63,.04);color:rgba(20,40,63,.7);cursor:pointer;text-align:center;line-height:1.5}
-.epchip.active{background:rgba(160,58,34,.25);border-color:var(--red);color:#F0C4B4}
+.epchip.active{background:rgba(160,58,34,.25);border-color:var(--red);color:#7A2517}
 .epchip b{display:block;color:var(--paper);font-size:12px}
 
 /* --- health score --- */
@@ -283,9 +468,18 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
   .print-header{display:block !important;margin-bottom:24px;border-bottom:2px solid #14283F;padding-bottom:12px}
   .print-header .pt{font-family:'Newsreader',serif;font-size:22px;font-weight:700}
   .print-header .ps{font-family:'Spline Sans Mono',monospace;font-size:11px;color:#666;margin-top:4px}
+  /* Every collapsible in this file (explainDropdown/collapsibleSection)
+     starts closed and expands only via a live click handler, which never
+     fires for a print stylesheet. Left alone, printing a page with any
+     collapsed section -- including the "Go deeper" bundles this overhaul
+     adds -- would silently drop that content from the printout. Force
+     every panel open and hide the now-pointless toggle pill instead. */
+  .explain-panel{max-height:none !important;overflow:visible !important}
+  .explain-toggle{display:none !important}
 }
 .print-header{display:none}
-.print-btn{position:fixed;bottom:20px;right:20px;background:var(--gold);color:#fff;border:none;border-radius:24px;padding:12px 18px;font-family:'Figtree',sans-serif;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.3);z-index:50;display:flex;align-items:center;gap:8px}
+.print-btn{position:fixed;bottom:20px;right:20px;background:var(--gold);color:#fff;border:none;border-radius:24px;padding:12px 18px;font-family:'Figtree',sans-serif;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 6px 20px rgba(37,87,199,.35);z-index:50;display:flex;align-items:center;gap:8px;transition:transform .15s ease,box-shadow .15s ease}
+.print-btn:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(37,87,199,.4)}
 .print-btn svg{width:15px;height:15px}
 @media print{.print-btn{display:none !important}}
 
@@ -316,14 +510,31 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 .live-chip-status.st-loading{background:var(--gold);animation:live-pulse 1s ease-in-out infinite}
 .live-chip-status.st-ready{background:#8FC79E}
 .live-chip-status.st-error{background:var(--red)}
+.live-chip-status.st-caution{background:var(--warn)}
+.live-chip-status.st-held{background:var(--red)}
+.live-chip-held{background:rgba(160,58,34,.08);border-color:rgba(160,58,34,.4)}
+.live-chip-held span:not(.live-chip-status){color:var(--red);text-decoration:line-through;text-decoration-color:rgba(160,58,34,.5)}
 @keyframes live-pulse{0%,100%{opacity:.3}50%{opacity:1}}
 .live-chip-x{background:none;border:none;color:rgba(20,40,63,.5);cursor:pointer;font-size:15px;line-height:1;padding:2px 3px}
 .live-chip-x:hover{color:var(--red)}
 .live-freetext{display:flex;gap:8px;margin-top:10px}
 .live-freetext input{flex:1;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.18);border-radius:3px;padding:9px 11px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:12px;outline:none}
 .live-freetext button{background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:0 16px;font-family:'Spline Sans Mono',monospace;font-size:11.5px;cursor:pointer;white-space:nowrap}
-.live-error-box{background:rgba(160,58,34,.1);border-left:2px solid var(--red);border-radius:0 8px 8px 0;padding:10px 13px;font-size:12px;color:#F0C4B4;margin-top:8px;line-height:1.55}
+.live-error-box{background:rgba(160,58,34,.1);border-left:2px solid var(--red);border-radius:0 8px 8px 0;padding:10px 13px;font-size:12px;color:#7A2517;margin-top:8px;line-height:1.55}
 .live-empty{padding:30px 20px;text-align:center;color:rgba(20,40,63,.4);font-size:13px}
+.live-inst-row{padding:12px 0;border-top:1px solid rgba(20,40,63,.08)}
+.live-inst-row:first-child{border-top:none;padding-top:0}
+.live-inst-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.live-inst-name{font-size:13px;color:var(--paper);font-weight:600}
+.live-inst-name .cap{font-weight:400;margin-left:4px}
+.live-inst-cagr{font-family:'Spline Sans Mono',monospace;font-size:15px;color:var(--paper);white-space:nowrap}
+.live-inst-cagr .cap{font-size:10px;margin-left:2px}
+.live-inst-stats{display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;font-size:11.5px;color:rgba(20,40,63,.6)}
+.live-inst-flags{margin-top:6px}
+.live-flag{font-size:11.5px;line-height:1.5;padding:6px 10px;border-radius:0 6px 6px 0;margin-top:4px}
+.live-flag-caution{background:rgba(201,154,69,.12);border-left:2px solid var(--warn);color:#8a6a1f}
+.live-flag-unusable{background:rgba(160,58,34,.1);border-left:2px solid var(--red);color:#7A2517}
+.live-inst-held .live-inst-name,.live-inst-held .live-inst-cagr{opacity:.55}
 .live-wc-wrap{overflow-x:auto;margin-top:4px;border-radius:3px 14px 14px 14px;border:1px solid rgba(20,40,63,.1)}
 .live-wc-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11.5px;white-space:nowrap}
 .live-wc-table th{text-align:right;padding:9px 12px;color:rgba(20,40,63,.45);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em;background:rgba(20,40,63,.04);position:sticky;top:0}
@@ -342,11 +553,14 @@ main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
   <a href="index.html" class="brand">Goalden<span>the lab</span></a>
   <div class="country-toggle" id="countryToggle"></div>
 </header>
-<nav class="tabbar" id="tabbar">
-  <div id="tabbarInner"></div>
-</nav>
 <div class="print-header" id="printHeader"></div>
-<main id="main"></main>
+<div class="labshell">
+  <nav class="tabbar" id="tabbar">
+    <button class="nav-toggle-btn" id="navToggleBtn" title="Hide tools list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <div id="tabbarInner"></div>
+  </nav>
+  <main id="main"></main>
+</div>
 <button class="print-btn" id="printBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span>Print / Save as PDF</span></button>
 
 <script>
@@ -376,7 +590,7 @@ echarts.registerTheme('goalden', {
   tooltip: {
     backgroundColor: '#FFFFFF', borderColor: 'rgba(37,87,199,.4)', borderWidth: 1,
     textStyle: { color: '#14283F', fontFamily: "'Spline Sans Mono', monospace", fontSize: 11.5 },
-    extraCssText: 'border-radius:3px 8px 8px 8px;box-shadow:0 4px 14px rgba(0,0,0,.35)',
+    extraCssText: 'border-radius:3px 8px 8px 8px;box-shadow:0 6px 18px rgba(20,40,63,.16)',
   },
 });
 // Registry of live chart instances, keyed by container id. A tab switch
@@ -414,6 +628,22 @@ function disposeChart(id){
 // container is guaranteed to exist by the time this callback runs, with
 // no caller-side changes needed at any of this app's many call sites.
 function deferChartInit(fn){ setTimeout(fn, 0); }
+// ECharts with renderer:'svg' writes fixed pixel dimensions at mount time
+// and never re-measures on its own. With no resize listener anywhere in
+// this file, every chart stayed frozen at its original width forever --
+// most visibly when crossing the 860px layout breakpoint. Debounced so a
+// window drag doesn't fire a resize per pixel; wrapped in try/catch
+// because a chart id can be present in the registry for a container that
+// a re-render has since removed from the DOM (disposeChart lags one
+// render behind in a couple of call sites).
+let chartResizeT;
+window.addEventListener('resize', ()=>{
+  clearTimeout(chartResizeT);
+  chartResizeT = setTimeout(()=>{
+    Object.values(chartInstances).forEach(entry=>{ try{ entry.inst.resize(); }catch(e){} });
+    if(typeof syncStickyPanels==='function') syncStickyPanels();
+  }, 150);
+});
 
 /* =====================================================================
    ENGINE (verbatim port)
@@ -742,12 +972,18 @@ function portfolioTailRisk(d){
 }
 function portfolioRatios(d, c){
   const rf = c.d.fdRate;
-  const sharpe = (d.portRet - rf) / d.decomp.totalVol;
+  // An empty (all-zero, e.g. freshly Reset) mix has zero risk and zero
+  // return -- these ratios are all divisions by that zero risk, which
+  // would otherwise surface as -Infinity/NaN/Infinity rather than
+  // meaningfully "nothing selected yet".
+  const empty = d.decomp.totalVol<=0;
+  const sharpe = empty ? 0 : (d.portRet - rf) / d.decomp.totalVol;
   const dd = downsideDeviation(d.portRet, d.decomp.totalVol, rf);
   const sortino = dd > 1e-9 ? (d.portRet - rf) / dd : null; // null = downside risk is negligible
   const weightedAvgVol = d.w.reduce((s,wi,i)=>s+wi*d.vols[i], 0);
-  const divRatio = weightedAvgVol / d.decomp.totalVol;
-  const effN = 1 / d.w.reduce((s,wi)=>s+wi*wi, 0);
+  const divRatio = empty ? 1 : weightedAvgVol / d.decomp.totalVol;
+  const sumSq = d.w.reduce((s,wi)=>s+wi*wi, 0);
+  const effN = sumSq>0 ? 1/sumSq : 0;
   return {sharpe, sortino, downsideDev:dd, divRatio, effN, rf};
 }
 // Euler decomposition of risk: how much of total portfolio VOLATILITY
@@ -777,6 +1013,7 @@ function normalizeWeights(raw){
 // leftover points to whichever assets had the biggest rounded-off remainder,
 // so the displayed integers always sum to exactly 100.
 function roundPercentsTo100(weights){
+  if(weights.every(w=>w===0)) return weights.map(()=>0);
   const raw = weights.map(w=>w*100);
   const floors = raw.map(Math.floor);
   let remainder = 100 - floors.reduce((a,b)=>a+b,0);
@@ -997,7 +1234,7 @@ const FX_DEPRECIATION_DEFAULT = 0.04; // INR/USD, verified Jul 2026
    STATE
    ===================================================================== */
 const L = {
-  country:'IN', tab:'home',
+  country:'IN', tab:'home', navCollapsed:false, panelCollapsed:false,
   ret:{ age:30, retireAge:60, monthlyExpense:50000, lifestyleFactor:75,
         preRate:10, postRate:9, inflation:6, lifeExp:78, due:true, realTerms:false, shock:null,
         corpusMode:'expenses', customCorpus:30000000, customBasis:'future',
@@ -1017,18 +1254,29 @@ const L = {
   snapshots:[], // up to 2 saved Retirement Lab states, for side-by-side comparison
   instCategory:'all',
   instSearch:'',
-  portfolio:{ weights:[35,15,10,25,10,5], seed:11, inflation:null, investAmount:null, investYears:null },
+  portfolio:{ weights:[35,15,10,25,10,5], seed:11, inflation:null, investAmount:null, investYears:null,
+    show:{cloud:'all', assets:'held'}, // frontier-map declutter state: sample-mix dot density + which building-block dots/labels show
+    blendPct:30 }, // "what if I mixed in something safe" explorer: % parked in the safe leg
   live:{
     items:[],           // [{key, symbol, label, type:'equity'|'fund'}], key doubles as the /api/history cache key
     data:{},             // key -> {status:'loading'|'ready'|'error', prices, stats, currency, label, error}
     weight:50,           // exactly-2-instrument case: % held in items[0], rest in items[1]
     selectedWeights:null,// 3+-instrument case: weight vector chosen by clicking the chart or the combinations table
     rf:null,             // risk-free rate override, %; null = use the country default (fdRate) until touched
-    searchMode:'equity', search:'', fundResults:[], fundSearching:false, fundSearchError:null,
+    searchMode:'equity', search:'', klassFilter:'all', fundResults:[], fundSearching:false, fundSearchError:null,
     freeText:'', freeTextError:null, freeTextLoading:false,
     seed:19,
+    overrides:{},        // key -> true once someone explicitly says "use it anyway" past an unusable data-quality flag
   },
 };
+// A frozen snapshot of L's starting shape, taken before anything mutates
+// it. Every per-tool "reset" button in this overhaul restores from this
+// instead of hand-writing a second copy of each default -- which would
+// silently drift out of sync with the L literal above the moment either
+// one changed. L.tab and L.country are intentionally part of the
+// snapshot too but resets only ever touch a single named slice (e.g.
+// L.portfolio), never these two, so navigation state is unaffected.
+const L_DEFAULTS = JSON.parse(JSON.stringify(L));
 
 function cfg(){ return C[L.country]; }
 
@@ -1059,6 +1307,45 @@ function collapsibleSection(extraToggleClass, toggleHtml, bodyHtml){
   return `<div class="explain-toggle${extraToggleClass?' '+extraToggleClass:''}"><span class="explain-chevron"></span>${toggleHtml}</div>
   <div class="explain-panel tall"><div class="explain-panel-inner controls">${bodyHtml}</div></div>`;
 }
+// One "where to next" card at the bottom of every tab. items is 1-2
+// {q, tab} pairs -- q is the question this tool's output raises that the
+// next tool answers, tab is a TABS id. Plain data-tab-switch buttons, so
+// no per-instance JS: attach()'s existing #main-scoped listener binds
+// them like any other nav button.
+function nextStepCard(items){
+  return `<div class="card next-step-card">
+    <div class="ns-label">Where to next</div>
+    ${items.map(it=>`<button class="ns-btn" data-tab-switch="${it.tab}">${it.q}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>`).join('')}
+  </div>`;
+}
+// Which L_DEFAULTS keys a given tab's "Reset" button should restore.
+// Several keys (age, retireAge...) live directly under `ret` etc, so a
+// tab's own state is reset without touching any other tab's inputs or
+// the global country/currency choice.
+const TAB_STATE_KEYS={
+  retirement:['ret'], stepup:['step'], swp:['swp'], fx:['fx'], joint:['joint'],
+  mc:['mc'], portfolio:['portfolio'], livefrontier:['live'],
+  instruments:['instCategory','instSearch'], health:['health'],
+};
+function resetTab(tabId){
+  const keys=TAB_STATE_KEYS[tabId];
+  if(!keys) return;
+  keys.forEach(k=>{ L[k]=JSON.parse(JSON.stringify(L_DEFAULTS[k])); });
+  render();
+}
+// Panel header with a title and a ghost "reset this tool" button, used
+// in place of a bare <h3> across every tab for one consistent way back
+// to defaults, using the Phase 0 L_DEFAULTS snapshot rather than a
+// hand-maintained duplicate.
+// The panel-toggle button is emitted here, one choke point for all 9
+// grid-based tabs, so hide/show works everywhere the same way the "All
+// tools" nav does -- but unlike that static HTML-shell button, this one
+// is regenerated by every render(), so its click is handled via the
+// delegated [data-panel-toggle] listener, not a per-element bind.
+function panelHead(title, tabId){
+  return `<button class="panel-toggle-btn" data-panel-toggle title="${L.panelCollapsed?'Show':'Hide'} inputs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+  <div class="panel-head"><h3>${title}</h3><button class="reset-tab-btn" data-reset-tab="${tabId}" title="Reset this tool's inputs back to their defaults">Reset</button></div>`;
+}
 
 function yearlyAmortization(monthlyRows){
   const years=[];
@@ -1077,6 +1364,17 @@ function yearlyAmortization(monthlyRows){
     prevContributed = yearEndRow.contributed;
   }
   return years;
+}
+// mountainChart() labels each data point "Year N" from the point's raw
+// array index -- feeding it accumulationSchedule()'s rows directly (one
+// row per MONTH) mislabels month 109 as "Year 109" instead of showing
+// one point per actual year. Bucket to yearly first.
+function yearlyMountainRows(monthlyRows){
+  let contributed=0;
+  return yearlyAmortization(monthlyRows).map(y=>{
+    contributed+=y.contributedThisYear;
+    return {year:y.year, contributed, closeBal:y.closeBal};
+  });
 }
 
 // A bare filled shape with no readable numbers on it isn't information,
@@ -1286,9 +1584,9 @@ function renderRetirement(){
   const todayDraw = res.expAtRet/12/Math.pow(1+r.inflation/100, res.yrs);
   scheduleDDMCUpdate();
 
-  return `<div class="grid">
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
-    <h3>Assumptions</h3>
+    ${panelHead('Assumptions', 'retirement')}
 
     <div class="section-label">You</div>
     <div class="field-row">
@@ -1356,10 +1654,10 @@ function renderRetirement(){
       `}
     </div>
 
-    <div class="card">
+    <div class="card is-primary">
       <h4>Accumulation: how the pot grows</h4>
       <div class="cap">Gold = growth earned · grey = what you put in</div>
-      ${mountainChart(res.accRows, 'ret-mountain')}
+      ${mountainChart(yearlyMountainRows(res.accRows), 'ret-mountain')}
     </div>
 
     <div class="card">
@@ -1408,6 +1706,7 @@ function renderRetirement(){
     </div>
 
     ${renderSnapshotBar(res)}
+    ${nextStepCard([{q:'Is that growth rate realistic? See what a real mix of assets has actually returned.', tab:'portfolio'}])}
   </div>
   </div>`;
 }
@@ -1457,9 +1756,9 @@ function renderStepUp(){
   const flatAcc=accumulationSchedule({sip:flatSip, rate:mRate, periods:s.years*12, due:true}).rows;
   const stepAcc=accumulationSchedule({sip:steppedSip, rate:mRate, periods:s.years*12, due:true, stepUp:mStep}).rows;
 
-  return `<div class="grid">
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
-    <h3>Step-up SIP</h3>
+    ${panelHead('Step-up SIP', 'stepup')}
     <div class="field"><label>Target corpus <b>${c.compact(s.corpus)}</b></label><input type="range" min="1000000" max="100000000" step="500000" value="${s.corpus}" data-k="corpus" data-tab="step"></div>
     <div class="field"><label>Years to invest <b>${s.years}</b></label><input type="range" min="5" max="40" value="${s.years}" data-k="years" data-tab="step"></div>
     <div class="field"><label>Expected growth <b>${s.preRate}%</b></label><input type="range" min="4" max="16" step="0.1" value="${s.preRate}" data-k="preRate" data-tab="step"></div>
@@ -1472,7 +1771,7 @@ function renderStepUp(){
       <div class="stat"><div class="stat-label">Step-up SIP (starting)${infoIcon('The first-year monthly amount. It then rises by the step-up rate each year, reaching the same target by paying more in later, higher-income years.')}</div><div class="stat-value">${c.fmt(Math.round(steppedSip))}</div></div>
       <div class="stat"><div class="stat-label">Year-1 saving</div><div class="stat-value">${c.fmt(Math.round(flatSip-steppedSip))}</div><div class="stat-sub">less to start</div></div>
     </div>
-    <div class="card">
+    <div class="card is-primary">
       <h4>Both reach the same target, at a different starting cost</h4>
       <div class="cap">Red = flat SIP · Green = step-up SIP, rising ${s.stepUpPct}%/yr</div>
       ${twinFatesChart(
@@ -1481,6 +1780,7 @@ function renderStepUp(){
         'step-twinfates'
       )}
     </div>
+    ${nextStepCard([{q:'See this target corpus in full: savings phase and spend-down together.', tab:'retirement'}])}
   </div>
   </div>`;
 }
@@ -1498,9 +1798,9 @@ function renderSWP(){
   const sim=drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:infl, nominalRate:postR, years:s.years, due:s.due}, shockYr, shockEp?shockEp.rate:0);
   const rows=sim.rows;
 
-  return `<div class="grid">
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
-    <h3>Sustainable withdrawal</h3>
+    ${panelHead('Sustainable withdrawal', 'swp')}
     <div class="field"><label>You have a corpus of <b>${c.compact(s.corpus)}</b></label><input type="range" min="1000000" max="100000000" step="500000" value="${s.corpus}" data-k="corpus" data-tab="swp"></div>
     <div class="field"><label>Draw for <b>${s.years}</b> years</label><input type="range" min="5" max="40" value="${s.years}" data-k="years" data-tab="swp"></div>
     <div class="field"><label>Growth during drawdown <b>${s.postRate}%</b></label><input type="range" min="3" max="14" step="0.1" value="${s.postRate}" data-k="postRate" data-tab="swp"></div>
@@ -1520,11 +1820,15 @@ function renderSWP(){
       <div class="stat"><div class="stat-label">Annual draw, year 1</div><div class="stat-value">${c.compact(w)}</div></div>
       <div class="stat"><div class="stat-label">Corpus lasts</div><div class="stat-value" style="${sim.ranOutYear?'color:#E8977A':''}">${sim.ranOutYear?sim.ranOutYear:s.years} yrs</div><div class="stat-sub">${sim.ranOutYear?`runs out ${s.years-sim.ranOutYear} years early`:(shockEp?'survives the shock':'exactly, by design')}</div></div>
     </div>
-    <div class="card">
+    <div class="card is-primary">
       <h4>Drawdown schedule${shockEp?` with ${shockEp.label} injected`:''}</h4>
       <div class="cap">${shockEp?(sim.ranOutYear?`The same withdrawals now empty the pot in year ${sim.ranOutYear}, ${s.years-sim.ranOutYear} years short of plan. Sequence matters: the earlier the shock, the worse the damage.`:'Absorbs the shock and still lasts the full period.'):`Built to reach zero in year ${s.years}`}</div>
       ${drawdownChart(rows, c, 'swp-drawdown')}
     </div>
+    ${nextStepCard([
+      {q:'Run this same corpus through thousands of random market paths, not one fixed shock.', tab:'mc'},
+      {q:'Get a full check on whether this plan is actually ready.', tab:'health'},
+    ])}
   </div>
   </div>`;
 }
@@ -1541,9 +1845,9 @@ function renderFX(){
   const pMax = f.direction==='investingAbroad' ? 10000000 : 120000;
   const pStep = f.direction==='investingAbroad' ? 50000 : 500;
 
-  return `<div class="grid">
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
-    <h3>Cross-border investing</h3>
+    ${panelHead('Cross-border investing', 'fx')}
     <div class="section-label">Direction</div>
     <div class="toggle-row">
       <button class="tglbtn${f.direction==='investingAbroad'?' active':''}" data-toggle="direction" data-val="investingAbroad">₹ → $<br>India investing in US</button>
@@ -1563,7 +1867,7 @@ function renderFX(){
       <div class="stat"><div class="stat-label">Went abroad</div><div class="stat-value">${homeC.compact(res.crossBorderFV)}</div><div class="stat-sub">${res.foreignBeatsHome?'beats staying home':'loses to staying home'}</div></div>
       <div class="stat"><div class="stat-label">Currency effect${infoIcon('The part of the final outcome caused purely by exchange-rate movement, separated from what the foreign market itself earned. Positive means the currency worked for you, negative means it ate into the market return.')}</div><div class="stat-value" style="color:${res.currencyEffect>=0?'#8FC79E':'#E8977A'}">${res.currencyEffect>=0?'+':''}${homeC.compact(res.currencyEffect)}</div><div class="stat-sub">${res.currencyEffect>=0?'tailwind':'drag'}</div></div>
     </div>
-    <div class="card">
+    <div class="card is-primary">
       <h4>The interesting fact</h4>
       <div class="cap">Market return alone vs what currency movement actually did to it</div>
       <div class="gr-note" style="margin-top:0">
@@ -1573,6 +1877,7 @@ function renderFX(){
       This comparison never used today's actual exchange rate. It only used the two growth rates and the depreciation rate. The starting exchange rate cancels out completely.
       </div>
     </div>
+    ${nextStepCard([{q:'Use this effective return as the growth rate in a savings plan.', tab:'retirement'}])}
   </div>
   </div>`;
 }
@@ -1592,13 +1897,103 @@ function frontierGap(frontier, currentPoint){
   }
   return null;
 }
+// Same interpolation as frontierGap but unconditional (no "is this
+// meaningful" threshold) -- used by chart tooltips to tell a hovered
+// cloud dot how far below the frontier it sits, at its own risk level.
+function interpFrontierRet(frontier, vol){
+  for(let i=0;i<frontier.length-1;i++){
+    const a=frontier[i], b=frontier[i+1];
+    if(vol>=a.vol && vol<=b.vol){
+      const t=(b.vol-a.vol)>1e-9 ? (vol-a.vol)/(b.vol-a.vol) : 0;
+      return a.ret + t*(b.ret-a.ret);
+    }
+  }
+  return null;
+}
+
+// Module-scoped, not a DOM attribute: the flashcard's action button is
+// re-created via innerHTML on every settle (drag-debounce tick, preset
+// click, chart click...), so any listener bound directly to the button
+// would be gone by the next tick. One delegated document.body handler
+// (wired once, at the end of the script) reads whichever function this
+// slot holds at the moment of the actual click instead.
+let frontierJumpHandler = null;
+
+// Plain-language "so what" for any risk/return frontier chart, as a
+// scannable flashcard rather than a dense paragraph: a retail investor
+// can already read the axes and the dots fine, what's usually missing is
+// what the numbers actually mean and what to do about it. Verdict
+// sentence up top, three at-a-glance stats, an optional one-click action
+// to actually close the gap, and the full explanation tucked into a
+// collapsed dropdown so nothing from the original prose is lost, just
+// no longer forced on every reader by default.
+//
+// `onJump(w)` is optional and, when given, is whatever the chart's own
+// click-to-adopt callback already is (onPortfolioFrontierPick,
+// onLiveMultiFrontierPick, ...) — reused as-is rather than duplicated,
+// so "click the button" and "click the chart" always agree on what
+// adopting a mix means.
+function frontierTakeawayHTML(currentPoint, sharpe, frontier, onJump){
+  const gap = frontierGap(frontier, currentPoint);
+  const pct = v=>(v*100).toFixed(1)+'%';
+  // Verdict colour is #5FA875 (on-frontier, good news) or #D97757 (gap,
+  // room to improve) -- never --red, which this app reserves for actual
+  // errors, not "you could be doing better."
+  const verdictColor = gap ? '#D97757' : '#5FA875';
+  const verdictText = gap
+    ? `You're leaving <b style="color:${verdictColor}">${(gap.gapPct*100).toFixed(1)} points</b> of return on the table at this risk level.`
+    : `This mix is already on the best line available &ndash; nothing here earns more for the risk you're taking.`;
+
+  let jumpBtn = '';
+  if(gap && onJump){
+    // The frontier array is a discrete sample, not a continuous curve, so
+    // "the best mix at this risk" means whichever sampled point sits
+    // closest by risk to where the current mix actually is.
+    let bestIdx=0, bestDist=Infinity;
+    frontier.forEach((p,i)=>{ const dist=Math.abs(p.vol-currentPoint.vol); if(dist<bestDist){ bestDist=dist; bestIdx=i; } });
+    frontierJumpHandler = ()=>onJump(frontier[bestIdx].w);
+    jumpBtn = `<button class="fc-action" data-frontier-jump>Move to the best mix at this risk &rarr;</button>`;
+  }
+
+  const detail = `<div>This mix earns <b style="color:var(--paper)">${pct(currentPoint.ret)}</b> a year for <b style="color:var(--paper)">${pct(currentPoint.vol)}</b> risk &ndash; a <span class="term" data-def="Return earned per unit of risk, above a safe baseline (a bank FD). Higher is better: above 1 is generally good, above 2 very good, for a real portfolio over a full market cycle.">Sharpe ratio</span> of <b style="color:var(--gold)">${sharpe.toFixed(2)}</b>. In plain terms: for every extra point of risk this mix takes on above safe cash, it earns about ${sharpe.toFixed(2)} points of extra return.</div>
+  <div style="margin-top:8px">${gap
+    ? `The blue line is the <i>most</i> return possible at each risk level. At this exact risk (${pct(currentPoint.vol)}), the best mix on it earns <b style="color:#8FC79E">${pct(gap.frontierRetHere)}</b> &ndash; <b style="color:#8FC79E">${(gap.gapPct*100).toFixed(1)} points more</b> than this mix, for the identical risk. Click any point on the blue line, or the button above, to move there.`
+    : `This mix already sits right on the blue line &ndash; for the risk being taken, it's already earning about as much as this combination can give.`}</div>`;
+
+  return `<div class="fcard">
+    <div class="fc-verdict" style="color:${verdictColor}">${verdictText}</div>
+    <div class="fc-tiles">
+      <div class="stat fc-tile"><div class="stat-label">Your return</div><div class="stat-value">${pct(currentPoint.ret)}</div></div>
+      <div class="stat fc-tile"><div class="stat-label">Your risk</div><div class="stat-value">${pct(currentPoint.vol)}</div></div>
+      <div class="stat fc-tile"><div class="stat-label">Sharpe ratio${infoIcon('Return earned per unit of risk, above a safe baseline (a bank FD). Higher is better: above 1 is generally good, above 2 very good.')}</div><div class="stat-value">${sharpe.toFixed(2)}</div></div>
+    </div>
+    ${jumpBtn}
+    ${explainDropdown('Show the full breakdown', detail)}
+  </div>`;
+}
 
 // Builds the ECharts option for the efficient-frontier chart. Every cloud
 // and frontier point carries its own weight vector (`w`, from
 // generateFrontier()), so a click handler elsewhere can read
 // params.dataIndex straight back into an allocation with no extra lookup.
-function frontierChartOption(cloud, frontier, assetPoints, currentPoint){
+// The point on the frontier with the highest return per unit of risk
+// taken above a safe baseline -- the same tangency idea already marked
+// on the Test Real Investments 2-asset chart, generalised to an
+// n-asset sampled frontier. rf is Portfolio's illustrative bank-FD rate
+// (cfg().d.fdRate) or Test Real Investments' actual rf slider, whichever
+// this chart instance was built for.
+function bestSharpePoint(frontier, rf){
+  let best=null, bestSharpe=-Infinity;
+  frontier.forEach(p=>{
+    if(p.vol<=0) return;
+    const s=(p.ret-rf)/p.vol;
+    if(s>bestSharpe){ bestSharpe=s; best=p; }
+  });
+  return best ? Object.assign({}, best, {sharpe:bestSharpe}) : null;
+}
+function frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf){
   const gap = frontierGap(frontier, currentPoint);
+  const bestSharpe = rf!=null ? bestSharpePoint(frontier, rf) : null;
   const markLine = gap ? {
     silent:true, symbol:['none','none'],
     lineStyle:{color:'#14283F', type:'dashed', width:1.5, opacity:.6},
@@ -1624,15 +2019,24 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint){
     },
     dataZoom:[{type:'inside', xAxisIndex:0}, {type:'inside', yAxisIndex:0}],
     tooltip:{
-      trigger:'item',
+      trigger:'item', confine:true, extraCssText:'max-width:290px;white-space:normal;line-height:1.5',
+      textStyle:{fontFamily:"'Figtree',sans-serif", fontSize:12},
       formatter(p){
-        if(p.seriesName==='Cloud') return `Sample mix<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
-        if(p.seriesName==='Frontier') return `On the frontier<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+        if(p.seriesName==='Frontier'){
+          return `<b>The best you can do at this risk.</b><br/>No mix of these building blocks earned more than ${pct(p.value[1])} while staying at ${pct(p.value[0])} risk.<br/><span style="color:#2557C7">Click to move here.</span>`;
+        }
+        if(p.seriesName==='Cloud'){
+          const front = interpFrontierRet(frontier, p.value[0]);
+          const behind = front!=null ? front - p.value[1] : null;
+          return `One of ${cloud.length.toLocaleString()} possible mixes.<br/>${pct(p.value[1])} for ${pct(p.value[0])} risk${behind!=null && behind>0.0015 ? ` &ndash; ${(behind*100).toFixed(1)} points below the best available at that same risk` : ''}.<br/><span style="color:#2557C7">Click to try it.</span>`;
+        }
         if(p.seriesName==='Assets'){
           const a=assetPoints[p.dataIndex];
-          return `${a?(a.fullLabel||a.label):''}<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+          if(!a) return '';
+          return `<b>${a.fullLabel||a.label} on its own:</b><br/>${pct(a.ret)} for ${pct(a.vol)} risk.${a.weight!=null ? `<br/>You hold ${a.weight}% of it.` : ''}`;
         }
-        if(p.seriesName==='Current mix') return `Your current mix<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+        if(p.seriesName==='Current mix') return `<b>You are here.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+        if(p.seriesName==='Best Sharpe') return `<b>The best return for the risk you're taking.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])} &nbsp; Sharpe: ${bestSharpe.sharpe.toFixed(2)}<br/><span style="color:#2557C7">Click to switch to this mix.</span>`;
         return '';
       },
     },
@@ -1646,11 +2050,19 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint){
         markLine },
       { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
         itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1},
-        label:{show:true, formatter:p=>assetPoints[p.dataIndex].label, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
-      { name:'Current mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
-        itemStyle:{color:'transparent', borderColor:'#14283F', borderWidth:2}, silent:true, z:4 },
+        // Points built without a showLabel flag (e.g. the Test Real
+        // Investments chart, which reuses this same option builder but
+        // never applies the Portfolio tab's decluttering) always label --
+        // showLabel is only ever explicitly set to false, never omitted-as-false.
+        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
+      ...(bestSharpe ? [{ name:'Best Sharpe', type:'scatter', data:[[bestSharpe.vol,bestSharpe.ret]], symbolSize:12,
+        itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
+        label:{show:true, formatter:'BEST FOR THE RISK', position:'bottom', distance:8, color:'#14283F', fontWeight:700, fontSize:9, fontFamily:"'Spline Sans Mono',monospace"} }] : []),
+      { name:'Current mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:18,
+        itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, silent:true, z:4,
+        label:{show:true, formatter:'YOUR MIX', position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Current mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
-        itemStyle:{color:'#14283F'}, tooltip:{show:false}, silent:true, z:4 },
+        itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:4 },
     ],
   };
 }
@@ -1658,26 +2070,35 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint){
 // Renders (or refreshes) the frontier chart in-place. Only Cloud/Frontier
 // points carry a stored weight vector `w`, so a click on either calls
 // onPointClick with that mix; other series are silent or non-selectable.
-function renderFrontierChartOption(chartId, cloud, frontier, assetPoints, currentPoint, onPointClick){
-  const chart=initChart(chartId, frontierChartOption(cloud, frontier, assetPoints, currentPoint));
+// Clicking the Best Sharpe marker adopts that same frontier point's mix.
+function renderFrontierChartOption(chartId, cloud, frontier, assetPoints, currentPoint, onPointClick, rf){
+  const chart=initChart(chartId, frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf));
   if(!chart) return;
   chart.off('click');
   if(onPointClick){
+    const best = rf!=null ? bestSharpePoint(frontier, rf) : null;
     chart.on('click', params=>{
       if(params.seriesName==='Cloud' && cloud[params.dataIndex]) onPointClick(cloud[params.dataIndex].w);
       else if(params.seriesName==='Frontier' && frontier[params.dataIndex]) onPointClick(frontier[params.dataIndex].w);
+      else if(params.seriesName==='Best Sharpe' && best) onPointClick(best.w);
     });
   }
 }
 
-function frontierChart(cloud, frontier, assetPoints, currentPoint, chartId, onPointClick){
-  deferChartInit(()=>renderFrontierChartOption(chartId, cloud, frontier, assetPoints, currentPoint, onPointClick));
+// rf (decimal, e.g. 0.065) is optional -- omit it and the chart drops the
+// Best Sharpe marker entirely rather than showing a wrong one. Portfolio
+// passes cfg().d.fdRate (the illustrative bank-FD baseline used for its
+// Sharpe ratio everywhere else); Test Real Investments passes its actual
+// rf slider value.
+function frontierChart(cloud, frontier, assetPoints, currentPoint, chartId, onPointClick, rf){
+  deferChartInit(()=>renderFrontierChartOption(chartId, cloud, frontier, assetPoints, currentPoint, onPointClick, rf));
   return `<div class="fx-chart-wrap">
     <div id="${chartId}" class="echart" style="height:400px"></div>
     <div class="fx-legend">
       <span><i style="background:#2557C7"></i>The frontier: the best return possible at each risk level</span>
       <span><i style="background:#8FC79E;border-radius:50%"></i>A single building block on its own</span>
-      <span><i style="border:2px solid #14283F;background:transparent"></i>Your current mix</span>
+      ${rf!=null ? `<span><i style="border:2px solid #2557C7;background:#14283F"></i>Best return for the risk you're taking, after a safe cash baseline</span>` : ''}
+      <span><i style="border:2px solid #D97757;background:transparent"></i>Your current mix</span>
       <span><i style="border-top:2px dashed rgba(20,40,63,.7);background:transparent"></i>Return left on the table at this risk level &middot; click any point to try that mix</span>
     </div>
   </div>`;
@@ -1786,9 +2207,9 @@ function renderJoint(){
     </div>`;
   }).join('');
 
-  return `<div class="grid">
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
-    <h3>Joint children's corpus</h3>
+    ${panelHead("Joint children's corpus", 'joint')}
     <div class="section-label">Children (up to 3)</div>
     ${childRows}
     ${j.children.length<3?`<button id="addChildBtn" style="width:100%;background:rgba(20,40,63,.06);border:1.5px dashed rgba(20,40,63,.2);border-radius:10px;padding:12px;color:rgba(20,40,63,.55);cursor:pointer;font-size:13px;margin-bottom:16px">+ Add a child</button>`:''}
@@ -1804,7 +2225,7 @@ function renderJoint(){
       <div class="stat"><div class="stat-label">Separate corpora would need</div><div class="stat-value">${c.fmt(Math.round(separate))}</div><div class="stat-sub">/yr, per-child silos</div></div>
       <div class="stat"><div class="stat-label">Saved by clubbing${infoIcon('One shared pot lets the gap years between children keep compounding instead of sitting idle in separate silos, so the required yearly saving falls versus running one corpus per child.')}</div><div class="stat-value" style="color:#8FC79E">${c.fmt(Math.round(saved))}</div><div class="stat-sub">/yr</div></div>
     </div>
-    <div class="card">
+    <div class="card is-primary">
       <h4>Corpus timeline: tightest point${infoIcon('The year the balance comes closest to zero across the whole saving-and-spending timeline. The solver guarantees it never actually dips below zero at any point, not just at the end.')} is year ${joint.minYear}</h4>
       <div class="cap">${Math.abs(joint.minBal)<1000 ? 'Solved so the balance touches exactly zero at its tightest point, never negative.' : 'Balance across the full saving-and-spending timeline.'}</div>
       ${timelineChart}
@@ -1815,6 +2236,7 @@ function renderJoint(){
       Gap years between children compound untouched instead of sitting idle in two silos. Overlap years (both children in college at once) are the real stress test. The solver checks the balance never goes negative at <b style="color:var(--paper)">any</b> point in the timeline, not just at the end. The tightest year here is year ${joint.minYear}${joint.minYear<horizon?', mid-timeline, not the last year':''}, which a solver that only targets a zero terminal balance would have missed entirely.
       </div>
     </div>
+    ${nextStepCard([{q:'Check that the growth rate assumed here holds up against a real portfolio.', tab:'portfolio'}])}
   </div>
   </div>`;
 }
@@ -1833,9 +2255,9 @@ function renderMC(){
   const bull=monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*REGIME_PRESETS.bull.meanAdj, volatility:(m.volatility/100)*REGIME_PRESETS.bull.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
   const bear=monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*REGIME_PRESETS.bear.meanAdj, volatility:(m.volatility/100)*REGIME_PRESETS.bear.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
 
-  return `<div class="grid">
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
-    <h3>Monte Carlo: 1,000 simulated paths</h3>
+    ${panelHead('Monte Carlo: 1,000 simulated paths', 'mc')}
     <div class="field"><label>Annual contribution <b data-mc-label="sip">${c.fmt(m.sip)}</b></label><input type="range" min="10000" max="1000000" step="10000" value="${m.sip}" data-k="sip" data-tab="mc"></div>
     <div class="field"><label>Years <b data-mc-label="years">${m.years}</b></label><input type="range" min="5" max="35" value="${m.years}" data-k="years" data-tab="mc"></div>
     <div class="field"><label>Expected return <b data-mc-label="meanReturn">${m.meanReturn}%</b></label><input type="range" min="4" max="16" step="0.1" value="${m.meanReturn}" data-k="meanReturn" data-tab="mc"></div>
@@ -1854,7 +2276,7 @@ function renderMC(){
       <div class="stat"><div class="stat-label">Worst-case band (P10)${infoIcon('9 in 10 simulated futures ended above this line. Treat it as a planning floor, not the absolute worst case, since real markets can do worse than any simulation.')}</div><div class="stat-value" style="color:#E8977A">${c.compact(res.p10)}</div></div>
       <div class="stat"><div class="stat-label">Best-case band (P90)${infoIcon('Only 1 in 10 simulated futures ended above this line. Enjoy it if it happens, but never build the plan on it.')}</div><div class="stat-value" style="color:#8FC79E">${c.compact(res.p90)}</div></div>
     </div>
-    <div class="card">
+    <div class="card is-primary">
       <h4>Fan chart: the range of outcomes, not just one number</h4>
       <div class="cap">Gold line = median · dark band = 25th-75th percentile · light band = 10th-90th percentile</div>
       ${fanChart(res.yearBands, 'mc-fan')}
@@ -1874,6 +2296,7 @@ function renderMC(){
       </div>
     </div>
     <div class="gr-note">Set volatility to 0% to check this collapses to a single deterministic line. Every percentile becomes identical, proving the doors and the Lab share one engine even under simulation.</div>
+    ${nextStepCard([{q:'Get a full check on whether this plan is actually ready, not just this one number.', tab:'health'}])}
   </div>
   </div>`;
 }
@@ -1937,7 +2360,7 @@ function renderInstruments(){
 
   return `<div style="max-width:980px">
     <div class="inst-header">
-      <h3 style="margin-bottom:4px">Instrument Explorer</h3>
+      <div class="panel-head" style="margin-bottom:4px"><h3>Instrument Explorer</h3><button class="reset-tab-btn" data-reset-tab="instruments" title="Clear the category filter and search box">Reset</button></div>
       <div class="cap">${li.granular
         ? `The full ${totalCount}-category breakdown from your verified reference document. Door 2 shows a curated 6-9 item list matched to a person's risk profile and horizon; this is everything underneath it.`
         : `A ${totalCount}-item reference list of standard US account and fund categories. Less granular than the India side, since the underlying category-by-category breakdown was not part of the verified source material.`}
@@ -1960,6 +2383,7 @@ function renderInstruments(){
     </div>
 
     <div id="inst-cards">${cards}</div>
+    ${nextStepCard([{q:'See real historical risk and return for instruments like these, not assumption bands.', tab:'livefrontier'}])}
   </div>`;
 }
 
@@ -2031,7 +2455,11 @@ function renderRiskBarOption(chartId, decomp, concentratedDecomp){
 
 function computePortfolioDerived(assets, corr){
   const rawW = L.portfolio.weights;
-  const w = normalizeWeights(rawW);
+  // A literal all-zero weight vector (the Reset button's "start from
+  // nothing" state) must stay all-zero, not fall back to equal-weight --
+  // normalizeWeights()'s zero-sum fallback exists for a different case
+  // (malformed input), not this deliberate empty state.
+  const w = rawW.every(x=>x===0) ? rawW.slice() : normalizeWeights(rawW);
   const returns = assets.map(a=>a.ret), vols = assets.map(a=>a.vol);
   const marketIdx = 0;
   const portRet = portfolioReturn(w, returns);
@@ -2043,6 +2471,46 @@ function computePortfolioDerived(assets, corr){
   const concentratedW = assets.map((_,i)=>i===topIdx?1:0);
   const concentratedDecomp = decomposeRisk(concentratedW, vols, corr, marketIdx);
   return { w, rawW, returns, vols, marketIdx, portRet, decomp, topIdx, concRet, concVol, volSaved, retGiven, concentratedDecomp };
+}
+
+// "What if I mixed in something safe?" (Phase 5, optional): blends the
+// CURRENT mix, treated as a single asset with (portRet, totalVol), against
+// one safe building block already in the index -- Liquid Fund for India,
+// Short-Term Treasuries for the US -- at a chosen safe-leg percentage.
+// No new assumptions: the correlation between the safe leg and the
+// current mix is derived directly from the existing correlation matrix,
+// cov(safe, mix) = Σ wᵢ·cov(safe,i) = Σ wᵢ·corr[safeIdx][i]·σsafe·σᵢ, so
+// ρ = cov/(σsafe·σmix) = Σ wᵢ·corr[safeIdx][i]·σᵢ / σmix -- σsafe cancels.
+function pfSafeAssetId(){ return L.country==='IN' ? 'liquid' : 'shortbond'; }
+function portfolioBlendData(d, assets, corr){
+  const safeIdx = assets.findIndex(a=>a.id===pfSafeAssetId());
+  if(safeIdx<0) return null;
+  const safeAsset = assets[safeIdx];
+  const sigmaMix = d.decomp.totalVol;
+  const rawRho = sigmaMix>0 ? d.w.reduce((s,wi,i)=>s+wi*corr[safeIdx][i]*d.vols[i],0) / sigmaMix : 0;
+  const rho = Math.max(-1, Math.min(1, rawRho));
+  const blendAt = p=>{
+    const ret = p*safeAsset.ret + (1-p)*d.portRet;
+    const variance = p*p*safeAsset.vol*safeAsset.vol + (1-p)*(1-p)*sigmaMix*sigmaMix
+      + 2*p*(1-p)*safeAsset.vol*sigmaMix*rho;
+    return {p, ret, vol:Math.sqrt(Math.max(0,variance))};
+  };
+  const p = Math.max(0, Math.min(1, L.portfolio.blendPct/100));
+  return { safeAsset, rho, blendAt, current: blendAt(p), portRet:d.portRet, sigmaMix };
+}
+function portfolioBlendHTML(d, assets, corr){
+  const bd = portfolioBlendData(d, assets, corr);
+  if(!bd) return '<div class="cap">No safe-asset building block found for this country.</div>';
+  const rows=[0,0.25,0.5,0.75,1].map(p=>bd.blendAt(p));
+  const cur = bd.current;
+  const retKept = bd.portRet>0 ? Math.max(0, cur.ret/bd.portRet*100) : 0;
+  const volKept = bd.sigmaMix>0 ? cur.vol/bd.sigmaMix*100 : 0;
+  return `<div class="gr-note" style="margin-top:0">Correlation between your current mix and ${bd.safeAsset.name}: <b style="color:var(--gold)">${bd.rho.toFixed(2)}</b>. At <b style="color:var(--paper)">${(L.portfolio.blendPct)}%</b> parked in ${bd.safeAsset.name}, you'd keep <b style="color:#8FC79E">${retKept.toFixed(0)}%</b> of the return for <b style="color:#8FC79E">${volKept.toFixed(0)}%</b> of the risk.</div>
+  <div class="table-scroll" style="margin-top:10px"><table class="dtable">
+  <thead><tr><th>In ${bd.safeAsset.name}</th><th>In your mix</th><th>Return</th><th>Risk</th></tr></thead>
+  <tbody>
+  ${rows.map(r=>`<tr${Math.abs(r.p-L.portfolio.blendPct/100)<0.01?' style="background:rgba(37,87,199,.08)"':''}><td>${(r.p*100).toFixed(0)}%</td><td>${((1-r.p)*100).toFixed(0)}%</td><td>${(r.ret*100).toFixed(1)}%</td><td>${(r.vol*100).toFixed(1)}%</td></tr>`).join('')}
+  </tbody></table></div>`;
 }
 
 function pfInflation(){
@@ -2165,9 +2633,31 @@ function portfolioTailRiskHTML(d){
 }
 // Shared by the full render and the debounced live-update fast path, so
 // both build the identical cloud/frontier/assetPoints/currentPoint shape.
+// Display decluttering (the "Fewer"/"Off" toggles) happens HERE, and only
+// here: the chart's click-to-adopt handler reads params.dataIndex back
+// into this same cloud array, so as long as every consumer gets its
+// cloud/assetPoints from this one function, the indices the chart shows
+// and the indices a click resolves to can never drift apart.
 function computePortfolioFrontierData(d, assets, corr){
-  const {cloud, frontier} = generateFrontier(d.returns, d.vols, corr, 3000, L.portfolio.seed);
-  const assetPoints = assets.map((a,i)=>({vol:a.vol, ret:a.ret, label:a.name.split(' ')[0], fullLabel:a.name}));
+  // The frontier line is always derived from the full 3000-point cloud,
+  // via the 40 volatility bins inside generateFrontier() -- never from
+  // whatever subset ends up on screen below. Thinning the display can
+  // only ever declutter the dots, never bend the blue line itself.
+  const {cloud: fullCloud, frontier} = generateFrontier(d.returns, d.vols, corr, 3000, L.portfolio.seed);
+  const show = L.portfolio.show || {cloud:'all', assets:'held'};
+  const cloud = show.cloud==='off' ? [] : show.cloud==='fewer' ? fullCloud.filter((_,i)=>i%5===0) : fullCloud;
+
+  const pct = roundPercentsTo100(d.w);
+  let assetPoints = assets.map((a,i)=>({vol:a.vol, ret:a.ret, label:a.name.split(' ')[0], fullLabel:a.name, weight:pct[i]}));
+  if(show.assets==='off') assetPoints=[];
+  else if(show.assets==='held') assetPoints=assetPoints.filter(p=>p.weight>0);
+  // Cap text labels to the 8 largest holdings shown -- with up to 24
+  // building blocks the dots themselves are fine, it's 24 overlapping 9px
+  // mono labels that was the actual clutter complaint.
+  const weightsDesc = assetPoints.map(p=>p.weight).sort((a,b)=>b-a);
+  const labelFloor = weightsDesc[7]; // 8th-largest, or undefined when <=8 points
+  assetPoints.forEach(p=>{ p.showLabel = labelFloor===undefined || p.weight>=labelFloor; });
+
   const currentPoint = {vol:d.decomp.totalVol, ret:d.portRet};
   return {cloud, frontier, assetPoints, currentPoint};
 }
@@ -2181,7 +2671,7 @@ function onPortfolioFrontierPick(w){
 }
 function portfolioChartHTML(d, assets, corr){
   const {cloud, frontier, assetPoints, currentPoint} = computePortfolioFrontierData(d, assets, corr);
-  return frontierChart(cloud, frontier, assetPoints, currentPoint, 'pf-frontier-echart', onPortfolioFrontierPick);
+  return frontierChart(cloud, frontier, assetPoints, currentPoint, 'pf-frontier-echart', onPortfolioFrontierPick, cfg().d.fdRate);
 }
 
 // Called on every slider tick (input event fires continuously during a
@@ -2237,6 +2727,10 @@ function updatePortfolioLive(){
   const tailEl=document.getElementById('pf-tailrisk'); if(tailEl) tailEl.innerHTML=portfolioTailRiskHTML(d);
   const stressEl=document.getElementById('pf-stress'); if(stressEl) stressEl.innerHTML=portfolioStressHTML(d, c);
   const rcEl=document.getElementById('pf-riskcontrib'); if(rcEl) rcEl.innerHTML=portfolioRiskContribHTML(d, assets, corr);
+  // The blend slider itself lives OUTSIDE #pf-blend (see renderPortfolio),
+  // so patching this innerHTML on every drag tick can never wipe out the
+  // slider mid-gesture -- only the table/sentence below it re-renders.
+  const blendEl=document.getElementById('pf-blend'); if(blendEl) blendEl.innerHTML=portfolioBlendHTML(d, assets, corr);
   // Cluster accordion headers: every drag renormalizes ALL weights, not
   // just the dragged asset's own cluster, so every cluster's running
   // total needs refreshing here too, not only the one being dragged.
@@ -2267,7 +2761,9 @@ function schedulePortfolioChartUpdate(delay){
       // replacing the DOM (which would dispose/recreate the instance and
       // interrupt the drag gesture the browser is mid-tracking).
       const {cloud, frontier, assetPoints, currentPoint} = computePortfolioFrontierData(d, assets, corr);
-      renderFrontierChartOption('pf-frontier-echart', cloud, frontier, assetPoints, currentPoint, onPortfolioFrontierPick);
+      renderFrontierChartOption('pf-frontier-echart', cloud, frontier, assetPoints, currentPoint, onPortfolioFrontierPick, cfg().d.fdRate);
+      const takeawayEl=document.getElementById('pf-chart-takeaway');
+      if(takeawayEl) takeawayEl.innerHTML=frontierTakeawayHTML(currentPoint, portfolioRatios(d, c).sharpe, frontier, onPortfolioFrontierPick);
     } else {
       chartEl.innerHTML=portfolioChartHTML(d, assets, corr);
     }
@@ -2320,18 +2816,63 @@ function renderPortfolio(){
     <button class="pf-preset-btn" data-pfpreset="equal">Equal weight</button>
   </div>`;
 
-  return `<div class="grid">
+  const pfFrontierData = computePortfolioFrontierData(d, assets, corr);
+  const pfSharpe = portfolioRatios(d, c).sharpe;
+
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
-    <h3>Build a portfolio</h3>
+    ${panelHead('Build a portfolio', 'portfolio')}
     <div class="cap" style="margin-bottom:14px">${assets.length} building blocks across ${clusterOrder.filter(cl=>assets.some(a=>a.cluster===cl)).length} categories. Start from a preset below or open any category to drag its sliders yourself &ndash; either way, all ${assets.length} weights stay automatically rescaled against each other so the total always reads exactly 100%. Named after the real SEBI categories and indices you would actually shop from, with long-run category-level assumptions; not any specific fund house's live performance.</div>
     ${presetRow}
     <div class="pf-total-banner"><span class="ttl-label">Total allocated${infoIcon('Every mix, however you drag it, is rescaled to sum to exactly 100%. This checks out to the rupee (or point) by construction, not by luck.')}</span><span class="ttl-value" id="pf-total-check">${pct.reduce((a,b)=>a+b,0)}%</span></div>
     ${sliders}
-    <button id="reseedFrontierBtn" style="width:100%;margin-top:14px;background:transparent;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.6);border-radius:3px;padding:9px;font-size:11px;cursor:pointer;font-family:'Spline Sans Mono',monospace">Resample the frontier cloud</button>
   </div>
 
   <div class="output">
     <div class="stat-row" id="pf-stats" style="grid-template-columns:repeat(4,1fr)">${portfolioStatsHTML(d)}</div>
+
+    <div class="card is-primary">
+      <h4>The risk-return map <span style="color:rgba(20,40,63,.4);font-weight:400;font-size:13px">(finance calls this curve the "efficient frontier")</span></h4>
+      <div class="cap">Each faint dot is one possible mix of these ${assets.length} building blocks. Higher up is more return; further right is more risk. The blue line traces the best return achievable at each risk level &ndash; your orange marker is where you actually stand right now. Hover any point, or click one, to try that mix.</div>
+      <div class="pf-map-toolbar">
+        <button class="pf-map-btn" id="pfResetBtn">Reset</button>
+        <button class="pf-map-btn" id="reseedFrontierBtn">Resample the cloud</button>
+      </div>
+      <div class="pf-declutter-row">
+        <div class="pf-declutter-group">
+          <span class="pf-declutter-label">Sample mixes</span>
+          <div class="pf-declutter-opts">
+            <button class="pf-declutter-opt${(L.portfolio.show.cloud==='all')?' active':''}" data-pfshow-cloud="all">All</button>
+            <button class="pf-declutter-opt${(L.portfolio.show.cloud==='fewer')?' active':''}" data-pfshow-cloud="fewer">Fewer</button>
+            <button class="pf-declutter-opt${(L.portfolio.show.cloud==='off')?' active':''}" data-pfshow-cloud="off">Off</button>
+          </div>
+        </div>
+        <div class="pf-declutter-group">
+          <span class="pf-declutter-label">Building blocks</span>
+          <div class="pf-declutter-opts">
+            <button class="pf-declutter-opt${(L.portfolio.show.assets==='all')?' active':''}" data-pfshow-assets="all">All</button>
+            <button class="pf-declutter-opt${(L.portfolio.show.assets==='held')?' active':''}" data-pfshow-assets="held">Only mine</button>
+            <button class="pf-declutter-opt${(L.portfolio.show.assets==='off')?' active':''}" data-pfshow-assets="off">Off</button>
+          </div>
+        </div>
+      </div>
+      <div class="pf-cluster-chips">${clusterOrder.filter(cl=>clusterPct[cl]>0).map(cl=>`<span class="pf-cluster-chip">${PORT_CLUSTER_LABELS[cl]} <b>${clusterPct[cl]}%</b></span>`).join('')}</div>
+      <div id="pf-chart">${portfolioChartHTML(d, assets, corr)}</div>
+      <div class="gr-note" id="pf-chart-takeaway" style="margin-top:10px">${frontierTakeawayHTML(pfFrontierData.currentPoint, pfSharpe, pfFrontierData.frontier, onPortfolioFrontierPick)}</div>
+    </div>
+
+    ${collapsibleSection('', 'What if I mixed in something safe?', `
+      <div class="field" style="margin-bottom:4px"><label>Park in ${(assets.find(a=>a.id===pfSafeAssetId())||{}).name||'a safe asset'} <b id="pf-blend-label">${L.portfolio.blendPct}%</b></label>
+        <input type="range" min="0" max="100" step="5" value="${L.portfolio.blendPct}" data-pfblend>
+      </div>
+      <div id="pf-blend">${portfolioBlendHTML(d, assets, corr)}</div>
+    `)}
+
+    <div class="card">
+      <h4>How much of your risk is diversifiable, right now${infoIcon('This updates live as you move the sliders. Systematic risk comes from the market as a whole and cannot be diversified away. Unsystematic risk is specific to your particular mix of holdings, and shrinks as you spread across less-correlated building blocks.')}</h4>
+      <div class="cap">Drag any slider above and watch the split shift.</div>
+      <div id="pf-riskbar">${portfolioRiskBarHTML(d)}</div>
+    </div>
 
     <div class="card">
       <h4>Invest in this mix</h4>
@@ -2361,18 +2902,6 @@ function renderPortfolio(){
       </div>
       <button id="pfToRetBtn" style="width:100%;margin-top:10px;background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:10px;font-size:12px;cursor:pointer;font-family:'Spline Sans Mono',monospace">Use this return in the Retirement Lab</button>
       <div class="cap" style="margin-top:7px">Sets the Retirement tab's "Growth while saving" to this mix's expected return and takes you there.</div>
-    </div>
-
-    <div class="card">
-      <h4>The risk-return map <span style="color:rgba(20,40,63,.4);font-weight:400;font-size:13px">(finance calls this curve the "efficient frontier")</span></h4>
-      <div class="cap">Each faint dot is one possible mix of these ${assets.length} building blocks. Hover the gold line, the green dots, or your marker for exact numbers.</div>
-      <div id="pf-chart">${portfolioChartHTML(d, assets, corr)}</div>
-    </div>
-
-    <div class="card">
-      <h4>How much of your risk is diversifiable, right now${infoIcon('This updates live as you move the sliders. Systematic risk comes from the market as a whole and cannot be diversified away. Unsystematic risk is specific to your particular mix of holdings, and shrinks as you spread across less-correlated building blocks.')}</h4>
-      <div class="cap">Drag any slider above and watch the split shift.</div>
-      <div id="pf-riskbar">${portfolioRiskBarHTML(d)}</div>
     </div>
 
     <div class="lab-gopdeeper-label">Go deeper</div>
@@ -2425,6 +2954,7 @@ function renderPortfolio(){
       <div class="cap" style="margin-bottom:10px">Send this mix's expected return and volatility to the Monte Carlo tab, instead of typing them in by hand.</div>
       <button id="pfToMCBtn" style="width:100%;background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:10px;font-size:12px;cursor:pointer;font-family:'Spline Sans Mono',monospace">Use this mix in Monte Carlo</button>
     </div>
+    ${nextStepCard([{q:'Do these numbers hold up against real prices? Test this mix with real stocks, ETFs and funds.', tab:'livefrontier'}])}
   </div>
   </div>`;
 }
@@ -2448,9 +2978,9 @@ function renderHealth(){
   const bands=[{max:39,label:'Needs attention',color:'#A03A22'},{max:69,label:'On track, room to grow',color:'#2557C7'},{max:100,label:'Strong shape',color:'#2E8B6F'}];
   const band=bands.find(b=>sc.total<=b.max);
 
-  return `<div class="grid">
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
-    <h3>Plan health inputs</h3>
+    ${panelHead('Plan health inputs', 'health')}
     ${h.fromDoor2Plan?`<div class="gr-note" style="margin-top:0;margin-bottom:14px;color:var(--gold)">Capacity and total SIP filled in from your Full Plan (Door 2). Adjust the sliders below if anything's changed.</div>`:''}
     <div class="field"><label>Your savings capacity <b>${c.fmt(h.capacity)}</b>/mo</label><input type="range" min="5000" max="300000" step="1000" value="${h.capacity}" data-k="capacity" data-tab="health"></div>
     <div class="field"><label>Total your goals need <b>${c.fmt(h.totalSIP)}</b>/mo</label><input type="range" min="5000" max="300000" step="1000" value="${h.totalSIP}" data-k="totalSIP" data-tab="health"></div>
@@ -2468,7 +2998,7 @@ function renderHealth(){
     <div class="gr-note">A scored composite, built only from what this app actually measures: funding, emergency cover, and stress survival. Not a substitute for a full review with an adviser.</div>
   </div>
   <div class="output">
-    <div class="card">
+    <div class="card is-primary">
       <h4>Plan Health Score${infoIcon('A 0 to 100 composite scored only from what this app can actually measure: funding 40 points, emergency cover 20, stress survival 25, discipline 15. A quick pulse check, not a full financial review.')}</h4>
       <div class="cap">${band.label}</div>
       <div class="score-dial">
@@ -2490,6 +3020,7 @@ function renderHealth(){
       <b>Discipline (15pts):</b> ${h.capacity>h.totalSIP?'capacity exceeds what goals need, a real surplus':'capacity is fully or over-committed'}.
       </div>
     </div>
+    ${nextStepCard([{q:'Start from the Retirement tab to raise the funding score.', tab:'retirement'}])}
   </div>
   </div>`;
 }
@@ -2517,7 +3048,13 @@ function renderHealth(){
    an honest fetch error, never silently wrong data. Mutual funds use
    MFAPI's own working search instead of a bundled list — funds are too
    numerous and change too often (new NFOs) to bundle sensibly. */
-const INSTRUMENT_INDEX_IN = [
+// kind: what it is (stock/etf/reit/invit). klass: what it exposes you to
+// (equity/debt/gold/realasset/intl). tagBlock() applies both as a block
+// default, with a trailing spread so any single entry can still override
+// them -- see the arrays composing INSTRUMENT_INDEX_IN/US below.
+function tagBlock(arr, def){ return arr.map(x=>({type:'equity', ...def, ...x})); }
+
+const IN_STOCKS = [
   // NIFTY 50
   {symbol:'RELIANCE.NS',name:'Reliance Industries'},{symbol:'TCS.NS',name:'Tata Consultancy Services'},
   {symbol:'HDFCBANK.NS',name:'HDFC Bank'},{symbol:'ICICIBANK.NS',name:'ICICI Bank'},
@@ -2544,13 +3081,78 @@ const INSTRUMENT_INDEX_IN = [
   {symbol:'BRITANNIA.NS',name:'Britannia Industries'},{symbol:'APOLLOHOSP.NS',name:'Apollo Hospitals'},
   {symbol:'UPL.NS',name:'UPL'},{symbol:'SHRIRAMFIN.NS',name:'Shriram Finance'},
   {symbol:'LTIM.NS',name:'LTIMindtree'},{symbol:'HINDALCO.NS',name:'Hindalco Industries'},
-  // ETFs: gold, silver, broad index, sector index — verified live (GOLDBEES.NS, JUNIORBEES.NS)
-  {symbol:'GOLDBEES.NS',name:'Nippon India Gold ETF'},{symbol:'SILVERBEES.NS',name:'Nippon India Silver ETF'},
+  // Next 50 / broader large-mid cap — batch-verified live against /api/history
+  // this session (every symbol below returned 1200+ daily bars except
+  // ZOMATO.NS, renamed on NSE to ETERNAL.NS, used here instead).
+  {symbol:'ADANIENSOL.NS',name:'Adani Energy Solutions'},{symbol:'ADANIGREEN.NS',name:'Adani Green Energy'},
+  {symbol:'ADANIPOWER.NS',name:'Adani Power'},{symbol:'AMBUJACEM.NS',name:'Ambuja Cements'},
+  {symbol:'BAJAJHLDNG.NS',name:'Bajaj Holdings & Investment'},{symbol:'BANKBARODA.NS',name:'Bank of Baroda'},
+  {symbol:'BERGEPAINT.NS',name:'Berger Paints'},{symbol:'BOSCHLTD.NS',name:'Bosch'},
+  {symbol:'CANBK.NS',name:'Canara Bank'},{symbol:'CHOLAFIN.NS',name:'Cholamandalam Investment & Finance'},
+  {symbol:'COLPAL.NS',name:'Colgate-Palmolive India'},{symbol:'DABUR.NS',name:'Dabur India'},
+  {symbol:'DLF.NS',name:'DLF'},{symbol:'GAIL.NS',name:'GAIL India'},
+  {symbol:'GODREJCP.NS',name:'Godrej Consumer Products'},{symbol:'HAVELLS.NS',name:'Havells India'},
+  {symbol:'HAL.NS',name:'Hindustan Aeronautics'},{symbol:'ICICIGI.NS',name:'ICICI Lombard General Insurance'},
+  {symbol:'ICICIPRULI.NS',name:'ICICI Prudential Life Insurance'},{symbol:'INDIGO.NS',name:'InterGlobe Aviation (IndiGo)'},
+  {symbol:'INDHOTEL.NS',name:'Indian Hotels Company'},{symbol:'IOC.NS',name:'Indian Oil Corporation'},
+  {symbol:'IRFC.NS',name:'Indian Railway Finance Corp'},{symbol:'JINDALSTEL.NS',name:'Jindal Steel & Power'},
+  {symbol:'LODHA.NS',name:'Macrotech Developers (Lodha)'},{symbol:'LUPIN.NS',name:'Lupin'},
+  {symbol:'MARICO.NS',name:'Marico'},{symbol:'MOTHERSON.NS',name:'Samvardhana Motherson International'},
+  {symbol:'MUTHOOTFIN.NS',name:'Muthoot Finance'},{symbol:'NHPC.NS',name:'NHPC'},
+  {symbol:'NMDC.NS',name:'NMDC'},{symbol:'PAGEIND.NS',name:'Page Industries'},
+  {symbol:'PATANJALI.NS',name:'Patanjali Foods'},{symbol:'PERSISTENT.NS',name:'Persistent Systems'},
+  {symbol:'PFC.NS',name:'Power Finance Corporation'},{symbol:'PIDILITIND.NS',name:'Pidilite Industries'},
+  {symbol:'PNB.NS',name:'Punjab National Bank'},{symbol:'POLYCAB.NS',name:'Polycab India'},
+  {symbol:'RECLTD.NS',name:'REC Limited'},{symbol:'SIEMENS.NS',name:'Siemens India'},
+  {symbol:'SRF.NS',name:'SRF'},{symbol:'TATACOMM.NS',name:'Tata Communications'},
+  {symbol:'TATAPOWER.NS',name:'Tata Power'},{symbol:'TORNTPHARM.NS',name:'Torrent Pharmaceuticals'},
+  {symbol:'TVSMOTOR.NS',name:'TVS Motor Company'},{symbol:'UNIONBANK.NS',name:'Union Bank of India'},
+  {symbol:'UNITDSPR.NS',name:'United Spirits'},{symbol:'VBL.NS',name:'Varun Beverages'},
+  {symbol:'VEDL.NS',name:'Vedanta'},{symbol:'YESBANK.NS',name:'Yes Bank'},
+  {symbol:'ETERNAL.NS',name:'Eternal (formerly Zomato)'},
+];
+// ETFs: broad index, sector/thematic — batch-verified live.
+const IN_ETF_EQUITY = [
   {symbol:'NIFTYBEES.NS',name:'Nippon India Nifty 50 ETF'},{symbol:'JUNIORBEES.NS',name:'Nippon India Nifty Next 50 ETF'},
   {symbol:'BANKBEES.NS',name:'Nippon India Nifty Bank ETF'},{symbol:'ICICIB22.NS',name:'ICICI Prudential Bharat 22 ETF'},
-].map(x=>({...x, type:'equity'}));
+  {symbol:'CPSEETF.NS',name:'CPSE ETF (PSU basket)'},
+  {symbol:'ITBEES.NS',name:'Nippon India Nifty IT ETF (sector)'},{symbol:'PHARMABEES.NS',name:'Nippon India Nifty Pharma ETF (sector)'},
+  {symbol:'PSUBNKBEES.NS',name:'Nippon India Nifty PSU Bank ETF (sector)'},{symbol:'CONSUMBEES.NS',name:'Nippon India Nifty India Consumption ETF (sector)'},
+];
+const IN_ETF_GOLD = [
+  {symbol:'GOLDBEES.NS',name:'Nippon India Gold ETF'},{symbol:'SILVERBEES.NS',name:'Nippon India Silver ETF'},
+];
+const IN_ETF_INTL = [
+  {symbol:'MON100.NS',name:'Motilal Oswal Nasdaq 100 ETF (international)'},{symbol:'MAFANG.NS',name:'Mirae Asset FANG+ ETF (international)'},
+];
+// Debt/gilt ETFs — batch-verified live against /api/history this session
+// (GSEC10IETF 374 bars, LTGILTBEES 1214, EBBETF0433 355; all well above
+// the 250-bar floor). Fixes the gap the user flagged directly: India had
+// zero debt-class instruments to blend against equity before this.
+const IN_ETF_DEBT = [
+  {symbol:'GSEC10IETF.NS',name:'ICICI Prudential Nifty 10yr Benchmark G-Sec ETF'},
+  {symbol:'LTGILTBEES.NS',name:'Nippon India ETF Nifty 8-13yr G-Sec Long Term Gilt'},
+  {symbol:'EBBETF0433.NS',name:'BHARAT Bond ETF - April 2033'},
+];
+// REITs and an InvIT — batch-verified live this session (1200+ bars each).
+// The "alternative asset class" the user asked for: real estate and
+// infrastructure income, neither equity nor debt.
+const IN_REALASSET = [
+  {symbol:'EMBASSY.NS',name:'Embassy Office Parks REIT',kind:'reit'},
+  {symbol:'MINDSPACE.NS',name:'Mindspace Business Parks REIT',kind:'reit'},
+  {symbol:'BIRET.NS',name:'Brookfield India Real Estate Trust REIT',kind:'reit'},
+  {symbol:'INDIGRID.NS',name:'IndiGrid InvIT (power transmission)',kind:'invit'},
+];
+const INSTRUMENT_INDEX_IN = [
+  ...tagBlock(IN_STOCKS, {kind:'stock', klass:'equity'}),
+  ...tagBlock(IN_ETF_EQUITY, {kind:'etf', klass:'equity'}),
+  ...tagBlock(IN_ETF_GOLD, {kind:'etf', klass:'gold'}),
+  ...tagBlock(IN_ETF_INTL, {kind:'etf', klass:'intl'}),
+  ...tagBlock(IN_ETF_DEBT, {kind:'etf', klass:'debt'}),
+  ...tagBlock(IN_REALASSET, {klass:'realasset'}),
+];
 
-const INSTRUMENT_INDEX_US = [
+const US_STOCKS = [
   {symbol:'AAPL',name:'Apple'},{symbol:'MSFT',name:'Microsoft'},{symbol:'AMZN',name:'Amazon'},
   {symbol:'GOOGL',name:'Alphabet (Class A)'},{symbol:'META',name:'Meta Platforms'},{symbol:'NVDA',name:'NVIDIA'},
   {symbol:'BRK-B',name:'Berkshire Hathaway'},{symbol:'TSLA',name:'Tesla'},{symbol:'JPM',name:'JPMorgan Chase'},
@@ -2585,16 +3187,110 @@ const INSTRUMENT_INDEX_US = [
   {symbol:'FI',name:'Fiserv'},{symbol:'HUM',name:'Humana'},{symbol:'SLB',name:'SLB (Schlumberger)'},
   {symbol:'EQIX',name:'Equinix'},{symbol:'USB',name:'US Bancorp'},{symbol:'PYPL',name:'PayPal'},
   {symbol:'GM',name:'General Motors'},{symbol:'FDX',name:'FedEx'},{symbol:'CSX',name:'CSX Corp'},
-  // ETFs: broad index, gold, real estate — for parity with the India list's ETF coverage
+  // Broader S&P 500 coverage — batch-verified live against /api/history this
+  // session (every symbol below returned 1250+ daily bars except Kellanova
+  // 'K', which 404'd -- delisted after its 2025 acquisition, dropped).
+  {symbol:'NFLX',name:'Netflix'},{symbol:'DIS',name:'Walt Disney'},{symbol:'XOM',name:'ExxonMobil'},
+  {symbol:'PFE',name:'Pfizer'},{symbol:'MS',name:'Morgan Stanley'},{symbol:'BX',name:'Blackstone'},
+  {symbol:'NOW',name:'ServiceNow'},{symbol:'PANW',name:'Palo Alto Networks'},{symbol:'ANET',name:'Arista Networks'},
+  {symbol:'LRCX',name:'Lam Research'},{symbol:'KLAC',name:'KLA Corp'},{symbol:'MU',name:'Micron Technology'},
+  {symbol:'AMAT',name:'Applied Materials'},{symbol:'CDNS',name:'Cadence Design Systems'},{symbol:'SNPS',name:'Synopsys'},
+  {symbol:'ROP',name:'Roper Technologies'},{symbol:'ETN',name:'Eaton Corp'},{symbol:'PH',name:'Parker Hannifin'},
+  {symbol:'EMR',name:'Emerson Electric'},{symbol:'CMI',name:'Cummins'},{symbol:'FCX',name:'Freeport-McMoRan'},
+  {symbol:'NUE',name:'Nucor'},{symbol:'DOW',name:'Dow Inc'},{symbol:'DD',name:'DuPont de Nemours'},
+  {symbol:'ECL',name:'Ecolab'},{symbol:'APH',name:'Amphenol'},{symbol:'TDG',name:'TransDigm Group'},
+  {symbol:'WM',name:'Waste Management'},{symbol:'RSG',name:'Republic Services'},{symbol:'AEP',name:'American Electric Power'},
+  {symbol:'D',name:'Dominion Energy'},{symbol:'EXC',name:'Exelon'},{symbol:'PEG',name:'Public Service Enterprise Group'},
+  {symbol:'XEL',name:'Xcel Energy'},{symbol:'ED',name:'Consolidated Edison'},{symbol:'WEC',name:'WEC Energy Group'},
+  {symbol:'ES',name:'Eversource Energy'},{symbol:'AWK',name:'American Water Works'},{symbol:'PSA',name:'Public Storage'},
+  {symbol:'O',name:'Realty Income'},{symbol:'SPG',name:'Simon Property Group'},{symbol:'AMT',name:'American Tower'},
+  {symbol:'CCI',name:'Crown Castle'},{symbol:'DLR',name:'Digital Realty Trust'},{symbol:'WELL',name:'Welltower'},
+  {symbol:'VTR',name:'Ventas'},{symbol:'ARE',name:'Alexandria Real Estate'},{symbol:'AVB',name:'AvalonBay Communities'},
+  {symbol:'EQR',name:'Equity Residential'},{symbol:'MAA',name:'Mid-America Apartment Communities'},{symbol:'KMB',name:'Kimberly-Clark'},
+  {symbol:'CL',name:'Colgate-Palmolive'},{symbol:'GIS',name:'General Mills'},{symbol:'HSY',name:'Hershey'},
+  {symbol:'STZ',name:'Constellation Brands'},{symbol:'EL',name:'Estee Lauder'},{symbol:'CLX',name:'Clorox'},
+  {symbol:'CHD',name:'Church & Dwight'},{symbol:'KDP',name:'Keurig Dr Pepper'},{symbol:'KHC',name:'Kraft Heinz'},
+  {symbol:'MNST',name:'Monster Beverage'},{symbol:'YUM',name:'Yum! Brands'},{symbol:'CMG',name:'Chipotle Mexican Grill'},
+  {symbol:'DPZ',name:"Domino's Pizza"},{symbol:'ROST',name:'Ross Stores'},{symbol:'ORLY',name:"O'Reilly Automotive"},
+  {symbol:'AZO',name:'AutoZone'},{symbol:'BBY',name:'Best Buy'},{symbol:'EBAY',name:'eBay'},
+  {symbol:'ETSY',name:'Etsy'},{symbol:'MAR',name:'Marriott International'},{symbol:'HLT',name:'Hilton Worldwide'},
+  {symbol:'CCL',name:'Carnival Corp'},{symbol:'RCL',name:'Royal Caribbean Group'},{symbol:'LUV',name:'Southwest Airlines'},
+  {symbol:'DAL',name:'Delta Air Lines'},{symbol:'UAL',name:'United Airlines'},{symbol:'AAL',name:'American Airlines'},
+];
+// ETFs: broad index, sector (Select Sector SPDRs), dividend — batch-verified
+// live; substantially broader than the original 4-ETF set so genuinely
+// diversified frontiers are possible.
+const US_ETF_EQUITY = [
   {symbol:'SPY',name:'SPDR S&P 500 ETF'},{symbol:'QQQ',name:'Invesco QQQ (Nasdaq 100 ETF)'},
-  {symbol:'GLD',name:'SPDR Gold Shares'},{symbol:'VNQ',name:'Vanguard Real Estate ETF'},
-].map(x=>({...x, type:'equity'}));
+  {symbol:'VTI',name:'Vanguard Total Stock Market ETF'},{symbol:'VOO',name:'Vanguard S&P 500 ETF'},
+  {symbol:'IVV',name:'iShares Core S&P 500 ETF'},{symbol:'IWM',name:'iShares Russell 2000 ETF (small cap)'},
+  {symbol:'DIA',name:'SPDR Dow Jones Industrial Average ETF'},
+  {symbol:'XLK',name:'Technology Select Sector SPDR'},{symbol:'XLF',name:'Financial Select Sector SPDR'},
+  {symbol:'XLE',name:'Energy Select Sector SPDR'},{symbol:'XLV',name:'Health Care Select Sector SPDR'},
+  {symbol:'XLY',name:'Consumer Discretionary Select SPDR'},{symbol:'XLP',name:'Consumer Staples Select SPDR'},
+  {symbol:'XLI',name:'Industrial Select Sector SPDR'},{symbol:'XLU',name:'Utilities Select Sector SPDR'},
+  {symbol:'XLB',name:'Materials Select Sector SPDR'},
+  {symbol:'XLC',name:'Communication Services Select SPDR'},
+  {symbol:'SCHD',name:'Schwab US Dividend Equity ETF'},{symbol:'VIG',name:'Vanguard Dividend Appreciation ETF'},
+  {symbol:'VYM',name:'Vanguard High Dividend Yield ETF'},
+];
+const US_ETF_GOLD = [
+  {symbol:'GLD',name:'SPDR Gold Shares'},{symbol:'SLV',name:'iShares Silver Trust'},
+];
+const US_ETF_REALASSET = [
+  {symbol:'VNQ',name:'Vanguard Real Estate ETF',kind:'etf'},
+  {symbol:'XLRE',name:'Real Estate Select Sector SPDR',kind:'etf'},
+];
+const US_ETF_DEBT = [
+  {symbol:'AGG',name:'iShares Core US Aggregate Bond ETF'},{symbol:'BND',name:'Vanguard Total Bond Market ETF'},
+  {symbol:'TLT',name:'iShares 20+ Year Treasury Bond ETF'},{symbol:'LQD',name:'iShares Investment Grade Corp Bond ETF'},
+  {symbol:'HYG',name:'iShares High Yield Corp Bond ETF'},{symbol:'TIP',name:'iShares TIPS Bond ETF'},
+];
+const US_ETF_INTL = [
+  {symbol:'VEA',name:'Vanguard FTSE Developed Markets ETF'},{symbol:'VWO',name:'Vanguard FTSE Emerging Markets ETF'},
+  {symbol:'EFA',name:'iShares MSCI EAFE ETF'},{symbol:'EEM',name:'iShares MSCI Emerging Markets ETF'},
+];
+const INSTRUMENT_INDEX_US = [
+  ...tagBlock(US_STOCKS, {kind:'stock', klass:'equity'}),
+  ...tagBlock(US_ETF_EQUITY, {kind:'etf', klass:'equity'}),
+  ...tagBlock(US_ETF_GOLD, {kind:'etf', klass:'gold'}),
+  ...tagBlock(US_ETF_REALASSET, {klass:'realasset'}),
+  ...tagBlock(US_ETF_DEBT, {kind:'etf', klass:'debt'}),
+  ...tagBlock(US_ETF_INTL, {kind:'etf', klass:'intl'}),
+];
 
-function searchInstrumentIndex(query, countryCode){
-  const list = countryCode==='IN' ? INSTRUMENT_INDEX_IN : INSTRUMENT_INDEX_US;
+// Ranked, not just filtered: with ~120-215 entries per country now (up from
+// 56/106), a plain substring filter that preserves array order would bury
+// an exact ticker match under dozens of unrelated name hits (e.g. typing
+// "V" against the old US list already collided with Visa/Chevron/Devon...;
+// worse now). Exact symbol > symbol-starts-with > name-starts-with >
+// substring, each tier alphabetised, keeps the list usable as it grows.
+const KLASS_LABELS={equity:'Equity',debt:'Debt',gold:'Gold & silver',realasset:'Real assets',intl:'International'};
+const KLASS_ORDER=['equity','debt','gold','realasset','intl'];
+function searchInstrumentIndex(query, countryCode, klassFilter){
+  const full = countryCode==='IN' ? INSTRUMENT_INDEX_IN : INSTRUMENT_INDEX_US;
+  const list = (klassFilter && klassFilter!=='all') ? full.filter(i=>i.klass===klassFilter) : full;
   const q=(query||'').trim().toLowerCase();
-  if(!q) return list.slice(0,10);
-  return list.filter(i=>i.symbol.toLowerCase().includes(q) || i.name.toLowerCase().includes(q)).slice(0,12);
+  if(!q){
+    if(klassFilter && klassFilter!=='all') return list.slice(0,12);
+    // Curated cross-class starter set for an empty search box: two
+    // entries from every asset class, not the old list.slice(0,10) --
+    // that always showed ten large-cap stocks and made debt, gold and
+    // international invisible until you already knew to search for them.
+    const starters=[];
+    KLASS_ORDER.forEach(k=>{ starters.push(...full.filter(i=>i.klass===k).slice(0,2)); });
+    return starters;
+  }
+  const tiers=[[],[],[],[]]; // exact symbol, symbol-starts, name-starts, substring
+  list.forEach(i=>{
+    const sym=i.symbol.toLowerCase(), name=i.name.toLowerCase();
+    if(sym===q) tiers[0].push(i);
+    else if(sym.startsWith(q)) tiers[1].push(i);
+    else if(name.startsWith(q)) tiers[2].push(i);
+    else if(sym.includes(q)||name.includes(q)) tiers[3].push(i);
+  });
+  tiers.forEach(t=>t.sort((a,b)=>a.symbol.localeCompare(b.symbol)));
+  return tiers.flat().slice(0,15);
 }
 
 /* --- B3: calculation engine ---
@@ -2636,7 +3332,78 @@ function computeDailyReturns(prices){
   }
   return rets;
 }
-function computeReturnStats(prices){
+// Audits a fetched price series for the kinds of defects that can
+// silently poison mean/stdev before any of it reaches a chart or a
+// Sharpe ratio — an unadjusted stock split, a NAV that's pinned/stale,
+// a single bad print, too little history. Per this project's
+// no-fabricated-data rule, a flagged series is never repaired, clipped
+// or smoothed here: it's only labelled. liveReadyItems() is where a
+// flagged instrument actually gets excluded (or kept, if the person
+// explicitly overrides it) — this function just reports.
+function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoAnnual, hasCatastrophicLoss, isFund){
+  const flags=[];
+  let level='ok';
+  const bump=(lvl,code,msg,detail)=>{
+    flags.push({code, msg, detail});
+    if(lvl==='unusable') level='unusable';
+    else if(lvl==='caution' && level==='ok') level='caution';
+  };
+
+  const n=rets.length;
+  if(n<60) bump('unusable','SHORT',`Only ${n} usable daily observations — too few to trust.`);
+
+  const badPrices=prices.filter(p=>!(p.close>0)||!isFinite(p.close));
+  if(badPrices.length>0){
+    const frac=badPrices.length/prices.length;
+    bump(frac>0.01?'unusable':'caution','BADPRICE',`${badPrices.length} price point(s) were zero, negative or missing.`);
+  }
+
+  if(spanYears<1) bump('caution','SPAN','Less than a year of history — the annualised figures are a thin extrapolation.');
+
+  let maxGapDays=0;
+  for(let i=1;i<prices.length;i++){
+    const gap=(new Date(prices[i].date)-new Date(prices[i-1].date))/86400000;
+    if(gap>maxGapDays) maxGapDays=gap;
+  }
+  if(maxGapDays>30) bump('caution','GAP',`A ${Math.round(maxGapDays)}-day gap in the price history — something didn't trade or wasn't reported for a while.`);
+
+  // NSE circuit limits cap most single-day equity moves at 20%, so a
+  // >35% one-day move is almost always a corporate action or a bad
+  // print, not real trading. Funds get a tighter 10% bar: a NAV jump
+  // that size usually means a segregated-portfolio side-pocket event or
+  // a stale-then-corrected NAV, not a real one-day market move.
+  const jumpThreshold = isFund ? 0.10 : 0.35;
+  let worstJump=null;
+  rets.forEach(x=>{ if(!worstJump || Math.abs(x.r)>Math.abs(worstJump.r)) worstJump=x; });
+  if(worstJump && Math.abs(worstJump.r)>jumpThreshold){
+    bump('caution','JUMP',`A single-day move of ${(worstJump.r*100).toFixed(0)}% on ${worstJump.date} — most likely a corporate action, not a real trading day.`,worstJump);
+    // Does that jump look like an unadjusted split or bonus issue? A
+    // ~(1/k - 1) or ~(k - 1) move for a small integer k is the classic
+    // signature of a k:1 split/bonus the price history wasn't rebased for.
+    for(const k of [2,3,4,5,10]){
+      const splitDown=1/k-1, splitUp=k-1;
+      if(Math.abs(worstJump.r-splitDown)<0.03*Math.abs(splitDown) || Math.abs(worstJump.r-splitUp)<0.03*splitUp){
+        bump('caution','SPLITSIG',`Looks like an unadjusted ${k}:1 split or bonus issue on ${worstJump.date}, not a genuine one-day move.`);
+        break;
+      }
+    }
+  }
+
+  const zeroDays=rets.filter(x=>x.r===0).length;
+  if(rets.length>0 && zeroDays/rets.length>0.30) bump('caution','STALE',`${Math.round(zeroDays/rets.length*100)}% of days show exactly no price change — this barely moves, so its risk figure will look unrealistically low.`);
+
+  if(hasCatastrophicLoss) bump('unusable','IMPLAUSIBLE','A single-day move to zero or below in this series — the compounded return cannot be computed.');
+  else{
+    if(annualReturn>1.00 || annualVol>1.50) bump('unusable','IMPLAUSIBLE',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — implausible for a real instrument, almost certainly a data defect rather than genuine performance.`);
+    else if(annualReturn>0.60 || annualVol>0.80) bump('caution','WILD',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — unusually extreme; worth a second look before trusting it.`);
+    if(geoAnnual!=null && Math.sign(annualReturn)!==Math.sign(geoAnnual) && annualReturn!==0 && geoAnnual!==0){
+      bump('caution','SIGNFLIP',`The average daily move was ${annualReturn>0?'positive':'negative'}, but compounded over the full window this was ${geoAnnual>0?'a net gain':'a net loss'} — see the note below.`);
+    }
+  }
+
+  return {level, flags};
+}
+function computeReturnStats(prices, isFund){
   const rets=computeDailyReturns(prices);
   const n=rets.length;
   const mean=rets.reduce((s,x)=>s+x.r,0)/n;
@@ -2645,9 +3412,34 @@ function computeReturnStats(prices){
   const first=new Date(prices[0].date), last=new Date(prices[prices.length-1].date);
   const spanYears=Math.max(0.05, (last-first)/(365.25*24*3600*1000));
   const tradingDaysPerYear=n/spanYears;
+  // The optimiser keeps this arithmetic figure -- it's the only kind of
+  // return that's linearly combinable across assets, which mean-variance
+  // math requires, and it matches this project's coursework convention
+  // (wealth class1.csv / Capital Allocation Line.xlsx, hand-checked
+  // against its own SBI figures: ~29.9% return, ~21.3% stdev over the
+  // same 251-session window). It is NOT what an investor who held the
+  // whole period actually earned -- see geoAnnual/cagr below for that.
   const annualReturn=Math.pow(1+mean, tradingDaysPerYear)-1;
   const annualVol=sd*Math.sqrt(tradingDaysPerYear);
-  return {returns:rets, n, dailyMean:mean, dailySd:sd, tradingDaysPerYear, annualReturn, annualVol};
+
+  // Compounded return: what holding this the entire window actually
+  // turned into. A single day where price falls to (near) zero makes
+  // log(1+r) = -Infinity, which would poison every downstream number
+  // silently -- guarded explicitly rather than left to produce NaN/Inf
+  // on screen.
+  const hasCatastrophicLoss = rets.some(x=>x.r<=-0.999);
+  let geoAnnual=null, cagr=null;
+  if(!hasCatastrophicLoss){
+    const logSum = rets.reduce((s,x)=>s+Math.log(1+x.r), 0);
+    geoAnnual = Math.expm1(logSum * tradingDaysPerYear / n);
+    cagr = Math.pow(prices[prices.length-1].close/prices[0].close, 1/spanYears) - 1;
+  }
+
+  const quality = auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoAnnual, hasCatastrophicLoss, !!isFund);
+
+  return {returns:rets, n, dailyMean:mean, dailySd:sd, tradingDaysPerYear,
+    annualReturn, annualVol, geoAnnual, cagr, spanYears,
+    startDate:prices[0].date, endDate:prices[prices.length-1].date, quality};
 }
 // Aligns two return series by date (different instruments can carry
 // different trading calendars/holidays) before computing covariance.
@@ -2703,15 +3495,41 @@ function minVarianceWeightTwoAsset(sdA, sdB, corr){
   return Math.max(0, Math.min(1, (sdB*sdB-covAB)/denom));
 }
 // Closed-form tangency weight for two risky assets given a risk-free
-// rate — the standard two-fund-separation result. Clamped to [0,1] for
-// the same no-shorting reason as above.
+// rate — the standard two-fund-separation result.
+//
+// Unlike minVarianceWeightTwoAsset above, this one CANNOT be fixed by
+// simply clamping the raw formula to [0,1]. Portfolio variance is convex
+// in w (always a bowl shape), so when its unconstrained minimum falls
+// outside [0,1] the nearest boundary really is the constrained best —
+// clamping is safe there. Sharpe ratio is not convex/concave: its one
+// stationary point is a genuine interior maximum ONLY when the raw value
+// already lands in [0,1]. When one asset's excess return over the
+// risk-free rate is negative (this instrument underperformed cash),
+// the unconstrained "optimum" wants to short that asset and lever up
+// the other one — something this app never offers — and the stationary
+// point found by the formula sits on the wrong side entirely: Sharpe is
+// then monotonic across [0,1], and naively clamping the raw value grabs
+// whichever endpoint happens to be numerically closer, not whichever
+// endpoint actually has the higher Sharpe ratio. Verified against a real
+// pair (RELIANCE.NS/TCS.NS, TCS deeply negative over the window): the
+// raw formula gave -0.90, clamped that to 0% RELIANCE / 100% TCS —
+// exactly backwards, since 100% RELIANCE alone (Sharpe 0.12) beats 100%
+// TCS alone (Sharpe -0.49) and nothing between them does better than
+// either pure holding once shorting is off the table.
 function tangencyWeightTwoAsset(retA, retB, sdA, sdB, corr, rf){
   const covAB=corr*sdA*sdB;
   const exA=retA-rf, exB=retB-rf;
   const num=exA*sdB*sdB - exB*covAB;
   const den=exA*sdB*sdB + exB*sdA*sdA - (exA+exB)*covAB;
-  if(Math.abs(den)<1e-12) return 0.5;
-  return Math.max(0, Math.min(1, num/den));
+  const wRaw = Math.abs(den)<1e-12 ? 0.5 : num/den;
+  if(wRaw>=0 && wRaw<=1) return wRaw; // genuine interior optimum -- no shorting needed to reach it
+  const sharpeAt = w=>{
+    const ret = w*retA + (1-w)*retB;
+    const variance = w*w*sdA*sdA + (1-w)*(1-w)*sdB*sdB + 2*w*(1-w)*covAB;
+    const vol = Math.sqrt(Math.max(0, variance));
+    return vol>0 ? (ret-rf)/vol : -Infinity;
+  };
+  return sharpeAt(1) >= sharpeAt(0) ? 1 : 0;
 }
 // Capital Allocation Line: a straight line from (0, rf) through the
 // tangency point, extended to maxLeverage x the tangency risk/return —
@@ -2728,7 +3546,21 @@ function capitalAllocationLine(rf, tanRet, tanVol, maxLeverage){
 
 /* --- B4: UI --- */
 function liveDefaultRf(){ return L.live.rf==null ? cfg().d.fdRate*100 : L.live.rf; }
-function liveReadyItems(){ return L.live.items.filter(it=>L.live.data[it.key] && L.live.data[it.key].status==='ready'); }
+// The sole chokepoint feeding the chart/table computations. An
+// instrument the data-quality audit marked 'unusable' (see
+// auditPriceSeries) is held back here rather than reaching the frontier
+// math at all, unless the person has explicitly clicked "use it anyway"
+// on that specific instrument -- so a single bad series (a split the
+// price history wasn't adjusted for, a NAV discontinuity) can't silently
+// produce something like a 1700%/yr mix.
+function liveReadyItems(){
+  return L.live.items.filter(it=>{
+    const d=L.live.data[it.key];
+    if(!d || d.status!=='ready') return false;
+    if(d.stats.quality.level==='unusable' && !L.live.overrides[it.key]) return false;
+    return true;
+  });
+}
 
 async function liveLoadInstrument(item){
   L.live.data[item.key]={status:'loading', label:item.label};
@@ -2736,7 +3568,7 @@ async function liveLoadInstrument(item){
   if(chipsEl) chipsEl.innerHTML = L.live.items.map(it=>liveChipHTML(it)).join('') || '<span class="cap">Add two or more to see a frontier.</span>';
   try{
     const raw=await liveFetchHistory(item);
-    L.live.data[item.key]={status:'ready', label:raw.label||item.label, currency:raw.currency, prices:raw.prices, stats:computeReturnStats(raw.prices)};
+    L.live.data[item.key]={status:'ready', label:raw.label||item.label, currency:raw.currency, prices:raw.prices, stats:computeReturnStats(raw.prices, item.type==='fund')};
   }catch(e){
     L.live.data[item.key]={status:'error', label:item.label, error:(e&&e.message)||'Could not fetch this instrument.'};
   }
@@ -2748,6 +3580,25 @@ function liveAddInstrument(item){
   liveLoadInstrument(item); // async — re-renders itself once the fetch settles
   render();
 }
+// Search results are patched in directly on every keystroke (see the
+// liveSearchBox/liveFundSearchBox input handlers and liveRunFundSearch),
+// bypassing the full render() that normally (re)binds click handlers —
+// so every result list needs its own "add" buttons rewired right after
+// its innerHTML is replaced, or they render but do nothing when clicked.
+function wireLiveResultButtons(container){
+  if(!container) return;
+  container.querySelectorAll('[data-live-add-equity]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      liveAddInstrument({key:el.dataset.liveAddEquity, symbol:el.dataset.liveAddEquity, label:el.dataset.liveAddName, type:'equity'});
+    });
+  });
+  container.querySelectorAll('[data-live-add-fund]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const scheme=el.dataset.liveAddFund;
+      liveAddInstrument({key:'MF'+scheme, symbol:scheme, label:el.dataset.liveAddName, type:'fund'});
+    });
+  });
+}
 async function liveAddFreeText(){
   const raw=(L.live.freeText||'').trim();
   if(!raw) return;
@@ -2758,7 +3609,7 @@ async function liveAddFreeText(){
     const raw2=await liveFetchHistory({type:'equity', symbol});
     const item={key:symbol, symbol, label:raw2.label||symbol, type:'equity'};
     L.live.items.push(item);
-    L.live.data[item.key]={status:'ready', label:raw2.label||symbol, currency:raw2.currency, prices:raw2.prices, stats:computeReturnStats(raw2.prices)};
+    L.live.data[item.key]={status:'ready', label:raw2.label||symbol, currency:raw2.currency, prices:raw2.prices, stats:computeReturnStats(raw2.prices, false)};
     L.live.freeText=''; L.live.freeTextError=null;
   }catch(e){
     L.live.freeTextError=(e&&e.message)||'Could not find that ticker.';
@@ -2768,16 +3619,16 @@ async function liveAddFreeText(){
 }
 async function liveRunFundSearch(){
   const q=(L.live.search||'').trim();
-  if(!q){ L.live.fundResults=[]; L.live.fundSearchError=null; const el=document.getElementById('liveFundResults'); if(el) el.innerHTML=liveFundResultsHTML(); return; }
+  if(!q){ L.live.fundResults=[]; L.live.fundSearchError=null; const el=document.getElementById('liveFundResults'); if(el){ el.innerHTML=liveFundResultsHTML(); wireLiveResultButtons(el); } return; }
   L.live.fundSearching=true; L.live.fundSearchError=null;
-  const el0=document.getElementById('liveFundResults'); if(el0) el0.innerHTML=liveFundResultsHTML();
+  const el0=document.getElementById('liveFundResults'); if(el0){ el0.innerHTML=liveFundResultsHTML(); wireLiveResultButtons(el0); }
   try{
     L.live.fundResults = await liveApiGet(`/api/fundsearch?q=${encodeURIComponent(q)}`);
   }catch(e){
     L.live.fundResults=[]; L.live.fundSearchError=(e&&e.message)||'Fund search failed.';
   }
   L.live.fundSearching=false;
-  const el=document.getElementById('liveFundResults'); if(el) el.innerHTML=liveFundResultsHTML();
+  const el=document.getElementById('liveFundResults'); if(el){ el.innerHTML=liveFundResultsHTML(); wireLiveResultButtons(el); }
 }
 function onLiveFrontierPick(w){ L.live.weight=Math.round(w*100); render(); }
 function liveComputeMulti(){
@@ -2790,12 +3641,25 @@ function liveComputeMulti(){
 }
 function onLiveMultiFrontierPick(w){ L.live.selectedWeights=w; render(); }
 
+function liveKlassFilterHTML(){
+  const c=cfg();
+  const counts={};
+  (c.code==='IN'?INSTRUMENT_INDEX_IN:INSTRUMENT_INDEX_US).forEach(i=>{ counts[i.klass]=(counts[i.klass]||0)+1; });
+  const chip=(val,label)=>`<button class="klass-chip${L.live.klassFilter===val?' active':''}" data-live-klass="${val}">${label}</button>`;
+  return `<div class="klass-chip-row" style="margin-bottom:10px">
+    ${chip('all','All')}
+    ${KLASS_ORDER.filter(k=>counts[k]).map(k=>chip(k, KLASS_LABELS[k])).join('')}
+  </div>`;
+}
 function liveEquityResultsHTML(){
   const c=cfg();
-  const results=searchInstrumentIndex(L.live.search, c.code);
+  const results=searchInstrumentIndex(L.live.search, c.code, L.live.klassFilter);
   const already=new Set(L.live.items.map(it=>it.key));
-  if(!results.length) return `<div class="cap" style="padding:8px 2px">No matches. Try a shorter word, or use the exact-ticker box below.</div>`;
-  return results.map(r=>{
+  const emptyNote = !L.live.search
+    ? `<div class="cap" style="padding:0 2px 8px">${L.live.klassFilter==='all'?'A couple of starting picks from every asset class. Search above to see more, or filter to just one.':`Showing ${(KLASS_LABELS[L.live.klassFilter]||'').toLowerCase()} only.`}</div>`
+    : '';
+  if(!results.length) return emptyNote + `<div class="cap" style="padding:8px 2px">No matches. Try a shorter word, a different filter, or use the exact-ticker box below.</div>`;
+  return emptyNote + results.map(r=>{
     const disabled=already.has(r.symbol);
     return `<button class="live-result-btn"${disabled?' disabled style="opacity:.35;cursor:default"':` data-live-add-equity="${r.symbol}" data-live-add-name="${r.name}"`}>
       <span>${r.name}${disabled?' <span class="cap" style="font-size:10.5px">(added)</span>':''}</span>
@@ -2820,10 +3684,18 @@ function liveFundResultsHTML(){
 }
 function liveChipHTML(it){
   const d=L.live.data[it.key]||{status:'loading'};
-  const statusCls = d.status==='ready'?'st-ready':d.status==='error'?'st-error':'st-loading';
-  return `<div class="live-chip" title="${d.status==='error'?(d.error||''):''}">
+  const heldBack = d.status==='ready' && d.stats.quality.level==='unusable' && !L.live.overrides[it.key];
+  const caution = d.status==='ready' && d.stats.quality.level==='caution';
+  const statusCls = d.status==='error' ? 'st-error'
+    : d.status!=='ready' ? 'st-loading'
+    : heldBack ? 'st-held' : caution ? 'st-caution' : 'st-ready';
+  const title = d.status==='error' ? (d.error||'')
+    : heldBack ? 'Held back — ' + (d.stats.quality.flags[0]||{}).msg
+    : caution ? 'Flagged — ' + (d.stats.quality.flags[0]||{}).msg
+    : '';
+  return `<div class="live-chip${heldBack?' live-chip-held':''}" title="${title.replace(/"/g,'&quot;')}">
     <span class="live-chip-status ${statusCls}"></span>
-    <span>${d.label||it.symbol}</span>
+    <span>${d.label||it.symbol}${heldBack?' (held back)':caution?' (flagged)':''}</span>
     <button class="live-chip-x" data-live-remove="${it.key}" title="Remove">&times;</button>
   </div>`;
 }
@@ -2836,16 +3708,27 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
     xAxis:{type:'value', min:0, name:'RISK: annualised volatility, from real daily prices', nameLocation:'middle', nameGap:30,
       nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.5)'}, axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
       splitLine:{lineStyle:{color:'rgba(20,40,63,.05)'}}},
-    yAxis:{type:'value', name:'RETURN: annualised, from real daily prices', nameLocation:'middle', nameGap:44,
+    yAxis:{type:'value', name:'RETURN: expected, annualised from average daily moves', nameLocation:'middle', nameGap:44,
       nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.5)'}, axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
       splitLine:{lineStyle:{color:'rgba(20,40,63,.05)'}}},
     dataZoom:[{type:'inside',xAxisIndex:0},{type:'inside',yAxisIndex:0}],
-    tooltip:{trigger:'item', formatter(p){
-      if(p.seriesName==='Frontier') return `Weight split<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
-      if(p.seriesName==='CAL') return `Capital Allocation Line<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
-      if(p.seriesName==='Assets'){ const a=assetPoints[p.dataIndex]; return `${a?(a.fullLabel||a.label):''}<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`; }
-      if(p.seriesName==='Your mix') return `Your mix<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
-      if(p.seriesName==='Tangency') return `Best Sharpe ratio (tangency)<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+    tooltip:{trigger:'item', confine:true, extraCssText:'max-width:290px;white-space:normal;line-height:1.5',
+      textStyle:{fontFamily:"'Figtree',sans-serif", fontSize:12},
+      formatter(p){
+      const [labelA,labelB] = assetPoints.map(a=>a.label);
+      if(p.seriesName==='Frontier'){
+        const w = frontier[p.dataIndex] ? frontier[p.dataIndex].w : null;
+        const split = w!=null ? `${(w*100).toFixed(0)}% ${labelA} / ${((1-w)*100).toFixed(0)}% ${labelB}<br/>` : '';
+        return `${split}Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/><span style="color:#2557C7">Click to try this mix.</span>`;
+      }
+      if(p.seriesName==='CAL') return `<b>Capital Allocation Line.</b><br/>Part safe cash, part the best-Sharpe mix.<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='Assets'){
+        const a=assetPoints[p.dataIndex];
+        if(!a) return '';
+        return `<b>${a.fullLabel||a.label} on its own:</b><br/>${pct(a.ret)} for ${pct(a.vol)} risk.`;
+      }
+      if(p.seriesName==='Your mix') return `<b>You are here.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='Tangency') return `<b>The single best trade-off between risk and reward here.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/><span style="color:#2557C7">Click to move here.</span>`;
       return '';
     }},
     series:[
@@ -2855,13 +3738,19 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         lineStyle:{color:'#14283F', width:1.5, type:'dashed'}, z:1 },
       { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
         itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1},
-        label:{show:true, formatter:p=>assetPoints[p.dataIndex].label, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
+        // Points built without a showLabel flag (e.g. the Test Real
+        // Investments chart, which reuses this same option builder but
+        // never applies the Portfolio tab's decluttering) always label --
+        // showLabel is only ever explicitly set to false, never omitted-as-false.
+        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
       { name:'Tangency', type:'scatter', data:[[tangencyPoint.vol,tangencyPoint.ret]], symbolSize:11,
-        itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4 },
-      { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:14,
-        itemStyle:{color:'transparent', borderColor:'#14283F', borderWidth:2}, silent:true, z:5 },
+        itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
+        label:{show:true, formatter:'BEST SHARPE', position:'bottom', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} },
+      { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
+        itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, silent:true, z:5,
+        label:{show:true, formatter:'YOUR MIX', position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Your mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
-        itemStyle:{color:'#14283F'}, tooltip:{show:false}, silent:true, z:5 },
+        itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:5 },
     ],
   };
 }
@@ -2879,7 +3768,8 @@ function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoi
       <span><i style="background:#2557C7"></i>The frontier: every weight split between the two instruments</span>
       <span><i style="border-top:2px dashed rgba(20,40,63,.9);background:transparent"></i>Capital Allocation Line: risk-free rate blended with the best-Sharpe mix, extended past 100% for leverage</span>
       <span><i style="background:#8FC79E;border-radius:50%"></i>Each instrument on its own</span>
-      <span><i style="border:2px solid #14283F;background:transparent"></i>Your current mix &middot; click the curve to move there</span>
+      <span><i style="border:2px solid #14283F;background:#14283F"></i>Best Sharpe ratio (tangency): the single best risk/reward trade-off available</span>
+      <span><i style="border:2px solid #D97757;background:transparent"></i>Your current mix &middot; click the curve to move there</span>
     </div>
   </div>`;
 }
@@ -2957,6 +3847,86 @@ function liveMultiCombinationsTable(frontier, items, rf, currentVol){
   </table></div>`;
 }
 
+// Plain-language takeaway for the exact-two-instrument case. The chart
+// here isn't a sorted risk-ordered frontier (twoAssetFrontier sweeps the
+// weight linearly, not risk), so frontierTakeawayHTML's frontier-gap
+// interpolation doesn't apply — instead this leans on what actually
+// drives the shape of this specific curve: how correlated the two real
+// instruments turned out to be, and how far the current mix sits from
+// the single best risk/reward trade-off (the tangency point).
+// Parallel flashcard treatment to frontierTakeawayHTML() above, for the
+// 2-instrument case: same verdict/tiles/action/collapsed-detail shape,
+// but built around a single sweepable weight (0-100% of `a`) rather than
+// an n-asset weight vector, so its jump action moves L.live.weight
+// directly instead of taking an onJump(w) callback.
+function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentSharpe, wTan, tanVol, tanRet, rf, w, wMinVar, retA, volA, retB, volB){
+  const pct = v=>(v*100).toFixed(1)+'%';
+  const corrWord = c12>0.7?'move together strongly':c12>0.3?'move somewhat together':c12>-0.3?'move mostly independently of each other':'tend to move in opposite directions';
+  const corrLine = c12<0.85
+    ? `Real prices show <b style="color:var(--paper)">${a.symbol}</b> and <b style="color:var(--paper)">${b.symbol}</b> ${corrWord} (correlation <b style="color:var(--gold)">${c12.toFixed(2)}</b>). That's useful: because they don't move in lockstep, blending them can lower your risk by more than a simple average of the two would suggest.`
+    : `Real prices show <b style="color:var(--paper)">${a.symbol}</b> and <b style="color:var(--paper)">${b.symbol}</b> ${corrWord} (correlation <b style="color:var(--gold)">${c12.toFixed(2)}</b>). Because they move together this closely, blending them buys very little risk reduction &ndash; you're mostly just averaging their returns, not diversifying risk away.`;
+  const tanSharpe = tanVol>0 ? (tanRet-rf)/tanVol : 0;
+  const sharpeGap = tanSharpe - currentSharpe;
+  const hasGap = sharpeGap > 0.05;
+  const verdictColor = hasGap ? '#D97757' : '#5FA875';
+  const verdictText = hasGap
+    ? `The best trade-off between risk and reward here is <b style="color:${verdictColor}">${(wTan*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:${verdictColor}">${((1-wTan)*100).toFixed(0)}% ${b.symbol}</b> &ndash; your split earns less reward per unit of risk than that.`
+    : `Your split is already close to the best trade-off between risk and reward these two instruments can offer.`;
+
+  let jumpBtn = '';
+  if(hasGap){
+    frontierJumpHandler = ()=>{ L.live.weight = Math.round(wTan*100); render(); };
+    jumpBtn = `<button class="fc-action" data-frontier-jump>Move to the best split &rarr;</button>`;
+  }
+
+  // When the best-Sharpe point lands right at one edge of the curve (100%
+  // of one instrument, 0% of the other), that's not a rounding artefact
+  // -- it means the excluded instrument returned less than the risk-free
+  // rate over this exact window, so blending any of it in only drags the
+  // mix's Sharpe ratio down. The only way to still profit from it would
+  // be to short it, which this app never offers, so "all of one, none of
+  // the other" genuinely is the best available combination here. Named
+  // explicitly rather than left for someone to wonder why the dot sits
+  // in the corner instead of somewhere in the middle.
+  const edgeAsset = wTan<=0.001 ? b : wTan>=0.999 ? a : null;
+  const otherAsset = edgeAsset===a ? b : a;
+  const edgeLine = edgeAsset
+    ? `<div style="margin-top:8px">Notice the best-Sharpe point sits right at the edge of the curve, not in the middle. That's because <b style="color:var(--paper)">${otherAsset.symbol}</b> returned less than the ${(rf*100).toFixed(1)}% risk-free rate over this window &ndash; blending any of it in would only pull the mix's Sharpe ratio down, not up. Holding it would only pay off if you could bet against it, which this tool doesn't offer, so 100% ${edgeAsset.symbol} genuinely is the best combination of these two available here.</div>`
+    : '';
+
+  const detail = `<div>${corrLine}</div>
+  <div style="margin-top:8px">Your mix earns <b style="color:var(--paper)">${pct(currentRet)}</b> a year for <b style="color:var(--paper)">${pct(currentVol)}</b> risk &ndash; Sharpe <b style="color:var(--gold)">${currentSharpe.toFixed(2)}</b>.</div>
+  <div style="margin-top:8px">${hasGap
+    ? `The single best trade-off between risk and reward here (the <span class="term" data-def="The point on the curve with the highest Sharpe ratio: the mix that earns the most extra return per unit of extra risk, above the risk-free rate. Where the Capital Allocation Line touches the frontier.">tangency point</span>) is <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--gold)">${((1-wTan)*100).toFixed(0)}% ${b.symbol}</b>, earning ${pct(tanRet)} for ${pct(tanVol)} risk (Sharpe ${tanSharpe.toFixed(2)}). Drag the slider toward it, click the dark dot on the chart, or use the button above, to close the gap.`
+    : `The single best trade-off between risk and reward these two instruments can offer is ${(wTan*100).toFixed(0)}% ${a.symbol} / ${((1-wTan)*100).toFixed(0)}% ${b.symbol} &ndash; your split is already close to it.`}</div>${edgeLine}`;
+
+  const cfgC = cfg();
+  const illustrateAmt = cfgC.code==='IN' ? 100000 : 1000;
+  const illustrateYrs = 10;
+  const compoundedApprox = currentRet - (currentVol*currentVol)/2;
+  const illustrateFv = illustrateAmt*Math.pow(1+compoundedApprox, illustrateYrs);
+  const weightLabel = `<b style="color:var(--paper)">${(w*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--paper)">${((1-w)*100).toFixed(0)}% ${b.symbol}</b>`;
+  const moneyLine = `<div class="gr-note" style="margin-top:10px">Put <b style="color:var(--paper)">${cfgC.compact(illustrateAmt)}</b> into your current split &ndash; ${weightLabel} &ndash; and leave it for ${illustrateYrs} years: at this mix's compounded rate of <b style="color:var(--gold)">${(compoundedApprox*100).toFixed(1)}%</b>/yr, it would grow to roughly <b style="color:var(--paper)">${cfgC.compact(illustrateFv)}</b>. That uses the compounded figure, not the higher expected-return figure above, because that's closer to what an account statement would actually show.</div>`;
+
+  const minVarRet = portfolioReturn([wMinVar,1-wMinVar],[retA,retB]);
+  const minVarVol = Math.sqrt(portfolioVariance([wMinVar,1-wMinVar],[volA,volB],[[1,c12],[c12,1]]));
+  const hiIsA = retA >= retB;
+  const hiEnd = hiIsA ? {sym:a.symbol, ret:retA, vol:volA} : {sym:b.symbol, ret:retB, vol:volB};
+  const rangeLine = `<div class="gr-note" style="margin-top:10px">Moving up the efficient part of this curve, from the lowest-risk mix &ndash; <b style="color:var(--paper)">${(wMinVar*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--paper)">${((1-wMinVar)*100).toFixed(0)}% ${b.symbol}</b>, earning ${pct(minVarRet)} for ${pct(minVarVol)} risk &ndash; up to 100% <b style="color:var(--paper)">${hiEnd.sym}</b>, earning ${pct(hiEnd.ret)} for ${pct(hiEnd.vol)} risk, both return and risk magnify together. Taking more risk on this line always buys more expected return; there's no way to get one without the other.</div>`;
+
+  return `<div class="fcard">
+    <div class="fc-verdict" style="color:${verdictColor}">${verdictText}</div>
+    <div class="fc-tiles">
+      <div class="stat fc-tile"><div class="stat-label">Your return</div><div class="stat-value">${pct(currentRet)}</div></div>
+      <div class="stat fc-tile"><div class="stat-label">Your risk</div><div class="stat-value">${pct(currentVol)}</div></div>
+      <div class="stat fc-tile"><div class="stat-label">Sharpe ratio</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
+    </div>
+    ${moneyLine}
+    ${rangeLine}
+    ${jumpBtn}
+    ${explainDropdown('Show the full breakdown', detail)}
+  </div>`;
+}
 function liveTwoAssetHTML(items, rfPct){
   const rf=rfPct/100;
   const [a,b]=items;
@@ -2977,15 +3947,18 @@ function liveTwoAssetHTML(items, rfPct){
     {label:a.symbol, fullLabel:L.live.data[a.key].label, vol:sa.annualVol, ret:sa.annualReturn},
     {label:b.symbol, fullLabel:L.live.data[b.key].label, vol:sb.annualVol, ret:sb.annualReturn},
   ];
-  return `<div class="stat-row">
+  const compoundedApprox = currentRet - (currentVol*currentVol)/2;
+  return `<div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
     <div class="stat"><div class="stat-label">Correlation</div><div class="stat-value">${c12.toFixed(2)}</div></div>
     <div class="stat"><div class="stat-label">Your mix return</div><div class="stat-value">${(currentRet*100).toFixed(1)}%</div></div>
     <div class="stat"><div class="stat-label">Your mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
+    <div class="stat"><div class="stat-label">Compounded equivalent${infoIcon('An approximation of what this mix would actually compound to over time: expected return minus half the variance (μ − σ²/2). Not a substitute for the exact per-instrument compounded figures above, but a quick read on how much the expected-return figure overstates real growth for a mix this volatile.')}</div><div class="stat-value">${(compoundedApprox*100).toFixed(1)}%</div></div>
   </div>
-  <div class="card">
-    <h4>${a.symbol} / ${b.symbol}${infoIcon('Every point on the gold curve is one weight split between these two instruments, swept from 100% '+b.symbol+' to 100% '+a.symbol+'. The dashed line is the Capital Allocation Line: the risk-free rate blended with the best-Sharpe (tangency) mix, extended past 100% to show what borrowing at the risk-free rate to lever up would do.')}</h4>
-    <div class="cap">Annualised from ${sa.n} and ${sb.n} real daily observations.</div>
+  <div class="card is-primary">
+    <h4>${a.symbol} / ${b.symbol}${infoIcon('Every point on the blue curve is one weight split between these two instruments, swept from 100% '+b.symbol+' to 100% '+a.symbol+'. The dashed line is the Capital Allocation Line: the risk-free rate blended with the best-Sharpe (tangency) mix, extended past 100% to show what borrowing at the risk-free rate to lever up would do.')}</h4>
+    <div class="cap">Annualised from ${sa.n} and ${sb.n} real daily observations. Higher up is more return, further right is more risk.</div>
     ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'live-frontier-echart', onLiveFrontierPick)}
+    <div class="gr-note" style="margin-top:10px">${liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentSharpe, wTan, tanVol, tanRet, rf, w, wMinVar, sa.annualReturn, sa.annualVol, sb.annualReturn, sb.annualVol)}</div>
   </div>
   <div class="card">
     <h4>Weight: <b>${(w*100).toFixed(0)}% ${a.symbol}</b> / <b>${((1-w)*100).toFixed(0)}% ${b.symbol}</b></h4>
@@ -2994,11 +3967,11 @@ function liveTwoAssetHTML(items, rfPct){
   </div>
   <div class="card">
     <h4>Capital Allocation Line: risk-free + optimal portfolio${infoIcon('Blending the risk-free asset with the single best-Sharpe (tangency) mix of '+a.symbol+' and '+b.symbol+', at five leverage levels from all-cash to 2x.')}</h4>
-    ${liveCalTable(rf, tanRet, tanVol, a.symbol, b.symbol, wTan)}
+    ${collapsibleSection('', 'Show the table', liveCalTable(rf, tanRet, tanVol, a.symbol, b.symbol, wTan))}
   </div>
   <div class="card">
     <h4>Every combination${infoIcon('The same weight sweep as the chart above, in table form, 5% at a time — click any row to move the slider there. Sharpe uses the risk-free rate set on the left.')}</h4>
-    ${liveCombinationsTable(frontier.filter((p,i)=>i%5===0), a, b, rf, w)}
+    ${collapsibleSection('', 'Show the table', liveCombinationsTable(frontier.filter((p,i)=>i%5===0), a, b, rf, w))}
   </div>`;
 }
 
@@ -3011,22 +3984,68 @@ function liveMultiAssetHTML(computed, rfPct){
   if(!weights || weights.length!==items.length) weights=items.map(()=>1/items.length);
   const currentPoint={vol:Math.sqrt(portfolioVariance(weights,vols,corr)), ret:portfolioReturn(weights,returns)};
   const currentSharpe=currentPoint.vol>0?(currentPoint.ret-rf)/currentPoint.vol:0;
-  return `<div class="stat-row">
+  const compoundedApprox = currentPoint.ret - (currentPoint.vol*currentPoint.vol)/2;
+  const pct=v=>(v*100).toFixed(1)+'%';
+  const weightLabel = items.map((it,i)=>`<b style="color:var(--paper)">${(weights[i]*100).toFixed(0)}% ${it.symbol}</b>`).join(' / ');
+  const cfgC = cfg();
+  const illustrateAmt = cfgC.code==='IN' ? 100000 : 1000;
+  const illustrateYrs = 10;
+  const illustrateFv = illustrateAmt*Math.pow(1+compoundedApprox, illustrateYrs);
+  const moneyLine = `<div class="gr-note" style="margin-top:10px">Put <b style="color:var(--paper)">${cfgC.compact(illustrateAmt)}</b> into your current mix &ndash; ${weightLabel} &ndash; and leave it for ${illustrateYrs} years: at this mix's compounded rate of <b style="color:var(--gold)">${(compoundedApprox*100).toFixed(1)}%</b>/yr, it would grow to roughly <b style="color:var(--paper)">${cfgC.compact(illustrateFv)}</b>. That uses the compounded figure, not the higher expected-return figure above, because that's closer to what an account statement would actually show.</div>`;
+  const lowPt = frontier[0];
+  const hiPt = frontier.reduce((best,p)=> (!best || p.ret>best.ret) ? p : best, null);
+  const rangeLine = (lowPt && hiPt && hiPt.vol > lowPt.vol + 0.0005 && hiPt.ret > lowPt.ret + 0.0005) ? `<div class="gr-note" style="margin-top:10px">Moving up the efficient part of this frontier, from the lowest-risk mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(lowPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(lowPt.ret)} for ${pct(lowPt.vol)} risk &ndash; up to the highest-return mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(hiPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(hiPt.ret)} for ${pct(hiPt.vol)} risk &ndash; both return and risk magnify together. Taking more risk on this line always buys more expected return; there's no way to get one without the other.</div>` : '';
+  return `<div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
     <div class="stat"><div class="stat-label">Instruments</div><div class="stat-value">${items.length}</div></div>
     <div class="stat"><div class="stat-label">Selected mix return</div><div class="stat-value">${(currentPoint.ret*100).toFixed(1)}%</div></div>
     <div class="stat"><div class="stat-label">Selected mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
+    <div class="stat"><div class="stat-label">Compounded equivalent${infoIcon('An approximation of what this mix would actually compound to over time: expected return minus half the variance (μ − σ²/2). A quick read on how much the expected-return figure overstates real growth for a mix this volatile.')}</div><div class="stat-value">${(compoundedApprox*100).toFixed(1)}%</div></div>
   </div>
-  <div class="card">
+  <div class="card is-primary">
     <h4>Simulated frontier${infoIcon('With 3 or more instruments there is no single sweepable weight, so this samples 3,000 random weight combinations (seeded, so it repeats identically) and keeps the best-return mix at each risk level — the same technique Build a Portfolio uses.')}</h4>
-    <div class="cap">Annualised from real daily prices: ${items.map(it=>it.symbol).join(', ')}.</div>
-    ${frontierChart(cloud, frontier, assetPoints, currentPoint, 'live-multi-frontier-echart', onLiveMultiFrontierPick)}
+    <div class="cap">Annualised from real daily prices: ${items.map(it=>it.symbol).join(', ')}. Higher up is more return, further right is more risk &ndash; the blue line is the best you could have done at each risk level, and your orange marker is where this exact mix actually sits.</div>
+    ${frontierChart(cloud, frontier, assetPoints, currentPoint, 'live-multi-frontier-echart', onLiveMultiFrontierPick, rf)}
+    <div class="gr-note" style="margin-top:10px">${frontierTakeawayHTML(currentPoint, currentSharpe, frontier, onLiveMultiFrontierPick)}</div>
+    ${moneyLine}
+    ${rangeLine}
   </div>
   <div class="card">
     <h4>Notable combinations${infoIcon('Every distinct risk level the simulation found, best-return mix at each — click any row (or any point on the chart) to adopt that weight split.')}</h4>
-    ${liveMultiCombinationsTable(frontier, items, rf, currentPoint.vol)}
+    ${collapsibleSection('', 'Show the table', liveMultiCombinationsTable(frontier, items, rf, currentPoint.vol))}
   </div>`;
 }
 
+// One row per fetched instrument: the compounded return it actually
+// produced, the arithmetic figure the frontier math below uses, risk,
+// how many real trading days that's built from, and any data-quality
+// flags -- so a held-back or merely-cautioned instrument is explained
+// right where someone would look for it, not left as a silent absence
+// from the chart.
+function liveInstrumentStatsCardHTML(items){
+  const withData = items.filter(it=>L.live.data[it.key] && L.live.data[it.key].status==='ready');
+  if(!withData.length) return '';
+  const rows = withData.map(it=>{
+    const d=L.live.data[it.key], s=d.stats, q=s.quality;
+    const heldBack = q.level==='unusable' && !L.live.overrides[it.key];
+    const cagrDisplay = s.geoAnnual==null ? '&mdash;' : (s.geoAnnual*100).toFixed(1)+'%';
+    const flagsHtml = q.flags.length ? `<div class="live-inst-flags">${q.flags.map(f=>
+      `<div class="live-flag live-flag-${q.level==='unusable'?'unusable':'caution'}">${f.msg}</div>`).join('')}</div>` : '';
+    return `<div class="live-inst-row${heldBack?' live-inst-held':''}">
+      <div class="live-inst-top">
+        <div class="live-inst-name">${d.label||it.symbol} <span class="cap">${it.symbol}</span></div>
+        <div class="live-inst-cagr">${cagrDisplay}<span class="cap"> compounded/yr</span></div>
+      </div>
+      <div class="live-inst-stats">
+        <span>${(s.annualReturn*100).toFixed(1)}% expected/yr</span>
+        <span>${(s.annualVol*100).toFixed(1)}% risk</span>
+        <span class="cap">${s.n} days &middot; ${s.startDate} to ${s.endDate}</span>
+      </div>
+      ${flagsHtml}
+      ${heldBack ? `<button class="tglbtn" data-live-override="${it.key}" style="margin-top:8px">Use it anyway</button>` : ''}
+    </div>`;
+  }).join('');
+  return rows;
+}
 function liveOutputHTML(ready, rfPct){
   const items=L.live.items;
   const errored=items.filter(it=>L.live.data[it.key] && L.live.data[it.key].status==='error');
@@ -3035,12 +4054,20 @@ function liveOutputHTML(ready, rfPct){
       ${errored.map(it=>`<div class="live-error-box"><b>${L.live.data[it.key].label||it.symbol}:</b> ${L.live.data[it.key].error}</div>`).join('')}
       <div class="cap" style="margin-top:8px">Remove it and try again, or double-check the exact ticker and exchange suffix.</div>
     </div>` : '';
+  const instrumentRows = liveInstrumentStatsCardHTML(items);
+  const instrumentDropdown = instrumentRows ? `<div class="card">${collapsibleSection('', `What each one did on its own${infoIcon('Total return, dividends reinvested, from real daily prices. The compounded figure is what holding this the entire window actually turned into; the expected-return figure is the average-based number the frontier math below is built from, because portfolio math needs a linearly-combinable figure -- see "Why do you show two different return numbers?" below.')}`, instrumentRows)}</div>` : '';
   if(ready.length<2){
     return errorBanner + `<div class="card live-empty">
-      ${loading.length? 'Fetching real prices&hellip;' : 'Add at least two instruments on the left to compute a frontier.<br><span class="cap">Two gives the exact closed-form curve from your class exercise; three or more switches to a simulated cloud, same as Build a Portfolio.</span>'}
-    </div>`;
+      ${loading.length? 'Fetching real prices&hellip;' : 'Add at least two usable instruments on the left to compute a frontier.<br><span class="cap">Two gives the exact closed-form curve from your class exercise; three or more switches to a simulated cloud, same as Build a Portfolio.</span>'}
+    </div>` + instrumentDropdown;
   }
-  return errorBanner + (ready.length===2 ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(liveComputeMulti(), rfPct));
+  return errorBanner + (ready.length===2 ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(liveComputeMulti(), rfPct))
+    + instrumentDropdown
+    + explainDropdown('Why do you show two different return numbers?', `
+      The <b>expected-return</b> figure ((1+average daily move)<sup>trading days per year</sup> &minus; 1) is what the frontier, Sharpe ratio and tangency point below are built from. Mean-variance portfolio math needs a return figure that combines <i>linearly</i> across assets &ndash; a compounded return does not have that property, so the optimiser can't use it. This is also the convention used in the coursework this tool extends (a two-asset frontier worksheet), hand-checked against its own SBI figures (~29.9% return, ~21.3% risk over a comparable window) before being trusted here.<br><br>
+      The <b>compounded</b> figure is what actually holding the instrument the whole window would have turned into &ndash; the number a real account statement would show. The two can disagree a lot for a volatile instrument: something that falls 50% then rises 50% averages 0% on the expected-return measure but is actually down 25% compounded. Both numbers are real; they answer different questions, so both are shown rather than picking one and hiding the other.
+    `)
+    + nextStepCard([{q:'Turn this real-world return into a savings plan.', tab:'retirement'}]);
 }
 
 function renderLiveFrontier(){
@@ -3048,10 +4075,10 @@ function renderLiveFrontier(){
   const ready=liveReadyItems();
   const rf=liveDefaultRf();
   const equityMode = live.searchMode==='equity' || c.code!=='IN';
-  return `<div class="grid">
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
-    <h3>Live Frontier</h3>
-    <div class="cap" style="margin-bottom:14px">Real historical prices, fetched live: the same efficient-frontier math as Build a Portfolio, computed from actual daily returns instead of long-run assumptions.</div>
+    ${panelHead('Test Real Investments', 'livefrontier')}
+    <div class="cap" style="margin-bottom:14px">Pick real stocks, ETFs or funds and see the actual risk and return of mixing them, computed from real historical prices instead of long-run assumptions.</div>
 
     <div class="section-label">Add an instrument</div>
     ${c.code==='IN' ? `<div class="live-mode-row">
@@ -3059,6 +4086,7 @@ function renderLiveFrontier(){
       <button class="tglbtn${live.searchMode==='fund'?' active':''}" data-live-mode="fund">Mutual Funds</button>
     </div>`:''}
     ${equityMode ? `
+      ${liveKlassFilterHTML()}
       <input id="liveSearchBox" class="live-searchbox" type="text" placeholder="Search ${c.code==='IN'?'NIFTY 50 stocks and ETFs':'S&amp;P 100 stocks and ETFs'}: try reliance, gold, apple" value="${live.search||''}" autocomplete="off" spellcheck="false">
       <div class="live-results" id="liveResults">${liveEquityResultsHTML()}</div>
     ` : `
@@ -3066,7 +4094,19 @@ function renderLiveFrontier(){
       <div class="live-results" id="liveFundResults">${liveFundResultsHTML()}</div>
     `}
 
-    <div class="gr-note" style="margin-top:10px">Can't find it? Enter the exact ticker Yahoo Finance uses (India needs a .NS or .BO suffix, e.g. RELIANCE.NS).</div>
+    <div class="gr-note" style="margin-top:10px">Can't find it? Enter the exact ticker Yahoo Finance uses.</div>
+    ${explainDropdown('Ticker format examples', `
+      <div class="table-scroll"><table class="dtable">
+      <thead><tr><th>Want</th><th>Type</th></tr></thead>
+      <tbody>
+      <tr><td>Reliance on the NSE</td><td class="mono">RELIANCE.NS</td></tr>
+      <tr><td>Same company on the BSE</td><td class="mono">RELIANCE.BO</td></tr>
+      <tr><td>An Indian gold ETF</td><td class="mono">GOLDBEES.NS</td></tr>
+      <tr><td>A US stock</td><td class="mono">AAPL</td></tr>
+      <tr><td>A US ETF</td><td class="mono">SPY</td></tr>
+      </tbody></table></div>
+      <div style="margin-top:8px">Rule: NSE listings need <b style="color:var(--paper)">.NS</b>, BSE needs <b style="color:var(--paper)">.BO</b>, US tickers need no suffix at all.</div>
+    `)}
     <div class="live-freetext">
       <input id="liveFreeText" type="text" placeholder="e.g. RELIANCE.NS" value="${live.freeText||''}" autocomplete="off" spellcheck="false">
       <button id="liveFreeAddBtn"${live.freeTextLoading?' disabled':''}>${live.freeTextLoading?'Checking&hellip;':'Add'}</button>
@@ -3095,23 +4135,41 @@ function renderLiveFrontier(){
 const ICON_RETIREMENT=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h6v6"/></svg>`;
 const ICON_PORTFOLIO=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l7 4"/></svg>`;
 const ICON_LIVEFRONTIER=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M7 15 11 10 15 12 19 6" stroke-dasharray="1.5 3"/><circle cx="7" cy="15" r="1.3" fill="currentColor" stroke="none"/><circle cx="11" cy="10" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="19" cy="6" r="1.3" fill="currentColor" stroke="none"/></svg>`;
+// The 3 primary tools above got real icons from day one; the other 7 --
+// shown as plain text in both the Lab home "More tools" row and the
+// sidebar nav (renderTabs() already does ${t.icon||''}${t.label}, so an
+// empty icon there was silently rendering nothing) -- never did. Same
+// 24x24, stroke-width 1.5, round-cap style as the three above.
+const ICON_STEPUP=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h4v-5H3v5z"/><path d="M10 21h4v-9h-4v9z"/><path d="M17 21h4v-14h-4v14z"/></svg>`;
+const ICON_SWP=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><rect x="4" y="15" width="16" height="6" rx="1.5"/></svg>`;
+const ICON_FX=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.4 2.5 3.8 5.5 3.8 9s-1.4 6.5-3.8 9c-2.4-2.5-3.8-5.5-3.8-9s1.4-6.5 3.8-9z"/></svg>`;
+const ICON_JOINT=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M2.5 21v-1.5A4.5 4.5 0 0 1 7 15h4a4.5 4.5 0 0 1 4.5 4.5V21"/><circle cx="17.5" cy="7.5" r="2.3"/><path d="M20.5 21v-1.3a4 4 0 0 0-2.8-3.8"/></svg>`;
+const ICON_MC=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="8.5" cy="8.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.15" fill="currentColor" stroke="none"/></svg>`;
+const ICON_INSTRUMENTS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>`;
+const ICON_HEALTH=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-6 3 12 2-8 1.5 2H21"/></svg>`;
 
 const TABS=[
   {id:'retirement', label:'Retirement Lab', primary:true, icon:ICON_RETIREMENT,
     blurb:'How much you need to save, and whether that number actually survives a real retirement.'},
   {id:'portfolio', label:'Build a Portfolio', primary:true, icon:ICON_PORTFOLIO,
     blurb:'Mix real fund categories with presets or your own sliders, and watch the efficient frontier move live.'},
-  {id:'livefrontier', label:'Live Frontier', primary:true, icon:ICON_LIVEFRONTIER,
-    blurb:'Pull real market data for any stocks or funds and compute the frontier and tangency portfolio live.'},
-  {id:'stepup', label:'Step-Up SIP'},
-  {id:'swp', label:'Sustainable Withdrawal'},
-  {id:'fx', label:'Cross-Border'},
-  {id:'joint', label:'Joint Children Corpus'},
-  {id:'mc', label:'Monte Carlo'},
-  {id:'instruments', label:'Instrument Explorer'},
-  {id:'health', label:'Plan Health'},
+  {id:'livefrontier', label:'Test Real Investments', primary:true, icon:ICON_LIVEFRONTIER,
+    blurb:'Pick real stocks, ETFs or funds and see how mixing them would actually have performed - real risk, real return, real history.'},
+  {id:'stepup', label:'Step-Up SIP', icon:ICON_STEPUP,
+    blurb:'Model a SIP that grows with your income every year, not a flat amount forever.'},
+  {id:'swp', label:'Sustainable Withdrawal', icon:ICON_SWP,
+    blurb:'Check whether a retirement corpus can actually fund a fixed withdrawal for as long as you need it to.'},
+  {id:'fx', label:'Cross-Border', icon:ICON_FX,
+    blurb:'See what currency movement does to real returns when you invest across India and the US.'},
+  {id:'joint', label:'Joint Children Corpus', icon:ICON_JOINT,
+    blurb:'Plan overlapping education costs for more than one child from a single pool of savings.'},
+  {id:'mc', label:'Monte Carlo', icon:ICON_MC,
+    blurb:'Run thousands of randomised market paths to see how likely a plan is to actually work, not just its average outcome.'},
+  {id:'instruments', label:'Instrument Explorer', icon:ICON_INSTRUMENTS,
+    blurb:"Look up any bundled fund category's return and risk assumptions side by side."},
+  {id:'health', label:'Plan Health', icon:ICON_HEALTH,
+    blurb:'A quick score on whether your current savings, emergency fund and protection are actually in shape.'},
 ];
-
 function renderHome(){
   const primary=TABS.filter(t=>t.primary), secondary=TABS.filter(t=>!t.primary);
   return `<div class="lab-home">
@@ -3129,28 +4187,68 @@ function renderHome(){
     </div>
     <div class="lab-home-secondary-label">More tools</div>
     <div class="lab-home-secondary">
-      ${secondary.map(t=>`<button class="tab" data-tab-switch="${t.id}">${t.label}</button>`).join('')}
+      ${secondary.map(t=>`<button class="lab-tool-chip" data-tab-switch="${t.id}" title="${t.blurb||''}">
+        <span class="ltc-icon">${t.icon||''}</span>
+        <span class="ltc-label">${t.label}</span>
+      </button>`).join('')}
     </div>
   </div>`;
 }
 
+// Rebuilding #tabbarInner from scratch is only safe when the nav's own
+// identity actually changed (which tab/country is current) -- render()
+// fires on every slider input across the whole app, and a full rebuild
+// would blow away any sidebar group the person just opened by hand.
+// navKey lets a same-tab, same-country re-render skip the rebuild
+// entirely and leave the existing DOM (and its open/closed groups) alone.
+let lastNavKey=null;
 function renderTabs(){
   const bar=document.getElementById('tabbar');
   if(L.tab==='home'){
     bar.className='tabbar is-home';
     document.getElementById('tabbarInner').innerHTML='';
+    lastNavKey=null;
   } else {
-    bar.className='tabbar is-slim';
-    const current=TABS.find(t=>t.id===L.tab)||{};
-    document.getElementById('tabbarInner').innerHTML=`<div class="slim-row">
-      <button class="slim-back" data-tab-switch="home">&larr; All tools</button>
-      <span class="slim-current">${current.label||''}</span>
+    bar.className='tabbar is-slim'+(L.navCollapsed?' nav-collapsed':'');
+    const navKey=L.tab+'|'+L.country;
+    if(navKey!==lastNavKey){
+      lastNavKey=navKey;
+      const current=TABS.find(t=>t.id===L.tab)||{};
+      const inner=document.getElementById('tabbarInner');
+      inner.innerHTML=`<div class="slim-row">
+        <button class="slim-back" data-tab-switch="home">&larr; All tools</button>
+        <span class="slim-current">${current.label||''}</span>
+      </div>
       <div class="tabs tabs-slim">${TABS.map(t=>
-        `<button class="tab${L.tab===t.id?' active':''}" data-tab-switch="${t.id}">${t.label}</button>`).join('')}</div>
-    </div>`;
+        `<button class="tab${L.tab===t.id?' active':''}" data-tab-switch="${t.id}" title="${t.blurb||''}">${t.icon||''}${t.label}</button>`).join('')}</div>`;
+      // Nav buttons live inside #tabbarInner, only rebuilt on an actual nav
+      // change -- so it's safe to bind listeners here rather than relying
+      // on attach()'s broader, every-render rebind (see attach()'s own
+      // comment on why its query is scoped away from this element).
+      inner.querySelectorAll('[data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{
+        L.tab=el.dataset.tabSwitch;
+        try{ localStorage.setItem('goaldenLabLastTab', L.tab); }catch(e){}
+        render();
+      }));
+    }
   }
   document.getElementById('countryToggle').innerHTML = Object.values(C).map(c=>
     `<button class="ctbtn${L.country===c.code?' active':''}" data-country="${c.code}">${c.sym} ${c.code}</button>`).join('');
+}
+
+// Applies .is-sticky to the current tool's left panel whenever its own
+// output sibling is taller -- that's what gives the sticky panel room to
+// travel and unstick again near the end, rather than checking against the
+// viewport (a panel taller than the *screen* still sticks fine as long as
+// it's shorter than the *output column*, which is the actual constraint;
+// gating on viewport height instead left a short viewport's Test Real
+// Investments panel un-stuck and scrolling away early, leaving a dead
+// gutter beside the much longer output column).
+function syncStickyPanels(){
+  const panel=document.querySelector('main .grid > .panel');
+  const output=document.querySelector('main .grid > .output');
+  if(!panel) return;
+  panel.classList.toggle('is-sticky', !output || panel.offsetHeight <= output.offsetHeight);
 }
 
 function render(){
@@ -3167,15 +4265,25 @@ function render(){
   else if(L.tab==='livefrontier') main.innerHTML=renderLiveFrontier();
   else if(L.tab==='instruments') main.innerHTML=renderInstruments();
   else if(L.tab==='health') main.innerHTML=renderHealth();
+  main.classList.remove('enter'); void main.offsetWidth; main.classList.add('enter');
   const tabLabel=L.tab==='home' ? 'Home' : (TABS.find(t=>t.id===L.tab)||{}).label||'';
   document.getElementById('printHeader').innerHTML=
     '<div class="pt">Goalden Lab &middot; '+tabLabel+'</div>'+
     '<div class="ps">'+cfg().name+' &middot; printed '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})+'</div>';
   attach();
+  syncStickyPanels();
 }
 
 function attach(){
-  document.querySelectorAll('[data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{
+  // Scoped to #main, not document-wide: #tabbarInner's own [data-tab-switch]
+  // buttons bind their own listener inside renderTabs(), only on the
+  // renders where that DOM is actually rebuilt. Since renderTabs() now
+  // skips rebuilding when the tab/country hasn't changed (see lastNavKey),
+  // those nav buttons persist across re-renders -- if attach() re-bound
+  // them here too on every render(), each stale render would leave behind
+  // another listener and a single click would eventually fire render()
+  // several times over.
+  document.querySelectorAll('#main [data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{
     L.tab=el.dataset.tabSwitch;
     try{ localStorage.setItem('goaldenLabLastTab', L.tab); }catch(e){}
     render();
@@ -3457,7 +4565,47 @@ function attach(){
       render();
     });
   });
-
+  // A true zero-out, distinct from the Conservative/Balanced/Aggressive/
+  // Equal-weight presets above: every asset goes to 0%, no product shown
+  // on the map, so the person picks their own mix from a blank slate
+  // rather than from a preset. computePortfolioDerived() and
+  // roundPercentsTo100() both special-case a literal all-zero vector so
+  // it renders as 0% everywhere instead of falling back to equal-weight.
+  document.getElementById('pfResetBtn')&&document.getElementById('pfResetBtn').addEventListener('click',()=>{
+    const c=cfg();
+    const assets = c.code==='IN' ? PORTFOLIO_ASSETS_IN : PORTFOLIO_ASSETS_US;
+    L.portfolio.weights = assets.map(()=>0);
+    L.portfolio.show = {cloud:'all', assets:'held'};
+    render();
+  });
+  document.querySelectorAll('[data-pfshow-cloud]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      L.portfolio.show.cloud = el.dataset.pfshowCloud;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-pfshow-assets]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      L.portfolio.show.assets = el.dataset.pfshowAssets;
+      render();
+    });
+  });
+  document.querySelectorAll('[data-live-klass]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      L.live.klassFilter = el.dataset.liveKlass;
+      render();
+    });
+  });
+  document.querySelectorAll('input[data-pfblend]').forEach(el=>{
+    el.addEventListener('input',()=>{
+      L.portfolio.blendPct = parseFloat(el.value);
+      const labelEl=document.getElementById('pf-blend-label'); if(labelEl) labelEl.textContent = L.portfolio.blendPct+'%';
+      const c=cfg();
+      const assets = c.code==='IN' ? PORTFOLIO_ASSETS_IN : PORTFOLIO_ASSETS_US;
+      const corr = c.code==='IN' ? PORTFOLIO_CORR_IN : PORTFOLIO_CORR_US;
+      const blendEl=document.getElementById('pf-blend'); if(blendEl) blendEl.innerHTML=portfolioBlendHTML(computePortfolioDerived(assets, corr), assets, corr);
+    });
+  });
   document.getElementById('reseedBtn')&&document.getElementById('reseedBtn').addEventListener('click',()=>{
     L.mc.seed = Math.floor(Math.random()*100000);
     render();
@@ -3543,7 +4691,7 @@ function attach(){
     liveSearchEl.addEventListener('input',()=>{
       L.live.search=liveSearchEl.value;
       const el=document.getElementById('liveResults');
-      if(el) el.innerHTML=liveEquityResultsHTML();
+      if(el){ el.innerHTML=liveEquityResultsHTML(); wireLiveResultButtons(el); }
     });
   }
   let liveFundTimer=null;
@@ -3555,17 +4703,7 @@ function attach(){
       liveFundTimer=setTimeout(()=>{ liveFundTimer=null; liveRunFundSearch(); }, 350);
     });
   }
-  document.querySelectorAll('[data-live-add-equity]').forEach(el=>{
-    el.addEventListener('click',()=>{
-      liveAddInstrument({key:el.dataset.liveAddEquity, symbol:el.dataset.liveAddEquity, label:el.dataset.liveAddName, type:'equity'});
-    });
-  });
-  document.querySelectorAll('[data-live-add-fund]').forEach(el=>{
-    el.addEventListener('click',()=>{
-      const scheme=el.dataset.liveAddFund;
-      liveAddInstrument({key:'MF'+scheme, symbol:scheme, label:el.dataset.liveAddName, type:'fund'});
-    });
-  });
+  wireLiveResultButtons(document);
   document.querySelectorAll('[data-live-remove]').forEach(el=>{
     el.addEventListener('click',()=>{
       const key=el.dataset.liveRemove;
@@ -3574,6 +4712,11 @@ function attach(){
       if(L.live.selectedWeights && L.live.selectedWeights.length!==L.live.items.length) L.live.selectedWeights=null;
       render();
     });
+  });
+  // "Use it anyway" on a held-back instrument: an explicit, per-instrument,
+  // visible opt-in past a data-quality flag -- never a silent default.
+  document.querySelectorAll('[data-live-override]').forEach(el=>{
+    el.addEventListener('click',()=>{ L.live.overrides[el.dataset.liveOverride]=true; render(); });
   });
   const liveFreeTextEl=document.getElementById('liveFreeText');
   if(liveFreeTextEl){
@@ -3645,11 +4788,47 @@ if(!consumeDoor2Handoff()){
     if(last==='home' || TABS.some(t=>t.id===last)) L.tab = last;
   }catch(e){}
 }
+try{ L.navCollapsed = localStorage.getItem('goaldenLabNavCollapsed')==='1'; }catch(e){}
+try{ L.panelCollapsed = localStorage.getItem('goaldenLabPanelCollapsed')==='1'; }catch(e){}
 
 document.getElementById('printBtn').addEventListener('click',()=>window.print());
+// #navToggleBtn lives outside #tabbarInner (a static sibling in the HTML
+// shell), so it survives every renderTabs() rebuild -- bind it once here
+// rather than re-binding on every render.
+document.getElementById('tabbar').classList.toggle('nav-collapsed', L.navCollapsed);
+document.getElementById('navToggleBtn').addEventListener('click',()=>{
+  L.navCollapsed = !L.navCollapsed;
+  try{ localStorage.setItem('goaldenLabNavCollapsed', L.navCollapsed?'1':'0'); }catch(e){}
+  document.getElementById('tabbar').classList.toggle('nav-collapsed', L.navCollapsed);
+});
+// Frontier flashcard's "Move to the best mix at this risk" button: it is
+// re-created via innerHTML on every settle, so this reads the
+// module-scoped frontierJumpHandler set by the most recent
+// frontierTakeawayHTML() call rather than a listener on the button
+// itself, which would already be gone.
+document.body.addEventListener('click', e=>{
+  const btn = e.target.closest('[data-frontier-jump]');
+  if(!btn || !frontierJumpHandler) return;
+  frontierJumpHandler();
+});
 // Delegated once here rather than re-wired after every render(): works
 // for any .explain-toggle / .explain-panel pair anywhere in the app,
 // present now or added later, with no per-tab wiring needed.
+document.body.addEventListener('click', e=>{
+  const btn = e.target.closest('[data-reset-tab]');
+  if(!btn) return;
+  resetTab(btn.dataset.resetTab);
+});
+// Per-tab panel hide/show (see panelHead() and the .panel-toggle-btn CSS):
+// delegated, since panelHead() re-emits this button on every render()
+// rather than it being a static shell element like #navToggleBtn.
+document.body.addEventListener('click', e=>{
+  const btn = e.target.closest('[data-panel-toggle]');
+  if(!btn) return;
+  L.panelCollapsed = !L.panelCollapsed;
+  try{ localStorage.setItem('goaldenLabPanelCollapsed', L.panelCollapsed?'1':'0'); }catch(e){}
+  render();
+});
 document.body.addEventListener('click', e=>{
   const btn = e.target.closest('.explain-toggle');
   if(!btn) return;
@@ -3657,6 +4836,66 @@ document.body.addEventListener('click', e=>{
   if(!panel || !panel.classList.contains('explain-panel')) return;
   btn.classList.toggle('open');
   panel.classList.toggle('open');
+});
+// Cursor-follow tilt on the Lab home screen's 3 primary tool cards,
+// mirroring index.html's own .door treatment (see that file's script) so
+// the two "choosing" screens in the app feel like the same surface, while
+// every actual calculator tab stays still. Delegated on #main rather than
+// bound per-card, since renderHome() tears the whole home screen down and
+// rebuilds it via innerHTML on every render() -- a per-element listener
+// here would leak exactly like the duplicate-listener hazard documented
+// on attach()'s own [data-tab-switch] query.
+if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  const mainEl = document.getElementById('main');
+  let tiltedCard = null;
+  const resetTiltedCard = ()=>{
+    if(!tiltedCard) return;
+    tiltedCard.style.transform = '';
+    tiltedCard.classList.remove('tilting');
+    const icon = tiltedCard.querySelector('.tc-icon');
+    if(icon) icon.style.transform = '';
+    tiltedCard = null;
+  };
+  mainEl.addEventListener('mousemove', e=>{
+    const card = e.target.closest('.lab-tool-card');
+    if(card !== tiltedCard) resetTiltedCard();
+    if(!card) return;
+    tiltedCard = card;
+    const r = card.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
+    const rx = (0.5 - py) * 12, ry = (px - 0.5) * 12;
+    card.style.transform = `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) translateY(-2px)`;
+    card.style.setProperty('--mx', (px * 100) + '%');
+    card.style.setProperty('--my', (py * 100) + '%');
+    card.classList.add('tilting');
+    const icon = card.querySelector('.tc-icon');
+    if(icon) icon.style.transform = `translate(${(px - 0.5) * 8}px, ${(py - 0.5) * 8}px) scale(1.05)`;
+  });
+  mainEl.addEventListener('mouseleave', resetTiltedCard);
+}
+// Exclusive accordions: opening one Build-a-Portfolio cluster closes the
+// others, so the left panel never grows past roughly one cluster's
+// worth of content. This is what keeps syncStickyPanels()'s "does it
+// fit the viewport" check passing in practice, rather than the sticky
+// behaviour technically existing but immediately falling off the moment
+// two or three clusters are open. Registered after the generic
+// .explain-toggle handler above (same click, later listener), so `btn`
+// already reflects its own freshly-toggled open/closed state here.
+document.body.addEventListener('click', e=>{
+  const btn = e.target.closest('.port-cluster-toggle');
+  if(!btn || !btn.classList.contains('open')) return;
+  const group = btn.closest('.panel');
+  if(!group) return;
+  group.querySelectorAll('.port-cluster-toggle.open').forEach(other=>{
+    if(other===btn) return;
+    other.classList.remove('open');
+    const otherPanel = other.nextElementSibling;
+    if(otherPanel) otherPanel.classList.remove('open');
+  });
+  // The .explain-panel max-height transition is .3s; offsetHeight needs
+  // to be measured after it settles, or this would use the taller
+  // pre-collapse height and wrongly decide the panel no longer fits.
+  setTimeout(syncStickyPanels, 320);
 });
 render();
 </script>

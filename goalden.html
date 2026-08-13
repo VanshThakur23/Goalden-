@@ -94,6 +94,21 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .value-slider{margin:18px 0 8px}
 .value-slider input[type=range]{width:100%;accent-color:var(--gold);height:22px;cursor:pointer}
 .value-slider-labels{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);margin-top:2px}
+/* Custom slider thumb + track -- every range input in this app was
+   previously the bare OS control, tinted only by accent-color. This
+   replaces it everywhere with one consistent tactile design. */
+input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:rgba(20,40,63,.14)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:rgba(20,40,63,.14)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--gold)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--gold);margin-top:-6px;box-shadow:0 1px 4px rgba(20,40,63,.3);transition:transform .15s ease,box-shadow .15s ease;cursor:pointer}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--gold);box-shadow:0 1px 4px rgba(20,40,63,.3);transition:transform .15s ease,box-shadow .15s ease;cursor:pointer}
+input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.12)}
+input[type=range]:hover::-moz-range-thumb{transform:scale(1.12)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.22);box-shadow:0 2px 8px rgba(37,87,199,.4)}
+input[type=range]:active::-moz-range-thumb{transform:scale(1.22);box-shadow:0 2px 8px rgba(37,87,199,.4)}
+input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--gold);outline-offset:2px}
+input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);outline-offset:2px}
 .chips-label{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin:14px 0 8px}
 .optional-field{margin-top:20px;padding-top:20px;border-top:1px dashed rgba(20,40,63,.18)}
 .optional-label{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
@@ -163,7 +178,7 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .case-back-row{padding:16px 0 8px;text-align:center}
 .case-back-row button{background:none;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.7);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
 .term-i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.4);color:rgba(20,40,63,.6);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:pointer;position:relative;margin-left:2px;vertical-align:middle}
-.term-i-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink2,#16281f);border:1px solid rgba(37,87,199,.3);border-radius:9px;padding:9px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:20;pointer-events:none;width:220px;line-height:1.45;font-family:'Figtree',sans-serif;font-weight:400;text-align:left;white-space:normal}
+.term-i-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--card);border:1px solid rgba(37,87,199,.3);box-shadow:0 8px 20px rgba(20,40,63,.14);border-radius:9px;padding:9px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:20;pointer-events:none;width:220px;line-height:1.45;font-family:'Figtree',sans-serif;font-weight:400;text-align:left;white-space:normal}
 .chart-title{font-family:'Newsreader',serif;font-size:15.5px;color:var(--paper);margin-bottom:2px}
 .chart-caption{font-size:12px;color:rgba(20,40,63,.5);margin-bottom:10px}
 .alloc-flex{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:14px}
@@ -185,7 +200,7 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .echart{width:100%;max-width:480px;margin:0 auto}
 
 /* delay card */
-.delay-card{background:rgba(28,58,45,.7);border:1px solid rgba(37,87,199,.35);border-radius:16px 3px 16px 16px;padding:19px 20px;margin-bottom:20px}
+.delay-card{background:rgba(37,87,199,.05);border:1px solid rgba(37,87,199,.25);border-radius:16px 3px 16px 16px;padding:19px 20px;margin-bottom:20px}
 .delay-title{font-family:'Newsreader',serif;font-size:15px;color:var(--paper);margin-bottom:12px}
 .delay-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(20,40,63,.1)}
 .delay-row:last-child{border-bottom:none}
@@ -209,6 +224,24 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .assump-panel.open{max-height:500px}
 .assump-inner{padding:4px 2px 18px;font-size:12.5px;color:rgba(20,40,63,.6);line-height:1.8}
 .assump-inner b{color:var(--paper)}
+/* Advanced allocation override -- attached inline to a flat post-goal
+   rate line, opt-in, collapsed by default unless already customized. */
+.adv-toggle{display:inline-flex;align-items:center;gap:5px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--gold);cursor:pointer;margin:2px 0 4px;text-align:left}
+.adv-toggle .tog-caret{font-size:9px;transition:transform .2s ease;display:inline-block}
+.adv-toggle.open .tog-caret{transform:rotate(180deg)}
+.adv-badge{font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;text-transform:uppercase;background:rgba(37,87,199,.16);color:var(--gold);padding:2px 7px;border-radius:8px}
+.adv-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.adv-panel.open{max-height:220px}
+.adv-inner{background:rgba(37,87,199,.05);border:1px solid rgba(37,87,199,.16);border-radius:3px 12px 12px 12px;padding:14px 16px;margin:4px 0 10px}
+.adv-label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.adv-label b{color:var(--gold);font-family:'Newsreader',serif;font-size:13px;text-transform:none;letter-spacing:0}
+.adv-inner input[type=range]{width:100%;height:20px}
+.adv-preview{font-size:12px;color:rgba(20,40,63,.65);margin:10px 0}
+.adv-preview b{color:var(--paper)}
+.adv-btn-row{display:flex;gap:8px;margin-top:4px}
+.adv-btn-row button{font-family:'Figtree',sans-serif;font-size:12px;font-weight:600;padding:8px 14px;border-radius:3px 9px 9px 9px;cursor:pointer;border:none;background:var(--gold);color:#fff;transition:transform .15s ease}
+.adv-btn-row button:hover{transform:translateY(-1px)}
+.adv-btn-row button.adv-btn-ghost{background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.6);font-weight:500}
 /* This button is the entire point of the deeper "Case" screen, so it
    needs to visually interrupt the page, not sit quietly at the bottom
    looking like a footnote. Gentle pulse on the border draws the eye
@@ -244,7 +277,7 @@ echarts.registerTheme('goalden', {
   grid: { left: 44, right: 16, top: 16, bottom: 30, containLabel: true },
   categoryAxis: { axisLine:{lineStyle:{color:'rgba(20,40,63,.2)'}}, axisLabel:{color:'rgba(20,40,63,.5)'}, splitLine:{show:false} },
   valueAxis: { axisLine:{show:false}, axisLabel:{color:'rgba(20,40,63,.5)'}, splitLine:{lineStyle:{color:'rgba(20,40,63,.08)'}} },
-  tooltip: { backgroundColor:'#FFFFFF', borderColor:'rgba(37,87,199,.4)', borderWidth:1, textStyle:{color:'#14283F', fontFamily:"'Spline Sans Mono',monospace", fontSize:11}, extraCssText:'border-radius:3px 8px 8px 8px;box-shadow:0 4px 14px rgba(0,0,0,.35)' },
+  tooltip: { backgroundColor:'#FFFFFF', borderColor:'rgba(37,87,199,.4)', borderWidth:1, textStyle:{color:'#14283F', fontFamily:"'Spline Sans Mono',monospace", fontSize:11}, extraCssText:'border-radius:3px 8px 8px 8px;box-shadow:0 6px 18px rgba(20,40,63,.16)' },
 });
 const chartInstances = {};
 function initChart(id, option, optsOverride){
@@ -308,6 +341,19 @@ function yearlyAmortization(monthlyRows) {
     prevClose = end.closeBal; prevContributed = end.contributed;
   }
   return years;
+}
+// mountainChart() labels each point "Year N" from its raw array index --
+// feeding it accumulationSchedule()'s rows directly (one row per MONTH)
+// mislabels month 109 as "Year 109" instead of one point per real year.
+// Bucket to yearly first, using each year's real cumulative totals (not
+// yearlyAmortization()'s per-year deltas, which the chart isn't built for).
+function yearlyMountainRows(monthlyRows) {
+  const rows = [];
+  for (let m = 0; m < monthlyRows.length; m += 12) {
+    const end = monthlyRows[Math.min(m + 11, monthlyRows.length - 1)];
+    rows.push({ contributed: end.contributed, closeBal: end.closeBal });
+  }
+  return rows;
 }
 function drawdownSchedule(opts) {
   const rows = []; let bal = opts.openingCorpus; let w = opts.firstWithdrawal;
@@ -517,7 +563,12 @@ const S = {
   age: null, retireAge: null, monthlyExpense: null,
   annualFee: null, yearsToCollege: null, courseDuration: null,
   genType: null, genAmount: null, genYears: null, existingSavings: 0,
-  risk: null, si: 0, quickEdit: false
+  risk: null, si: 0, quickEdit: false,
+  // Advanced, opt-in overrides for the flat post-goal rate (d.postRet /
+  // d.debt). null = use the flat default; {eq,de,hy} once the user has
+  // picked a custom post-goal mix via the "Advanced" control under the
+  // relevant assumption line.
+  postRetAlloc: null, eduAlloc: null
 };
 
 function flow() {
@@ -544,6 +595,22 @@ function riskRate() {
   const d = cfg().d, a = riskAllocation();
   return a.eq*d.equity + a.de*d.debt + a.hy*d.hybrid;
 }
+// Same eq/de/hy blend as riskRate(), but for an arbitrary allocation --
+// used by the advanced post-goal rate override.
+function blendedRate(alloc, d) {
+  return alloc.eq*d.equity + alloc.de*d.debt + alloc.hy*d.hybrid;
+}
+// Turns a single "how much equity" slider into a full eq/de/hy split by
+// keeping debt:hybrid in whatever ratio the base risk profile already
+// used -- same redistribution idea as a glide path, just applied on
+// demand instead of by age.
+function allocFromEquityPct(eqPct, base) {
+  const eq = eqPct/100;
+  const deHyTotal = base.de + base.hy;
+  const deShare = deHyTotal > 0 ? base.de/deHyTotal : 0.75;
+  const rest = 1 - eq;
+  return { eq, de: rest*deShare, hy: rest*(1-deShare) };
+}
 
 /* =====================================================================
    CALCULATION
@@ -554,7 +621,8 @@ function calcRetirement() {
   const drawYrs = Math.max(5, d.lifeExp - S.retireAge);
   const annualExp = S.monthlyExpense * 12;
   const expAtRet = inflateExpense(annualExp, [{rate: d.inflation, years: yrs}], 0.75);
-  const rr = realRate(d.postRet, d.inflation);
+  const postRetRate = S.postRetAlloc ? blendedRate(S.postRetAlloc, d) : d.postRet;
+  const rr = realRate(postRetRate, d.inflation);
   const corpus = corpusRequired(rr, drawYrs, expAtRet, true);
   const preRate = riskRate();
   const mRate = effectiveMonthlyRate(preRate);
@@ -569,9 +637,9 @@ function calcRetirement() {
   const sip = alreadyMet ? 0 : solveSIP(mRate, yrs * 12, gapCorpus, true);
   const realCorpus = corpus / Math.pow(1 + d.inflation, yrs);
   const accRows = accumulationSchedule({sip, rate: mRate, years: yrs * 12, due: true, opening: existing}).rows;
-  const drawRows = drawdownSchedule({openingCorpus: corpus, firstWithdrawal: expAtRet, inflation: d.inflation, nominalRate: d.postRet, years: drawYrs, due: true});
+  const drawRows = drawdownSchedule({openingCorpus: corpus, firstWithdrawal: expAtRet, inflation: d.inflation, nominalRate: postRetRate, years: drawYrs, due: true});
   const delay = alreadyMet ? null : calcDelay(gapCorpus, mRate, yrs);
-  return {corpus, sip, realCorpus, preRate, expAtRet, yrs, drawYrs, accRows, drawRows, delay, d, existing, existingFV, gapCorpus, alreadyMet};
+  return {corpus, sip, realCorpus, preRate, postRetRate, expAtRet, yrs, drawYrs, accRows, drawRows, delay, d, existing, existingFV, gapCorpus, alreadyMet};
 }
 
 // A one-tap "what if I retired at a different age" comparison. Reuses
@@ -597,7 +665,8 @@ function calcRetireAgeCompare() {
 function calcEducation() {
   const d = cfg().d, c = cfg();
   const feeAtCollege = inflateExpense(S.annualFee, [{rate: d.eduInflation, years: S.yearsToCollege}]);
-  const rr = realRate(d.debt, d.eduInflation);
+  const eduPhaseRate = S.eduAlloc ? blendedRate(S.eduAlloc, d) : d.debt;
+  const rr = realRate(eduPhaseRate, d.eduInflation);
   const corpus = corpusRequired(rr, S.courseDuration, feeAtCollege, true);
   const preRate = riskRate();
   const mRate = effectiveMonthlyRate(preRate);
@@ -612,7 +681,7 @@ function calcEducation() {
     inflateExpense(S.annualFee, [{rate: d.eduInflation, years: S.yearsToCollege + i}])
   );
   const delay = alreadyMet ? null : calcDelay(gapCorpus, mRate, S.yearsToCollege);
-  return {corpus, sip, realCorpus, preRate, feeAtCollege, accRows, feeYears, delay, d, existing, existingFV, gapCorpus, alreadyMet};
+  return {corpus, sip, realCorpus, preRate, eduPhaseRate, feeAtCollege, accRows, feeYears, delay, d, existing, existingFV, gapCorpus, alreadyMet};
 }
 
 function calcGeneric() {
@@ -894,12 +963,64 @@ function delayCard(delay, yearsRemaining) {
 /* =====================================================================
    ASSUMPTION PANELS
    ===================================================================== */
+// Advanced, opt-in control attached to a flat post-goal rate (post-
+// retirement or during-education-study-years). One slider -- how much
+// equity stays in the mix at that stage -- with debt/hybrid split to
+// preserve the risk profile's own ratio (allocFromEquityPct). Defaults to
+// closed/using the flat rate; nothing changes until the user explicitly
+// applies a custom mix.
+function advAllocControl(kind) {
+  const base = riskAllocation();
+  const active = kind==='ret' ? S.postRetAlloc : S.eduAlloc;
+  const eqPct = active ? Math.round(active.eq*100) : Math.round(base.eq*100);
+  const p = 'adv'+kind;
+  return '<div class="adv-toggle'+(active?' adv-active open':'')+'" id="'+p+'Toggle">' +
+      '<span class="tog-caret">&#9662;</span>Advanced: customize this rate'+(active?' <span class="adv-badge">customized</span>':'') +
+    '</div>' +
+    '<div class="adv-panel'+(active?' open':'')+'" id="'+p+'Panel"><div class="adv-inner">' +
+      '<label class="adv-label">Equity kept at this stage <b id="'+p+'Val">'+eqPct+'%</b></label>' +
+      '<input type="range" id="'+p+'Slider" min="0" max="100" step="5" value="'+eqPct+'">' +
+      '<div class="adv-preview" id="'+p+'Preview"></div>' +
+      '<div class="adv-btn-row"><button id="'+p+'Apply">Use this mix</button>' +
+      (active ? '<button id="'+p+'Reset" class="adv-btn-ghost">Reset to default</button>' : '') + '</div>' +
+    '</div></div>';
+}
+function wireAdvAlloc(kind) {
+  const p = 'adv'+kind;
+  const toggle = document.getElementById(p+'Toggle'), panel = document.getElementById(p+'Panel');
+  if (toggle && panel) toggle.addEventListener('click', () => { panel.classList.toggle('open'); toggle.classList.toggle('open'); });
+  const slider = document.getElementById(p+'Slider');
+  if (!slider) return;
+  const d = cfg().d;
+  const flatRate = kind==='ret' ? d.postRet : d.debt;
+  const updatePreview = (eqPct) => {
+    const rate = blendedRate(allocFromEquityPct(eqPct, riskAllocation()), d);
+    const valEl = document.getElementById(p+'Val'); if (valEl) valEl.textContent = eqPct+'%';
+    const prevEl = document.getElementById(p+'Preview');
+    if (prevEl) prevEl.innerHTML = 'New rate: <b>'+(rate*100).toFixed(1)+'%</b> a year (was '+(flatRate*100).toFixed(1)+'%)';
+  };
+  updatePreview(parseInt(slider.value));
+  slider.addEventListener('input', () => updatePreview(parseInt(slider.value)));
+  const applyBtn = document.getElementById(p+'Apply');
+  if (applyBtn) applyBtn.addEventListener('click', () => {
+    const alloc = allocFromEquityPct(parseInt(slider.value), riskAllocation());
+    if (kind==='ret') S.postRetAlloc = alloc; else S.eduAlloc = alloc;
+    render();
+  });
+  const resetBtn = document.getElementById(p+'Reset');
+  if (resetBtn) resetBtn.addEventListener('click', () => {
+    if (kind==='ret') S.postRetAlloc = null; else S.eduAlloc = null;
+    render();
+  });
+}
+
 function assumpRetirement(r) {
   const c = cfg();
   return '<b>Prices rising:</b> '+(r.d.inflation*100).toFixed(1)+'% a year.<br>' +
     '<b>Spending in retirement:</b> 75% of your inflated expenses. The assumption is some costs finish before you retire.<br>' +
     '<b>Growth while saving:</b> '+(r.preRate*100).toFixed(1)+'% a year, matching your comfort level.<br>' +
-    '<b>Growth after retirement:</b> '+(r.d.postRet*100).toFixed(1)+'% a year, shifted to something steadier.<br>' +
+    '<b>Growth after retirement:</b> '+(r.postRetRate*100).toFixed(1)+'% a year'+(S.postRetAlloc?', using your custom mix.':', shifted to something steadier.')+'<br>' +
+    advAllocControl('ret') +
     '<b>How long the pot lasts:</b> to age '+r.d.lifeExp+'. A planning default, not a prediction about you specifically.<br>' +
     (r.existing>0 ? '<b>Existing savings:</b> '+c.compact(r.existing)+' assumed to stay invested at the same rate as your new SIP, growing to '+c.compact(r.existingFV)+' by age '+S.retireAge+'.<br>' : '') +
     '<b>None of these are guarantees.</b> They are the same conservative starting numbers a real adviser would use.';
@@ -908,7 +1029,8 @@ function assumpRetirement(r) {
 function assumpEducation(r) {
   const c = cfg();
   return '<b>Education cost inflation:</b> '+(r.d.eduInflation*100).toFixed(0)+'% a year. Fees typically rise faster than general prices.<br>' +
-    '<b>During the study years:</b> the corpus earns '+(r.d.debt*100).toFixed(1)+'% (a safer parking rate) while fees keep rising. That is why the corpus needed is larger than simply adding up the fees.<br>' +
+    '<b>During the study years:</b> the corpus earns '+(r.eduPhaseRate*100).toFixed(1)+'% (a safer parking rate) while fees keep rising. That is why the corpus needed is larger than simply adding up the fees.<br>' +
+    advAllocControl('edu') +
     '<b>Growth while saving:</b> '+(r.preRate*100).toFixed(1)+'% a year, matching your comfort level.<br>' +
     (r.existing>0 ? '<b>Existing savings:</b> '+c.compact(r.existing)+' assumed to stay invested at the same rate as your new SIP, growing to '+c.compact(r.existingFV)+' by the time college starts.<br>' : '') +
     '<b>None of these are guarantees.</b> Review as the start date gets closer.';
@@ -1407,7 +1529,7 @@ function sResultsRetirement() {
     actionCard +
     '<div class="chart-card"><div class="chart-title">How the pot grows</div>' +
     '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
-    mountainChart(r.accRows, 'chart-mountain')+'</div>' +
+    mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' +
     '<div class="chart-card"><div class="chart-title">How the pot gets spent</div>' +
     '<div class="chart-caption">Built to last until age '+r.d.lifeExp+'</div>' +
     potChart(r.drawRows, c, 'chart-secondary')+'</div>' +
@@ -1458,7 +1580,7 @@ function sResultsEducation() {
     actionCard +
     '<div class="chart-card"><div class="chart-title">How the college fund grows</div>' +
     '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
-    mountainChart(r.accRows, 'chart-mountain')+'</div>' +
+    mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' +
     '<div class="chart-card"><div class="chart-title">Fee you will pay each year of study</div>' +
     '<div class="chart-caption">Rises every year because education costs keep going up</div>' +
     feeBarChart(r.feeYears, 'chart-secondary')+'</div>' +
@@ -1505,7 +1627,7 @@ function sResultsGeneric() {
     (r.accRows.length > 0 ?
       '<div class="chart-card"><div class="chart-title">How the fund grows</div>' +
       '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
-      mountainChart(r.accRows, 'chart-mountain')+'</div>' : '') +
+      mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' : '') +
     (r.gap > 0 ? allocationCardHtml(r.preRate, r.d, rLabel) : '') +
     (r.gap > 0 ? fdComparisonCardHtml(r.sip, S.genYears, r.gap, r.d, c) : '') +
     (r.delay ? delayCard(r.delay, S.genYears) : '') +
@@ -1584,7 +1706,7 @@ function go(delta) {
     S.age = null; S.retireAge = null; S.monthlyExpense = null;
     S.annualFee = null; S.yearsToCollege = null; S.courseDuration = null;
     S.genType = null; S.genAmount = null; S.genYears = null; S.existingSavings = 0;
-    S.risk = null;
+    S.risk = null; S.postRetAlloc = null; S.eduAlloc = null;
   }
   S.si = Math.max(0, Math.min(flow().length - 1, S.si + delta));
   render();
@@ -1787,9 +1909,10 @@ function attach(screen) {
     if (st && sp) st.addEventListener('click', () => { sp.classList.toggle('open'); st.classList.toggle('open'); });
     const dt = document.getElementById('dt'), dp = document.getElementById('dp');
     if (dt && dp) dt.addEventListener('click', () => { dp.classList.toggle('open'); dt.classList.toggle('open'); });
+    wireAdvAlloc('ret'); wireAdvAlloc('edu');
     const rb = document.getElementById('rb');
     if (rb) rb.addEventListener('click', () => {
-      Object.assign(S, {country:null,goalType:null,age:null,retireAge:null,monthlyExpense:null,annualFee:null,yearsToCollege:null,courseDuration:null,genType:null,genAmount:null,genYears:null,existingSavings:0,risk:null,si:0,quickEdit:false});
+      Object.assign(S, {country:null,goalType:null,age:null,retireAge:null,monthlyExpense:null,annualFee:null,yearsToCollege:null,courseDuration:null,genType:null,genAmount:null,genYears:null,existingSavings:0,risk:null,si:0,quickEdit:false,postRetAlloc:null,eduAlloc:null});
       render();
     });
     const caseBtn = document.getElementById('caseBtn');

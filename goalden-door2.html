@@ -16,9 +16,11 @@
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
-body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden;line-height:1.5}
+h1,h2,h3{line-height:1.25}
 
 @media(prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}}
+:is(button,a,input,[tabindex]):focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 
 /* --- chrome --- */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 8px;flex-shrink:0}
@@ -63,6 +65,8 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 /* --- country grid --- */
 .country-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .ccrd{background:rgba(20,40,63,.06);border:1.5px solid rgba(20,40,63,.13);border-radius:6px 18px 6px 18px;padding:22px 12px;text-align:center;cursor:pointer;transition:all .17s}
+.ccrd:active{transform:scale(.97)}
+.ccrd:hover{border-color:rgba(37,87,199,.4)}
 .ccrd.sel{background:rgba(37,87,199,.16);border-color:var(--gold)}
 .cf{width:44px;height:44px;border-radius:50%;background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.3);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-family:'Newsreader',serif;font-size:22px;color:var(--gold)}
 .cn{font-family:'Newsreader',serif;font-size:16px;font-weight:600;color:var(--paper)}
@@ -72,14 +76,28 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .num-row{display:flex;align-items:baseline;gap:6px;padding:14px 0;border-bottom:2px solid rgba(20,40,63,.18);margin-bottom:16px}
 .value-slider{margin:2px 0 14px}
 .value-slider input[type=range]{width:100%;accent-color:var(--gold);height:22px;cursor:pointer}
-.value-slider-labels{display:flex;justify-content:space-between;font-family:monospace;font-size:10px;color:var(--dim);margin-top:2px}
-.chips-label{font-family:monospace;font-size:10px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin:2px 0 8px}
+.value-slider-labels{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);margin-top:2px}
+/* Custom slider thumb + track, matching goalden.html / goalden-lab.html. */
+input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:rgba(20,40,63,.14)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:rgba(20,40,63,.14)}
+input[type=range]::-moz-range-progress{height:6px;border-radius:3px;background:var(--gold)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--gold);margin-top:-6px;box-shadow:0 1px 4px rgba(20,40,63,.3);transition:transform .15s ease,box-shadow .15s ease;cursor:pointer}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--gold);box-shadow:0 1px 4px rgba(20,40,63,.3);transition:transform .15s ease,box-shadow .15s ease;cursor:pointer}
+input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.12)}
+input[type=range]:hover::-moz-range-thumb{transform:scale(1.12)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.22);box-shadow:0 2px 8px rgba(37,87,199,.4)}
+input[type=range]:active::-moz-range-thumb{transform:scale(1.22);box-shadow:0 2px 8px rgba(37,87,199,.4)}
+input[type=range]:focus-visible::-webkit-slider-thumb{outline:2px solid var(--gold);outline-offset:2px}
+input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);outline-offset:2px}
+.chips-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase;margin:2px 0 8px}
 .np{font-family:'Newsreader',serif;font-size:24px;color:var(--gold)}
 .ni{flex:1;background:transparent;border:none;outline:none;color:var(--paper);font-family:'Newsreader',serif;font-size:36px;font-weight:600;-moz-appearance:textfield}
 .ni::-webkit-outer-spin-button,.ni::-webkit-inner-spin-button{-webkit-appearance:none}
 .ns{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--dim)}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .chip{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--paper);background:rgba(20,40,63,.08);border:1px solid rgba(20,40,63,.16);padding:8px 13px;border-radius:3px;cursor:pointer;transition:all .14s}
+.chip:active{transform:scale(.95)}
 .chip.sel{background:var(--gold);border-color:var(--gold);color:#fff}
 .err{color:#E8977A;font-size:12px;font-family:'Spline Sans Mono',monospace;min-height:16px;margin-top:8px}
 
@@ -98,11 +116,11 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 /* --- profile reveal --- */
 .profile-card{border-radius:3px 20px 20px 20px;padding:24px;margin-bottom:20px;position:relative;overflow:hidden}
 .profile-card::before{content:'';position:absolute;inset:0;opacity:.12}
-.pc-conservative    {background:#1C4D5A;border:1.5px solid #4A90A4}
-.pc-mod_conservative{background:#1E3D2E;border:1.5px solid #5B8F6E}
-.pc-moderate        {background:#2E2A1A;border:1.5px solid #2557C7}
-.pc-mod_aggressive  {background:#2A2010;border:1.5px solid #9B7C3A}
-.pc-aggressive      {background:#2D1410;border:1.5px solid #A03A22}
+.pc-conservative    {background:rgba(74,144,164,.10);border:1.5px solid #4A90A4}
+.pc-mod_conservative{background:rgba(91,143,110,.10);border:1.5px solid #5B8F6E}
+.pc-moderate        {background:rgba(37,87,199,.08);border:1.5px solid #2557C7}
+.pc-mod_aggressive  {background:rgba(155,124,58,.12);border:1.5px solid #9B7C3A}
+.pc-aggressive      {background:rgba(160,58,34,.08);border:1.5px solid #A03A22}
 .pc-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(20,40,63,.65);margin-bottom:6px}
 .pc-name{font-family:'Newsreader',serif;font-weight:700;font-size:28px;color:var(--paper);margin-bottom:4px}
 .pc-tagline{font-family:'Newsreader',serif;font-size:15px;font-style:italic;color:rgba(20,40,63,.75);margin-bottom:14px}
@@ -117,7 +135,7 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 
 /* --- term chips --- */
 .term{border-bottom:1px dashed rgba(37,87,199,.65);cursor:pointer;position:relative;display:inline}
-.term-tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink2);border:1px solid rgba(37,87,199,.3);border-radius:9px;padding:8px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:10;pointer-events:none;width:200px;line-height:1.45;font-style:normal;font-family:'Figtree',sans-serif}
+.term-tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--card);border:1px solid rgba(37,87,199,.3);box-shadow:0 8px 20px rgba(20,40,63,.14);border-radius:9px;padding:8px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:10;pointer-events:none;width:200px;line-height:1.45;font-style:normal;font-family:'Figtree',sans-serif}
 .term.open .term-tip{display:block}
 
 /* --- goal pills on hub screen --- */
@@ -138,6 +156,8 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 /* --- goal type mini grid --- */
 .mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .mg{background:rgba(20,40,63,.06);border:1.5px solid rgba(20,40,63,.13);border-radius:4px 14px 4px 14px;padding:14px;text-align:center;cursor:pointer;transition:all .17s}
+.mg:active{transform:scale(.97)}
+.mg:hover{border-color:rgba(37,87,199,.35)}
 .mg.sel{background:rgba(37,87,199,.16);border-color:var(--gold)}
 .mg-icon{width:24px;height:24px;display:block;margin-bottom:8px;color:var(--gold)}
 .mg-icon svg{width:100%;height:100%}
@@ -189,7 +209,7 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .case-back-row{padding:16px 0 8px;text-align:center}
 .case-back-row button{background:none;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.7);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
 .term-i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.4);color:rgba(20,40,63,.6);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:pointer;position:relative;margin-left:2px;vertical-align:middle}
-.term-i-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink2,#16281f);border:1px solid rgba(37,87,199,.3);border-radius:9px;padding:9px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:20;pointer-events:none;width:220px;line-height:1.45;font-family:'Figtree',sans-serif;font-weight:400;text-align:left;white-space:normal}
+.term-i-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--card);border:1px solid rgba(37,87,199,.3);box-shadow:0 8px 20px rgba(20,40,63,.14);border-radius:9px;padding:9px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:20;pointer-events:none;width:220px;line-height:1.45;font-family:'Figtree',sans-serif;font-weight:400;text-align:left;white-space:normal}
 .section-head{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:20px 0 10px}
 .goal-row{display:flex;justify-content:space-between;align-items:flex-start;padding:13px 15px;background:rgba(20,40,63,.05);border-radius:3px 13px 13px 13px;margin-bottom:0}
 .goal-row-wrap{margin-bottom:10px}
@@ -201,7 +221,7 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .inst-name{font-family:'Newsreader',serif;font-size:13.5px;color:var(--paper);line-height:1.3;margin-bottom:3px}
 .inst-rate{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--gold);margin-bottom:5px}
 .inst-why{font-size:11px;color:rgba(20,40,63,.55);line-height:1.4}
-.inst-risk{display:inline-block;font-family:monospace;font-size:9px;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:2px 7px 7px 7px;margin-bottom:6px}
+.inst-risk{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:2px 7px 7px 7px;margin-bottom:6px}
 .inst-risk.low{background:rgba(61,122,79,.18);color:#8FC79E}
 .inst-risk.mod{background:rgba(37,87,199,.18);color:var(--gold)}
 .inst-risk.high{background:rgba(160,58,34,.18);color:#E8977A}
@@ -217,7 +237,7 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .plan-divider{border:none;border-top:1px solid rgba(20,40,63,.14);margin:10px 0}
 .plan-total{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:11px;margin-bottom:10px}
 .plan-total.ok {background:rgba(61,122,79,.2);border:1px solid rgba(61,122,79,.5)}
-.plan-total.warn{background:rgba(169,139,69,.18);border:1px solid rgba(37,87,199,.4)}
+.plan-total.warn{background:rgba(169,139,69,.18);border:1px solid rgba(169,139,69,.55)}
 .plan-total.gap {background:rgba(160,58,34,.2);border:1px solid rgba(160,58,34,.5)}
 .pt-label{font-size:14px;color:var(--paper)}
 .pt-value{font-family:'Newsreader',serif;font-size:17px;font-weight:600;color:var(--paper)}
@@ -237,6 +257,23 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .assump-panel.open{max-height:600px}
 .assump-inner{padding:4px 2px 16px;font-size:12px;color:rgba(20,40,63,.6);line-height:1.75}
 .assump-inner b{color:var(--paper)}
+/* Advanced per-goal allocation override -- see advGoalAllocControl(). */
+.adv-toggle{display:inline-flex;align-items:center;gap:5px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--gold);cursor:pointer;margin:10px 2px 4px;text-align:left}
+.adv-toggle .tog-caret{font-size:9px;transition:transform .2s ease;display:inline-block}
+.adv-toggle.open .tog-caret{transform:rotate(180deg)}
+.adv-badge{font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;text-transform:uppercase;background:rgba(37,87,199,.16);color:var(--gold);padding:2px 7px;border-radius:8px}
+.adv-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.adv-panel.open{max-height:220px}
+.adv-inner{background:rgba(37,87,199,.05);border:1px solid rgba(37,87,199,.16);border-radius:3px 12px 12px 12px;padding:14px 16px;margin:4px 2px 10px}
+.adv-label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.adv-label b{color:var(--gold);font-family:'Newsreader',serif;font-size:13px;text-transform:none;letter-spacing:0}
+.adv-inner input[type=range]{width:100%;height:20px}
+.adv-preview{font-size:12px;color:rgba(20,40,63,.65);margin:10px 0}
+.adv-preview b{color:var(--paper)}
+.adv-btn-row{display:flex;gap:8px;margin-top:4px}
+.adv-btn-row button{font-family:'Figtree',sans-serif;font-size:12px;font-weight:600;padding:8px 14px;border-radius:3px 9px 9px 9px;cursor:pointer;border:none;background:var(--gold);color:#fff;transition:transform .15s ease}
+.adv-btn-row button:hover{transform:translateY(-1px)}
+.adv-btn-row button.adv-btn-ghost{background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.6);font-weight:500}
 .restart-row{padding:8px 0 28px;text-align:center}
 .restart-row button{background:none;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.6);font-family:'Spline Sans Mono',monospace;font-size:11.5px;padding:10px 20px;border-radius:3px;cursor:pointer}
 .save-row{display:flex;gap:10px;margin-top:22px}
@@ -253,7 +290,7 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
    leaves most of a normal monitor empty and looks broken. */
 .echart{width:100%;max-width:480px;margin:0 auto}
 .gr-chart-card{background:rgba(20,40,63,.035);border:1px solid rgba(20,40,63,.09);border-radius:10px;padding:10px 10px 4px;margin-top:8px}
-.gr-chart-cap{font-family:monospace;font-size:10px;color:var(--dim);padding:0 2px 6px}
+.gr-chart-cap{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);padding:0 2px 6px}
 .gr-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(max-width:520px){.gr-chart-row{grid-template-columns:1fr}}
 .alloc-card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.1);border-radius:13px;padding:16px 16px 14px;margin-bottom:16px}
@@ -291,7 +328,7 @@ echarts.registerTheme('goalden', {
   grid: { left: 44, right: 16, top: 16, bottom: 30, containLabel: true },
   categoryAxis: { axisLine:{lineStyle:{color:'rgba(20,40,63,.2)'}}, axisLabel:{color:'rgba(20,40,63,.5)'}, splitLine:{show:false} },
   valueAxis: { axisLine:{show:false}, axisLabel:{color:'rgba(20,40,63,.5)'}, splitLine:{lineStyle:{color:'rgba(20,40,63,.08)'}} },
-  tooltip: { backgroundColor:'#FFFFFF', borderColor:'rgba(37,87,199,.4)', borderWidth:1, textStyle:{color:'#14283F', fontFamily:"'Spline Sans Mono',monospace", fontSize:11}, extraCssText:'border-radius:3px 8px 8px 8px;box-shadow:0 4px 14px rgba(0,0,0,.35)' },
+  tooltip: { backgroundColor:'#FFFFFF', borderColor:'rgba(37,87,199,.4)', borderWidth:1, textStyle:{color:'#14283F', fontFamily:"'Spline Sans Mono',monospace", fontSize:11}, extraCssText:'border-radius:3px 8px 8px 8px;box-shadow:0 6px 18px rgba(20,40,63,.16)' },
 });
 const chartInstances = {};
 function initChart(id, option, optsOverride){
@@ -318,6 +355,10 @@ function corpusRequired(rate,years,w,due){if(rate===0)return w*years;let pv=w*(1
 function solveSIP(rate,periods,fv,due){if(rate===0)return fv/periods;let f=(Math.pow(1+rate,periods)-1)/rate;return fv/(due?f*(1+rate):f)}
 function effectiveMonthlyRate(r){return Math.pow(1+r,1/12)-1}
 function accumulationSchedule(o){const rows=[];let bal=o.opening||0;for(let i=1;i<=o.years;i++){let c=o.due?(bal+o.sip)*(1+o.rate):(bal*(1+o.rate)+o.sip);rows.push({period:i,closeBal:c});bal=c;}return{rows,finalBalance:bal}}
+// mountainChart() labels each point "Year N" from its raw array index -- feeding it
+// accumulationSchedule()'s rows directly (one row per MONTH, since callers pass
+// years:yrs*12) mislabels month 109 as "Year 109". Bucket to yearly first.
+function yearlyMountainRows(monthlyRows){const rows=[];for(let m=0;m<monthlyRows.length;m+=12){rows.push({closeBal:monthlyRows[Math.min(m+11,monthlyRows.length-1)].closeBal});}return rows}
 function drawdownSchedule(opts){const rows=[];let bal=opts.openingCorpus;let w=opts.firstWithdrawal;for(let yr=1;yr<=opts.years;yr++){let close;if(opts.due){const baw=bal-w;close=baw+baw*opts.nominalRate;}else{close=(bal+bal*opts.nominalRate)-w;}rows.push({year:yr,openBal:bal,withdrawal:w,closeBal:Math.max(0,close)});bal=close;w*=(1+opts.inflation);}return rows}
 
 /* =====================================================================
@@ -1053,6 +1094,18 @@ function blendedRateFromAlloc(alloc){
   const d=cfg().d;
   return alloc.eq*d.equity+alloc.de*d.debt+alloc.hy*d.hybrid;
 }
+// Turns a single "how much equity" slider into a full eq/de/hy split,
+// preserving the base bucket's own debt:hybrid ratio -- same idea as
+// horizonAllocation's redistribution, applied on demand for the advanced
+// post-goal rate override instead of by horizon.
+function allocFromEquityPct(eqPct,baseBucketId){
+  const base=BUCKETS[baseBucketId||G.bucket||'moderate'];
+  const eq=eqPct/100;
+  const deHyTotal=base.de+base.hy;
+  const deShare=deHyTotal>0?base.de/deHyTotal:0.75;
+  const rest=1-eq;
+  return{eq,de:rest*deShare,hy:rest*(1-deShare)};
+}
 
 function calcGoal(goal){
   const d=cfg().d,c=cfg();
@@ -1070,20 +1123,22 @@ function calcGoal(goal){
   if(goal.type==='retirement'){
     const expAtRet=inflateExpense(goal.monthlyExpense*12,[{rate:d.inflation,years:goal.years}],0.75);
     const drawYrs=Math.max(5,d.lifeExp-goal.retireAge);
-    corpus=corpusRequired(realRate(d.postRet,d.inflation),drawYrs,expAtRet,true);
+    const postGoalRate=goal.postGoalAlloc?blendedRateFromAlloc(goal.postGoalAlloc):d.postRet;
+    corpus=corpusRequired(realRate(postGoalRate,d.inflation),drawYrs,expAtRet,true);
     // Existing savings assumed to keep compounding at the same blended rate
     // as the new SIP, so existingFV + gapCorpus always equals corpus exactly.
     const existingFV=(goal.existingSavings||0)*Math.pow(1+mRate,goal.years*12);
     const gapCorpus=Math.max(0,corpus-existingFV);
     sip=solveSIP(mRate,goal.years*12,gapCorpus,true);
-    extra={...extra,expAtRet,drawYrs,existingFV,gapCorpus};
+    extra={...extra,expAtRet,drawYrs,existingFV,gapCorpus,postGoalRate};
   } else if(goal.type==='education'){
     const fee1=inflateExpense(goal.annualFee,[{rate:d.eduInflation,years:goal.years}]);
-    corpus=corpusRequired(realRate(d.debt,d.eduInflation),goal.duration||4,fee1,true);
+    const postGoalRate=goal.postGoalAlloc?blendedRateFromAlloc(goal.postGoalAlloc):d.debt;
+    corpus=corpusRequired(realRate(postGoalRate,d.eduInflation),goal.duration||4,fee1,true);
     const existingFV=(goal.existingSavings||0)*Math.pow(1+mRate,goal.years*12);
     const gapCorpus=Math.max(0,corpus-existingFV);
     sip=solveSIP(mRate,goal.years*12,gapCorpus,true);
-    extra={...extra,existingFV,gapCorpus};
+    extra={...extra,existingFV,gapCorpus,postGoalRate};
   } else {
     const inflRate=(c.goalInflation&&c.goalInflation[goal.genSub])||d.inflation;
     const inflated=goal.amount*Math.pow(1+inflRate,goal.years);
@@ -1415,49 +1470,49 @@ function renderGoalConfirm(){
   if(t==='retirement'){
     fields=`
     <div style="margin-bottom:18px">
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Monthly expenses today</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Monthly expenses today</label>
       <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inp1" type="number" inputmode="numeric" placeholder="0" value="${G.draftA||''}"><span class="ns">/ mo</span></div>
       ${(()=>{const b=sliderBounds(c.expChips);return valueSlider('sl1',G.draftA||b.min,b.min,b.max,b.step,c.compact(b.min),c.compact(b.max));})()}
       <div class="chips-label">Or pick a common amount</div>
       <div class="chips">${c.expChips.map(a=>`<div class="chip${G.draftA===a?' sel':''}" data-a="${a}">${c.compact(a)}</div>`).join('')}</div>
     </div>
     <div style="margin-bottom:18px">
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Your age today</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Your age today</label>
       <div class="num-row"><input class="ni" id="inp3" type="number" inputmode="numeric" placeholder="30" value="${G.draftC||''}"><span class="ns">years old</span></div>
       ${valueSlider('sl3',G.draftC||30,18,70,1,'18','70')}
       <div class="chips-label">Or pick a common age</div>
       <div class="chips">${[25,30,35,40,45].map(a=>`<div class="chip${G.draftC===a?' sel':''}" data-c="${a}">${a}</div>`).join('')}</div>
     </div>
     <div>
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Retirement age</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Retirement age</label>
       <div class="num-row"><input class="ni" id="inp2" type="number" inputmode="numeric" placeholder="60" value="${G.draftB||''}"><span class="ns">years old</span></div>
       ${valueSlider('sl2',G.draftB||60,Math.max(35,(G.draftC||30)+1),85,1,Math.max(35,(G.draftC||30)+1),'85')}
       <div class="chips-label">Or pick a common age</div>
       <div class="chips">${[55,58,60,65].map(a=>`<div class="chip${G.draftB===a?' sel':''}" data-b="${a}">${a}</div>`).join('')}</div>
     </div>
     <div class="optional-field" style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(20,40,63,.15)">
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Already saved for this? (optional)</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Already saved for this? (optional)</label>
       <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="${G.draftSav||''}"></div>
       ${(()=>{const b=sliderBounds(c.amtChips,6,0);return valueSlider('slSav',G.draftSav||0,0,b.max,b.step,c.compact(0),c.compact(b.max));})()}
     </div>`;
   } else if(t==='education'){
     fields=`
     <div style="margin-bottom:18px">
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Annual fee today</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Annual fee today</label>
       <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inp1" type="number" inputmode="numeric" placeholder="0" value="${G.draftA||''}"><span class="ns">/ yr</span></div>
       ${(()=>{const b=sliderBounds(c.feeChips);return valueSlider('sl1',G.draftA||b.min,b.min,b.max,b.step,c.compact(b.min),c.compact(b.max));})()}
       <div class="chips-label">Or pick a common amount</div>
       <div class="chips">${c.feeChips.map(a=>`<div class="chip${G.draftA===a?' sel':''}" data-a="${a}">${c.compact(a)}</div>`).join('')}</div>
     </div>
     <div>
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Years until college starts</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Years until college starts</label>
       <div class="num-row"><input class="ni" id="inp2" type="number" inputmode="numeric" placeholder="10" value="${G.draftB||''}"><span class="ns">years</span></div>
       ${valueSlider('sl2',G.draftB||10,1,22,1,'1','22')}
       <div class="chips-label">Or pick a common span</div>
       <div class="chips">${c.yrChips.filter(x=>x<=15).map(a=>`<div class="chip${G.draftB===a?' sel':''}" data-b="${a}">${a} yrs</div>`).join('')}</div>
     </div>
     <div class="optional-field" style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(20,40,63,.15)">
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Already saved for this? (optional)</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Already saved for this? (optional)</label>
       <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="${G.draftSav||''}"></div>
       ${(()=>{const b=sliderBounds(c.feeChips,10,0);return valueSlider('slSav',G.draftSav||0,0,b.max,b.step,c.compact(0),c.compact(b.max));})()}
     </div>`;
@@ -1467,21 +1522,21 @@ function renderGoalConfirm(){
     const inflLbl=isHouse?'property':'goal';
     fields=`
     <div style="margin-bottom:18px">
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Cost today</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Cost today</label>
       <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inp1" type="number" inputmode="numeric" placeholder="0" value="${G.draftA||''}"><span class="ns">today</span></div>
       ${(()=>{const b=sliderBounds(c.amtChips);return valueSlider('sl1',G.draftA||b.min,b.min,b.max,b.step,c.compact(b.min),c.compact(b.max));})()}
       <div class="chips-label">Or pick a common amount</div>
       <div class="chips">${c.amtChips.map(a=>`<div class="chip${G.draftA===a?' sel':''}" data-a="${a}">${c.compact(a)}</div>`).join('')}</div>
     </div>
     <div>
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Years until you need it</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Years until you need it</label>
       <div class="num-row"><input class="ni" id="inp2" type="number" inputmode="numeric" placeholder="7" value="${G.draftB||''}"><span class="ns">years</span></div>
       ${valueSlider('sl2',G.draftB||7,1,30,1,'1','30')}
       <div class="chips-label">Or pick a common span</div>
       <div class="chips">${c.yrChips.map(a=>`<div class="chip${G.draftB===a?' sel':''}" data-b="${a}">${a} yrs</div>`).join('')}</div>
     </div>
     <div class="optional-field" style="margin-top:18px;padding-top:16px;border-top:1px dashed rgba(20,40,63,.15)">
-      <label style="font-family:monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Already saved for this? (optional)</label>
+      <label style="font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Already saved for this? (optional)</label>
       <div class="num-row"><span class="np">${c.sym}</span><input class="ni" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="${G.draftSav||''}"></div>
       ${(()=>{const b=sliderBounds(c.amtChips,4,0);return valueSlider('slSav',G.draftSav||0,0,b.max,b.step,c.compact(0),c.compact(b.max));})()}
     </div>`;
@@ -1547,16 +1602,44 @@ function renderInstrumentPanel(rec, overridden, fullBucketName, effectiveBucketN
   return html;
 }
 
+// Advanced, opt-in control attached to a goal's post-goal-phase rate
+// (post-retirement drawdown rate, or the during-study-years parking rate
+// for education). Per-goal, not global -- door2 supports several
+// simultaneous goals with independent horizons, so one goal's custom mix
+// should never leak into another's.
+function advGoalAllocControl(g,i){
+  const active=g.postGoalAlloc;
+  const eqPct=active?Math.round(active.eq*100):Math.round((BUCKETS[G.bucket]||BUCKETS.moderate).eq*100);
+  const flatRate=g.type==='retirement'?cfg().d.postRet:cfg().d.debt;
+  const previewRate=blendedRateFromAlloc(allocFromEquityPct(eqPct));
+  return `<div class="adv-toggle${active?' adv-active open':''}" id="advToggle-${i}"><span class="tog-caret">&#9662;</span>Advanced: customize this rate${active?' <span class="adv-badge">customized</span>':''}</div>
+  <div class="adv-panel${active?' open':''}" id="advPanel-${i}"><div class="adv-inner">
+    <label class="adv-label">Equity kept at this stage <b id="advVal-${i}">${eqPct}%</b></label>
+    <input type="range" id="advSlider-${i}" min="0" max="100" step="5" value="${eqPct}">
+    <div class="adv-preview" id="advPreview-${i}">New rate: <b>${(previewRate*100).toFixed(1)}%</b> a year (was ${(flatRate*100).toFixed(1)}%)</div>
+    <div class="adv-btn-row"><button data-adv-apply="${i}">Use this mix</button>${active?`<button data-adv-reset="${i}" class="adv-btn-ghost">Reset to default</button>`:''}</div>
+  </div></div>`;
+}
 function ddToggleBlock(g,i,c){
   const d=cfg().d;
-  const rows=drawdownSchedule({openingCorpus:g.corpus,firstWithdrawal:g.expAtRet,inflation:d.inflation,nominalRate:d.postRet,years:g.drawYrs,due:true});
+  const rows=drawdownSchedule({openingCorpus:g.corpus,firstWithdrawal:g.expAtRet,inflation:d.inflation,nominalRate:g.postGoalRate,years:g.drawYrs,due:true});
   const caret='<svg class="tog-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
   return `<div class="inst-toggle" id="dd-${i}">${caret}How the pot gets spent after age ${g.retireAge}</div>
   <div class="inst-panel" id="ddp-${i}"><div class="schedule-scroll"><table class="schedule-table">
   <thead><tr><th>Year</th><th>Start of year</th><th>You withdraw</th><th>Growth earned</th><th>End of year</th></tr></thead><tbody>
   ${rows.map(r=>`<tr><td>${r.year}</td><td>${c.compact(r.openBal)}</td><td>${c.compact(r.withdrawal)}</td><td>${c.compact(Math.max(0,r.closeBal-r.openBal+r.withdrawal))}</td><td>${c.compact(r.closeBal)}</td></tr>`).join('')}
   </tbody></table></div>
-  <div style="font-size:11px;color:rgba(20,40,63,.4);padding:2px 2px 10px;line-height:1.5">Withdrawals rise with inflation each year. Built to last to age ${d.lifeExp}, reaching zero by design, not by accident.</div></div>`;
+  <div style="font-size:11px;color:rgba(20,40,63,.4);padding:2px 2px 10px;line-height:1.5">Withdrawals rise with inflation each year. Built to last to age ${d.lifeExp}, reaching zero by design, not by accident.</div>
+  ${advGoalAllocControl(g,i)}
+  </div>`;
+}
+function eduPhaseToggleBlock(g,i){
+  const d=cfg().d;
+  const caret='<svg class="tog-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+  return `<div class="inst-toggle" id="dd-${i}">${caret}How the pot behaves during the study years</div>
+  <div class="inst-panel" id="ddp-${i}"><div style="font-size:12px;color:rgba(20,40,63,.6);line-height:1.6;padding:8px 2px 4px">While fees are being paid out over ${g.duration||4} years, the remaining balance is assumed to earn <b style="color:var(--paper)">${(g.postGoalRate*100).toFixed(1)}%</b> (a safer parking rate) rather than staying at full growth -- that is why the corpus needed is larger than simply adding up the fees.</div>
+  ${advGoalAllocControl(g,i)}
+  </div>`;
 }
 function renderPlan(){
   const c=cfg(),plan=buildPlan();
@@ -1575,13 +1658,13 @@ function renderPlan(){
     const rec=recommendInstruments(G.country, g.years, eid, g.type);
     const mRate=effectiveMonthlyRate(rate);
     const accRows=accumulationSchedule({sip, rate:mRate, years:g.years*12, due:true, opening:g.existingSavings||0}).rows;
-    const drawRowsChart = g.type==='retirement' ? drawdownSchedule({openingCorpus:g.corpus, firstWithdrawal:g.expAtRet, inflation:cfg().d.inflation, nominalRate:cfg().d.postRet, years:g.drawYrs, due:true}) : null;
+    const drawRowsChart = g.type==='retirement' ? drawdownSchedule({openingCorpus:g.corpus, firstWithdrawal:g.expAtRet, inflation:cfg().d.inflation, nominalRate:g.postGoalRate, years:g.drawYrs, due:true}) : null;
     const chartsHtml = g.type==='retirement'
       ? `<div class="gr-chart-row">
-          <div class="gr-chart-card"><div class="gr-chart-cap">Building the pot, ${g.years} yrs</div>${mountainChart(accRows,i)}</div>
+          <div class="gr-chart-card"><div class="gr-chart-cap">Building the pot, ${g.years} yrs</div>${mountainChart(yearlyMountainRows(accRows),i)}</div>
           <div class="gr-chart-card"><div class="gr-chart-cap">Spending it down, ${g.drawYrs} yrs from ${g.retireAge}</div>${potChart(drawRowsChart,c,i)}</div>
         </div>`
-      : `<div class="gr-chart-card"><div class="gr-chart-cap">How this goal's pot grows over ${g.years} years</div>${mountainChart(accRows,i)}</div>`;
+      : `<div class="gr-chart-card"><div class="gr-chart-cap">How this goal's pot grows over ${g.years} years</div>${mountainChart(yearlyMountainRows(accRows),i)}</div>`;
     return `<div class="goal-row-wrap">
     <div class="goal-row">
     <div class="gr-left">
@@ -1596,7 +1679,7 @@ function renderPlan(){
     ${chartsHtml}
     <div class="inst-toggle" id="it-${i}">What should this actually be invested in?</div>
     <div class="inst-panel" id="ip-${i}">${renderInstrumentPanel(rec, overridden, b.name, bn, c, eqPct, g.years)}</div>
-    ${g.type==='retirement'?ddToggleBlock(g,i,c):''}
+    ${g.type==='retirement'?ddToggleBlock(g,i,c):(g.type==='education'?eduPhaseToggleBlock(g,i):'')}
     </div>`;
   });
 
@@ -1607,7 +1690,7 @@ function renderPlan(){
     const mRate=effectiveMonthlyRate(bucketRate(G.bucket));
     const rows=accumulationSchedule({sip:plan.totalSIP,rate:mRate,years:topGoal.years*12,due:true}).rows;
     chartHtml=`<div class="section-head">What your combined SIP builds over ${topGoal.years} years</div>
-    <div style="background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.1);border-radius:13px;padding:14px 12px 6px;margin-bottom:16px">${mountainChart(rows,'total')}</div>`;
+    <div style="background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.1);border-radius:13px;padding:14px 12px 6px;margin-bottom:16px">${mountainChart(yearlyMountainRows(rows),'total')}</div>`;
 
     // A Fixed Deposit is the one thing almost every saver already knows
     // and already trusts, which makes it the most honest benchmark for
@@ -1926,6 +2009,11 @@ function attach(screen){
       else{
         goal={type:'generic',label:type.name,amount:G.draftA,years:G.draftB,genSub:t,existingSavings:G.draftSav||0};
       }
+      // Carry forward an advanced post-goal allocation override across an
+      // edit, as long as the goal is still the same type -- but not across
+      // a type change, where the old override would no longer make sense.
+      const prevGoal = G.editingIndex!==null ? G.goals[G.editingIndex] : null;
+      goal.postGoalAlloc = (prevGoal && prevGoal.type===goal.type) ? (prevGoal.postGoalAlloc||null) : null;
       if(G.editingIndex!==null){ G.goals[G.editingIndex]=goal; }
       else { G.goals.push(goal); }
       G.addingGoal=false;G.editingIndex=null;G.draftType=null;G.draftA=null;G.draftB=null;
@@ -1956,6 +2044,43 @@ function attach(screen){
         const idx=el.id.split('-')[1];
         document.getElementById('ddp-'+idx).classList.toggle('open');
         el.classList.toggle('open');
+      });
+    });
+    document.querySelectorAll('[id^="advToggle-"]').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const idx=el.id.split('-')[1];
+        document.getElementById('advPanel-'+idx).classList.toggle('open');
+        el.classList.toggle('open');
+      });
+    });
+    document.querySelectorAll('[id^="advSlider-"]').forEach(slider=>{
+      const idx=slider.id.split('-')[1];
+      const g=G.goals[idx];
+      if(!g) return;
+      const flatRate=g.type==='retirement'?cfg().d.postRet:cfg().d.debt;
+      const update=(eqPct)=>{
+        const rate=blendedRateFromAlloc(allocFromEquityPct(eqPct));
+        const valEl=document.getElementById('advVal-'+idx); if(valEl) valEl.textContent=eqPct+'%';
+        const prevEl=document.getElementById('advPreview-'+idx);
+        if(prevEl) prevEl.innerHTML='New rate: <b>'+(rate*100).toFixed(1)+'%</b> a year (was '+(flatRate*100).toFixed(1)+'%)';
+      };
+      slider.addEventListener('input',()=>update(parseInt(slider.value)));
+    });
+    document.querySelectorAll('[data-adv-apply]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const idx=btn.dataset.advApply;
+        const slider=document.getElementById('advSlider-'+idx);
+        if(!slider||!G.goals[idx]) return;
+        G.goals[idx].postGoalAlloc=allocFromEquityPct(parseInt(slider.value));
+        render();
+      });
+    });
+    document.querySelectorAll('[data-adv-reset]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const idx=btn.dataset.advReset;
+        if(!G.goals[idx]) return;
+        G.goals[idx].postGoalAlloc=null;
+        render();
       });
     });
     document.getElementById('rb')&&document.getElementById('rb').addEventListener('click',()=>{

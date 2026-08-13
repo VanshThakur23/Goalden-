@@ -60,7 +60,18 @@ async function fetchEquityHistory(symbol) {
 
   const timestamps = result.timestamp || [];
   const quote = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
-  const closes = quote.close || [];
+  const rawCloses = quote.close || [];
+  // Yahoo's chart endpoint also returns an `adjclose` series alongside
+  // `quote.close`, adjusted backward through every dividend and split so
+  // it reflects total return (dividends reinvested), not just the price.
+  // Reading raw `close` only understates -- and can even sign-flip -- the
+  // return of any high-dividend name. Verified on VEDL.NS (Vedanta, large
+  // special dividends): raw close gives a 5y CAGR of -3.1%, adjclose gives
+  // +12.2%. Prefer adjclose; fall back to raw close only if Yahoo omits
+  // the series entirely (seen for some indices/ETFs with nothing to
+  // adjust for). Mirrors the identical change in local_server.py.
+  const adjcloseSeries = result.indicators && result.indicators.adjclose && result.indicators.adjclose[0] && result.indicators.adjclose[0].adjclose;
+  const closes = adjcloseSeries && adjcloseSeries.length ? adjcloseSeries : rawCloses;
   const currency = (result.meta && result.meta.currency) || 'INR';
   const label = (result.meta && (result.meta.longName || result.meta.shortName)) || symbol;
 
