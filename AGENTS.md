@@ -28,39 +28,77 @@ data, which needs the proxy either way.
   navigation in all three door files; `jumpEdit()`/`go()`/`render()` always
   resolve position via `flow().indexOf(name)`, never a cached numeric index.
 
-## Pending, not yet started: AI-agent feature
+## Pending: Full conversational AI advisor (the main AI feature)
 
-The user wants to add an AI layer to the app to demo — hasn't committed to
-scope yet. Two options were scoped out with a Claude Code session on
-2026-08-13/14, not yet built:
+**Decided scope (2026-08-14):** Not just voice navigation — a full
+conversational financial advisor accessible from every screen. The user can
+speak or type; the AI talks back in plain language, runs real calculations
+behind the scenes, and navigates the app to the right screen automatically.
+Works for both financially-literate and novice users. Goal: a person with no
+finance background can just talk to it, and it figures out which level/tool
+is right for them and gets them there.
 
-1. **Voice-nav agent** (recommended as the first, smaller piece): browser's
-   built-in Web Speech API for STT/TTS (free, no key, works in
-   Chrome/Edge/Safari, not Firefox) + one LLM call per utterance with a
-   `navigate(screen)` tool constrained to an enum built from `flow()` at
-   request time, so it can't hallucinate a destination. Validate the
-   returned screen name is actually in `flow()` before doing
-   `S.si = flow().indexOf(screen); render();`. Needs a backend proxy for the
-   LLM key — `src/worker.js` already exists and already proxies market data,
-   so add an `/api/chat` route there with the key as a Worker secret, don't
-   build new infrastructure. DeepSeek's current model (~$0.14/M input,
-   ~$0.28/M output) is the cheapest option and has an OpenAI-compatible
-   function-calling schema; GPT-5-mini or Gemini 2.5 Flash are fine
-   alternatives if DeepSeek doesn't work out. Cost at demo scale
-   (50-200 people, a few turns each) is well under a dollar regardless of
-   provider — not the constraint.
+### What it does (user-visible)
+- Floating chat/voice button visible on all 4 pages
+- User asks anything: "How much do I need to save?", "What does risk profile
+  mean?", "Show me what happens if I retire at 55 instead of 60"
+- AI answers in plain language AND takes action: fills a slider, navigates to
+  a screen, triggers a calculation, surfaces a result
+- Maintains conversation history within the session (context carries across
+  screens)
+- STT/TTS via browser Web Speech API (free, no key; Chrome/Edge/Safari only,
+  not Firefox) — user can also just type if preferred
+- Adapter language: AI detects from the conversation whether the user is a
+  novice or expert and adjusts terminology accordingly
 
-2. **Portfolio-rebalancing advisor**: bigger scope, stronger multi-step
-   "agentic" demo since it reuses `goalden-lab.html`'s existing efficient-
-   frontier/live-data code instead of bolting on something new. Give the
-   model tools like `get_current_prices()`, `compute_drift_from_target()`,
-   `simulate_trade()` and let it iterate — check drift, propose a trade,
-   recompute, explain. Scope this out properly before starting; it's a
-   real week+ of work, not a weekend add-on like option 1.
+### Tools the AI has (function-calling)
+These are the actions the AI can take — the backend returns a tool call,
+the frontend executes it, then feeds the result back:
+- `navigate(screen)` — go to a named screen; enum is built from `flow()` at
+  call time so the AI cannot hallucinate a destination
+- `set_value(field, value)` — set a slider or input (e.g. age=28, retireAge=55)
+- `get_state()` — return current S/G/L object (all user inputs so far) so the
+  AI knows what's already been entered
+- `get_results()` — return the current calculated output (corpus, SIP, etc.)
+- `explain(concept)` — surface a tooltip or highlight an element on screen
 
-Recommendation given at the time: build the voice-nav agent first (small,
-fast, directly demoable), then decide whether the rebalancing advisor is
-worth the extra time.
+The AI MUST validate `navigate` targets against `flow()` before applying —
+never trust the model's string directly without the indexOf check.
+
+### Backend architecture
+- `src/worker.js` already exists and proxies Yahoo Finance / MFAPI.
+  Add an `/api/chat` route to the same Worker. **Never put the LLM API key
+  in client-side JS** — store it as a Cloudflare Worker secret
+  (`wrangler secret put OPENAI_API_KEY` or equivalent).
+- POST body: `{ messages: [...], tools: [...], state: {...} }` where `state`
+  is the current S/G/L snapshot and `tools` is the dynamic function list
+  built from `flow()`.
+- LLM: DeepSeek (~$0.14/M input, OpenAI-compatible schema) is cheapest.
+  GPT-4o-mini or Gemini 2.5 Flash are fine alternatives. At demo scale
+  (50-200 people, a few turns each) total cost is well under $1.
+- System prompt must include: what Goalden is, current page, current state,
+  the tool list with descriptions, and the instruction to adapt language to
+  the user's apparent literacy level.
+
+### Implementation order (do this file-by-file, prove it in one then port)
+1. Start in `goalden.html` (simplest state object `S`). Add the advisor
+   overlay UI + Worker route + tool loop. Get it fully working.
+2. Port to `goalden-door2.html` (state object `G`), then `goalden-lab.html`
+   (state object `L`), then `index.html` (no state, just navigate to a door).
+3. Each file is independent — copy the advisor block, update the state
+   reference (S vs G vs L), and update the tool enum.
+
+### API key logistics
+- The LLM key lives in the Cloudflare Worker as a secret — the user needs to
+  set it once via the Cloudflare dashboard or `wrangler secret put`.
+- The client-side code only ever calls `/api/chat` on the same Worker origin
+  that already serves the app — no key ever touches the browser.
+- opencode: do NOT hardcode any API key into the HTML files. If you need to
+  test LLM calls locally, add a `OPENAI_API_KEY` env var to `local_server.py`
+  and proxy it the same way.
+
+### Work log
+Write what you built/changed in WORKLOG.md at end of each session.
 
 ## Recent work (for context on what's already been through several rounds)
 
