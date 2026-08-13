@@ -1,5 +1,10 @@
 # Goalden — agent notes
 
+**IMPORTANT — git/GitHub rule:** Do NOT commit or push anything to GitHub.
+The user handles all commits and pushes through Claude Code. Your job is to
+edit files only. Write what you did in WORKLOG.md at the end of each session
+so Claude Code can read it and commit everything cleanly.
+
 Static, no-build-step financial planning app. Four independent, self-contained
 HTML files — each has its own inline CSS/JS, no shared imports. **Never
 assume two of them are identical** just because they look similar; check
