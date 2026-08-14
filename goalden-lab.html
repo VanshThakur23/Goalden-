@@ -1714,6 +1714,7 @@ function renderRetirement(){
       <h4>Accumulation: how the pot grows</h4>
       <div class="cap">Gold = growth earned · grey = what you put in</div>
       ${mountainChart(yearlyMountainRows(res.accRows), 'ret-mountain')}
+      ${advisorAskLink('Explain this chart to me')}
     </div>
 
     <div class="card">
@@ -1722,6 +1723,7 @@ function renderRetirement(){
         (res.shockInfo.ranOutYear ? `Runs out in drawdown year ${res.shockInfo.ranOutYear}, ${res.drawYrs-res.shockInfo.ranOutYear} years short of plan.` : 'Survives the shock without running out.')
         : 'Dashed line marks zero. Built to reach exactly zero at the end of the plan.'}</div>
       ${drawdownChart(res.ddRows, c, 'ret-drawdown')}
+      ${advisorAskLink('Explain this drawdown chart')}
     </div>
 
     <div class="lab-gopdeeper-label">Go deeper</div>
@@ -2921,6 +2923,7 @@ function renderPortfolio(){
       <div class="pf-cluster-chips">${clusterOrder.filter(cl=>clusterPct[cl]>0).map(cl=>`<span class="pf-cluster-chip">${PORT_CLUSTER_LABELS[cl]} <b>${clusterPct[cl]}%</b></span>`).join('')}</div>
       <div id="pf-chart">${portfolioChartHTML(d, assets, corr)}</div>
       <div class="gr-note" id="pf-chart-takeaway" style="margin-top:10px">${frontierTakeawayHTML(pfFrontierData.currentPoint, pfSharpe, pfFrontierData.frontier, onPortfolioFrontierPick)}</div>
+      ${advisorAskLink('Explain this chart to me')}
     </div>
 
     ${collapsibleSection('', 'What if I mixed in something safe?', `
@@ -4099,6 +4102,7 @@ function liveTwoAssetHTML(items, rfPct){
     <div class="cap">Annualised from ${sa.n} and ${sb.n} real daily observations. Higher up is more return, further right is more risk.</div>
     ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'live-frontier-echart', onLiveFrontierPick, `${(w*100).toFixed(0)}% ${a.symbol} / ${((1-w)*100).toFixed(0)}% ${b.symbol}`, {vol:minVarVol,ret:minVarRet})}
     <div class="gr-note" style="margin-top:10px">${liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentSharpe, wTan, tanVol, tanRet, rf, w, wMinVar, sa.annualReturn, sa.annualVol, sb.annualReturn, sb.annualVol)}</div>
+    ${advisorAskLink('Explain this chart to me')}
   </div>
   <div class="card">
     <h4>Weight: <b>${(w*100).toFixed(0)}% ${a.symbol}</b> / <b>${((1-w)*100).toFixed(0)}% ${b.symbol}</b></h4>
@@ -6203,6 +6207,19 @@ window.GOALDEN_ADVISOR_CONFIG = {
   executeTool: function (name, args) { return executeAdvisorTool(name, args); },
   describeTool: function (name, args) { return advisorDescribeTool(name, args); },
   briefingSections: function () { return BRIEFING_SECTIONS; },
+  // F7d — per-tab follow-up chips shown below a chart explanation so the user
+  // can go deeper without thinking of the next question themselves.
+  chartFollowUps: function () {
+    var tab = L.tab || 'home';
+    var followUps = {
+      'ret-lab':   ['Why is the curve shaped like that?', 'What if I retire 5 years earlier?', 'How reliable is this projection?'],
+      'portfolio': ['What does my Sharpe ratio mean?', 'How do I move closer to the frontier?', 'Which asset is pulling my mix off the curve?'],
+      'livefrontier': ['Why does this correlation matter?', 'Which blend is the best balance?', 'What happened in the worst year for this pair?'],
+      'montecarlo': ['What does the spread mean?', 'What is the chance of running out of money?', 'How does equity allocation change the fan?'],
+      'stepup':    ['Why does stepping up beat a flat SIP?', 'What if my income grows slower?', 'How much of the gain is real vs inflation?'],
+    };
+    return followUps[tab] || ['What does this number mean?', 'What should I do with this?'];
+  },
   lang: function () { return L.country === 'US' ? 'en-US' : 'en-IN'; },
   greeting: 'Hi! I can run any of these tools for you. Tell me what you\'re trying to figure out, or just ask a question.',
   placeholder: 'Ask, or tap the mic…',

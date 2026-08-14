@@ -494,6 +494,9 @@ function advisorFlash(name, result) {
 function advisorPause(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 async function advisorLoop() {
+  // F7d — track whether read_current_chart was called this turn so we can
+  // append layered follow-up chips below the final bot reply.
+  let readChartCalled = false;
   for (let step = 0; step < 6; step++) {
     const resp = await fetch('/api/chat', {
       method: 'POST',
@@ -514,6 +517,7 @@ async function advisorLoop() {
       for (let ci = 0; ci < msg.tool_calls.length; ci++) {
         const tc = msg.tool_calls[ci];
         const name = tc.function && tc.function.name;
+        if (name === 'read_current_chart') readChartCalled = true;
         let args = {};
         try { args = JSON.parse(tc.function.arguments || '{}'); } catch (_) { args = {}; }
         const stepRow = advisorAddStep(advisorDescribe(name, args));
@@ -533,7 +537,24 @@ async function advisorLoop() {
     }
     if (msg.content) {
       advisorHideThinking();
-      advisorAddMsg('bot', msg.content);
+      const botEl = advisorAddMsg('bot', msg.content);
+      // F7d — append layered follow-up chips after a chart explanation so the
+      // user can go deeper without having to think of the next question.
+      if (readChartCalled && ADVISOR_CFG.chartFollowUps) {
+        const followUps = ADVISOR_CFG.chartFollowUps();
+        if (followUps && followUps.length) {
+          const chipRow = document.createElement('div');
+          chipRow.className = 'advisor-chips';
+          followUps.forEach(function (q) {
+            const btn = document.createElement('button');
+            btn.className = 'advisor-chip';
+            btn.setAttribute('data-advisor-ask', q);
+            btn.textContent = q;
+            chipRow.appendChild(btn);
+          });
+          botEl.appendChild(chipRow);
+        }
+      }
       advisor.messages.push({ role: 'assistant', content: msg.content });
       advisorSpeak(msg.content);
     } else {
