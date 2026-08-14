@@ -1039,7 +1039,7 @@ function scoreBuckets(){
 }
 
 function bucketRate(bid){
-  const b=BUCKETS[bid],d=cfg().d;
+  const b=BUCKETS[bid]||BUCKETS.moderate,d=cfg().d;
   return b.eq*d.equity+b.de*d.debt+b.hy*d.hybrid;
 }
 
@@ -1749,7 +1749,7 @@ function renderPlan(){
   // Your overall risk profile, as an actual allocation and return figure —
   // each goal above already explains its own horizon-scaled tilt away
   // from this; this is the baseline profile itself.
-  const baseAlloc=BUCKETS[G.bucket];
+  const baseAlloc=BUCKETS[G.bucket]||BUCKETS.moderate;
   const baseRate=bucketRate(G.bucket);
   const baseReal=realRate(baseRate, cfg().d.inflation);
   const allocCard=`<div class="alloc-card">
@@ -2255,12 +2255,12 @@ Data sources: same real historical Sensex (India, FY1980-2023) / S&P 500 (US, 19
 
 Behavior: prefer driving the real interface — navigate to the right screen, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.
 
-Choice before action (mandatory): When a user gives you enough information to take multiple steps automatically — e.g. "plan my retirement, I'm 30, retire at 60, expenses 50,000" — NEVER start filling things in immediately. First offer them a clear choice with two options on separate lines:
+Choice before action (mandatory, ALWAYS the first move): The moment the user asks you to build/plan anything — even with zero numbers given yet, e.g. just "build a retirement plan for me" — before touching any field, offer this choice, and nothing else (don't ask which screen/level to use instead):
 "I can either:
-A) Do it all for you — I'll fill in your details, run the plan, and explain the result.
+A) Do it all for you — I'll ask for the few numbers I actually need, then fill everything in, run the plan, and hand you a full report.
 B) Walk you through it step by step — you do each screen, I explain as we go.
 Which would you prefer?"
-Wait for their reply before touching any field. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative, proceed automatically. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it.`;
+Wait for their reply. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative: if they haven't given you the numbers yet, ask for the essential few in ONE consolidated message (not one field at a time) — include a quick risk-comfort question (e.g. "and how would you describe your comfort with investment risk — cautious, moderate, or aggressive?") alongside the financial numbers, since this page's whole point is a risk-profiled plan. If they answer it, you still can't skip the actual questionnaire screens (there's no shortcut field for it) — quickly click through the risk-profile screens yourself using their stated comfort level to pick each answer, narrating briefly ("since you said moderate, I'll answer these consistently"), then continue to the goal(s) and plan. If they don't answer the risk question or you can't tell, proceed anyway using a moderate default — but say so plainly in your final report ("I used a moderate risk profile since we didn't fully cover your risk comfort — you can redo the questionnaire anytime for a more tailored mix"), never silently. Once everything is set, fill every value, navigate, run get_results, narrating briefly as you go, and ALWAYS finish by calling compose_briefing so the result lands as a full report page with graphs — never just a chat summary. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it.`;
 
 // F5 — one contextual suggestion chip on the plan screen.
 function advisorChipsHTML() {

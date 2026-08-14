@@ -238,6 +238,15 @@ function advisorRenderHistory() {
   });
 }
 
+// F-autocontinue — a "do it all" flow on the landing page collects the
+// user's numbers, then hands off to a tool page via a REAL page navigation
+// (open_door). That kills JS execution, so without this the AI just narrates
+// "let me open that door" and the user is dropped on the new page with
+// nothing actually built. index.html sets this sessionStorage flag right
+// before navigating, only when the handoff is part of a "do it all" flow
+// (never for a "walk me through" handoff) — see its open_door tool.
+const ADVISOR_AUTOCONTINUE_KEY = 'goalden_advisor_autocontinue';
+
 function advisorRehydrate() {
   try {
     const raw = sessionStorage.getItem(ADVISOR_STORE_KEY);
@@ -252,6 +261,17 @@ function advisorRehydrate() {
       advisorSetMode(data.mode);
     } else if (data.open) {
       advisorSetMode('dock');
+    }
+    let autoContinue = false;
+    try {
+      if (sessionStorage.getItem(ADVISOR_AUTOCONTINUE_KEY) === '1') {
+        sessionStorage.removeItem(ADVISOR_AUTOCONTINUE_KEY);
+        autoContinue = true;
+      }
+    } catch (e) {}
+    if (autoContinue && advisor.messages.length) {
+      advisorEnterDock();
+      advisorContinue();
     }
   } catch (e) {}
 }
@@ -549,7 +569,12 @@ async function advisorLoop() {
   // F7d — track whether read_current_chart was called this turn so we can
   // append layered follow-up chips below the final bot reply.
   let readChartCalled = false;
-  for (let step = 0; step < 6; step++) {
+  // A "do it all" flow (set country, answer a risk questionnaire, add a
+  // goal, run the calculation, compose a briefing) can legitimately need
+  // 10+ individual tool calls. 6 was tuned for a single explain/compare
+  // exchange and was cutting off real multi-step automation mid-flow with
+  // "taking too many steps" before it ever finished the job.
+  for (let step = 0; step < 18; step++) {
     const resp = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -628,16 +653,12 @@ async function advisorLoop() {
   advisorAddMsg('sys', 'The advisor is taking too many steps — please ask something more specific.');
 }
 
-async function advisorSend() {
+// Shared busy/error wrapper around advisorLoop(), used both by a real user
+// send and by the cross-page auto-continue below (F-autocontinue) — a "do it
+// all" flow that hands off to another page via a real navigation needs a way
+// to keep acting on the new page with no fresh user message to trigger it.
+async function advisorContinue() {
   if (advisor.busy) return;
-  advisorStopSpeech();
-  const ta = document.getElementById('advisorText');
-  const text = ta.value.trim();
-  if (!text) return;
-  ta.value = '';
-  advisorAddMsg('user', text);
-  advisor.messages.push({ role: 'user', content: text });
-  advisorPersist();
   advisor.busy = true;
   document.getElementById('advisorSend').disabled = true;
   try {
@@ -659,6 +680,19 @@ async function advisorSend() {
     advisor.busy = false;
     document.getElementById('advisorSend').disabled = false;
   }
+}
+
+async function advisorSend() {
+  if (advisor.busy) return;
+  advisorStopSpeech();
+  const ta = document.getElementById('advisorText');
+  const text = ta.value.trim();
+  if (!text) return;
+  ta.value = '';
+  advisorAddMsg('user', text);
+  advisor.messages.push({ role: 'user', content: text });
+  advisorPersist();
+  await advisorContinue();
 }
 
 /* =====================================================================

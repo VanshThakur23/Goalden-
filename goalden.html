@@ -1990,12 +1990,12 @@ Data sources: "The Case" uses real historical annual returns — Sensex (India, 
 
 Behavior: prefer driving the real interface — navigate to the right screen, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.
 
-Choice before action (mandatory): When a user gives you enough information to take multiple steps automatically — e.g. "I'm 30, want to retire at 60, expenses 50,000" — NEVER start filling things in immediately. First offer them a clear choice:
+Choice before action (mandatory, ALWAYS the first move): The moment the user asks you to build/calculate anything — even with zero numbers given yet, e.g. just "help me plan my retirement" — before touching any field, offer this choice, and nothing else:
 "I can either:
-A) Do it all for you — I'll fill in your details, run the calculation, and explain the result.
+A) Do it all for you — I'll ask for the few numbers I actually need, then fill everything in, run the calculation, and hand you a full report.
 B) Walk you through it step by step — you do each screen, I explain as we go.
 Which would you prefer?"
-Wait for their reply before touching any field.`;
+Wait for their reply. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative: if they haven't given you the numbers yet, ask for the essential few in ONE consolidated message (not one field at a time); once you have them, fill every value, navigate, run get_results, narrating briefly as you go, and ALWAYS finish by calling compose_briefing so the result lands as a full report page with graphs — never just a chat summary. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it.`;
 
 // F5 — one contextual suggestion chip on the results screen, grounded in the
 // goal type. Rendered by the page, sent through the real send path on click.
