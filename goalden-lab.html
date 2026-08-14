@@ -5154,7 +5154,9 @@ Portfolio math (Build a Portfolio / Test Real Investments):
 - Tangency vs minimum-variance: the tangency point maximises return-for-risk; the minimum-variance point is the lowest-risk mix on the whole frontier. They usually differ — the safest mix is not the best-compensated one.
 - Diversification benefit: the ratio of the weighted-average volatility of the holdings to the portfolio's actual volatility. Above 1 means the mix is less risky than its parts standing alone — the whole point of diversification.
 
-Behavior: prefer driving the real interface — navigate to the right tool, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.`;
+Behavior: prefer driving the real interface — navigate to the right tool, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.
+
+Explaining charts: when a user asks to explain a chart or "what's on my screen", call read_current_chart() first and explain THEIR actual numbers and points — reference the specific points by name (their mix, the best-Sharpe point, the risk-free rate, each asset's own dot), then call highlight to point at the chart feature as you describe it. A textbook definition of the efficient frontier is a failure state — ground every sentence in the numbers read_current_chart returned.`;
 
 // F0 — compact state for the model. The raw L object carries L.live.data's
 // full daily price arrays (two instruments × ~1,238 days ≈ >100KB) which blows
@@ -5250,7 +5252,7 @@ function advisorTools() {
     { type:'function', function:{ name:'stress_test', description:'Run a historical crash scenario against the retirement plan. Valid scenarios are the episode ids (e.g. 2008, 2013, 2020).', parameters:{ type:'object', properties:{ scenario:{ type:'string' } }, required:['scenario'] } } },
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view (no pulse). Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
-    { type:'function', function:{ name:'show_result', description:'Open the results canvas showing a real chart or comparison. Valid kinds: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ')+'.', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:Object.keys(ADVISOR_RESULT_KINDS) } }, required:['kind'] } } },
+    { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
   ];
 }
 
@@ -5671,6 +5673,15 @@ const ADVISOR_HIGHLIGHT_TARGETS = {
   screen: '#main',
   output: '.output',
   panel: '.panel',
+  // F7c — chart containers, so "explain this graph" can point at the actual
+  // chart being described. Comma selectors resolve to the first chart of that
+  // type present on the current tab.
+  frontier: '#pf-frontier-echart, #live-frontier-echart, #live-multi-frontier-echart',
+  fan: '#mc-fan, #ret-ddmc-fan',
+  drawdown: '#ret-drawdown, #swp-drawdown',
+  mountain: '#ret-mountain',
+  timeline: '#joint-timeline',
+  twinfates: '#step-twinfates',
 };
 function advisorHighlight(name) {
   const sel = ADVISOR_HIGHLIGHT_TARGETS[name];
@@ -5837,25 +5848,71 @@ function resultCanvasHealth() {
   };
 }
 
-const ADVISOR_RESULT_KINDS = {
-  retirement: { title: 'Retirement Lab', build: resultCanvasRetirement },
-  portfolio: { title: 'Build a Portfolio', build: resultCanvasPortfolio },
-  livefrontier: { title: 'Test Real Investments', build: resultCanvasLiveFrontier },
-  mc: { title: 'Monte Carlo', build: resultCanvasMC },
-  stepup: { title: 'Step-Up SIP', build: resultCanvasStepUp },
-  swp: { title: 'Sustainable Withdrawal', build: resultCanvasSWP },
-  fx: { title: 'Cross-Border', build: resultCanvasFX },
-  joint: { title: 'Joint Children Corpus', build: resultCanvasJoint },
-  health: { title: 'Plan Health', build: resultCanvasHealth },
-};
-function advisorShowResult(kind) {
-  const spec = ADVISOR_RESULT_KINDS[kind];
-  if (!spec) return { ok:false, error:'No result kind "'+kind+'". Valid: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ') };
-  const r = spec.build();
+// F3g — the nine single-scenario `show_result` kinds are retired; they're now
+// Briefing sections, reusing the exact same chart builders. Each build() returns
+// {ok, html} or {ok:false, error} so a section lacking inputs degrades to an
+// honest "tell me X first" rather than an empty chart.
+function briefingHeadline() {
+  const c = cfg();
+  const r = advisorGetResults();
   if (!r.ok) return { ok:false, error: r.error };
-  resultCanvasOpen(spec.title, r.html);
-  return { ok:true, shown: kind };
+  const res = r.result;
+  const fmt = function (v) { return typeof v === 'number' ? c.compact(v) : String(v); };
+  const skip = { tool:1, note:1, breakdown:1, holdings:1, correlations:1, weights:1, inputs:1 };
+  const rows = Object.keys(res).filter(function (k) { return !skip[k] && !(res[k] && typeof res[k] === 'object'); }).map(function (k) {
+    return '<div class="stat"><div class="stat-label">' + k + '</div><div class="stat-value">' + fmt(res[k]) + '</div></div>';
+  }).join('');
+  return { ok:true, html: '<div class="card"><h4>' + (res.tool || 'Result') + '</h4><div class="stat-row">' + (rows || '<div class="gr-note">Nothing to summarise yet.</div>') + '</div></div>' };
 }
+function briefingStress() {
+  const c = cfg();
+  const ep = (c.episodes && c.episodes[0]) ? c.episodes[0] : null;
+  if (!ep) return { ok:false, error:'No historical crash scenarios available for this country.' };
+  const saved = L.ret.shock;
+  L.ret.shock = { epId: ep.id, year: 1 };
+  const res = calcRetLab();
+  L.ret.shock = saved;
+  const survived = !!(res.shockInfo && !res.shockInfo.ranOutYear);
+  return { ok:true, html: '<div class="card"><h4>Against the ' + ep.label + ' (' + (ep.rate*100).toFixed(0) + '% in one year)</h4>' +
+    '<div class="stat-row">' +
+    '<div class="stat"><div class="stat-label">Outcome</div><div class="stat-value" style="color:' + (survived ? '#8FC79E' : '#E8977A') + '">' + (survived ? 'Survives' : 'Runs out in drawdown year ' + res.shockInfo.ranOutYear) + '</div></div>' +
+    '<div class="stat"><div class="stat-label">Monthly SIP</div><div class="stat-value">' + c.fmt(Math.round(res.sip)) + '</div></div>' +
+    '</div></div>' };
+}
+function briefingAllocation() {
+  if (!L.country) return { ok:false, error:'Pick a country first.' };
+  const p = advisorPortfolioData();
+  const rows = p.assets.map(function (a, i) { return '<div class="delay-row"><span class="delay-label">' + a.name + '</span><span class="delay-value">' + Math.round(p.d.w[i] * 100) + '%</span></div>'; }).join('');
+  return { ok:true, html: '<div class="card"><h4>Your current mix</h4>' + rows + '<div class="gr-note" style="margin-top:8px">Expected return ' + (p.d.portRet*100).toFixed(1) + '% at ' + (p.d.decomp.totalVol*100).toFixed(1) + '% risk.</div></div>' };
+}
+function briefingAssumptions() {
+  const c = cfg();
+  const d = c.d;
+  const rows = [
+    ['Inflation', (d.inflation*100).toFixed(1) + '%'], ['Debt return', (d.debt*100).toFixed(1) + '%'], ['Hybrid return', (d.hybrid*100).toFixed(1) + '%'], ['Equity return', (d.equity*100).toFixed(1) + '%'], ['FD rate', (d.fdRate*100).toFixed(1) + '%'],
+  ].map(function (r) { return '<div class="delay-row"><span class="delay-label">' + r[0] + '</span><span class="delay-value">' + r[1] + '</span></div>'; }).join('');
+  return { ok:true, html: '<div class="card"><h4>Assumptions for ' + c.name + '</h4>' + rows + '<div class="gr-note" style="margin-top:8px">These are planning defaults; each tool lets you override them.</div></div>' };
+}
+function briefingNext() {
+  return { ok:true, html: '<div class="card"><h4>What to do next</h4><div class="gr-note">Open the tool that produced these numbers to adjust any assumption and watch the result change live. Ask me to explain any figure and I\'ll ground it in your own screen.</div></div>' };
+}
+
+const BRIEFING_SECTIONS = {
+  headline: { title: 'Your number', build: briefingHeadline },
+  retirement: { title: 'Retirement projection', build: resultCanvasRetirement },
+  drawdown: { title: 'Drawdown & longevity', build: resultCanvasSWP },
+  montecarlo: { title: 'Monte Carlo outcome range', build: resultCanvasMC },
+  stress: { title: 'Stress test vs a historical crash', build: briefingStress },
+  allocation: { title: 'Portfolio allocation', build: briefingAllocation },
+  frontier: { title: 'Efficient frontier', build: resultCanvasPortfolio },
+  live: { title: 'Live-instrument comparison', build: resultCanvasLiveFrontier },
+  stepup: { title: 'Step-up SIP', build: resultCanvasStepUp },
+  fx: { title: 'Cross-border FX', build: resultCanvasFX },
+  joint: { title: 'Joint children corpus', build: resultCanvasJoint },
+  health: { title: 'Plan health', build: resultCanvasHealth },
+  assumptions: { title: 'Assumptions used', build: briefingAssumptions },
+  next: { title: 'What to do next', build: briefingNext },
+};
 
 function executeAdvisorTool(name, args) {
   if (name === 'get_state') {
@@ -5888,7 +5945,6 @@ function executeAdvisorTool(name, args) {
   if (name === 'stress_test') return JSON.stringify(advisorStressTest(args && args.scenario));
   if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
   if (name === 'scroll_to') return JSON.stringify(advisorHighlight(args && args.element));
-  if (name === 'show_result') return JSON.stringify(advisorShowResult(args && args.kind));
   return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
 }
 
@@ -5916,7 +5972,7 @@ function advisorDescribeTool(name, args) {
     case 'run_monte_carlo': return 'Running 1,000 simulations';
     case 'stress_test': return 'Stress-testing against ' + args.scenario;
     case 'highlight': case 'scroll_to': return 'Pointing you at the ' + args.element;
-    case 'show_result': return 'Opening the result';
+    case 'compose_briefing': return 'Putting together your briefing';
     default: return null;
   }
 }
@@ -5932,6 +5988,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
   screens: function () { return ADVISOR_TABS; },
   executeTool: function (name, args) { return executeAdvisorTool(name, args); },
   describeTool: function (name, args) { return advisorDescribeTool(name, args); },
+  briefingSections: function () { return BRIEFING_SECTIONS; },
   lang: function () { return L.country === 'US' ? 'en-US' : 'en-IN'; },
   greeting: 'Hi! I can run any of these tools for you. Tell me what you\'re trying to figure out, or just ask a question.',
   placeholder: 'Ask, or tap the mic…',

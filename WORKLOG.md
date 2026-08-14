@@ -303,3 +303,71 @@ Format:
   F4's knowledge rewrite; it's retired properly in Batch 2 (F3g).
 - Batch 2 (F7 + F3) and Batch 3 (F5 + F6) not started.
 - No commit made (per the git rule).
+
+---
+
+## 2026-08-14 (night 3) — opencode — V2 Batch 2 (F7 + F3)
+
+### F7 — "explain this graph on my screen"
+- F7a: `read_current_chart()` + `read_current_result()` tools on the Lab,
+  goalden and door2. The Lab version returns a per-tab structured description
+  (chart title, axis meaning, notable points with real values, correlations,
+  date range/sample size) built from the existing calc functions
+  (calcRetLab, computePortfolioFrontierData, liveReadyItems,
+  monteCarloAccumulation, etc.) — never fabricated, never read out of pixels.
+  The doors return a simple result/plan description. `read_current_result` =
+  the existing `advisorGetResults`.
+- F7b: Lab ADVISOR_KNOWLEDGE now instructs the model to call read_current_chart
+  first and ground every sentence in the user's actual numbers, referencing
+  points by name; "a textbook definition of the efficient frontier is a failure
+  state."
+- F7c: chart-feature highlight targets added (frontier / fan / drawdown /
+  mountain / timeline / twinfates), so the model can point at the real chart as
+  it describes it. Point-level ECharts annotation (pulse the tangency dot) is
+  NOT done — limited to pulsing the chart container.
+
+### F3 — the Briefing (full-page composed document)
+- New `#briefing` fullscreen surface in advisor.js (scrollable, title + close +
+  print, `@media print` rule, Escape closes, chat collapses to FAB on open).
+- `compose_briefing(title, sections, intro)` tool: the AI is the editor (picks
+  sections, writes intro prose — HTML-escaped); the app is the renderer (every
+  number/chart comes from the page's section builders, `{ok,html}` or
+  `{ok:false,error}` so a missing-input section degrades to an honest "tell me
+  X first"). Dispatched in advisorLoop, not the page.
+- Lab section builders (14): headline, retirement, drawdown (SWP), montecarlo,
+  stress, allocation, frontier, live, stepup, fx, joint, health, assumptions,
+  next — reuse the existing resultCanvas* chart builders + a few new compact
+  builders. F3b satisfied: a retirement briefing can include Monte Carlo +
+  drawdown + step-up regardless of the current tab (sections call calc/chart
+  functions against current state).
+- goalden sections (3): headline, assumptions, next. door2 sections (5):
+  headline, goals, allocation, assumptions, next.
+- F3e partial: footer has a "Back to the app" button + print button; "open this
+  in the Lab" and per-section "explain this" affordances not wired (deferred —
+  the chip mechanism is Batch 3).
+
+### F3g — retired the single-scenario kinds (recorded)
+- Lab: all 9 old kinds became Briefing sections — retirement→retirement,
+  portfolio→frontier, livefrontier→live, mc→montecarlo, stepup→stepup,
+  swp→drawdown, fx→fx, joint→joint, health→health.
+- goalden: 5 kinds (summary/delay/retire/fd/alloc) CUT — "show a chart already
+  on screen" is replaced by F7 "scroll to it and explain it"; only
+  headline/assumptions/next kept as sections.
+- door2: 4 kinds (summary/goals/alloc/profile) CUT/merged — summary→headline,
+  goals→goals, alloc→allocation, profile dropped (folded into headline);
+  assumptions/next added.
+- `ADVISOR_RESULT_KINDS`, `advisorShowResult`, and the `show_result` tool are
+  removed from all three files (resultCanvas* builder functions remain, reused
+  as section builders).
+
+### Verification
+- advisor.js brace-balanced (script check). door2 BRIEFING_SECTIONS re-read by
+  hand. No functional leftover `show_result` references (only comments). Still
+  NOT browser-tested.
+
+### Known / not done (Batch 2)
+- F7d (layered follow-ups) + F7e ("Explain this" affordance on every chart) +
+  F3e's per-section explain/open-in-lab are deferred to Batch 3 — they reuse
+  the F5 chip mechanism which lands there.
+- Batch 3 (F5 chips + F6 portfolio/live understanding tools) not started.
+- No commit made (per the git rule).

@@ -87,6 +87,20 @@ body.advisor-docked{transition:padding-right .25s ease}
   #resultCanvas{left:0;right:0;bottom:0;width:auto;max-width:none;max-height:60vh;border-radius:0;border:none}
 }
 @media(prefers-reduced-motion:reduce){#resultCanvas{transition:none}}
+#briefing{position:fixed;left:0;top:0;right:0;bottom:0;z-index:3000;background:var(--bg);display:none;flex-direction:column;overflow:hidden}
+#briefing.open{display:flex}
+#briefingHead{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-bottom:1px solid rgba(20,40,63,.1);background:var(--card);flex-shrink:0}
+#briefingHead .t{font-family:'Newsreader',serif;font-weight:700;font-size:22px;color:var(--ink)}
+#briefingHead .rc-btns{display:flex;align-items:center;gap:2px}
+#briefingHead button{background:none;border:none;color:rgba(20,40,63,.55);cursor:pointer;font-size:16px;padding:4px 8px;line-height:1}
+#briefingBody{flex:1;overflow-y:auto;padding:26px 22px 60px;max-width:860px;margin:0 auto;width:100%}
+#briefingIntro{font-family:'Newsreader',serif;font-size:18px;line-height:1.5;color:var(--ink);margin-bottom:22px}
+.briefing-section{margin-bottom:26px}
+.briefing-section h2{font-family:'Newsreader',serif;font-weight:600;font-size:19px;color:var(--ink);margin-bottom:10px}
+.briefing-err{padding:12px 16px;background:rgba(20,40,63,.05);border:1px dashed rgba(20,40,63,.2);border-radius:10px;font-size:14px;color:rgba(20,40,63,.7);font-family:'Figtree',sans-serif}
+.briefing-footer{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:16px;border-top:1px solid rgba(20,40,63,.1)}
+.briefing-footer button{background:var(--gold);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-family:'Figtree',sans-serif;font-weight:600;font-size:13.5px;cursor:pointer}
+@media print{#advisorFab,#advisorPanel,#resultCanvas{display:none!important}#briefing{position:static;display:block!important;background:#fff}#briefingHead .rc-btns{display:none!important}}
 `;
 (function injectAdvisorCss() {
   const s = document.createElement('style');
@@ -133,6 +147,16 @@ body.advisor-docked{transition:padding-right .25s ease}
         '</div>' +
       '</div>' +
       '<div id="resultCanvasBody"></div>' +
+    '</div>' +
+    '<div id="briefing" aria-label="Briefing">' +
+      '<div id="briefingHead">' +
+        '<div class="t" id="briefingTitle">Briefing</div>' +
+        '<div class="rc-btns">' +
+          '<button id="briefingPrint" aria-label="Print / save" title="Print / save">🖶</button>' +
+          '<button id="briefingClose" aria-label="Close" title="Close">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="briefingBody"></div>' +
     '</div>';
   document.body.insertAdjacentHTML('beforeend', html);
 })();
@@ -489,7 +513,9 @@ async function advisorLoop() {
         let args = {};
         try { args = JSON.parse(tc.function.arguments || '{}'); } catch (_) { args = {}; }
         const stepRow = advisorAddStep(advisorDescribe(name, args));
-        let result = advExecuteTool(name, args);
+        let result;
+        if (name === 'compose_briefing') result = JSON.stringify(composeBriefing(args));
+        else result = advExecuteTool(name, args);
         if (result && typeof result.then === 'function') result = await result;
         advisor.messages.push({ role: 'tool', tool_call_id: tc.id, name: name, content: result });
         advisorCompleteStep(stepRow);
@@ -551,6 +577,55 @@ async function advisorSend() {
 }
 
 /* =====================================================================
+   Briefing (F3) — a full-page, composed document. The model is the editor
+   (it picks sections and writes the intro prose); the app is the renderer
+   (it computes every number and chart via the page's section builders).
+   ===================================================================== */
+function advisorEscapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+}
+function briefingOpen(title, html) {
+  advisorSetMode('fab');
+  document.getElementById('briefingTitle').textContent = title;
+  document.getElementById('briefingBody').innerHTML = html;
+  document.getElementById('briefing').classList.add('open');
+}
+function briefingClose() {
+  document.getElementById('briefing').classList.remove('open');
+  document.getElementById('briefingBody').innerHTML = '';
+}
+
+function composeBriefing(args) {
+  args = args || {};
+  const sections = Array.isArray(args.sections) ? args.sections : [];
+  const title = args.title || 'Your Briefing';
+  const intro = args.intro || '';
+  let builders = ADVISOR_CFG.briefingSections;
+  if (typeof builders === 'function') builders = builders();
+  builders = builders || {};
+  let html = '';
+  if (intro) html += '<div id="briefingIntro">' + advisorEscapeHtml(intro) + '</div>';
+  let shown = 0;
+  const missing = [];
+  sections.forEach(function (type) {
+    const spec = builders[type];
+    if (!spec) { missing.push(type); return; }
+    let r;
+    try { r = (typeof spec.build === 'function') ? spec.build() : spec; } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    html += '<div class="briefing-section"><h2>' + advisorEscapeHtml(spec.title || type) + '</h2>';
+    if (r && r.ok) { html += r.html; shown++; }
+    else { html += '<div class="briefing-err">' + advisorEscapeHtml((r && r.error) || 'This section needs more input before it can be shown.') + '</div>'; }
+    html += '</div>';
+  });
+  if (shown === 0 && sections.length) {
+    return { ok: false, error: 'None of those sections could be built yet — ask the user for the missing inputs first.' };
+  }
+  html += '<div class="briefing-footer"><button data-briefing-close>Back to the app</button></div>';
+  briefingOpen(title, html);
+  return { ok: true, opened: title, shownSections: shown, missing: missing };
+}
+
+/* =====================================================================
    DOM wiring — everything below runs once, after the HTML is injected.
    ===================================================================== */
 document.getElementById('advisorMic').addEventListener('click', () => {
@@ -608,6 +683,15 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && cv.classList.contains('open') && !cv.classList.contains('minimized')) {
     resultCanvasToggleMin();
   }
+});
+
+document.getElementById('briefingClose').addEventListener('click', briefingClose);
+document.getElementById('briefingPrint').addEventListener('click', function () { try { window.print(); } catch (e) {} });
+document.addEventListener('click', function (e) {
+  if (e.target && e.target.getAttribute && e.target.getAttribute('data-briefing-close')) briefingClose();
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && document.getElementById('briefing').classList.contains('open')) briefingClose();
 });
 
 advisorRehydrate();

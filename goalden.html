@@ -2001,7 +2001,7 @@ function advisorTools() {
     { type:'function', function:{ name:'read_current_result', description:'Return the current numeric result (same as get_results).' } },
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
-    { type:'function', function:{ name:'show_result', description:'Open the results canvas showing a real chart or comparison. Valid kinds: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ')+'.', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:Object.keys(ADVISOR_RESULT_KINDS) } }, required:['kind'] } } },
+    { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
   ];
 }
 
@@ -2161,19 +2161,28 @@ function resultCanvasAlloc() {
     '</div></div>';
 }
 
-const ADVISOR_RESULT_KINDS = {
-  summary: { title: 'Your number', build: resultCanvasSummary },
-  delay: { title: 'Cost of waiting', build: resultCanvasDelay },
-  retire: { title: 'Retire at a different age', build: resultCanvasRetire },
-  fd: { title: 'Fixed Deposit comparison', build: resultCanvasFd },
-  alloc: { title: 'Where the money sits', build: resultCanvasAlloc },
+// F3g — the five single-scenario `show_result` kinds are retired; they're now
+// Briefing sections. Each build() returns {ok, html} or {ok:false, error}.
+const BRIEFING_SECTIONS = {
+  headline: { title: 'Your number', build: function () {
+    const c = cfg();
+    const r = advisorGetResults();
+    if (!r.ok) return { ok:false, error: r.error };
+    const res = r.result;
+    const big = res.corpus != null ? res.corpus : res.inflatedGoal;
+    const monthly = res.monthlySIP != null ? res.monthlySIP : res.sip;
+    return { ok:true, html: '<div class="hero-number"><div class="hero-label">Your number</div><div class="hero-figure">' + c.compact(big) + '</div><div class="hero-sub">Save ' + c.fmt(Math.round(monthly)) + '/month to get there.</div></div>' };
+  } },
+  assumptions: { title: 'Assumptions used', build: function () {
+    const d = cfg().d;
+    const c = cfg();
+    const rows = [['Inflation', (d.inflation*100).toFixed(1)+'%'], ['Debt return', (d.debt*100).toFixed(1)+'%'], ['Hybrid return', (d.hybrid*100).toFixed(1)+'%'], ['Equity return', (d.equity*100).toFixed(1)+'%'], ['FD rate', (d.fdRate*100).toFixed(1)+'%']].map(function (r) { return '<div class="delay-row"><span class="delay-label">'+r[0]+'</span><span class="delay-value">'+r[1]+'</span></div>'; }).join('');
+    return { ok:true, html: '<div class="delay-card"><div class="delay-title">Assumptions for '+c.name+'</div>'+rows+'</div>' };
+  } },
+  next: { title: 'What to do next', build: function () {
+    return { ok:true, html: '<div class="gr-note">Adjust any input to watch the number change, or ask me to explain a specific figure against your own screen.</div>' };
+  } },
 };
-function advisorShowResult(kind) {
-  const spec = ADVISOR_RESULT_KINDS[kind];
-  if (!spec) return { ok:false, error:'No result kind "'+kind+'". Valid: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ') };
-  resultCanvasOpen(spec.title, spec.build());
-  return { ok:true, shown: kind };
-}
 
 function executeAdvisorTool(name, args) {
   if (name === 'get_state') {
@@ -2193,7 +2202,6 @@ function executeAdvisorTool(name, args) {
   if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
   if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
   if (name === 'scroll_to') return JSON.stringify(advisorHighlight(args && args.element));
-  if (name === 'show_result') return JSON.stringify(advisorShowResult(args && args.kind));
   return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
 }
 
@@ -2208,7 +2216,7 @@ function advisorDescribeTool(name, args) {
     case 'read_current_result': return 'Reading your result';
     case 'get_state': return 'Reading your answers';
     case 'highlight': case 'scroll_to': return 'Pointing you at the ' + args.element;
-    case 'show_result': return 'Opening the result';
+    case 'compose_briefing': return 'Putting together your briefing';
     default: return null;
   }
 }
@@ -2223,6 +2231,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
   screens: function () { return flow(); },
   executeTool: function (name, args) { return executeAdvisorTool(name, args); },
   describeTool: function (name, args) { return advisorDescribeTool(name, args); },
+  briefingSections: function () { return BRIEFING_SECTIONS; },
   lang: function () { return S.country === 'US' ? 'en-US' : 'en-IN'; },
   greeting: 'Hi! I can help you plan. Tell me what you\'re saving for — retirement, education, a big purchase — or just ask a question.',
   placeholder: 'Ask, or tap the mic…',
