@@ -62,29 +62,42 @@ series for each instrument (goalden-lab.html:1312-1314). Two instruments ×
 (src/worker.js:337), so the request is rejected before it ever reaches the
 model.
 
-Fix — three layers, all of them:
+**The fix is architectural: switch from pushing state to letting the model
+pull it.** This *increases* what the advisor can reach, it does not limit it.
+Today we mail the entire database on every turn and the model still can't use
+it — 1,238 raw daily closes are useless to a language model, while the
+annualised return and correlation computed *from* them are exactly what it
+needs. Nothing becomes invisible to the AI; it just asks for detail instead of
+being buried in it.
+
+Four layers, all of them:
 
 1. **Send a summary, not the raw state.** Each page's config gains
-   `stateForAdvisor()` returning a compact, model-useful projection of its
-   state. For the Lab that means: for each live instrument, send the
-   *derived* facts the model actually needs — symbol, label, currency,
-   annualised return, volatility, correlation matrix, date range, number of
-   observations — and **never the raw price array**. The model cannot use
-   1,238 daily closes; it needs the statistics the app already computed from
-   them. advisor.js calls `stateForAdvisor()` when present, falling back to
-   `state` otherwise.
+   `stateForAdvisor()` returning a compact, model-useful projection. For the
+   Lab: per live instrument, the *derived* facts — symbol, label, currency,
+   annualised return, volatility, correlation matrix, date range, observation
+   count — and **never the raw price array**. advisor.js calls
+   `stateForAdvisor()` when present, falling back to `state` otherwise.
 
-2. **Guard client-side before sending.** Measure the serialised body; if it
-   exceeds a safe threshold (~60KB), drop `state` to a minimal skeleton and
-   note in the payload that state was truncated, rather than firing a request
-   that is certain to 413.
+2. **Give the model pull-tools for anything omitted**, so no capability is
+   lost. At minimum: `get_price_history(symbol, granularity)` returning a
+   *downsampled* series (monthly closes, or ~60 evenly-spaced points — enough
+   to discuss shape and trend, small enough to fit), `get_instrument_stats(symbol)`
+   for the full statistics of one instrument, and `get_detail(path)` for a
+   specific slice of state by dotted path. The model can now reach every
+   number in the app, on demand, without any single request exceeding the cap.
 
-3. **Make the failure honest if it ever happens again.** "Request is too
-   large" is meaningless to a user. Surface something they can act on, and
-   log the actual byte size to the console for us.
+3. **Guard client-side before sending.** Measure the serialised body; if it
+   exceeds ~60KB, drop `state` to a minimal skeleton and tell the model in the
+   payload that state was truncated and which pull-tools to use, rather than
+   firing a request certain to 413.
 
-This is a prerequisite for F7 — "explain what's on my screen" cannot work
-until the request stops exceeding the cap.
+4. **Make the failure honest if it ever happens again.** "Request is too
+   large" means nothing to a user. Surface something actionable, and log the
+   actual byte size to the console for us.
+
+This is a prerequisite for F3 and F7 — neither the Briefing nor
+"explain what's on my screen" can work until requests stop exceeding the cap.
 
 ---
 
@@ -166,40 +179,71 @@ describing a result the user has to go hunting for.
 
 ---
 
-## Part F3 — The canvas becomes a workspace
+## Part F3 — The Briefing: a real composed page, not a popup
 
 *Files: `advisor.js` (shell), `goalden-lab.html` + `goalden.html` +
-`goalden-door2.html` (contents).*
+`goalden-door2.html` (section builders).*
 
-Keep the panel, change what it's for and how big it can get.
+**Replace the 420px results canvas with a full document surface.** When a
+user asks something that deserves a real answer — *"make me a retirement
+plan"*, *"explain my portfolio"*, *"should I be worried about this"* — the
+advisor composes and opens a **Briefing**: a scrollable, full-page,
+multi-section document that reads like a report prepared for them. Think of
+it as a new page assembled on demand inside the app, not a tooltip with a
+chart in it.
 
-**F3a — Sizes.** Three states, toggled from the header: `corner` (today's
-~420px), `half` (half the viewport, side-by-side with the docked chat),
-`full` (fullscreen overlay, chat collapses to FAB). Fullscreen is the point —
-when the advisor is showing a real comparison, it should be allowed to take
-the whole screen, and the charts inside must be rendered at that size, not
-scaled-up thumbnails.
+**F3a — It behaves like a page.** Opens `full` (fullscreen overlay) by
+default with the chat collapsed to its FAB; also supports `half` (beside the
+docked chat) and `corner`. Scrollable, with a title, a section rail or
+in-page anchors when long, and Print/Save reusing the Lab's existing print
+styling. Charts inside render at full page size — never scaled-down
+thumbnails. Escape and a close control return to the app with the underlying
+page untouched.
 
-**F3b — Narrow what it's used for.** The canvas is for things that are
-genuinely *not* on the current page:
-- **Side-by-side scenario comparison** — retire at 55 vs 60, portfolio A vs
-  portfolio B, with/without a 2008-style shock. This is the canvas's real
-  job and the app has no other surface for it.
-- **Cross-tool summaries** — a Plan Health view assembled from several tools.
+**F3b — It can pull from anywhere in the app, from anywhere in the app.**
+This is the key capability. A retirement Briefing may include a Monte Carlo
+fan, a drawdown curve, a step-up SIP comparison and an allocation card —
+even if the user is sitting on the home tab and has never opened those
+tools. Sections call the app's existing calculation and chart functions
+(`calcRetLab`, `monteCarloAccumulation`, `swpWithdrawal`, `solveStepUpSIP`,
+`computePortfolioDerived`, `generateFrontier`, the chart builders) against
+current state. No navigation required, no new math.
 
-It is **not** for re-rendering the chart that is already on screen. If the
-user is on the Retirement Lab and asks about their retirement number, the
-advisor should scroll to and explain the chart that's already there.
+**F3c — The AI is the editor; the app is the renderer.** Add a
+`compose_briefing(title, sections, intro)` tool. `sections` is an array drawn
+from a **fixed enum of section builders** the page provides — the model
+chooses *which* sections and writes the connective prose, and the app
+computes and renders every number and chart. The model must never emit a
+figure of its own into a Briefing. Each builder returns `{ok, html}` or
+`{ok:false, error}` so a section lacking inputs degrades to an honest "tell
+me your retirement age first" instead of an empty chart — the pattern D1
+already established.
 
-**F3c — "Open this in the real tool →".** Every canvas view gets a footer
-button that navigates to the tool that owns it, applies the state being
-shown, and closes the canvas. The canvas becomes a doorway to the app, never
-a substitute for it.
+Section builders to provide (Lab; the two door files get a smaller set):
+headline number · retirement projection · drawdown/longevity · Monte Carlo
+outcome range · stress test vs a historical crash · portfolio allocation ·
+efficient frontier · live-instrument comparison · step-up SIP · cross-border
+FX · plan health · assumptions used · what-to-do-next.
 
-**F3d — Rework the nine Lab kinds** (goalden-lab.html:5654-5664) under the
-new rule. Most become comparison views rather than single-scenario copies;
-several should simply be replaced by "navigate + scroll + explain". Judge
-each one against F3b and say in the WORKLOG which ones you cut and why.
+**F3d — Comparison is a first-class section type.** Retire at 55 vs 60,
+portfolio A vs B, with vs without a 2008-style shock — rendered side by side
+with the deltas called out. The app has no other surface for this today and
+it's one of the most useful things the advisor can produce.
+
+**F3e — Every Briefing ends in actions, not a dead end.** Footer buttons:
+*Open this in the Retirement Lab* (navigates and applies the state shown),
+*Print / Save*, and *Ask about this* (returns to chat with that section in
+context). Plus a per-section "explain this" affordance wired to F7.
+
+**F3f — New charts are allowed here** where they genuinely help comprehension
+and no existing chart covers it (e.g. a simple before/after bar for a
+comparison). Match the existing ECharts conventions and palette; do not
+introduce a new charting approach.
+
+**F3g — Retire the nine single-scenario kinds** (goalden-lab.html:5654-5664).
+They're replaced by Briefing sections. Anything that was only re-rendering a
+chart already on screen becomes "scroll to it and explain it" (F7) instead.
+Record in WORKLOG.md which kinds were cut, which became sections, and why.
 
 ---
 
@@ -336,12 +380,18 @@ they're the lowest-risk:
 1. **F1** — caption gone, panel docks. (advisor.js only)
 2. **F2** — action narration, sequencing, flash-what-changed. (advisor.js + label maps)
 3. **F4** — knowledge/prompt rewrite so the model stops preferring the canvas.
-4. **F7** — explain-this-chart. The highest-value feature in this plan; do it
-   before the workspace rebuild, because a good explanation of the real chart
-   removes most of the reason to render a copy of it.
-5. **F3** — workspace: sizes, fullscreen, "open in real tool", rework the kinds.
+4. **F7** — explain-this-chart. Highest-value feature here; do it before the
+   Briefing, because a good explanation of the real chart removes most of the
+   reason to render a copy of it, and F3's per-section "explain this" reuses
+   this machinery.
+5. **F3** — the Briefing.
 6. **F5** — suggestion chips.
 7. **F6** — portfolio/live-market depth tools.
+
+Batching for sessions: **Batch 1 = F0 + F1 + F2 + F4** (the bug and the feel).
+**Batch 2 = F7 + F3** (explanation, then the Briefing). **Batch 3 = F5 + F6**
+(discoverability and depth). Do not attempt all three in one session — the
+Part D brace incident came out of exactly that.
 
 ## Constraints
 
