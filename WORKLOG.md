@@ -371,3 +371,58 @@ Format:
   the F5 chip mechanism which lands there.
 - Batch 3 (F5 chips + F6 portfolio/live understanding tools) not started.
 - No commit made (per the git rule).
+
+---
+
+## 2026-08-14 (night 4) — opencode — V2 Batch 3 (F5 + F6)
+
+### F5 — suggestion chips (discoverability)
+- advisor.js: `advisorAsk(text)` (open dock + set textarea + call the real
+  `advisorSend()`), a single delegated `document` click listener on
+  `[data-advisor-ask]`, and `.advisor-chips/.advisor-chip/.advisor-ask-link`
+  CSS. Chips are inert until clicked — zero API cost on render.
+- Lab: `advisorChipsHTML(tab)` renders 2-3 tab-specific chips under each tool
+  header (9 tabs). Live chips are conditional — with <2 instruments it shows a
+  single "help me pick two" chip instead of the compare set. Questions are
+  grounded in what each tool actually shows (e.g. "Stress-test this plan against
+  2008", "What does this correlation actually mean?").
+- Inline "Ask the advisor →" links next to key numbers: retirement corpus,
+  portfolio Sharpe ratio, live correlation (`advisorAskLink(q)`).
+- goalden.html: one contextual chip on the results screen (wording varies by
+  goal type). goalden-door2.html: one chip on the plan screen. Both reuse the
+  same `[data-advisor-ask]` path via their own `advisorChipsHTML()`.
+
+### F6 — portfolio / live-market depth (goalden-lab.html)
+- `explain_metric(metric)` — sharpe, volatility, beta, correlation, cagr,
+  max_drawdown. Anchored to the user's actual current value (advisorPortfolioData
+  for sharpe/vol/beta; live instrument stats for correlation/cagr/max_drawdown).
+  Returns {ok:false, error} with an honest reason when not computable.
+- `optimize_for(objective)` — max_sharpe | min_volatility | target_return |
+  target_risk. Reuses bestSharpePoint / frontier sweep, then APPLIES the weights
+  via the existing advisorSetWeights path so the sliders move and the user
+  watches it; returns before/after return + risk.
+- `compare_scenarios(a, b)` — two weight sets, measured via a temporary swap of
+  L.portfolio.weights (the calcRetireAgeCompare pattern), rendered as a new
+  `comparison` Briefing section through composeBriefing, deltas called out.
+- `why_this_weight(asset)` — cluster's actual current weight + what it does for
+  the mix, grounded in the live portfolio return/vol.
+- `explain_instrument(symbol)` — live tab only; return/vol/cagr/max-drawdown +
+  correlation with other loaded instruments, all from L.live.data (never new
+  fetches, never invented fundamentals).
+- Note: `maxDrawdownFromPrices` is one small NEW helper (peak-to-trough from
+  prices) — the only genuinely new computation, added because the app had no
+  max-drawdown figure to reuse. Everything else reuses existing math.
+- All 5 tools wired once each in advisorTools / executeAdvisorTool /
+  describeTool. Guardrail unchanged.
+
+### Verification
+- advisor.js brace-balanced (script check). The inline-script TAIL (everything
+  from the F5/F6 additions onward) brace-balanced in all three door files via a
+  string/comment/regex-aware check. Function-reference grep confirms every F6
+  tool's callees exist exactly once. Still NOT browser-tested.
+
+### Known / not done (Batch 3)
+- F7d/F7e from Batch 2 still not wired: the chip click mechanism exists, but
+  per-chart "Explain this" buttons and layered follow-up chips inside the chat
+  were not added (they'd reuse the same advisorAsk path — small follow-up).
+- No commit made (per the git rule).

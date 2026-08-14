@@ -101,6 +101,10 @@ body.advisor-docked{transition:padding-right .25s ease}
 .briefing-footer{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:16px;border-top:1px solid rgba(20,40,63,.1)}
 .briefing-footer button{background:var(--gold);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-family:'Figtree',sans-serif;font-weight:600;font-size:13.5px;cursor:pointer}
 @media print{#advisorFab,#advisorPanel,#resultCanvas{display:none!important}#briefing{position:static;display:block!important;background:#fff}#briefingHead .rc-btns{display:none!important}}
+.advisor-chips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 10px}
+.advisor-chip{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.25);color:var(--gold);border-radius:999px;padding:5px 12px;font-family:'Figtree',sans-serif;font-size:12px;cursor:pointer;transition:background .15s ease}
+.advisor-chip:hover{background:rgba(37,87,199,.16)}
+.advisor-ask-link{background:none;border:none;color:var(--gold);cursor:pointer;font-family:'Spline Sans Mono',monospace;font-size:10.5px;padding:0;text-decoration:underline;margin-left:6px}
 `;
 (function injectAdvisorCss() {
   const s = document.createElement('style');
@@ -692,6 +696,22 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('keydown', function (e) {
   if (e.key === 'Escape' && document.getElementById('briefing').classList.contains('open')) briefingClose();
+});
+
+// F5 — suggestion chips + inline "Ask the advisor" links. The page renders
+// them with data-advisor-ask="<question>"; this single delegated listener sends
+// the text through the real send path (open dock, then advisorSend). Chips are
+// inert until clicked — zero API cost on render.
+function advisorAsk(text) {
+  if (!text || advisor.busy) return;
+  advisorSetMode('dock');
+  const ta = document.getElementById('advisorText');
+  ta.value = String(text);
+  advisorSend();
+}
+document.addEventListener('click', function (e) {
+  const el = e.target && e.target.closest ? e.target.closest('[data-advisor-ask]') : null;
+  if (el) advisorAsk(el.getAttribute('data-advisor-ask'));
 });
 
 advisorRehydrate();
