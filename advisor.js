@@ -211,7 +211,15 @@ function advisorPersist(open) {
 }
 
 function advisorTrim() {
-  const MAX = 24;
+  // A single "do it all" automation run (set country, walk a risk
+  // questionnaire, add a goal, run the calculation, compose a briefing) can
+  // legitimately produce 30-40 messages of its own tool_calls/tool pairs.
+  // 24 was tuned for ordinary back-and-forth chat and was chopping that
+  // history mid-flight — the model would lose track of fields it had
+  // already set and start repeating itself, or lose the thread entirely.
+  // advisorBuildBody()'s separate byte-size guard still bounds worst-case
+  // payload size regardless of this count.
+  const MAX = 80;
   if (advisor.messages.length <= MAX) return;
   const firstUser = advisor.messages.find((m) => m.role === 'user');
   let tail = advisor.messages.slice(-MAX);
@@ -271,7 +279,7 @@ function advisorRehydrate() {
     } catch (e) {}
     if (autoContinue && advisor.messages.length) {
       advisorEnterDock();
-      advisorContinue();
+      advisorContinue(true);
     }
   } catch (e) {}
 }
@@ -565,7 +573,7 @@ function advisorFlash(name, result) {
 }
 function advisorPause(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
-async function advisorLoop() {
+async function advisorLoop(silent) {
   // F7d — track whether read_current_chart was called this turn so we can
   // append layered follow-up chips below the final bot reply.
   let readChartCalled = false;
@@ -641,7 +649,10 @@ async function advisorLoop() {
         }
       }
       advisor.messages.push({ role: 'assistant', content: msg.content });
-      advisorSpeak(msg.content);
+      // Never speak unprompted — auto-continue (a "do it all" flow resuming
+      // itself right after a page load, with no user interaction that turn)
+      // must stay silent. Only a message the user actually triggered speaks.
+      if (!silent) advisorSpeak(msg.content);
     } else {
       advisorHideThinking();
       advisorAddMsg('sys', 'The advisor returned an empty reply.');
@@ -657,13 +668,13 @@ async function advisorLoop() {
 // send and by the cross-page auto-continue below (F-autocontinue) — a "do it
 // all" flow that hands off to another page via a real navigation needs a way
 // to keep acting on the new page with no fresh user message to trigger it.
-async function advisorContinue() {
+async function advisorContinue(silent) {
   if (advisor.busy) return;
   advisor.busy = true;
   document.getElementById('advisorSend').disabled = true;
   try {
     advisorShowThinking();
-    await advisorLoop();
+    await advisorLoop(silent);
   } catch (e) {
     advisorHideThinking();
     console.error('[advisor]', e);

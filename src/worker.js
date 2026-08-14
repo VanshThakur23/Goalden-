@@ -185,6 +185,43 @@ async function fetchFundHistory(schemeCode) {
 }
 
 /**
+ * GET /api/symbolsearch?q=axis
+ * Proxies Yahoo Finance's own search-by-name endpoint for stocks/ETFs — the
+ * app's built-in instrument list only covers ~20 curated large-caps per
+ * country, so a real but less common listed company (e.g. "Axis Solutions
+ * Limited" / AXISOL.BO) had no way to be found by name at all. This is a
+ * scoped, read-only lookup against Yahoo's own symbol database — not open
+ * web browsing — so it fills that gap without opening up anything broader.
+ * Known limitation: Yahoo's search ranks generic English words (e.g.
+ * "titan") by global relevance and can bury or omit the Indian-market
+ * result entirely — that's a Yahoo ranking quirk, not something this proxy
+ * can fix. The app mitigates it by checking its own curated list FIRST
+ * (which already covers well-known large-caps like TITAN.NS) and only
+ * falling back to this broader search for names the curated list misses.
+ */
+async function symbolSearch(query) {
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0`;
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+      Accept: 'application/json',
+    },
+  });
+  if (!res.ok) throw new Error(`Yahoo search returned ${res.status}`);
+  const data = await res.json();
+  const quotes = Array.isArray(data.quotes) ? data.quotes : [];
+  return quotes
+    .filter((q) => q.symbol && (q.quoteType === 'EQUITY' || q.quoteType === 'ETF'))
+    .slice(0, 10)
+    .map((q) => ({
+      symbol: q.symbol,
+      name: q.longname || q.shortname || q.symbol,
+      exchange: q.exchDisp || q.exchange || '',
+      type: q.quoteType === 'ETF' ? 'etf' : 'equity',
+    }));
+}
+
+/**
  * GET /api/fundsearch?q=gilt
  * Straight proxy of MFAPI's own search — it already returns reasonable
  * matches, unlike Yahoo's search which returns wrong-country listings for
@@ -363,6 +400,16 @@ export default {
         return json(await fundSearch(q));
       } catch (e) {
         return json({ error: (e && e.message) || 'Fund search failed' }, 502);
+      }
+    }
+
+    if (url.pathname === '/api/symbolsearch') {
+      const q = url.searchParams.get('q');
+      if (!q) return json({ error: 'q is required' }, 400);
+      try {
+        return json(await symbolSearch(q));
+      } catch (e) {
+        return json({ error: (e && e.message) || 'Symbol search failed' }, 502);
       }
     }
 

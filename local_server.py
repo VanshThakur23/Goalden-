@@ -114,6 +114,24 @@ def fund_search(query):
     return [{'schemeCode': r.get('schemeCode'), 'schemeName': r.get('schemeName')} for r in data[:25]]
 
 
+def symbol_search(query):
+    url = (f'https://query1.finance.yahoo.com/v1/finance/search?'
+           f'q={urllib.parse.quote(query)}&quotesCount=10&newsCount=0')
+    data = upstream_json(url, headers={'User-Agent': UA, 'Accept': 'application/json'})
+    quotes = data.get('quotes') or []
+    out = []
+    for q in quotes:
+        if not q.get('symbol') or q.get('quoteType') not in ('EQUITY', 'ETF'):
+            continue
+        out.append({
+            'symbol': q.get('symbol'),
+            'name': q.get('longname') or q.get('shortname') or q.get('symbol'),
+            'exchange': q.get('exchDisp') or q.get('exchange') or '',
+            'type': 'etf' if q.get('quoteType') == 'ETF' else 'equity',
+        })
+    return out[:10]
+
+
 # ---------------------------------------------------------------------------
 # Conversational AI advisor — /api/chat (POST)
 # Mirrors the Cloudflare Worker's /api/chat. Reads DEEPSEEK_API_KEY from the
@@ -351,6 +369,15 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send_json(fund_search(q))
             except Exception as e:
                 return self._send_json({'error': str(e) or 'Fund search failed'}, 502)
+
+        if parsed.path == '/api/symbolsearch':
+            q = (qs.get('q') or [None])[0]
+            if not q:
+                return self._send_json({'error': 'q is required'}, 400)
+            try:
+                return self._send_json(symbol_search(q))
+            except Exception as e:
+                return self._send_json({'error': str(e) or 'Symbol search failed'}, 502)
 
         return super().do_GET()
 

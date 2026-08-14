@@ -5432,7 +5432,7 @@ function advisorTools() {
     { type:'function', function:{ name:'apply_preset', description:'Apply a preset portfolio. Valid presets: conservative, balanced, aggressive, equal.', parameters:{ type:'object', properties:{ name:{ type:'string', enum:['conservative','balanced','aggressive','equal'] } }, required:['name'] } } },
     { type:'function', function:{ name:'analyze_portfolio', description:'Return the current portfolio mix\'s expected return, volatility, Sharpe, beta, diversification benefit and tail risk.' } },
     { type:'function', function:{ name:'frontier_gap', description:'Return how far the current mix sits below the efficient frontier, and the frontier weights that dominate it.' } },
-    { type:'function', function:{ name:'search_instruments', description:'Search real stocks/ETFs/funds to add to Test Real Investments.', parameters:{ type:'object', properties:{ query:{ type:'string' } }, required:['query'] } } },
+    { type:'function', function:{ name:'search_instruments', description:'Search real stocks/ETFs/mutual funds by name or ticker to add to Test Real Investments. Not limited to a small preset list — this reaches a broad live symbol database, so any real listed company or fund (well-known or obscure) can be searched by name.', parameters:{ type:'object', properties:{ query:{ type:'string' } }, required:['query'] } } },
     { type:'function', function:{ name:'add_instrument', description:'Add a real instrument (ticker or fund code) to Test Real Investments and fetch its history.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'remove_instrument', description:'Remove an instrument from Test Real Investments.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'compare_live', description:'Return each held instrument\'s real return and risk, pairwise correlations, the tangency (best-Sharpe) weights, and the current mix\'s Sharpe.' } },
@@ -5578,7 +5578,23 @@ async function advisorSearchInstruments(query) {
         .map(r => ({ symbol:String(r.schemeCode), name:r.schemeName, type:'fund' }));
     } catch (e) { funds = []; }
   }
-  return JSON.stringify({ ok:true, equities, funds });
+  // B2b — the curated list above only covers ~20 well-known large-caps per
+  // country; anything less common (e.g. "Axis Solutions Limited", a real
+  // BSE listing) has no way to be found by name otherwise. Fall back to a
+  // real search across Yahoo's own symbol database for names the curated
+  // list misses, deduped against what's already there.
+  let broader = [];
+  if (q) {
+    try {
+      const known = new Set(equities.map(i => i.symbol.toUpperCase()));
+      const list = await liveApiGet('/api/symbolsearch?q=' + encodeURIComponent(q));
+      broader = (Array.isArray(list) ? list : [])
+        .filter(r => r.symbol && !known.has(String(r.symbol).toUpperCase()))
+        .slice(0, 8)
+        .map(r => ({ symbol:r.symbol, name:r.name, exchange:r.exchange, type:r.type || 'equity' }));
+    } catch (e) { broader = []; }
+  }
+  return JSON.stringify({ ok:true, equities: equities.concat(broader), funds });
 }
 
 async function advisorAddInstrument(symbol) {
