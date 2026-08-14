@@ -131,6 +131,7 @@ body.advisor-docked{transition:padding-right .25s ease}
         '<div class="rc-btns">' +
           '<button id="advisorMode" aria-label="Dock or focus" title="Dock to the side / focus">⤢</button>' +
           '<button id="advisorVoice" aria-label="Speak replies aloud" title="Speak replies aloud">🔊</button>' +
+          '<button id="advisorClear" aria-label="Clear chat" title="Clear chat" style="font-size:13px">🗑</button>' +
           '<button id="advisorClose" aria-label="Close" title="Close">✕</button>' +
         '</div>' +
       '</div>' +
@@ -424,12 +425,47 @@ function advisorState() {
   return ADVISOR_CFG.state || {};
 }
 
+// Remove orphaned tool_call pairs before sending — DeepSeek requires every
+// assistant message with tool_calls to be immediately followed by a tool
+// message for each call_id. advisorTrim() can break this by slicing in the
+// middle of a pair.
+function advisorCleanMessages(messages) {
+  const cleaned = [];
+  let i = 0;
+  while (i < messages.length) {
+    const m = messages[i];
+    if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length) {
+      const expectedIds = new Set(m.tool_calls.map(function(tc) { return tc.id; }));
+      const responses = [];
+      let j = i + 1;
+      while (j < messages.length && messages[j].role === 'tool') {
+        responses.push(messages[j]);
+        expectedIds.delete(messages[j].tool_call_id);
+        j++;
+      }
+      if (expectedIds.size === 0) {
+        cleaned.push(m);
+        responses.forEach(function(r) { cleaned.push(r); });
+      }
+      // else: incomplete pair — drop the whole block silently
+      i = j;
+    } else if (m.role === 'tool') {
+      // orphaned tool response with no preceding tool_calls — drop it
+      i++;
+    } else {
+      cleaned.push(m);
+      i++;
+    }
+  }
+  return cleaned;
+}
+
 // F0 — build the request body, and guard client-side: if the serialised body
 // is still too large (even after projection), drop state to a skeleton and tell
 // the model which pull-tools to use, rather than firing a request certain to 413.
 function advisorBuildBody() {
   const body = {
-    messages: advisor.messages,
+    messages: advisorCleanMessages(advisor.messages),
     tools: advTools(),
     state: advisorState(),
     knowledge: ADVISOR_CFG.knowledge || '',
@@ -680,6 +716,13 @@ document.getElementById('advisorFab').addEventListener('click', () => {
 });
 document.getElementById('advisorMode').addEventListener('click', () => {
   advisorSetMode(advisor.mode === 'focus' ? 'dock' : 'focus');
+});
+document.getElementById('advisorClear').addEventListener('click', () => {
+  if (advisor.busy) return;
+  advisorStopSpeech();
+  advisor.messages = [];
+  document.getElementById('advisorMsgs').innerHTML = '';
+  advisorPersist();
 });
 document.getElementById('advisorClose').addEventListener('click', () => {
   advisorStopSpeech();
