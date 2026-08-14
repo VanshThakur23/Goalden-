@@ -1678,7 +1678,7 @@ function eduPhaseToggleBlock(g,i){
 }
 function renderPlan(){
   const c=cfg(),plan=buildPlan();
-  const b=BUCKETS[G.bucket];
+  const b=BUCKETS[G.bucket]||BUCKETS.moderate;
   const statusLabel={ok:'Fits within your savings',warn:'Slightly over, small adjustments needed',gap:'Gap: plan needs adjustment'};
   const diffSign=plan.diff>=0?'+':'-';
 
@@ -1686,7 +1686,7 @@ function renderPlan(){
   const goalRows=plan.goals.map((g,i)=>{
     const{eid,overridden,rate,sip,corpus,alloc}=g;
     const bn=BUCKETS[eid].name;
-    const eqPct=Math.round(alloc.eq*100), fullEqPct=Math.round(BUCKETS[G.bucket].eq*100);
+    const eqPct=Math.round(alloc.eq*100), fullEqPct=Math.round((BUCKETS[G.bucket]||BUCKETS.moderate).eq*100);
     const note=overridden
       ? `<span class="term" data-def="Your ${b.name} profile allows up to ${fullEqPct}% equity, but a ${g.years}-year horizon can only safely absorb up to ${Math.round(alloc.ceiling*100)}%, on a scale that keeps rising the longer the horizon gets. The debt and hybrid slices absorb the difference, kept in the same ratio your ${b.name} profile already uses between them.">${eqPct}% equity, scaled down from ${b.name} for ${g.years}yrs</span>`
       : bn;
@@ -1786,6 +1786,7 @@ function renderPlan(){
   ].join('<br>');
 
   return `<div class="plan-scroll">
+  ${advisorChipsHTML()}
   <div class="eyebrow" style="padding-top:6px">Your complete plan</div>
   <div class="qtitle" style="margin-bottom:16px">${b.name} investor · ${G.country} plan</div>
 
@@ -2252,7 +2253,19 @@ Assumptions (per country): India (₹): inflation 6%, education 10%, debt 7%, hy
 
 Data sources: same real historical Sensex (India, FY1980-2023) / S&P 500 (US, 1928-2024) series as Level 1 for "The Case". No live market data here.
 
-Behavior: prefer driving the real interface — navigate to the right screen, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.`;
+Behavior: prefer driving the real interface — navigate to the right screen, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.
+
+Choice before action (mandatory): When a user gives you enough information to take multiple steps automatically — e.g. "plan my retirement, I'm 30, retire at 60, expenses 50,000" — NEVER start filling things in immediately. First offer them a clear choice with two options on separate lines:
+"I can either:
+A) Do it all for you — I'll fill in your details, run the plan, and explain the result.
+B) Walk you through it step by step — you do each screen, I explain as we go.
+Which would you prefer?"
+Wait for their reply before touching any field. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative, proceed automatically. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it.`;
+
+// F5 — one contextual suggestion chip on the plan screen.
+function advisorChipsHTML() {
+  return '<div class="advisor-chips"><button class="advisor-chip" data-advisor-ask="Explain this plan to me">Explain this plan to me</button></div>';
+}
 
 function advisorTools() {
   const screens = flow();

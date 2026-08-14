@@ -1504,7 +1504,7 @@ function sResultsRetirement() {
     : '<div class="action-card"><div class="al">Put away, starting now</div>' +
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
       '<div class="as">For '+r.yrs+' years at "'+rLabel+'". Pot ready by age '+S.retireAge+', lasts to '+r.d.lifeExp+'.</div></div>';
-  return '<div class="result-scroll">' +
+  return '<div class="result-scroll">' + advisorChipsHTML() +
     '<div class="result-intro">Good news: this is a solvable problem. Here is exactly what it takes.</div>' +
     '<div class="edit-row">' +
     '<div class="edit-chip" data-jump="age">Age '+S.age+'</div>' +
@@ -1558,7 +1558,7 @@ function sResultsEducation() {
     : '<div class="action-card"><div class="al">Put away, starting now</div>' +
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
       '<div class="as">For '+S.yearsToCollege+' years at "'+rLabel+'". Corpus ready before college starts.</div></div>';
-  return '<div class="result-scroll">' +
+  return '<div class="result-scroll">' + advisorChipsHTML() +
     '<div class="result-intro">A college fund is one of the most plannable goals there is. Here is the number.</div>' +
     '<div class="edit-row">' +
     '<div class="edit-chip" data-jump="edu_fee">'+c.compact(S.annualFee)+'/yr</div>' +
@@ -1601,7 +1601,7 @@ function sResultsGeneric() {
   const genLabel = GEN_TYPES.find(g => g.id === S.genType);
   const rLabel = RISK.find(x => x.id === S.risk).title.toLowerCase();
   const alreadyMet = r.gap === 0;
-  return '<div class="result-scroll">' +
+  return '<div class="result-scroll">' + advisorChipsHTML() +
     '<div class="result-intro">'+(alreadyMet?'Even better news: you may already be on track.':'A clear target ahead. Here is what it takes to reach it.')+'</div>' +
     '<div class="edit-row">' +
     '<div class="edit-chip" data-jump="gen_type">'+genLabel.label+'</div>' +
@@ -1988,7 +1988,23 @@ Assumptions (per country):
 
 Data sources: "The Case" uses real historical annual returns — Sensex (India, FY1980-2023) and S&P 500 (US, 1928-2024) — to show how often N-year windows lost money and the worst/best windows. Price returns, no fabricated or estimated values. This Level does not fetch live market data.
 
-Behavior: prefer driving the real interface — navigate to the right screen, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.`;
+Behavior: prefer driving the real interface — navigate to the right screen, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.
+
+Choice before action (mandatory): When a user gives you enough information to take multiple steps automatically — e.g. "I'm 30, want to retire at 60, expenses 50,000" — NEVER start filling things in immediately. First offer them a clear choice:
+"I can either:
+A) Do it all for you — I'll fill in your details, run the calculation, and explain the result.
+B) Walk you through it step by step — you do each screen, I explain as we go.
+Which would you prefer?"
+Wait for their reply before touching any field.`;
+
+// F5 — one contextual suggestion chip on the results screen, grounded in the
+// goal type. Rendered by the page, sent through the real send path on click.
+function advisorChipsHTML() {
+  let q = 'Explain this number to me';
+  if (S.goalType === 'education') q = 'Explain how this college fund works';
+  else if (S.goalType === 'generic') q = 'Explain this goal amount to me';
+  return '<div class="advisor-chips"><button class="advisor-chip" data-advisor-ask="' + q + '">' + q + '</button></div>';
+}
 
 function advisorTools() {
   const screens = flow();
