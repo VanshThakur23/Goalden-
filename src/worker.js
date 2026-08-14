@@ -341,12 +341,14 @@ export default {
       if (!rateLimitOk(ip)) {
         return chatJson({ error: 'Too many requests — please slow down and try again in a minute.' }, 429, origin);
       }
-      const contentLength = parseInt(request.headers.get('Content-Length') || '0', 10);
-      if (contentLength > 100000) {
-        return chatJson({ error: 'Request is too large.' }, 413, origin);
-      }
       try {
-        const body = await request.json();
+        // Read as text first so we can check actual size — browsers don't set
+        // Content-Length on fetch() POST requests, so that header is always 0.
+        const bodyText = await request.text();
+        if (bodyText.length > 200000) {
+          return chatJson({ error: 'Request is too large.' }, 413, origin);
+        }
+        const body = JSON.parse(bodyText);
         if ((body.messages || []).length > 40) {
           return chatJson({ error: 'This conversation has grown too long — please start a new one.' }, 413, origin);
         }

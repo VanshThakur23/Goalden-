@@ -477,6 +477,22 @@ function advisorBuildBody() {
     body.state = { _truncated: true, note: 'State omitted because it was too large. Use get_state, get_detail, get_price_history or get_instrument_stats to pull what you need.' };
     serialized = JSON.stringify(body);
   }
+  // If the body is still large (tool results accumulate across rounds), strip
+  // the oldest tool exchanges until we are under 80KB. This keeps the most
+  // recent context while ensuring the Worker can proxy the request.
+  let stripped = 0;
+  while (serialized.length > 80000 && body.messages.length > 1) {
+    const firstCallIdx = body.messages.findIndex(function(m) { return m.role === 'assistant' && m.tool_calls; });
+    if (firstCallIdx < 0) { body.messages.shift(); }
+    else {
+      let endIdx = firstCallIdx + 1;
+      while (endIdx < body.messages.length && body.messages[endIdx].role === 'tool') endIdx++;
+      body.messages.splice(firstCallIdx, endIdx - firstCallIdx);
+    }
+    serialized = JSON.stringify(body);
+    stripped++;
+  }
+  if (stripped) console.warn('[advisor] trimmed ' + stripped + ' old tool exchanges; body now ' + serialized.length + ' bytes.');
   return serialized;
 }
 
@@ -561,7 +577,15 @@ async function advisorLoop() {
         if (name === 'compose_briefing') result = JSON.stringify(composeBriefing(args));
         else result = advExecuteTool(name, args);
         if (result && typeof result.then === 'function') result = await result;
-        advisor.messages.push({ role: 'tool', tool_call_id: tc.id, name: name, content: result });
+        // Truncate large tool results before storing — chart data and price
+        // history can be many KB; accumulated across 4+ tool rounds they
+        // push the body over the Worker's size limit and break later calls.
+        const MAX_TOOL_CONTENT = 3500;
+        let storedContent = typeof result === 'string' ? result : JSON.stringify(result);
+        if (storedContent.length > MAX_TOOL_CONTENT) {
+          storedContent = storedContent.slice(0, MAX_TOOL_CONTENT) + '…[truncated for context window]';
+        }
+        advisor.messages.push({ role: 'tool', tool_call_id: tc.id, name: name, content: storedContent });
         advisorCompleteStep(stepRow);
         advisorFlash(name, result);
         // F2b — sequence consecutive actions so a human can watch them happen.
