@@ -36,15 +36,25 @@ const ADVISOR_CSS = `
 #advisorFab svg{width:26px;height:26px}
 #advisorPanel{position:fixed;right:18px;bottom:86px;z-index:1001;width:460px;max-width:calc(100vw - 36px);max-height:min(75vh,720px);display:none;flex-direction:column;background:var(--card);border:1px solid rgba(20,40,63,.14);border-radius:14px;box-shadow:0 12px 40px rgba(20,40,63,.28);overflow:hidden}
 #advisorPanel.open{display:flex}
+#advisorPanel.mode-dock{right:0;top:0;bottom:0;width:400px;max-width:100vw;height:100vh;max-height:100vh;border-radius:0;border-top:none;border-bottom:none;border-right:none}
+#advisorPanel.mode-focus{left:0;right:0;top:5vh;bottom:5vh;margin:0 auto;width:680px;max-width:calc(100vw - 32px);height:90vh;max-height:90vh;border-radius:16px}
+body.advisor-docked{transition:padding-right .25s ease}
+@media(min-width:900px){body.advisor-docked{padding-right:400px}}
 #advisorHead{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(20,40,63,.1);background:var(--bg)}
 #advisorHead .t{font-family:'Newsreader',serif;font-weight:700;font-size:15px;color:var(--ink)}
 #advisorHead .s{font-family:'Spline Sans Mono',monospace;font-size:9.5px;color:rgba(20,40,63,.5);letter-spacing:.04em;text-transform:uppercase}
-#advisorClose{background:none;border:none;color:rgba(20,40,63,.55);cursor:pointer;font-size:16px;padding:2px 4px}
+#advisorHead .rc-btns{display:flex;align-items:center;gap:2px}
+#advisorHead button{background:none;border:none;color:rgba(20,40,63,.55);cursor:pointer;font-size:15px;padding:2px 6px;line-height:1}
 #advisorMsgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
 .adv-msg{max-width:88%;padding:11px 14px;border-radius:12px;font-size:15.5px;line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
 .adv-msg.user{align-self:flex-end;background:var(--gold);color:#fff;border-bottom-right-radius:3px;font-family:'Figtree',sans-serif}
 .adv-msg.bot{align-self:flex-start;background:#EFF3FA;color:var(--ink);border-bottom-left-radius:3px;font-family:'Figtree',sans-serif}
+.adv-msg.bot.speaking{border-left:3px solid var(--gold);animation:advisorSpeakingGlow 1.2s ease-in-out infinite}
+@keyframes advisorSpeakingGlow{0%,100%{box-shadow:0 0 0 2px rgba(37,87,199,.12)}50%{box-shadow:0 0 0 6px rgba(37,87,199,.22)}}
 .adv-msg.sys{align-self:flex-start;background:transparent;color:rgba(20,40,63,.5);font-family:'Spline Sans Mono',monospace;font-size:11px;padding:0 4px}
+.adv-step{display:flex;align-items:flex-start;gap:7px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.55);padding:1px 2px;line-height:1.4}
+.adv-step .adv-step-tick{color:var(--gold);font-weight:600;flex-shrink:0}
+.adv-step.done{color:rgba(20,40,63,.4)}
 #advisorInput{display:flex;gap:8px;padding:10px 12px;border-top:1px solid rgba(20,40,63,.1);background:var(--bg)}
 #advisorInput textarea{flex:1;resize:none;border:1px solid rgba(20,40,63,.18);border-radius:9px;padding:9px 11px;font-family:'Figtree',sans-serif;font-size:15px;line-height:1.4;max-height:90px;outline:none;background:#fff}
 #advisorInput textarea:focus{border-color:var(--gold)}
@@ -62,7 +72,6 @@ const ADVISOR_CSS = `
 .advisor-pulse{animation:advisorPulseOutline 1.6s ease}
 @keyframes advisorPulseOutline{0%{box-shadow:0 0 0 0 rgba(37,87,199,.45)}70%{box-shadow:0 0 0 14px rgba(37,87,199,0)}100%{box-shadow:0 0 0 0 rgba(37,87,199,0)}}
 .advisor-disclaimer{padding:7px 14px;font-family:'Spline Sans Mono',monospace;font-size:9.5px;color:rgba(20,40,63,.5);border-bottom:1px solid rgba(20,40,63,.08);background:#FBFCFE}
-#advisorCaption{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:2000;max-width:min(760px,calc(100vw - 28px));background:var(--card);color:var(--ink);border:1px solid rgba(20,40,63,.14);border-radius:14px;box-shadow:0 12px 40px rgba(20,40,63,.3);padding:16px 22px;font-family:'Figtree',sans-serif;font-size:21px;line-height:1.45;cursor:pointer;text-align:left}
 #resultCanvas{position:fixed;left:18px;bottom:18px;z-index:1000;width:420px;max-width:calc(100vw - 36px);max-height:70vh;background:var(--card);border:1px solid rgba(20,40,63,.14);border-radius:14px;box-shadow:0 12px 40px rgba(20,40,63,.28);display:none;flex-direction:column;overflow:hidden}
 #resultCanvas.open{display:flex}
 #resultCanvas.minimized{width:auto;max-height:none}
@@ -73,7 +82,7 @@ const ADVISOR_CSS = `
 #resultCanvasHead button{background:none;border:none;color:rgba(20,40,63,.55);cursor:pointer;font-size:15px;padding:2px 6px;line-height:1}
 #resultCanvasBody{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
 @media(max-width:480px){
-  #advisorPanel{left:0;right:0;bottom:0;width:auto;max-width:none;height:90vh;max-height:90vh;border-radius:0;border:none}
+  #advisorPanel,#advisorPanel.mode-dock,#advisorPanel.mode-focus{left:0;right:0;bottom:0;top:auto;width:auto;max-width:none;height:90vh;max-height:90vh;border-radius:0;border:none;margin:0}
   #advisorFab{right:12px;bottom:12px}
   #resultCanvas{left:0;right:0;bottom:0;width:auto;max-width:none;max-height:60vh;border-radius:0;border:none}
 }
@@ -101,9 +110,10 @@ const ADVISOR_CSS = `
     '<div id="advisorPanel">' +
       '<div id="advisorHead">' +
         '<div><div class="t">Goalden advisor</div><div class="s">Ask me anything</div></div>' +
-        '<div style="display:flex;align-items:center;gap:2px">' +
+        '<div class="rc-btns">' +
+          '<button id="advisorMode" aria-label="Dock or focus" title="Dock to the side / focus">⤢</button>' +
           '<button id="advisorVoice" aria-label="Speak replies aloud" title="Speak replies aloud">🔊</button>' +
-          '<button id="advisorClose" aria-label="Close">✕</button>' +
+          '<button id="advisorClose" aria-label="Close" title="Close">✕</button>' +
         '</div>' +
       '</div>' +
       disclaimer +
@@ -131,15 +141,43 @@ const ADVISOR_CSS = `
    State — conversation + persistence (sessionStorage, shared key).
    ===================================================================== */
 const ADVISOR_STORE_KEY = 'goalden_advisor_v1';
-const advisor = { messages: [], busy: false };
+const advisor = { messages: [], busy: false, mode: 'fab' };
 let advisorThinkingEl = null;
 const advisorVoice = { on: true, listening: false, rec: null };
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
+// F1b — panel mode: 'fab' (collapsed), 'dock' (right edge, page shifts), or
+// 'focus' (centred, large). Docked is what makes "the AI drives the page"
+// legible — you watch the sliders move while reading what it's saying.
+function advisorSetMode(mode) {
+  advisor.mode = mode;
+  const panel = document.getElementById('advisorPanel');
+  const body = document.body;
+  panel.classList.remove('mode-dock', 'mode-focus');
+  body.classList.remove('advisor-docked');
+  if (mode === 'dock') {
+    panel.classList.add('mode-dock');
+    if (!isMobile()) body.classList.add('advisor-docked');
+    panel.classList.add('open');
+  } else if (mode === 'focus') {
+    panel.classList.add('mode-focus');
+    panel.classList.add('open');
+  } else {
+    panel.classList.remove('open');
+  }
+  document.getElementById('advisorFab').setAttribute('aria-expanded', mode === 'fab' ? 'false' : 'true');
+  advisorPersist();
+}
+// When the advisor starts acting, promote the panel to dock so the user can
+// actually watch it drive the page (never force focus — that covers content).
+function advisorEnterDock() {
+  if (advisor.mode === 'fab') advisorSetMode('dock');
+}
+
 function advisorPersist(open) {
   try {
     const panelOpen = open !== undefined ? open : document.getElementById('advisorPanel').classList.contains('open');
-    sessionStorage.setItem(ADVISOR_STORE_KEY, JSON.stringify({ messages: advisor.messages, open: panelOpen }));
+    sessionStorage.setItem(ADVISOR_STORE_KEY, JSON.stringify({ messages: advisor.messages, open: panelOpen, mode: advisor.mode }));
   } catch (e) {}
 }
 
@@ -181,7 +219,11 @@ function advisorRehydrate() {
       advisorRenderHistory();
       advisor.messages.push({ role: 'system', content: '[navigation] The user is now on ' + (ADVISOR_CFG.pageLabel || 'a new page') + '. The available screens and tools changed to match this page.' });
     }
-    if (data.open) document.getElementById('advisorPanel').classList.add('open');
+    if (data.mode && data.mode !== 'fab') {
+      advisorSetMode(data.mode);
+    } else if (data.open) {
+      advisorSetMode('dock');
+    }
   } catch (e) {}
 }
 
@@ -204,16 +246,19 @@ function advisorHideThinking() {
    Voice — TTS + STT. E1b caption + E1c voice selection.
    ===================================================================== */
 const voiceCache = {};
-let captionEl = null;
-let captionTimer = null;
-// Monotonic id so a cancelled utterance's late onend/onerror can't hide the
-// caption of the NEXT utterance (speechSynthesis fires those callbacks on the
-// next tick after cancel(), by which point a newer utterance may be showing).
+// Monotonic id so a cancelled utterance's late onend/onerror can't affect the
+// NEXT utterance (speechSynthesis fires those callbacks on the next tick after
+// cancel(), by which point a newer utterance may be playing).
 let advisorSpeechId = 0;
+
+function advisorUnmarkSpeaking() {
+  const msgs = document.getElementById('advisorMsgs');
+  if (msgs) msgs.querySelectorAll('.adv-msg.bot.speaking').forEach((el) => el.classList.remove('speaking'));
+}
 
 function advisorStopSpeech() {
   advisorSpeechId++;
-  advisorHideCaption();
+  advisorUnmarkSpeaking();
   try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch (e) {}
 }
 
@@ -253,20 +298,6 @@ if ('speechSynthesis' in window) {
   try { window.speechSynthesis.getVoices(); } catch (e) {}
 }
 
-function advisorHideCaption() {
-  if (captionTimer) { clearTimeout(captionTimer); captionTimer = null; }
-  if (captionEl && captionEl.parentNode) captionEl.parentNode.removeChild(captionEl);
-  captionEl = null;
-}
-function advisorShowCaption(text) {
-  advisorHideCaption();
-  captionEl = document.createElement('div');
-  captionEl.id = 'advisorCaption';
-  captionEl.textContent = text;
-  captionEl.addEventListener('click', advisorHideCaption);
-  document.body.appendChild(captionEl);
-}
-
 function advisorSpeak(text) {
   if (!advisorVoice.on || !text) return;
   if (!('speechSynthesis' in window)) return;
@@ -280,9 +311,14 @@ function advisorSpeak(text) {
     u.rate = 1.0;
     const v = advisorPickVoice(lang);
     if (v) u.voice = v;
-    u.onend = function () { if (id === advisorSpeechId) captionTimer = setTimeout(advisorHideCaption, 2500); };
-    u.onerror = function () { if (id === advisorSpeechId) advisorHideCaption(); };
-    advisorShowCaption(clean);
+    // F1a — speaking indicator on the bubble itself (the text is right there).
+    const msgs = document.getElementById('advisorMsgs');
+    const bubbles = msgs ? msgs.querySelectorAll('.adv-msg.bot') : [];
+    const bubble = bubbles[bubbles.length - 1];
+    if (bubble) bubble.classList.add('speaking');
+    const unmark = function () { if (bubble) bubble.classList.remove('speaking'); };
+    u.onend = function () { if (id === advisorSpeechId) unmark(); };
+    u.onerror = function () { if (id === advisorSpeechId) unmark(); };
     window.speechSynthesis.speak(u);
   } catch (e) {}
 }
@@ -325,11 +361,7 @@ function isMobile() {
   try { return window.matchMedia('(max-width:480px)').matches; } catch (e) { return false; }
 }
 function advisorMinimizeToFab() {
-  const p = document.getElementById('advisorPanel');
-  if (p.classList.contains('open')) {
-    p.classList.remove('open');
-    document.getElementById('advisorFab').setAttribute('aria-expanded', 'false');
-  }
+  if (advisor.mode !== 'fab') advisorSetMode('fab');
 }
 function resultCanvasOpen(title, html) {
   if (isMobile()) advisorMinimizeToFab();
@@ -352,18 +384,93 @@ function resultCanvasClose() {
    Tool loop — POST /api/chat, execute tool calls, feed results back, loop
    until the model produces a plain-text reply.
    ===================================================================== */
+
+// F0 — state projection. Pages may supply stateForAdvisor() returning a compact,
+// model-useful summary instead of the raw state object (the Lab's raw L carries
+// full daily price arrays that blow the Worker's 100KB cap). Falls back to the
+// page's `state` when no projection is supplied.
+function advisorState() {
+  if (typeof ADVISOR_CFG.stateForAdvisor === 'function') {
+    try { return ADVISOR_CFG.stateForAdvisor(); } catch (e) {}
+  }
+  return ADVISOR_CFG.state || {};
+}
+
+// F0 — build the request body, and guard client-side: if the serialised body
+// is still too large (even after projection), drop state to a skeleton and tell
+// the model which pull-tools to use, rather than firing a request certain to 413.
+function advisorBuildBody() {
+  const body = {
+    messages: advisor.messages,
+    tools: advTools(),
+    state: advisorState(),
+    knowledge: ADVISOR_CFG.knowledge || '',
+    context: { page: advPage(), app: ADVISOR_CFG.app || 'Goalden', screens: advScreens() },
+  };
+  let serialized = JSON.stringify(body);
+  if (serialized.length > 60000) {
+    console.warn('[advisor] state truncated: body was ' + serialized.length + ' bytes; dropping state to a skeleton.');
+    body.state = { _truncated: true, note: 'State omitted because it was too large. Use get_state, get_detail, get_price_history or get_instrument_stats to pull what you need.' };
+    serialized = JSON.stringify(body);
+  }
+  return serialized;
+}
+
+// F2a — human-readable narration of a tool call (page supplies describeTool;
+// fall back to the raw name+args only when it doesn't).
+function advisorDescribe(name, args) {
+  if (typeof ADVISOR_CFG.describeTool === 'function') {
+    try {
+      const d = ADVISOR_CFG.describeTool(name, args || {});
+      if (d) return d;
+    } catch (e) {}
+  }
+  return name + (args && Object.keys(args).length ? ' ' + JSON.stringify(args) : '');
+}
+// F2 — step rows are quieter than a chat bubble: a small inline line with a
+// tick once the step completes.
+function advisorAddStep(text) {
+  const msgs = document.getElementById('advisorMsgs');
+  const div = document.createElement('div');
+  div.className = 'adv-step';
+  div.innerHTML = '<span class="adv-step-tick">·</span><span>' + text + '</span>';
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+function advisorCompleteStep(el) {
+  if (!el) return;
+  el.classList.add('done');
+  const tick = el.querySelector('.adv-step-tick');
+  if (tick) tick.textContent = '✓';
+}
+// F2c — after set_value, pulse the control that changed (the page returns the
+// selector it touched).
+function advisorFlash(name, result) {
+  if (name !== 'set_value') return;
+  let touched = null;
+  if (typeof result === 'string') {
+    try { touched = JSON.parse(result).touched; } catch (e) {}
+  } else if (result && typeof result === 'object') {
+    touched = result.touched;
+  }
+  if (!touched) return;
+  try {
+    const el = typeof touched === 'string' ? document.querySelector(touched) : touched;
+    if (!el) return;
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+    el.classList.add('advisor-pulse');
+    setTimeout(() => el.classList.remove('advisor-pulse'), 1600);
+  } catch (e) {}
+}
+function advisorPause(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
 async function advisorLoop() {
   for (let step = 0; step < 6; step++) {
     const resp = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: advisor.messages,
-        tools: advTools(),
-        state: ADVISOR_CFG.state || {},
-        knowledge: ADVISOR_CFG.knowledge || '',
-        context: { page: advPage(), app: ADVISOR_CFG.app || 'Goalden', screens: advScreens() },
-      }),
+      body: advisorBuildBody(),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -372,15 +479,23 @@ async function advisorLoop() {
     const data = await resp.json();
     const msg = data.message || {};
     if (msg.tool_calls && msg.tool_calls.length) {
+      advisorEnterDock();
       advisor.messages.push({ role: 'assistant', content: msg.content || null, tool_calls: msg.tool_calls });
-      for (const tc of msg.tool_calls) {
+      let reduceMotion = false;
+      try { reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+      for (let ci = 0; ci < msg.tool_calls.length; ci++) {
+        const tc = msg.tool_calls[ci];
         const name = tc.function && tc.function.name;
         let args = {};
         try { args = JSON.parse(tc.function.arguments || '{}'); } catch (_) { args = {}; }
-        advisorAddMsg('sys', '… ' + name + (Object.keys(args).length ? ' ' + JSON.stringify(args) : ''));
+        const stepRow = advisorAddStep(advisorDescribe(name, args));
         let result = advExecuteTool(name, args);
         if (result && typeof result.then === 'function') result = await result;
         advisor.messages.push({ role: 'tool', tool_call_id: tc.id, name: name, content: result });
+        advisorCompleteStep(stepRow);
+        advisorFlash(name, result);
+        // F2b — sequence consecutive actions so a human can watch them happen.
+        if (ci < msg.tool_calls.length - 1 && !reduceMotion) await advisorPause(350);
       }
       advisorTrim();
       advisorPersist();
@@ -423,6 +538,8 @@ async function advisorSend() {
     const msg = (e && e.message) ? e.message : '';
     if (/DEEPSEEK_API_KEY|secret is not set|api key/i.test(msg)) {
       advisorAddMsg('sys', "The advisor isn't switched on yet — the site owner needs to add an API key.");
+    } else if (/too large|413|payload|too long/i.test(msg)) {
+      advisorAddMsg('sys', 'That request was too large to send. Try asking about one instrument or one tool at a time.');
     } else {
       advisorAddMsg('sys', 'Could not reach the advisor: ' + (msg || e));
     }
@@ -447,26 +564,26 @@ document.getElementById('advisorVoice').addEventListener('click', () => {
   if (!advisorVoice.on) advisorStopSpeech();
 });
 document.getElementById('advisorFab').addEventListener('click', () => {
-  const p = document.getElementById('advisorPanel');
-  p.classList.toggle('open');
-  document.getElementById('advisorFab').setAttribute('aria-expanded', p.classList.contains('open') ? 'true' : 'false');
-  if (p.classList.contains('open')) {
-    if (isMobile()) {
-      const cv = document.getElementById('resultCanvas');
-      if (cv.classList.contains('open') && !cv.classList.contains('minimized')) cv.classList.add('minimized');
-    }
-    if (!document.getElementById('advisorMsgs').children.length) {
-      advisorAddMsg('bot', ADVISOR_CFG.greeting || 'Hi! Ask me anything about your plan.');
-    }
-    try { document.getElementById('advisorText').focus(); } catch (e) {}
+  if (advisor.mode !== 'fab') {
+    advisorSetMode('fab');
+    return;
   }
-  advisorPersist();
+  if (isMobile()) {
+    const cv = document.getElementById('resultCanvas');
+    if (cv.classList.contains('open') && !cv.classList.contains('minimized')) cv.classList.add('minimized');
+  }
+  if (!document.getElementById('advisorMsgs').children.length) {
+    advisorAddMsg('bot', ADVISOR_CFG.greeting || 'Hi! Ask me anything about your plan.');
+  }
+  advisorSetMode('dock');
+  try { document.getElementById('advisorText').focus(); } catch (e) {}
+});
+document.getElementById('advisorMode').addEventListener('click', () => {
+  advisorSetMode(advisor.mode === 'focus' ? 'dock' : 'focus');
 });
 document.getElementById('advisorClose').addEventListener('click', () => {
-  document.getElementById('advisorPanel').classList.remove('open');
-  document.getElementById('advisorFab').setAttribute('aria-expanded', 'false');
   advisorStopSpeech();
-  advisorPersist(false);
+  advisorSetMode('fab');
   try { document.getElementById('advisorFab').focus(); } catch (e) {}
 });
 document.getElementById('advisorSend').addEventListener('click', advisorSend);
@@ -474,11 +591,9 @@ document.getElementById('advisorText').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); advisorSend(); }
 });
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && document.getElementById('advisorPanel').classList.contains('open')) {
-    document.getElementById('advisorPanel').classList.remove('open');
-    document.getElementById('advisorFab').setAttribute('aria-expanded', 'false');
+  if (e.key === 'Escape' && advisor.mode !== 'fab') {
     advisorStopSpeech();
-    advisorPersist(false);
+    advisorSetMode('fab');
     try { document.getElementById('advisorFab').focus(); } catch (e) {}
   }
 });

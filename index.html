@@ -229,6 +229,7 @@ function advisorTools() {
     { type:'function', function:{ name:'open_door', description:'Open one of the three tools. Valid doors: quick (Quick Calculate), full (The Full Plan), lab (The Lab).', parameters:{ type:'object', properties:{ door:{ type:'string', enum:ADVISOR_DOORS.map(d=>d.id) } }, required:['door'] } } },
     { type:'function', function:{ name:'get_state', description:'Return which page the user is on right now.' } },
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
+    { type:'function', function:{ name:'scroll_to', description:'Scroll to an on-screen element. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
   ];
 }
 
@@ -257,7 +258,19 @@ function executeAdvisorTool(name, args) {
     return JSON.stringify({ ok:true, door: door.id, opened: door.label });
   }
   if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
+  if (name === 'scroll_to') return JSON.stringify(advisorHighlight(args && args.element));
   return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
+}
+
+// F2a — human-readable narration of each tool call.
+function advisorDescribeTool(name, args) {
+  args = args || {};
+  if (name === 'open_door') {
+    const d = ADVISOR_DOORS.find(function (x) { return x.id === args.door; });
+    return 'Opening ' + (d ? d.label : args.door);
+  }
+  if (name === 'highlight' || name === 'scroll_to') return 'Pointing you at the ' + args.element;
+  return null;
 }
 
 window.GOALDEN_ADVISOR_CONFIG = {
@@ -269,6 +282,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
   page: function () { return 'landing'; },
   screens: function () { return ADVISOR_DOORS.map(function (d) { return d.id; }); },
   executeTool: function (name, args) { return executeAdvisorTool(name, args); },
+  describeTool: function (name, args) { return advisorDescribeTool(name, args); },
   lang: function () { return 'en-IN'; },
   greeting: 'Hi! Not sure where to start? Tell me what you\'re saving for and I\'ll point you to the right tool.',
   placeholder: 'Ask, or tap the mic…',

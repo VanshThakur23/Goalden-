@@ -234,3 +234,72 @@ Format:
   voice, cross-page persistence). The one risk to eyeball first: advisor.js
   must load after the inline script so GOALDEN_ADVISOR_CONFIG is set.
 - No commit made (per the git rule).
+
+---
+
+## 2026-08-14 (night 2) — opencode — V2 Batch 1 (F0 + F1 + F2 + F4)
+
+### F0 — BLOCKING payload bug (advisor dead on Test Real Investments)
+- Root cause: advisor.js sent the whole `L` object as `state`, including
+  `L.live.data`'s raw daily price arrays. Measured (2 instruments, ~1,238 bars
+  each): **121,088 bytes BEFORE** vs **807 bytes AFTER** the fix (99.3% smaller).
+  The 100KB Worker cap rejected it before the model ever saw it.
+- Layer 1 — `stateForAdvisor()` hook: advisor.js now calls it when present
+  (Lab supplies it), falling back to `state`. The Lab projection keeps derived
+  facts per live instrument (symbol, label, currency, annualised return, vol,
+  geoAnnual/cagr, n, date range, quality level) and drops prices + stats.returns
+  + snapshot currency bloat.
+- Layer 2 — pull-tools (Lab): `get_price_history(symbol, granularity)` (daily
+  last-260 or ~60 downsampled points), `get_instrument_stats(symbol)`,
+  `get_detail(path)` (dotted path into the COMPACT state, so raw prices are
+  unreachable by construction). Nothing became invisible; the model just pulls
+  detail on demand.
+- Layer 3 — client-side guard in advisor.js `advisorBuildBody()`: if serialised
+  body > 60KB, drop state to a skeleton + tell the model which pull-tools to use.
+- Layer 4 — honest failure: "Request is too large" now maps to "try asking about
+  one instrument or one tool at a time", byte size logged to console.
+- Also fixed `get_state` in the Lab to return the compact projection (it was
+  also serialising full L).
+
+### F1 — caption gone, panel docks (advisor.js only)
+- F1a: deleted `#advisorCaption` + advisorShowCaption/HideCaption/captionEl/
+  captionTimer. Speaking is now a subtle `.adv-msg.bot.speaking` left-border +
+  glow on the bubble being spoken. `advisorSpeechId` kept (still guards stale
+  callbacks) via new `advisorUnmarkSpeaking()`.
+- F1b: three panel modes — `fab` / `dock` (right edge, 400px, full height;
+  `body.advisor-docked { padding-right:400px }` ≥900px so content shifts, NO
+  transform) / `focus` (centred 680px, 90vh via left/right+margin auto, no
+  transform). Header `#advisorMode` button cycles dock⇄focus; close/Escape →
+  fab; FAB → dock. Mode persisted in sessionStorage with `open`. Tool calls call
+  `advisorEnterDock()` so the panel docks as the AI acts. <900px dock = overlay
+  (no body shift); <480px existing fullscreen + canvas mutual-exclusion kept.
+
+### F2 — actions visible and legible
+- F2a: each page supplies `describeTool(name,args)` → human sentence ("Setting
+  retirement age to 55", "Running 1,000 simulations"), rendered as a quiet
+  `.adv-step` row with a tick; falls back to raw only if absent.
+- F2b: advisorLoop awaits ~350ms between consecutive tool calls (skipped when
+  reduced-motion), so N actions read as N steps.
+- F2c: advisorSetValue now returns a `touched` selector (Lab: exact
+  `input[data-k=...][data-tab=...]`; door1/door2: `#stage .screen`), which
+  advisorFlash pulses + scrolls into view after the change.
+- F2d: `scroll_to(element)` added as a first-class tool on all four pages
+  (aliases the existing scroll+pulse highlight).
+
+### F4 — taught the model the new behaviour
+- Rewrote the "Behavior note" in all four pages' ADVISOR_KNOWLEDGE: prefer
+  driving the real interface (navigate → set values → scroll result into view →
+  explain), use the workspace canvas only for side-by-side comparison, never
+  describe a number without putting it on screen.
+- Added to the system prompt (worker.js + local_server.py): narrate BEFORE
+  acting, and after a multi-step sequence say what changed and what it means.
+
+### Verification
+- advisor.js brace-balanced (script check). Lab F0 pull-tools + describeTool
+  re-read by hand. local_server.py compiles. Still NOT browser-tested.
+
+### Known / not done (Batch 1)
+- The old `show_result`/result-canvas path is still present but de-emphasised by
+  F4's knowledge rewrite; it's retired properly in Batch 2 (F3g).
+- Batch 2 (F7 + F3) and Batch 3 (F5 + F6) not started.
+- No commit made (per the git rule).

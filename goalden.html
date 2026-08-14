@@ -1988,7 +1988,7 @@ Assumptions (per country):
 
 Data sources: "The Case" uses real historical annual returns — Sensex (India, FY1980-2023) and S&P 500 (US, 1928-2024) — to show how often N-year windows lost money and the worst/best windows. Price returns, no fabricated or estimated values. This Level does not fetch live market data.
 
-Behavior note: when the user is looking at their results (or asking about them), prefer showing them the relevant chart or comparison over describing it in words — call show_result with the closest matching kind, then give a one-line explanation of what's now on screen.`;
+Behavior: prefer driving the real interface — navigate to the right screen, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.`;
 
 function advisorTools() {
   const screens = flow();
@@ -1997,7 +1997,10 @@ function advisorTools() {
     { type:'function', function:{ name:'set_value', description:'Set one input/answer. Use it to fill in a value the user just told you. Field meanings: '+ADVISOR_FIELDS.map(f=>f.name+' = '+f.desc).join(' '), parameters:{ type:'object', properties:{ field:{ type:'string', enum:ADVISOR_FIELDS.map(f=>f.name) }, value:{} }, required:['field','value'] } } },
     { type:'function', function:{ name:'get_state', description:'Return everything the user has entered so far, plus the current screen.' } },
     { type:'function', function:{ name:'get_results', description:'Run the current calculation and return the key numbers (monthly SIP, corpus, etc.).' } },
+    { type:'function', function:{ name:'read_current_chart', description:'Return a structured description of the result on screen right now — the number, what it means, and the notable figures.' } },
+    { type:'function', function:{ name:'read_current_result', description:'Return the current numeric result (same as get_results).' } },
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
+    { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'show_result', description:'Open the results canvas showing a real chart or comparison. Valid kinds: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ')+'.', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:Object.keys(ADVISOR_RESULT_KINDS) } }, required:['kind'] } } },
   ];
 }
@@ -2024,8 +2027,28 @@ function advisorSetValue(field, value) {
   const f = flow();
   S.si = Math.max(0, Math.min(f.length - 1, S.si));
   render();
-  return { ok:true, field, value:S[field], page:f[S.si] };
+  return { ok:true, field, value:S[field], page:f[S.si], touched:'#stage .screen' };
 }
+
+// F7a — structured description of what's on the results screen, built from the
+// app's own numbers (never fabricated).
+function advisorReadCurrentChart() {
+  if (!S.country || !S.goalType) return { ok:false, error:'Finish the inputs first — there is no result on screen yet.' };
+  const res = advisorGetResults();
+  if (!res.ok) return res;
+  const r = res.result;
+  const c = cfg();
+  const big = r.corpus != null ? r.corpus : (r.inflatedGoal != null ? r.inflatedGoal : null);
+  const monthly = r.monthlySIP != null ? r.monthlySIP : r.sip;
+  return { ok:true, tool:'Quick Calculate', charts:[
+    { kind:'result', title:'Your number', note:'the headline result for the '+S.goalType+' goal', points:[
+      { label:'target amount', value: big != null ? c.compact(big) : 'not computed yet' },
+      { label:'monthly SIP', value: monthly != null ? c.fmt(Math.round(monthly)) : 'not computed yet' },
+      { label:'expected return', value: r.expectedReturnPct != null ? r.expectedReturnPct+'%/yr' : null },
+    ] },
+  ] };
+}
+function advisorReadCurrentResult() { return advisorGetResults(); }
 
 function advisorGetResults() {
   if (!S.country) return { ok:false, error:'Need a country/currency first — ask the user whether they are in India or the United States.' };
@@ -2157,6 +2180,8 @@ function executeAdvisorTool(name, args) {
     return JSON.stringify(Object.assign({}, S, { page: flow()[S.si] || null, screens: flow() }));
   }
   if (name === 'get_results') return JSON.stringify(advisorGetResults());
+  if (name === 'read_current_chart') return JSON.stringify(advisorReadCurrentChart());
+  if (name === 'read_current_result') return JSON.stringify(advisorReadCurrentResult());
   if (name === 'navigate') {
     const screen = args && args.screen;
     const idx = flow().indexOf(screen);
@@ -2167,8 +2192,25 @@ function executeAdvisorTool(name, args) {
   }
   if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
   if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
+  if (name === 'scroll_to') return JSON.stringify(advisorHighlight(args && args.element));
   if (name === 'show_result') return JSON.stringify(advisorShowResult(args && args.kind));
   return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
+}
+
+// F2a — human-readable narration of each tool call.
+function advisorDescribeTool(name, args) {
+  args = args || {};
+  switch (name) {
+    case 'navigate': return 'Going to ' + args.screen;
+    case 'set_value': return 'Setting ' + args.field + ' to ' + args.value;
+    case 'get_results': return 'Calculating your number';
+    case 'read_current_chart': return 'Reading the chart on your screen';
+    case 'read_current_result': return 'Reading your result';
+    case 'get_state': return 'Reading your answers';
+    case 'highlight': case 'scroll_to': return 'Pointing you at the ' + args.element;
+    case 'show_result': return 'Opening the result';
+    default: return null;
+  }
 }
 
 window.GOALDEN_ADVISOR_CONFIG = {
@@ -2180,6 +2222,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
   page: function () { return flow()[S.si] || null; },
   screens: function () { return flow(); },
   executeTool: function (name, args) { return executeAdvisorTool(name, args); },
+  describeTool: function (name, args) { return advisorDescribeTool(name, args); },
   lang: function () { return S.country === 'US' ? 'en-US' : 'en-IN'; },
   greeting: 'Hi! I can help you plan. Tell me what you\'re saving for — retirement, education, a big purchase — or just ask a question.',
   placeholder: 'Ask, or tap the mic…',

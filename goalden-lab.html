@@ -5154,14 +5154,89 @@ Portfolio math (Build a Portfolio / Test Real Investments):
 - Tangency vs minimum-variance: the tangency point maximises return-for-risk; the minimum-variance point is the lowest-risk mix on the whole frontier. They usually differ — the safest mix is not the best-compensated one.
 - Diversification benefit: the ratio of the weighted-average volatility of the holdings to the portfolio's actual volatility. Above 1 means the mix is less risky than its parts standing alone — the whole point of diversification.
 
-Behavior note: when the user is looking at a tool's output (or asking about it), prefer showing them the relevant numbers or chart over describing them in words — call get_results to compute, then show_result to surface the result, and give a one-line explanation of what's now on screen.`;
+Behavior: prefer driving the real interface — navigate to the right tool, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.`;
+
+// F0 — compact state for the model. The raw L object carries L.live.data's
+// full daily price arrays (two instruments × ~1,238 days ≈ >100KB) which blows
+// the Worker's 100KB body cap, killing the advisor on Test Real Investments.
+// The model can't use raw closes anyway — it wants the derived facts. This
+// projects L down to what's useful and small; the get_price_history /
+// get_instrument_stats / get_detail pull-tools reach anything else on demand.
+function stateForAdvisor() {
+  const snapshot = Object.assign({}, L);
+  const live = { items: L.live.items, weight: L.live.weight, selectedWeights: L.live.selectedWeights, rf: L.live.rf, searchMode: L.live.searchMode, data: {} };
+  Object.keys(L.live.data || {}).forEach((key) => {
+    const d = L.live.data[key];
+    if (!d) return;
+    const s = d.stats || {};
+    const item = (L.live.items || []).find((it) => it.key === key) || {};
+    live.data[key] = {
+      status: d.status, symbol: item.symbol || key, label: d.label, currency: d.currency, type: item.type,
+      annualReturn: s.annualReturn, annualVol: s.annualVol, geoAnnual: s.geoAnnual, cagr: s.cagr,
+      n: s.n, startDate: s.startDate, endDate: s.endDate, qualityLevel: s.quality ? s.quality.level : null,
+    };
+  });
+  snapshot.live = live;
+  // Snapshots carry the whole C config object as `currency` (incl. the full
+  // instrument reference) — reduce to just the code so it doesn't re-bloat.
+  if (Array.isArray(snapshot.snapshots)) {
+    snapshot.snapshots = snapshot.snapshots.map((sn) => ({ label: sn.label, corpus: sn.corpus, sipDisplay: sn.sipDisplay, summary: sn.summary, currency: sn.currency ? sn.currency.code : null }));
+  }
+  return snapshot;
+}
+function downsampleSeries(prices, maxPoints) {
+  if (!Array.isArray(prices) || prices.length <= maxPoints) return prices || [];
+  const step = (prices.length - 1) / (maxPoints - 1);
+  const out = [];
+  for (let i = 0; i < maxPoints; i++) out.push(prices[Math.round(i * step)]);
+  return out;
+}
+function advisorLiveItem(symbol) {
+  const q = String(symbol || '').toUpperCase();
+  return (L.live.items || []).find((it) => (it.symbol || '').toUpperCase() === q || (it.key || '').toUpperCase() === q);
+}
+function advisorGetPriceHistory(symbol, granularity) {
+  const item = advisorLiveItem(symbol);
+  if (!item) return { ok:false, error:'No instrument "'+symbol+'" loaded — add it in Test Real Investments first.' };
+  const d = L.live.data[item.key];
+  if (!d || !Array.isArray(d.prices) || !d.prices.length) return { ok:false, error:'No price history for "'+symbol+'".' };
+  const daily = granularity === 'daily';
+  const points = daily ? d.prices.slice(-260) : downsampleSeries(d.prices, 60);
+  return { ok:true, symbol: item.symbol, label: d.label, currency: d.currency, granularity: daily ? 'daily' : 'downsampled', points: points, n: points.length };
+}
+function advisorGetInstrumentStats(symbol) {
+  const item = advisorLiveItem(symbol);
+  if (!item) return { ok:false, error:'No instrument "'+symbol+'" loaded.' };
+  const d = L.live.data[item.key];
+  if (!d || !d.stats) return { ok:false, error:'No statistics for "'+symbol+'".' };
+  const s = d.stats;
+  return { ok:true, symbol: item.symbol, label: d.label, currency: d.currency, annualReturn: s.annualReturn, annualVol: s.annualVol, geoAnnual: s.geoAnnual, cagr: s.cagr, n: s.n, startDate: s.startDate, endDate: s.endDate, spanYears: s.spanYears, quality: s.quality };
+}
+function advisorGetDetail(path) {
+  // Dotted-path lookup into the COMPACT state (never raw L), so no price array
+  // can ever be returned through this tool.
+  const snapshot = stateForAdvisor();
+  const parts = String(path || '').split('.');
+  let node = snapshot;
+  for (let i = 0; i < parts.length; i++) {
+    if (node == null) break;
+    node = node[parts[i]];
+  }
+  if (node == null) return { ok:false, error:'No value at path "'+path+'".' };
+  return { ok:true, path: path, value: node };
+}
 
 function advisorTools() {
   return [
     { type:'function', function:{ name:'navigate', description:'Open a tool/tab. Valid tabs right now: '+ADVISOR_TABS.join(', ')+'.', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:ADVISOR_TABS } }, required:['tab'] } } },
     { type:'function', function:{ name:'set_value', description:'Set one input. Use it to fill in a value the user just told you. Field meanings: '+Object.keys(ADVISOR_FIELDS).map(k=>k+' = '+ADVISOR_FIELDS[k].desc).join(' '), parameters:{ type:'object', properties:{ field:{ type:'string', enum:Object.keys(ADVISOR_FIELDS) }, value:{} }, required:['field','value'] } } },
     { type:'function', function:{ name:'get_state', description:'Return every input across all tools, plus the current tab.' } },
+    { type:'function', function:{ name:'get_price_history', description:'Return a downsampled price history (~60 points, or last ~260 daily bars) for one loaded instrument in Test Real Investments.', parameters:{ type:'object', properties:{ symbol:{ type:'string' }, granularity:{ type:'string', enum:['daily','downsampled'] } }, required:['symbol'] } } },
+    { type:'function', function:{ name:'get_instrument_stats', description:'Return the full derived statistics (annualised return, volatility, sample size, date range, data-quality flags) for one loaded instrument.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
+    { type:'function', function:{ name:'get_detail', description:'Return a specific slice of app state by dotted path (e.g. "ret.monthlyExpense", "mc.years"). Never returns raw price data.', parameters:{ type:'object', properties:{ path:{ type:'string' } }, required:['path'] } } },
     { type:'function', function:{ name:'get_results', description:'Return the current tool\'s calculated output (corpus, SIP, score, etc.).' } },
+    { type:'function', function:{ name:'read_current_chart', description:'Return a structured description of the chart on screen right now — which chart, what the axes mean, and the notable points (your mix, the best-Sharpe point, the risk-free rate, each asset), plus the date range and sample size behind it.' } },
+    { type:'function', function:{ name:'read_current_result', description:'Return the current tool\'s numeric result (same as get_results).' } },
     { type:'function', function:{ name:'list_assets', description:'List the current country\'s portfolio building blocks with each one\'s assumed return, volatility and beta.' } },
     { type:'function', function:{ name:'set_weights', description:'Set the portfolio weights. Pass an array of percentages (integers) summing to 100, one per asset in the order list_assets returns.', parameters:{ type:'object', properties:{ weights:{ type:'array', items:{ type:'number' } } }, required:['weights'] } } },
     { type:'function', function:{ name:'apply_preset', description:'Apply a preset portfolio. Valid presets: conservative, balanced, aggressive, equal.', parameters:{ type:'object', properties:{ name:{ type:'string', enum:['conservative','balanced','aggressive','equal'] } }, required:['name'] } } },
@@ -5174,8 +5249,16 @@ function advisorTools() {
     { type:'function', function:{ name:'run_monte_carlo', description:'Run the Monte Carlo simulator (optionally override sip, years, meanReturn, volatility, regime).', parameters:{ type:'object', properties:{ sip:{ type:'number' }, years:{ type:'number' }, meanReturn:{ type:'number' }, volatility:{ type:'number' }, regime:{ type:'string', enum:Object.keys(REGIME_PRESETS) } } } } },
     { type:'function', function:{ name:'stress_test', description:'Run a historical crash scenario against the retirement plan. Valid scenarios are the episode ids (e.g. 2008, 2013, 2020).', parameters:{ type:'object', properties:{ scenario:{ type:'string' } }, required:['scenario'] } } },
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
+    { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view (no pulse). Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'show_result', description:'Open the results canvas showing a real chart or comparison. Valid kinds: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ')+'.', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:Object.keys(ADVISOR_RESULT_KINDS) } }, required:['kind'] } } },
   ];
+}
+
+function advisorFieldSelector(spec) {
+  const key = spec.path[spec.path.length - 1];
+  const tab = spec.path[0];
+  const tabAttr = { ret: '', step: 'step', swp: 'swp', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' }[tab] || '';
+  return tabAttr ? 'input[data-k="' + key + '"][data-tab="' + tabAttr + '"]' : 'input[data-k="' + key + '"]';
 }
 
 function advisorSetValue(field, value) {
@@ -5192,7 +5275,7 @@ function advisorSetValue(field, value) {
   obj[spec.path[spec.path.length - 1]] = value;
   if (TAB_FOR[spec.path[0]]) L.tab = TAB_FOR[spec.path[0]];
   render();
-  return { ok:true, field, value, tab:L.tab };
+  return { ok:true, field, value, tab:L.tab, touched: advisorFieldSelector(spec) };
 }
 
 // Country-scoped asset list + correlation matrix, one choke point reused by
@@ -5413,6 +5496,109 @@ function advisorStressTest(scenario) {
     finalBalance: res.shockInfo ? Math.round(res.shockInfo.finalBalance) : 0,
     survives: !!(res.shockInfo && !res.shockInfo.ranOutYear),
   } };
+}
+
+// F7a — structured description of the chart visibly on screen right now, built
+// from values the page already computed (never fabricated, never read out of
+// pixels). The model uses this to explain the user's ACTUAL chart, not a
+// textbook definition of it.
+function advisorReadCurrentChart() {
+  if (!L.country) return { ok:false, error:'Ask the user to pick a country first.' };
+  const c = cfg();
+  const tab = L.tab;
+  if (tab === 'retirement') {
+    const res = calcRetLab();
+    return { ok:true, tool:'Retirement Lab', charts:[
+      { kind:'accumulation', title:'How the pot grows', xAxis:'years saving (0 → '+res.yrs+')', yAxis:'balance (ends at '+c.compact(res.corpus)+')', note:'gold area = growth earned; pale area = what was paid in', points:[{ label:'monthly SIP', value:c.fmt(Math.round(res.sip)) }, { label:'ending corpus', value:c.compact(res.corpus) }, { label:'today\'s money', value:c.compact(res.realCorpus) }] },
+      { kind:'drawdown', title:'How the pot gets spent', xAxis:'years after retirement (0 → '+res.drawYrs+')', yAxis:'balance (starts at '+c.compact(res.corpus)+')', note:'built to reach zero at the planned age '+L.ret.lifeExp, points: res.shockInfo ? [{ label:'shock', value:res.shockInfo.ep.label+' ('+(res.shockInfo.ep.rate*100).toFixed(0)+'%)' }, { label:'outcome', value: res.shockInfo.ranOutYear ? 'runs out in drawdown year '+res.shockInfo.ranOutYear : 'survives the shock' }] : [] },
+    ] };
+  }
+  if (tab === 'portfolio') {
+    const p = advisorPortfolioData();
+    const fd = computePortfolioFrontierData(p.d, p.assets, p.corr);
+    const best = bestSharpePoint(fd.frontier, cfg().d.fdRate);
+    const points = [];
+    points.push({ label:'your mix', value:'return '+(p.d.portRet*100).toFixed(1)+'%, risk '+(p.d.decomp.totalVol*100).toFixed(1)+'%' });
+    if (best) points.push({ label:'best Sharpe', value:'return '+(best.ret*100).toFixed(1)+'%, risk '+(best.vol*100).toFixed(1)+'%, Sharpe '+best.sharpe.toFixed(2) });
+    const minVar = fd.frontier.reduce(function (m, x) { return x.vol < m.vol ? x : m; }, fd.frontier[0]);
+    if (minVar) points.push({ label:'lowest risk', value:'return '+(minVar.ret*100).toFixed(1)+'%, risk '+(minVar.vol*100).toFixed(1)+'%' });
+    return { ok:true, tool:'Build a Portfolio', charts:[
+      { kind:'efficient-frontier', title:'The efficient frontier', xAxis:'risk (volatility per year)', yAxis:'expected return per year', note:'blue curve = best return at each risk level; your mix is the orange marker', points: points },
+    ] };
+  }
+  if (tab === 'livefrontier') {
+    const items = liveReadyItems();
+    if (items.length < 2) return { ok:false, error:'The user needs to add at least two instruments in Test Real Investments first.' };
+    const rf = liveDefaultRf() / 100;
+    const stats = items.map(function (it) { return L.live.data[it.key].stats; });
+    const returns = stats.map(function (s) { return s.annualReturn; });
+    const vols = stats.map(function (s) { return s.annualVol; });
+    const points = items.map(function (it, i) { return { label: it.symbol, value:'return '+(returns[i]*100).toFixed(1)+'%, risk '+(vols[i]*100).toFixed(1)+'%' }; });
+    const cov = computeCovarianceMatrix(stats);
+    const corrPairs = [];
+    for (let i = 0; i < items.length; i++) for (let j = i+1; j < items.length; j++) corrPairs.push(items[i].symbol+'–'+items[j].symbol+': '+cov.corr[i][j].toFixed(2));
+    return { ok:true, tool:'Test Real Investments', charts:[
+      { kind:'live-frontier', title:'Real risk and return of your mix', xAxis:'risk (volatility per year)', yAxis:'annualised return', note:'built from '+stats[0].n+' real daily prices per instrument, '+stats[0].startDate+' → '+stats[0].endDate, points: points, correlations: corrPairs, riskFreeRate: (rf*100).toFixed(2)+'%' },
+    ] };
+  }
+  if (tab === 'mc') {
+    const m = L.mc;
+    const regime = REGIME_PRESETS[m.regime];
+    const res = monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*regime.meanAdj, volatility:(m.volatility/100)*regime.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
+    return { ok:true, tool:'Monte Carlo', charts:[
+      { kind:'fan', title:'Range of possible outcomes', xAxis:'years (0 → '+m.years+')', yAxis:'balance', note:'1,000 simulated paths; gold line = median, bands = 25th–75th and 10th–90th percentiles', points:[{ label:'P10', value:c.compact(res.p10) }, { label:'P50', value:c.compact(res.p50) }, { label:'P90', value:c.compact(res.p90) }] },
+    ] };
+  }
+  if (tab === 'stepup') {
+    const s = L.step;
+    const mRate = effectiveMonthlyRate(s.preRate/100);
+    const mStep = effectiveMonthlyRate(s.stepUpPct/100);
+    const flatSip = solveSIP(mRate, s.years*12, s.corpus, true);
+    const steppedSip = solveStepUpSIP(mRate, mStep, s.years*12, s.corpus, true);
+    return { ok:true, tool:'Step-Up SIP', charts:[
+      { kind:'comparison', title:'Flat vs step-up SIP', xAxis:'years (0 → '+s.years+')', yAxis:'balance (both reach '+c.compact(s.corpus)+')', note:'red = flat SIP, green = step-up', points:[{ label:'flat SIP', value:c.fmt(Math.round(flatSip))+'/mo' }, { label:'step-up SIP (starting)', value:c.fmt(Math.round(steppedSip))+'/mo' }, { label:'year-1 saving', value:c.fmt(Math.round(flatSip-steppedSip))+'/mo' }] },
+    ] };
+  }
+  if (tab === 'swp') {
+    const s = L.swp;
+    const rr = realRate(s.postRate/100, s.inflation/100);
+    const w = swpWithdrawal(rr, s.years, s.corpus, s.due);
+    const shockEp = s.shock ? c.episodes.find(function (e) { return e.id === s.shock.epId; }) : null;
+    const sim = drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:s.inflation/100, nominalRate:s.postRate/100, years:s.years, due:s.due}, shockEp ? Math.min(s.shock.year, s.years) : -1, shockEp ? shockEp.rate : 0);
+    return { ok:true, tool:'Sustainable Withdrawal', charts:[
+      { kind:'drawdown', title:'Can the corpus fund the withdrawal?', xAxis:'years (0 → '+s.years+')', yAxis:'balance (starts '+c.compact(s.corpus)+')', note:'built to reach zero at the end; a shock may cut it short', points:[{ label:'sustainable monthly draw', value:c.fmt(Math.round(w/12)) }, { label:'lasts', value:(sim.ranOutYear || s.years)+' years' }] },
+    ] };
+  }
+  if (tab === 'fx') {
+    const f = L.fx;
+    const homeC = f.direction==='investingAbroad' ? C.IN : C.US;
+    const res = fxCompare({principal:f.principal, direction:f.direction, homeReturn:f.homeReturn/100, foreignReturn:f.foreignReturn/100, depreciationRate:f.deprec/100, years:f.years});
+    return { ok:true, tool:'Cross-Border', charts:[
+      { kind:'comparison', title:'Staying home vs going abroad', xAxis:'', yAxis:'final value in '+homeC.name, note:'no chart — a two-number comparison', points:[{ label:'stayed home', value:homeC.compact(res.domesticFV) }, { label:'went abroad', value:homeC.compact(res.crossBorderFV) }, { label:'currency effect', value:(res.currencyEffect>=0?'+':'')+homeC.compact(res.currencyEffect) }, { label:'effective return', value:((res.effectiveAnnualReturn*100).toFixed(2))+'%/yr' }] },
+    ] };
+  }
+  if (tab === 'joint') {
+    const j = L.joint;
+    const infl = j.eduInflation/100, preR = j.preRate/100, parkR = j.parkRate/100;
+    const horizon = Math.max.apply(null, j.children.map(function (ch) { return ch.yearsToStart + ch.duration; }));
+    const sipStopYear = Math.max.apply(null, j.children.map(function (ch) { return ch.yearsToStart; }));
+    const joint = solveJointEducationCorpus({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, sipStopYear:sipStopYear, horizon:horizon});
+    const separate = separateCorporaTotal({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR});
+    return { ok:true, tool:'Joint Children Corpus', charts:[
+      { kind:'timeline', title:'One pool, two college timelines', xAxis:'years', yAxis:'balance', note:'fees drawn as each child reaches college', points:[{ label:'joint SIP', value:c.fmt(Math.round(joint.sip))+'/mo' }, { label:'separate SIPs', value:c.fmt(Math.round(separate))+'/mo' }, { label:'saved by pooling', value:c.fmt(Math.round(separate-joint.sip))+'/mo' }] },
+    ] };
+  }
+  if (tab === 'health') {
+    const sc = calcHealthScore();
+    return { ok:true, tool:'Plan Health', charts:[
+      { kind:'score', title:'Plan Health Score', xAxis:'', yAxis:'0–100', note:'funding 40 + emergency 20 + stress survival 25 + discipline 15', points:[{ label:'score', value:sc.total }, { label:'funding', value:sc.funding+'/40' }, { label:'emergency', value:sc.emergency+'/20' }, { label:'stress survival', value:sc.stress+'/25' }, { label:'discipline', value:sc.discipline+'/15' }] },
+    ] };
+  }
+  return { ok:false, error:'The current screen ('+tab+') has no chart to explain.' };
+}
+
+function advisorReadCurrentResult() {
+  return advisorGetResults();
 }
 
 function advisorGetResults() {
@@ -5673,9 +5859,14 @@ function advisorShowResult(kind) {
 
 function executeAdvisorTool(name, args) {
   if (name === 'get_state') {
-    return JSON.stringify({ state: L, tab: L.tab, tabs: ADVISOR_TABS });
+    return JSON.stringify({ state: stateForAdvisor(), tab: L.tab, tabs: ADVISOR_TABS });
   }
+  if (name === 'get_price_history') return JSON.stringify(advisorGetPriceHistory(args && args.symbol, args && args.granularity));
+  if (name === 'get_instrument_stats') return JSON.stringify(advisorGetInstrumentStats(args && args.symbol));
+  if (name === 'get_detail') return JSON.stringify(advisorGetDetail(args && args.path));
   if (name === 'get_results') return JSON.stringify(advisorGetResults());
+  if (name === 'read_current_chart') return JSON.stringify(advisorReadCurrentChart());
+  if (name === 'read_current_result') return JSON.stringify(advisorReadCurrentResult());
   if (name === 'navigate') {
     const tab = args && args.tab;
     if (!ADVISOR_TABS.includes(tab)) return JSON.stringify({ ok:false, error:'No tab named "'+tab+'". Valid: '+ADVISOR_TABS.join(', ') });
@@ -5696,12 +5887,43 @@ function executeAdvisorTool(name, args) {
   if (name === 'run_monte_carlo') return JSON.stringify(advisorRunMonteCarlo(args || {}));
   if (name === 'stress_test') return JSON.stringify(advisorStressTest(args && args.scenario));
   if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
+  if (name === 'scroll_to') return JSON.stringify(advisorHighlight(args && args.element));
   if (name === 'show_result') return JSON.stringify(advisorShowResult(args && args.kind));
   return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
 }
 
+// F2a — human-readable narration of each tool call, shown as a quiet step row.
+function advisorDescribeTool(name, args) {
+  args = args || {};
+  const tabLabel = function (id) { const t = TABS.find(function (x) { return x.id === id; }); return t ? t.label : id; };
+  switch (name) {
+    case 'navigate': return 'Opening ' + tabLabel(args.tab);
+    case 'set_value': return 'Setting ' + args.field + ' to ' + args.value;
+    case 'get_results': return 'Calculating the current result';
+    case 'get_state': return 'Reading your inputs';
+    case 'get_price_history': return 'Looking up price history for ' + args.symbol;
+    case 'get_instrument_stats': return 'Reading statistics for ' + args.symbol;
+    case 'get_detail': return 'Checking ' + args.path;
+    case 'list_assets': return 'Listing the building blocks';
+    case 'set_weights': return 'Adjusting the portfolio mix';
+    case 'apply_preset': return 'Applying the ' + args.name + ' preset';
+    case 'analyze_portfolio': return 'Analyzing the current mix';
+    case 'frontier_gap': return 'Checking the gap to the efficient frontier';
+    case 'search_instruments': return 'Searching for ' + args.query;
+    case 'add_instrument': return 'Adding ' + args.symbol;
+    case 'remove_instrument': return 'Removing ' + args.symbol;
+    case 'compare_live': return 'Comparing the live holdings';
+    case 'run_monte_carlo': return 'Running 1,000 simulations';
+    case 'stress_test': return 'Stress-testing against ' + args.scenario;
+    case 'highlight': case 'scroll_to': return 'Pointing you at the ' + args.element;
+    case 'show_result': return 'Opening the result';
+    default: return null;
+  }
+}
+
 window.GOALDEN_ADVISOR_CONFIG = {
   state: L,
+  stateForAdvisor: function () { return stateForAdvisor(); },
   knowledge: ADVISOR_KNOWLEDGE,
   app: 'Goalden — The Lab',
   pageLabel: 'Level 3 — The Lab',
@@ -5709,6 +5931,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
   page: function () { return L.tab || 'home'; },
   screens: function () { return ADVISOR_TABS; },
   executeTool: function (name, args) { return executeAdvisorTool(name, args); },
+  describeTool: function (name, args) { return advisorDescribeTool(name, args); },
   lang: function () { return L.country === 'US' ? 'en-US' : 'en-IN'; },
   greeting: 'Hi! I can run any of these tools for you. Tell me what you\'re trying to figure out, or just ask a question.',
   placeholder: 'Ask, or tap the mic…',
