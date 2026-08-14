@@ -588,6 +588,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .live-wc-badge{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:8px;margin-left:6px;vertical-align:middle}
 .live-wc-badge.best{background:rgba(37,87,199,.22);color:var(--gold)}
 .live-wc-badge.minvar{background:rgba(143,199,158,.18);color:#8FC79E}
+
 </style>
 </head>
 <body>
@@ -603,6 +604,10 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
   </nav>
   <main id="main"></main>
 </div>
+
+
+</div>
+
 <button class="print-btn" id="printBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span>Print / Save as PDF</span></button>
 
 <script>
@@ -5066,7 +5071,652 @@ document.body.addEventListener('click', e=>{
   // pre-collapse height and wrongly decide the panel no longer fits.
   setTimeout(syncStickyPanels, 320);
 });
+
+/* =====================================================================
+   AI ADVISOR — conversational overlay. Talks to POST /api/chat (the Worker
+   in prod, local_server.py in dev). The model returns either plain text or
+   a tool call; we execute the tool against L, feed the result back, and
+   loop until it produces a plain answer. The model never touches L
+   directly — every mutation goes through executeAdvisorTool.
+   ===================================================================== */
+const ADVISOR_TABS = ['home'].concat(TABS.map(t => t.id));
+const TAB_FOR = { ret:'retirement', step:'stepup', swp:'swp', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+
+const ADVISOR_FIELDS = {
+  country: { path:['country'], type:'string', enum:['IN','US'], desc:'Country/currency: IN for India ₹, US for United States $.' },
+  'ret.age': { path:['ret','age'], type:'integer', min:18, max:65, desc:'Current age (18-65).' },
+  'ret.retireAge': { path:['ret','retireAge'], type:'integer', min:45, max:75, desc:'Retirement age (45-75).' },
+  'ret.monthlyExpense': { path:['ret','monthlyExpense'], type:'integer', min:10000, max:500000, desc:'Monthly expenses today.' },
+  'ret.existingSavings': { path:['ret','existingSavings'], type:'integer', min:0, max:20000000, desc:'Already saved for retirement.' },
+  'ret.lifestyleFactor': { path:['ret','lifestyleFactor'], type:'integer', min:40, max:120, desc:'Spending at retirement as a % of today (40-120).' },
+  'ret.preRate': { path:['ret','preRate'], type:'number', min:4, max:16, desc:'Growth % while saving.' },
+  'ret.postRate': { path:['ret','postRate'], type:'number', min:3, max:14, desc:'Growth % after retirement.' },
+  'ret.inflation': { path:['ret','inflation'], type:'number', min:2, max:12, desc:'Inflation %.' },
+  'ret.lifeExp': { path:['ret','lifeExp'], type:'integer', min:70, max:95, desc:'Planning age (70-95).' },
+  'ret.ddVol': { path:['ret','ddVol'], type:'integer', min:0, max:25, desc:'Drawdown volatility %.' },
+  'step.corpus': { path:['step','corpus'], type:'integer', min:1000000, max:100000000, desc:'Target corpus for the step-up SIP.' },
+  'step.years': { path:['step','years'], type:'integer', min:5, max:40, desc:'Years to invest.' },
+  'step.preRate': { path:['step','preRate'], type:'number', min:4, max:16, desc:'Expected growth %.' },
+  'step.stepUpPct': { path:['step','stepUpPct'], type:'integer', min:0, max:20, desc:'Annual step-up %.' },
+  'swp.corpus': { path:['swp','corpus'], type:'integer', min:1000000, max:100000000, desc:'Retirement corpus to draw from.' },
+  'swp.years': { path:['swp','years'], type:'integer', min:5, max:40, desc:'Years to draw.' },
+  'swp.postRate': { path:['swp','postRate'], type:'number', min:3, max:14, desc:'Growth during drawdown %.' },
+  'swp.inflation': { path:['swp','inflation'], type:'number', min:2, max:12, desc:'Withdrawal inflation %.' },
+  'fx.principal': { path:['fx','principal'], type:'integer', min:1000, max:10000000, desc:'Amount invested.' },
+  'fx.homeReturn': { path:['fx','homeReturn'], type:'number', min:3, max:16, desc:'Home market return %.' },
+  'fx.foreignReturn': { path:['fx','foreignReturn'], type:'number', min:3, max:16, desc:'Foreign market return %.' },
+  'fx.deprec': { path:['fx','deprec'], type:'number', min:0, max:8, desc:'₹ depreciation % vs $.' },
+  'fx.years': { path:['fx','years'], type:'integer', min:1, max:30, desc:'Years.' },
+  'joint.eduInflation': { path:['joint','eduInflation'], type:'number', min:4, max:16, desc:'Education inflation %.' },
+  'joint.preRate': { path:['joint','preRate'], type:'number', min:4, max:16, desc:'Growth while saving %.' },
+  'joint.parkRate': { path:['joint','parkRate'], type:'number', min:3, max:10, desc:'Parking rate % near/during college.' },
+  'mc.sip': { path:['mc','sip'], type:'integer', min:10000, max:1000000, desc:'Annual contribution.' },
+  'mc.years': { path:['mc','years'], type:'integer', min:5, max:35, desc:'Years.' },
+  'mc.meanReturn': { path:['mc','meanReturn'], type:'number', min:4, max:16, desc:'Expected return %.' },
+  'mc.volatility': { path:['mc','volatility'], type:'number', min:0, max:30, desc:'Volatility (std dev) %.' },
+  'health.capacity': { path:['health','capacity'], type:'integer', min:5000, max:300000, desc:'Monthly savings capacity.' },
+  'health.totalSIP': { path:['health','totalSIP'], type:'integer', min:5000, max:300000, desc:'Total monthly SIP needed.' },
+};
+
+const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with three levels — they all share the same math, so moving to a deeper level never wastes anything the user already entered. It supports India (₹) and the United States ($).
+- Level 1 — Quick Calculate: a fast single-goal answer in about two minutes, for first-timers.
+- Level 2 — The Full Plan: a risk-profiling questionnaire that builds a multi-goal plan with recommended fund categories.
+- Level 3 — The Lab (this page): full assumption control, Monte Carlo, efficient frontier, and live real-market-data testing.
+The user is currently on Level 3.
+
+This is "Goalden — The Lab" (Level 3): full assumption control and live market-data testing. Ten tools sharing one underlying engine.
+
+Tools:
+- Retirement Lab: age, retire age, monthly expenses, lifestyle %, inflation, growth before/after retirement, life expectancy; stress-tests with a real historical market crash, plus a drawdown Monte Carlo to show sequence-of-returns risk.
+- Build a Portfolio: mixes fund categories with preset or custom weights and shows the efficient frontier (return vs risk trade-off).
+- Test Real Investments (Live Frontier): picks real stocks/ETFs/funds and shows how mixing them actually performed — real risk, real return, real history.
+- Step-Up SIP: a SIP that grows with income each year.
+- Sustainable Withdrawal (SWP): whether a corpus can fund a fixed inflation-adjusted withdrawal for a set span.
+- Cross-Border (FX): effect of currency movement on India-US investing.
+- Joint Children Corpus: overlapping education costs for multiple children from one pool.
+- Monte Carlo: thousands of random market paths to show plan likelihood, not just the average.
+- Instrument Explorer: return/risk assumptions for all fund categories.
+- Plan Health: a quick 0-100 score on savings, emergency fund and protection.
+
+Data sources:
+- Live Frontier fetches real market data through the app's proxy: Yahoo Finance chart endpoint for equities/ETFs (Indian tickers need .NS/.BO), and MFAPI.in for Indian mutual-fund NAVs. It uses Yahoo's dividend/split-adjusted close (adjclose) so returns include reinvested dividends — a high-dividend stock can have a very different real return from its raw price.
+- The Retirement stress test and "The Case" use real historical annual returns: Sensex (India FY1980-2023) and S&P 500 (US 1928-2024).
+
+Assumptions (per country): India (₹): inflation 6%, debt 7%, hybrid 10%, equity 12%, FD 6.5%. US ($): inflation 2.5%, debt 4.5%, hybrid 7%, equity 9%, FD 4%. Each tool's sliders override these defaults.
+
+Key concepts the user may ask about: efficient frontier, Monte Carlo, sequence-of-returns risk, volatility, risk/return trade-off, glide path, annuity-due withdrawals.
+
+Portfolio math (Build a Portfolio / Test Real Investments):
+- Efficient frontier: the curve of mixes that give the most expected return for a given risk (or least risk for a given return). This app generates it by sampling thousands of random weight combinations, computing each one's return and volatility from the asset returns and the correlation matrix, and keeping only the non-dominated (best) points. A mix below the frontier is taking risk without being paid for it.
+- Correlation matrix: how each pair of assets moves together, on a scale of -1 to +1. Here it is built from cluster-level correlations (assets in the same style cluster move closely, equity is still correlated with equity, debt is largely independent of equity, gold is a near-zero hedge). Positive correlation reduces diversification; near-zero/negative correlation is what lowers portfolio risk.
+- Tangency portfolio / Best Balance: the single mix on the frontier with the highest Sharpe ratio (return above the risk-free rate per unit of risk). The Capital Allocation Line (CAL) is a straight line from the risk-free rate through this point; blending risk-free cash with the tangency mix gives the best risk/return trade-off available.
+- Risk-free rate: the safe baseline the Sharpe ratio and CAL use. It defaults to the country's FD rate (India ~6.5%, US ~4%) and can be overridden in Test Real Investments.
+- Tangency vs minimum-variance: the tangency point maximises return-for-risk; the minimum-variance point is the lowest-risk mix on the whole frontier. They usually differ — the safest mix is not the best-compensated one.
+- Diversification benefit: the ratio of the weighted-average volatility of the holdings to the portfolio's actual volatility. Above 1 means the mix is less risky than its parts standing alone — the whole point of diversification.
+
+Behavior note: when the user is looking at a tool's output (or asking about it), prefer showing them the relevant numbers or chart over describing them in words — call get_results to compute, then show_result to surface the result, and give a one-line explanation of what's now on screen.`;
+
+function advisorTools() {
+  return [
+    { type:'function', function:{ name:'navigate', description:'Open a tool/tab. Valid tabs right now: '+ADVISOR_TABS.join(', ')+'.', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:ADVISOR_TABS } }, required:['tab'] } } },
+    { type:'function', function:{ name:'set_value', description:'Set one input. Use it to fill in a value the user just told you. Field meanings: '+Object.keys(ADVISOR_FIELDS).map(k=>k+' = '+ADVISOR_FIELDS[k].desc).join(' '), parameters:{ type:'object', properties:{ field:{ type:'string', enum:Object.keys(ADVISOR_FIELDS) }, value:{} }, required:['field','value'] } } },
+    { type:'function', function:{ name:'get_state', description:'Return every input across all tools, plus the current tab.' } },
+    { type:'function', function:{ name:'get_results', description:'Return the current tool\'s calculated output (corpus, SIP, score, etc.).' } },
+    { type:'function', function:{ name:'list_assets', description:'List the current country\'s portfolio building blocks with each one\'s assumed return, volatility and beta.' } },
+    { type:'function', function:{ name:'set_weights', description:'Set the portfolio weights. Pass an array of percentages (integers) summing to 100, one per asset in the order list_assets returns.', parameters:{ type:'object', properties:{ weights:{ type:'array', items:{ type:'number' } } }, required:['weights'] } } },
+    { type:'function', function:{ name:'apply_preset', description:'Apply a preset portfolio. Valid presets: conservative, balanced, aggressive, equal.', parameters:{ type:'object', properties:{ name:{ type:'string', enum:['conservative','balanced','aggressive','equal'] } }, required:['name'] } } },
+    { type:'function', function:{ name:'analyze_portfolio', description:'Return the current portfolio mix\'s expected return, volatility, Sharpe, beta, diversification benefit and tail risk.' } },
+    { type:'function', function:{ name:'frontier_gap', description:'Return how far the current mix sits below the efficient frontier, and the frontier weights that dominate it.' } },
+    { type:'function', function:{ name:'search_instruments', description:'Search real stocks/ETFs/funds to add to Test Real Investments.', parameters:{ type:'object', properties:{ query:{ type:'string' } }, required:['query'] } } },
+    { type:'function', function:{ name:'add_instrument', description:'Add a real instrument (ticker or fund code) to Test Real Investments and fetch its history.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
+    { type:'function', function:{ name:'remove_instrument', description:'Remove an instrument from Test Real Investments.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
+    { type:'function', function:{ name:'compare_live', description:'Return each held instrument\'s real return and risk, pairwise correlations, the tangency (best-Sharpe) weights, and the current mix\'s Sharpe.' } },
+    { type:'function', function:{ name:'run_monte_carlo', description:'Run the Monte Carlo simulator (optionally override sip, years, meanReturn, volatility, regime).', parameters:{ type:'object', properties:{ sip:{ type:'number' }, years:{ type:'number' }, meanReturn:{ type:'number' }, volatility:{ type:'number' }, regime:{ type:'string', enum:Object.keys(REGIME_PRESETS) } } } } },
+    { type:'function', function:{ name:'stress_test', description:'Run a historical crash scenario against the retirement plan. Valid scenarios are the episode ids (e.g. 2008, 2013, 2020).', parameters:{ type:'object', properties:{ scenario:{ type:'string' } }, required:['scenario'] } } },
+    { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
+    { type:'function', function:{ name:'show_result', description:'Open the results canvas showing a real chart or comparison. Valid kinds: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ')+'.', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:Object.keys(ADVISOR_RESULT_KINDS) } }, required:['kind'] } } },
+  ];
+}
+
+function advisorSetValue(field, value) {
+  const spec = ADVISOR_FIELDS[field];
+  if (!spec) return { ok:false, error:'Unknown field "'+field+'". Valid: '+Object.keys(ADVISOR_FIELDS).join(', ') };
+  if (value === undefined || value === null || value === '') return { ok:false, error:'Missing value for '+field };
+  value = spec.type === 'integer' ? parseInt(value, 10) : parseFloat(value);
+  if (!isFinite(value)) return { ok:false, error:'Value for '+field+' must be a number.' };
+  if (spec.enum && !spec.enum.includes(value)) return { ok:false, error:'Invalid value for '+field+'. Allowed: '+spec.enum.join(', ') };
+  if (spec.min !== undefined && value < spec.min) return { ok:false, error:'Value for '+field+' is too low — it must be at least '+spec.min+'.' };
+  if (spec.max !== undefined && value > spec.max) return { ok:false, error:'Value for '+field+' is too high — it must be at most '+spec.max+'.' };
+  let obj = L;
+  for (let i = 0; i < spec.path.length - 1; i++) obj = obj[spec.path[i]];
+  obj[spec.path[spec.path.length - 1]] = value;
+  if (TAB_FOR[spec.path[0]]) L.tab = TAB_FOR[spec.path[0]];
+  render();
+  return { ok:true, field, value, tab:L.tab };
+}
+
+// Country-scoped asset list + correlation matrix, one choke point reused by
+// every portfolio/live tool so they can never disagree on which universe the
+// current country uses.
+function advisorCountryAssets() {
+  const c = cfg();
+  return c.code === 'IN'
+    ? { assets: PORTFOLIO_ASSETS_IN, corr: PORTFOLIO_CORR_IN }
+    : { assets: PORTFOLIO_ASSETS_US, corr: PORTFOLIO_CORR_US };
+}
+
+// Full portfolio analytics for the CURRENT mix, all computed by the exact
+// functions the on-screen render uses (never reimplemented here): return,
+// risk, Sharpe/Sortino/diversification, tail risk, the frontier, and how far
+// below the frontier the current mix sits.
+function advisorPortfolioData() {
+  const { assets, corr } = advisorCountryAssets();
+  const c = cfg();
+  const d = computePortfolioDerived(assets, corr);
+  const ratios = portfolioRatios(d, c);
+  const tail = portfolioTailRisk(d);
+  const { frontier } = generateFrontier(d.returns, d.vols, corr, 3000, L.portfolio.seed);
+  const currentPoint = { ret: d.portRet, vol: d.decomp.totalVol };
+  const gap = frontierGap(frontier, currentPoint);
+  return { assets, corr, d, ratios, tail, frontier, currentPoint, gap };
+}
+
+// ---- B1: portfolio construction ----
+function advisorSetWeights(weights) {
+  if (!L.country) return { ok:false, error:'Need a country first.' };
+  const { assets } = advisorCountryAssets();
+  if (!Array.isArray(weights)) return { ok:false, error:'weights must be an array of percentages summing to 100.' };
+  if (weights.length !== assets.length) return { ok:false, error:'weights must have '+assets.length+' entries for '+cfg().name+' (got '+weights.length+').' };
+  const nums = weights.map(Number);
+  if (nums.some(n => !isFinite(n) || n < 0)) return { ok:false, error:'weights must be non-negative numbers.' };
+  const sum = nums.reduce((a, b) => a + b, 0);
+  if (Math.abs(sum - 100) > 1.5) return { ok:false, error:'weights must sum to 100 (got '+sum+').' };
+  L.portfolio.weights = roundPercentsTo100(nums.map(n => n / 100));
+  L.tab = 'portfolio';
+  render();
+  return { ok:true, weights: L.portfolio.weights, assets: assets.map(a => a.id) };
+}
+
+function advisorApplyPreset(name) {
+  if (!L.country) return { ok:false, error:'Need a country first.' };
+  const { assets } = advisorCountryAssets();
+  const valid = ['equal'].concat(Object.keys(PORTFOLIO_PRESETS));
+  if (!valid.includes(name)) return { ok:false, error:'Unknown preset "'+name+'". Valid: '+valid.join(', ') };
+  L.portfolio.weights = portfolioPresetWeights(name, assets);
+  L.tab = 'portfolio';
+  render();
+  return { ok:true, preset: name, weights: L.portfolio.weights };
+}
+
+function advisorAnalyzePortfolio() {
+  if (!L.country) return { ok:false, error:'Need a country first.' };
+  const p = advisorPortfolioData();
+  return { ok:true, result: {
+    expectedReturnPct: +(p.d.portRet*100).toFixed(2),
+    volatilityPct: +(p.d.decomp.totalVol*100).toFixed(2),
+    sharpe: +(p.ratios.sharpe).toFixed(2),
+    sortino: p.ratios.sortino == null ? null : +(p.ratios.sortino).toFixed(2),
+    beta: +(p.d.decomp.beta).toFixed(2),
+    diversificationBenefit: +(p.ratios.divRatio).toFixed(2),
+    effectiveHoldings: +(p.ratios.effN).toFixed(2),
+    var95Pct: +(p.tail.var95*100).toFixed(2),
+    cvar95Pct: +(p.tail.cvar95*100).toFixed(2),
+    systematicRiskPct: +(p.d.decomp.systematicPct*100).toFixed(1),
+    unsystematicRiskPct: +(p.d.decomp.unsystematicPct*100).toFixed(1),
+  } };
+}
+
+function advisorFrontierGap() {
+  if (!L.country) return { ok:false, error:'Need a country first.' };
+  const p = advisorPortfolioData();
+  if (!p.gap) return { ok:true, result: { gapPct: 0, onFrontier: true } };
+  let best = null, bestDist = Infinity;
+  p.frontier.forEach(fp => { const dist = Math.abs(fp.vol - p.currentPoint.vol); if (dist < bestDist) { bestDist = dist; best = fp; } });
+  return { ok:true, result: {
+    gapPct: +(p.gap.gapPct*100).toFixed(2),
+    currentReturnPct: +(p.currentPoint.ret*100).toFixed(2),
+    frontierReturnAtSameRiskPct: +(p.gap.frontierRetHere*100).toFixed(2),
+    frontierPointWeights: best ? best.w.map(w => Math.round(w*100)) : null,
+  } };
+}
+
+function advisorListAssets() {
+  if (!L.country) return { ok:false, error:'Need a country first.' };
+  const { assets } = advisorCountryAssets();
+  return { ok:true, result: { assets: assets.map(a => ({ id:a.id, name:a.name, cluster:a.cluster, returnPct:+(a.ret*100).toFixed(2), volatilityPct:+(a.vol*100).toFixed(2), beta:+a.beta.toFixed(2) })) } };
+}
+
+// ---- B2: live market data ----
+async function advisorSearchInstruments(query) {
+  const c = cfg();
+  const q = String(query || '').trim();
+  const equities = searchInstrumentIndex(q, c.code, 'all').slice(0, 10)
+    .map(i => ({ symbol:i.symbol, name:i.name, klass:i.klass, type:'equity' }));
+  let funds = [];
+  if (c.code === 'IN' && q) {
+    try {
+      const list = await liveApiGet('/api/fundsearch?q=' + encodeURIComponent(q));
+      funds = (Array.isArray(list) ? list : []).slice(0, 10)
+        .map(r => ({ symbol:String(r.schemeCode), name:r.schemeName, type:'fund' }));
+    } catch (e) { funds = []; }
+  }
+  return JSON.stringify({ ok:true, equities, funds });
+}
+
+async function advisorAddInstrument(symbol) {
+  const sym = String(symbol || '').trim().toUpperCase();
+  if (!sym) return JSON.stringify({ ok:false, error:'Missing symbol.' });
+  const c = cfg();
+  const idx = c.code === 'IN' ? INSTRUMENT_INDEX_IN : INSTRUMENT_INDEX_US;
+  const match = idx.find(i => i.symbol.toUpperCase() === sym || (i.name || '').toUpperCase().includes(sym));
+  let item;
+  if (match) item = { key: match.symbol, symbol: match.symbol, label: match.name, type: 'equity' };
+  else if (c.code === 'IN' && /^\d{5,}$/.test(sym)) item = { key: 'MF' + sym, symbol: sym, label: 'Fund ' + sym, type: 'fund' };
+  else item = { key: sym, symbol: sym, label: sym, type: 'equity' };
+  if (L.live.items.some(it => it.key === item.key)) return JSON.stringify({ ok:false, error: sym + ' is already in the basket.' });
+  try {
+    const raw = await liveFetchHistory(item);
+    L.live.items.push(item);
+    L.live.data[item.key] = { status:'ready', label: raw.label || item.label, currency: raw.currency, prices: raw.prices, stats: computeReturnStats(raw.prices, item.type === 'fund') };
+    render();
+    return JSON.stringify({ ok:true, added: { symbol: item.symbol, label: L.live.data[item.key].label } });
+  } catch (e) {
+    return JSON.stringify({ ok:false, error:'Could not fetch ' + sym + ': ' + ((e && e.message) || e) });
+  }
+}
+
+function advisorRemoveInstrument(symbol) {
+  const sym = String(symbol || '').trim().toUpperCase();
+  const before = L.live.items.length;
+  L.live.items = L.live.items.filter(it => it.symbol.toUpperCase() !== sym && it.key.toUpperCase() !== sym);
+  if (L.live.items.length === before) return { ok:false, error: sym + ' is not in the basket.' };
+  Object.keys(L.live.data).forEach(k => { if (!L.live.items.some(it => it.key === k)) delete L.live.data[k]; });
+  render();
+  return { ok:true, removed: sym };
+}
+
+function advisorCompareLive() {
+  const items = liveReadyItems();
+  if (items.length < 2) return { ok:false, error:'Need at least two loaded instruments — add them via add_instrument first.' };
+  const rf = liveDefaultRf() / 100;
+  const stats = items.map(it => L.live.data[it.key].stats);
+  const holdings = items.map((it, i) => ({
+    symbol: it.symbol,
+    label: L.live.data[it.key].label || it.symbol,
+    annualReturnPct: +(stats[i].annualReturn*100).toFixed(2),
+    annualVolPct: +(stats[i].annualVol*100).toFixed(2),
+    compoundedPct: stats[i].geoAnnual == null ? null : +(stats[i].geoAnnual*100).toFixed(2),
+  }));
+  const { corr } = computeCovarianceMatrix(stats);
+  const correlations = [];
+  for (let i = 0; i < items.length; i++) for (let j = i+1; j < items.length; j++) {
+    correlations.push({ a: items[i].symbol, b: items[j].symbol, correlation: +corr[i][j].toFixed(2) });
+  }
+  let tangency, minVar;
+  if (items.length === 2) {
+    const c12 = corr[0][1];
+    const wTan = tangencyWeightTwoAsset(stats[0].annualReturn, stats[1].annualReturn, stats[0].annualVol, stats[1].annualVol, c12, rf);
+    tangency = { weights: [+wTan.toFixed(3), +(1-wTan).toFixed(3)], returnPct: +(portfolioReturn([wTan,1-wTan],[stats[0].annualReturn,stats[1].annualReturn])*100).toFixed(2), volPct: +(Math.sqrt(portfolioVariance([wTan,1-wTan],[stats[0].annualVol,stats[1].annualVol],[[1,c12],[c12,1]]))*100).toFixed(2) };
+    const wMinVar = minVarianceWeightTwoAsset(stats[0].annualVol, stats[1].annualVol, c12);
+    minVar = { weights: [+wMinVar.toFixed(3), +(1-wMinVar).toFixed(3)] };
+  } else {
+    const lm = liveComputeMulti();
+    const bp = bestSharpePoint(lm.frontier, rf);
+    if (bp) tangency = { weights: bp.w.map(w => +w.toFixed(3)), returnPct: +(bp.ret*100).toFixed(2), volPct: +(bp.vol*100).toFixed(2), sharpe: +bp.sharpe.toFixed(2) };
+    const mv = lm.frontier.reduce((best, p) => p.vol < best.vol ? p : best, lm.frontier[0]);
+    minVar = { weights: mv.w.map(w => +w.toFixed(3)), returnPct: +(mv.ret*100).toFixed(2), volPct: +(mv.vol*100).toFixed(2) };
+  }
+  let wVec;
+  if (items.length === 2) wVec = [L.live.weight/100, 1 - L.live.weight/100];
+  else if (L.live.selectedWeights && L.live.selectedWeights.length === items.length) wVec = L.live.selectedWeights;
+  else wVec = items.map(() => 1/items.length);
+  const curRet = portfolioReturn(wVec, stats.map(s => s.annualReturn));
+  const curVol = Math.sqrt(portfolioVariance(wVec, stats.map(s => s.annualVol), corr));
+  const curSharpe = curVol > 0 ? (curRet - rf)/curVol : 0;
+  return { ok:true, result: {
+    holdings, correlations, tangency, minVariance: minVar,
+    currentMix: { weights: wVec.map(w => +w.toFixed(3)), returnPct: +(curRet*100).toFixed(2), volPct: +(curVol*100).toFixed(2), sharpe: +curSharpe.toFixed(2) },
+    riskFreeRatePct: +(rf*100).toFixed(2),
+  } };
+}
+
+// ---- B3: Monte Carlo + stress testing ----
+function advisorRunMonteCarlo(overrides) {
+  const m = L.mc;
+  const regimeKey = (overrides && overrides.regime) || m.regime;
+  const regime = REGIME_PRESETS[regimeKey] || REGIME_PRESETS.normal;
+  const sip = (overrides && overrides.sip != null) ? overrides.sip : m.sip;
+  const years = (overrides && overrides.years != null) ? overrides.years : m.years;
+  const meanReturn = (overrides && overrides.meanReturn != null) ? overrides.meanReturn/100 : m.meanReturn/100;
+  const volatility = (overrides && overrides.volatility != null) ? overrides.volatility/100 : m.volatility/100;
+  const seed = (overrides && overrides.seed != null) ? overrides.seed : m.seed;
+  const res = monteCarloAccumulation({ sip, meanReturn: meanReturn*regime.meanAdj, volatility: volatility*regime.volAdj, years, due: true, seed, n: 1000 });
+  return { ok:true, result: { contribution: sip, years, regime: regime.label, p10: Math.round(res.p10), p50: Math.round(res.p50), p90: Math.round(res.p90), mean: Math.round(res.mean) } };
+}
+
+function advisorStressTest(scenario) {
+  if (!L.country) return { ok:false, error:'Need a country first.' };
+  const c = cfg();
+  const s = String(scenario || '').toLowerCase();
+  const ep = c.episodes.find(e => e.id === s || (e.label || '').toLowerCase().includes(s));
+  if (!ep) return { ok:false, error:'Unknown scenario "'+scenario+'". Valid: '+c.episodes.map(e=>e.id).join(', ') };
+  const saved = L.ret.shock;
+  L.ret.shock = { epId: ep.id, year: 1 };
+  const res = calcRetLab();
+  L.ret.shock = saved;
+  return { ok:true, result: {
+    scenario: ep.label,
+    shockReturnPct: +(ep.rate*100).toFixed(1),
+    corpus: Math.round(res.corpus),
+    monthlySIP: Math.round(res.sip),
+    ranOutYear: res.shockInfo ? res.shockInfo.ranOutYear : null,
+    finalBalance: res.shockInfo ? Math.round(res.shockInfo.finalBalance) : 0,
+    survives: !!(res.shockInfo && !res.shockInfo.ranOutYear),
+  } };
+}
+
+function advisorGetResults() {
+  if (!L.country) return { ok:false, error:'Need a country/currency first — ask the user whether they are in India or the United States.' };
+  const c = cfg();
+  const tab = L.tab;
+  if (tab === 'retirement') {
+    const res = calcRetLab();
+    return { ok:true, result:{ tool:'Retirement Lab', age:L.ret.age, retireAge:L.ret.retireAge, corpus:Math.round(res.corpus), monthlySIP:Math.round(res.sip), corpusTodayMoney:Math.round(res.realCorpus), supportsMonthlySpend:Math.round(res.expAtRet/12), years:res.yrs, drawYrs:res.drawYrs } };
+  }
+  if (tab === 'stepup') {
+    const s = L.step;
+    const mRate = effectiveMonthlyRate(s.preRate/100);
+    const mStep = effectiveMonthlyRate(s.stepUpPct/100);
+    const flatSip = solveSIP(mRate, s.years*12, s.corpus, true);
+    const steppedSip = solveStepUpSIP(mRate, mStep, s.years*12, s.corpus, true);
+    return { ok:true, result:{ tool:'Step-Up SIP', targetCorpus:s.corpus, years:s.years, flatMonthlySIP:Math.round(flatSip), startingStepUpSIP:Math.round(steppedSip), yearOneSaving:Math.round(flatSip - steppedSip) } };
+  }
+  if (tab === 'swp') {
+    const s = L.swp;
+    const rr = realRate(s.postRate/100, s.inflation/100);
+    const w = swpWithdrawal(rr, s.years, s.corpus, s.due);
+    const shockEp = s.shock ? c.episodes.find(e => e.id === s.shock.epId) : null;
+    const sim = drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:s.inflation/100, nominalRate:s.postRate/100, years:s.years, due:s.due}, shockEp ? Math.min(s.shock.year, s.years) : -1, shockEp ? shockEp.rate : 0);
+    return { ok:true, result:{ tool:'Sustainable Withdrawal', corpus:s.corpus, years:s.years, annualWithdrawalYear1:Math.round(w), monthlyWithdrawalYear1:Math.round(w/12), lastsYears:sim.ranOutYear || s.years, ranOutEarly:!!sim.ranOutYear } };
+  }
+  if (tab === 'fx') {
+    const f = L.fx;
+    const res = fxCompare({principal:f.principal, direction:f.direction, homeReturn:f.homeReturn/100, foreignReturn:f.foreignReturn/100, depreciationRate:f.deprec/100, years:f.years});
+    return { ok:true, result:{ tool:'Cross-Border', stayedHome:Math.round(res.domesticFV), wentAbroad:Math.round(res.crossBorderFV), currencyEffect:Math.round(res.currencyEffect), effectiveAnnualReturnPct:+(res.effectiveAnnualReturn*100).toFixed(2), foreignBeatsHome:res.foreignBeatsHome } };
+  }
+  if (tab === 'joint') {
+    const j = L.joint;
+    const infl = j.eduInflation/100, preR = j.preRate/100, parkR = j.parkRate/100;
+    const horizon = Math.max(...j.children.map(ch => ch.yearsToStart + ch.duration));
+    const sipStopYear = Math.max(...j.children.map(ch => ch.yearsToStart));
+    const opts = {children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, sipStopYear, horizon};
+    const joint = solveJointEducationCorpus(opts);
+    const separate = separateCorporaTotal({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR});
+    return { ok:true, result:{ tool:'Joint Children Corpus', children:j.children.length, jointMonthlySIP:Math.round(joint.sip), separateMonthlySIP:Math.round(separate), savedByPooling:Math.round(separate - joint.sip) } };
+  }
+  if (tab === 'mc') {
+    const m = L.mc;
+    const regime = REGIME_PRESETS[m.regime];
+    const res = monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*regime.meanAdj, volatility:(m.volatility/100)*regime.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
+    return { ok:true, result:{ tool:'Monte Carlo', contribution:m.sip, years:m.years, regime:regime.label, p10:Math.round(res.p10), p50:Math.round(res.p50), p90:Math.round(res.p90), mean:Math.round(res.mean) } };
+  }
+  if (tab === 'portfolio') {
+    const p = advisorPortfolioData();
+    return { ok:true, result:{ tool:'Build a Portfolio', expectedReturnPct:+(p.d.portRet*100).toFixed(2), volatilityPct:+(p.d.decomp.totalVol*100).toFixed(2), sharpe:+(p.ratios.sharpe).toFixed(2), beta:+(p.d.decomp.beta).toFixed(2), var95Pct:+(p.tail.var95*100).toFixed(2), diversificationBenefit:+(p.ratios.divRatio).toFixed(2), frontierGapPct:p.gap ? +(p.gap.gapPct*100).toFixed(2) : 0, weights:p.d.w.map(w => Math.round(w*100)) } };
+  }
+  if (tab === 'livefrontier') {
+    const items = liveReadyItems();
+    if (!items.length) return { ok:false, error:'No instruments loaded yet in Test Real Investments — the user needs to add some (or use add_instrument).' };
+    const lm = liveComputeMulti();
+    return { ok:true, result:{ tool:'Test Real Investments', holdings: lm.items.map((it, i) => ({ symbol:it.symbol, label:it.label, annualReturnPct:+(lm.returns[i]*100).toFixed(2), annualVolPct:+(lm.vols[i]*100).toFixed(2) })) } };
+  }
+  if (tab === 'instruments') {
+    const idx = c.code === 'IN' ? INSTRUMENT_INDEX_IN : INSTRUMENT_INDEX_US;
+    return { ok:true, result:{ tool:'Instrument Explorer', categories: KLASS_ORDER.filter(k => idx.some(i => i.klass === k)).map(k => ({ klass:k, count: idx.filter(i => i.klass === k).length })) } };
+  }
+  if (tab === 'health') {
+    const sc = calcHealthScore();
+    return { ok:true, result:{ tool:'Plan Health', score:sc.total, capacity:L.health.capacity, totalSIP:L.health.totalSIP, breakdown:{ funding:sc.funding, emergency:sc.emergency, stress:sc.stress, discipline:sc.discipline } } };
+  }
+  return { ok:true, result:{ tool: tab === 'home' ? 'Home' : tab, note:'Pick a tool to explore.' } };
+}
+
+const ADVISOR_HIGHLIGHT_TARGETS = {
+  screen: '#main',
+  output: '.output',
+  panel: '.panel',
+};
+function advisorHighlight(name) {
+  const sel = ADVISOR_HIGHLIGHT_TARGETS[name];
+  if (!sel) return { ok:false, error:'No highlight target "'+name+'". Valid: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ') };
+  const el = document.querySelector(sel);
+  if (!el) return { ok:false, error:'That element is not on screen right now.' };
+  try { el.scrollIntoView({ behavior:'smooth', block:'center' }); } catch (e) {}
+  el.classList.add('advisor-pulse');
+  setTimeout(() => el.classList.remove('advisor-pulse'), 1600);
+  return { ok:true, target:name };
+}
+
+/* =====================================================================
+   RESULTS CANVAS — the show_result tool renders the current tool's computed
+   numbers (from get_results) into #resultCanvas. `kind` is a fixed enum; the
+   model can only pick kinds the page can actually render from real results.
+   ===================================================================== */
+// Each kind renders that tool's REAL chart/output by re-invoking the exact
+// chart-building function the tab itself uses, just targeting a canvas-scoped
+// chartId. No new chart code. Each build() returns {ok:true, html} or
+// {ok:false, error} so the model can read and act on a missing-input error.
+function resultCanvasRetirement() {
+  const c = cfg();
+  const res = calcRetLab();
+  return { ok:true, html:
+    '<div class="stat-row">' +
+      '<div class="stat"><div class="stat-label">Corpus needed</div><div class="stat-value">'+c.compact(res.corpus)+'</div></div>' +
+      '<div class="stat"><div class="stat-label">Monthly SIP</div><div class="stat-value">'+c.fmt(Math.round(res.sip))+'</div></div>' +
+    '</div>' +
+    '<div class="card"><h4>How the pot grows</h4>'+mountainChart(yearlyMountainRows(res.accRows), 'cv-ret-mountain')+'</div>' +
+    '<div class="card"><h4>Drawdown</h4>'+drawdownChart(res.ddRows, c, 'cv-ret-drawdown')+'</div>'
+  };
+}
+function resultCanvasPortfolio() {
+  const p = advisorPortfolioData();
+  const fd = computePortfolioFrontierData(p.d, p.assets, p.corr);
+  return { ok:true, html:
+    '<div class="stat-row">' +
+      '<div class="stat"><div class="stat-label">Return</div><div class="stat-value">'+(p.d.portRet*100).toFixed(1)+'%</div></div>' +
+      '<div class="stat"><div class="stat-label">Risk</div><div class="stat-value">'+(p.d.decomp.totalVol*100).toFixed(1)+'%</div></div>' +
+      '<div class="stat"><div class="stat-label">Sharpe</div><div class="stat-value">'+p.ratios.sharpe.toFixed(2)+'</div></div>' +
+    '</div>' +
+    '<div class="card"><h4>Efficient frontier</h4>'+frontierChart(fd.cloud, fd.frontier, fd.assetPoints, fd.currentPoint, 'cv-pf-frontier', onPortfolioFrontierPick, cfg().d.fdRate)+'</div>'
+  };
+}
+function resultCanvasLiveFrontier() {
+  const items = liveReadyItems();
+  if (items.length < 2) return { ok:false, error:'Ask the user to add at least two instruments in Test Real Investments first (or add them via add_instrument).' };
+  const rf = liveDefaultRf() / 100;
+  if (items.length === 2) {
+    const [a, b] = items;
+    const sa = L.live.data[a.key].stats, sb = L.live.data[b.key].stats;
+    const { corr } = computeCovarianceMatrix([sa, sb]);
+    const c12 = corr[0][1];
+    const frontier = twoAssetFrontier(sa.annualReturn, sb.annualReturn, sa.annualVol, sb.annualVol, c12);
+    const wTan = tangencyWeightTwoAsset(sa.annualReturn, sb.annualReturn, sa.annualVol, sb.annualVol, c12, rf);
+    const tanRet = portfolioReturn([wTan,1-wTan],[sa.annualReturn,sb.annualReturn]);
+    const tanVol = Math.sqrt(portfolioVariance([wTan,1-wTan],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
+    const cal = capitalAllocationLine(rf, tanRet, tanVol, 2);
+    const w = L.live.weight/100;
+    const currentVol = Math.sqrt(portfolioVariance([w,1-w],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
+    const currentRet = portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]);
+    const wMinVar = minVarianceWeightTwoAsset(sa.annualVol, sb.annualVol, c12);
+    const minVarVol = Math.sqrt(portfolioVariance([wMinVar,1-wMinVar],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
+    const minVarRet = portfolioReturn([wMinVar,1-wMinVar],[sa.annualReturn,sb.annualReturn]);
+    const assetPoints = [
+      { label:a.symbol, fullLabel:L.live.data[a.key].label, vol:sa.annualVol, ret:sa.annualReturn },
+      { label:b.symbol, fullLabel:L.live.data[b.key].label, vol:sb.annualVol, ret:sb.annualReturn },
+    ];
+    return { ok:true, html: liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'cv-live-frontier', onLiveFrontierPick, (w*100).toFixed(0)+'% '+a.symbol+' / '+((1-w)*100).toFixed(0)+'% '+b.symbol, {vol:minVarVol,ret:minVarRet}) };
+  }
+  const lm = liveComputeMulti();
+  const assetPoints = lm.items.map((it,i)=>({ vol:lm.vols[i], ret:lm.returns[i], label:it.symbol, fullLabel:L.live.data[it.key].label }));
+  let weights = L.live.selectedWeights;
+  if (!weights || weights.length !== lm.items.length) weights = lm.items.map(()=>1/lm.items.length);
+  const currentPoint = { vol: Math.sqrt(portfolioVariance(weights, lm.vols, lm.corr)), ret: portfolioReturn(weights, lm.returns) };
+  return { ok:true, html: frontierChart(lm.cloud, lm.frontier, assetPoints, currentPoint, 'cv-live-multi', onLiveMultiFrontierPick, rf) };
+}
+function resultCanvasMC() {
+  const m = L.mc;
+  const regime = REGIME_PRESETS[m.regime];
+  const res = monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*regime.meanAdj, volatility:(m.volatility/100)*regime.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
+  return { ok:true, html:
+    '<div class="stat-row">' +
+      '<div class="stat"><div class="stat-label">P10</div><div class="stat-value">'+cfg().compact(res.p10)+'</div></div>' +
+      '<div class="stat"><div class="stat-label">P50</div><div class="stat-value">'+cfg().compact(res.p50)+'</div></div>' +
+      '<div class="stat"><div class="stat-label">P90</div><div class="stat-value">'+cfg().compact(res.p90)+'</div></div>' +
+    '</div>' +
+    '<div class="card"><h4>Range of outcomes</h4>'+fanChart(res.yearBands, 'cv-mc-fan')+'</div>'
+  };
+}
+function resultCanvasStepUp() {
+  const c = cfg(), s = L.step;
+  const mRate = effectiveMonthlyRate(s.preRate/100);
+  const mStep = effectiveMonthlyRate(s.stepUpPct/100);
+  const flatSip = solveSIP(mRate, s.years*12, s.corpus, true);
+  const steppedSip = solveStepUpSIP(mRate, mStep, s.years*12, s.corpus, true);
+  const flatAcc = accumulationSchedule({sip:flatSip, rate:mRate, periods:s.years*12, due:true}).rows;
+  const stepAcc = accumulationSchedule({sip:steppedSip, rate:mRate, periods:s.years*12, due:true, stepUp:mStep}).rows;
+  return { ok:true, html:
+    '<div class="stat-row">' +
+      '<div class="stat"><div class="stat-label">Flat SIP</div><div class="stat-value">'+c.fmt(Math.round(flatSip))+'</div></div>' +
+      '<div class="stat"><div class="stat-label">Step-up SIP (starting)</div><div class="stat-value">'+c.fmt(Math.round(steppedSip))+'</div></div>' +
+    '</div>' +
+    '<div class="card"><h4>Both reach the same target</h4>'+twinFatesChart(flatAcc.map(r=>({openBal:0,closeBal:r.closeBal})), stepAcc.map(r=>({openBal:0,closeBal:r.closeBal})), 'cv-step-twin')+'</div>'
+  };
+}
+function resultCanvasSWP() {
+  const c = cfg(), s = L.swp;
+  const rr = realRate(s.postRate/100, s.inflation/100);
+  const w = swpWithdrawal(rr, s.years, s.corpus, s.due);
+  const shockEp = s.shock ? c.episodes.find(e=>e.id===s.shock.epId) : null;
+  const sim = drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:s.inflation/100, nominalRate:s.postRate/100, years:s.years, due:s.due}, shockEp ? Math.min(s.shock.year, s.years) : -1, shockEp ? shockEp.rate : 0);
+  return { ok:true, html:
+    '<div class="stat-row">' +
+      '<div class="stat"><div class="stat-label">Sustainable monthly draw</div><div class="stat-value">'+c.fmt(Math.round(w/12))+'</div></div>' +
+      '<div class="stat"><div class="stat-label">Corpus lasts</div><div class="stat-value">'+(sim.ranOutYear?sim.ranOutYear:s.years)+' yrs</div></div>' +
+    '</div>' +
+    '<div class="card"><h4>Withdrawal schedule</h4>'+drawdownChart(sim.rows, c, 'cv-swp-drawdown')+'</div>'
+  };
+}
+function resultCanvasFX() {
+  const f = L.fx;
+  const homeC = f.direction==='investingAbroad' ? C.IN : C.US;
+  const res = fxCompare({principal:f.principal, direction:f.direction, homeReturn:f.homeReturn/100, foreignReturn:f.foreignReturn/100, depreciationRate:f.deprec/100, years:f.years});
+  return { ok:true, html:
+    '<div class="stat-row">' +
+      '<div class="stat"><div class="stat-label">Stayed home</div><div class="stat-value">'+homeC.compact(res.domesticFV)+'</div></div>' +
+      '<div class="stat"><div class="stat-label">Went abroad</div><div class="stat-value">'+homeC.compact(res.crossBorderFV)+'</div></div>' +
+      '<div class="stat"><div class="stat-label">Currency effect</div><div class="stat-value" style="color:'+(res.currencyEffect>=0?'#8FC79E':'#E8977A')+'">'+(res.currencyEffect>=0?'+':'')+homeC.compact(res.currencyEffect)+'</div></div>' +
+    '</div>' +
+    '<div class="card"><h4>The interesting fact</h4><div class="gr-note" style="margin-top:0">In market terms alone, '+homeC.compact(f.principal)+' at '+f.foreignReturn+'% for '+f.years+' years becomes <b style="color:var(--paper)">'+homeC.compact(res.marketOnlyFV)+'</b>. With currency movement priced in, it becomes <b style="color:var(--paper)">'+homeC.compact(res.crossBorderFV)+'</b> — an effective '+((res.effectiveAnnualReturn*100).toFixed(2))+'% a year in '+homeC.name+' terms.</div></div>'
+  };
+}
+function resultCanvasJoint() {
+  const c = cfg(), j = L.joint;
+  const infl = j.eduInflation/100, preR = j.preRate/100, parkR = j.parkRate/100;
+  const horizon = Math.max(...j.children.map(ch=>ch.yearsToStart+ch.duration));
+  const sipStopYear = Math.max(...j.children.map(ch=>ch.yearsToStart));
+  const opts = {children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, sipStopYear, horizon};
+  const joint = solveJointEducationCorpus(opts);
+  const separate = separateCorporaTotal({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR});
+  return { ok:true, html:
+    '<div class="stat-row">' +
+      '<div class="stat"><div class="stat-label">Joint SIP</div><div class="stat-value">'+c.fmt(Math.round(joint.sip))+'/mo</div></div>' +
+      '<div class="stat"><div class="stat-label">Separate SIPs</div><div class="stat-value">'+c.fmt(Math.round(separate))+'/mo</div></div>' +
+      '<div class="stat"><div class="stat-label">Saved by pooling</div><div class="stat-value">'+c.fmt(Math.round(separate - joint.sip))+'/mo</div></div>' +
+    '</div>' +
+    '<div class="card"><h4>One pool, two college timelines</h4>'+jointTimelineChart(joint.rows, 'cv-joint-timeline')+'</div>'
+  };
+}
+function resultCanvasHealth() {
+  const sc = calcHealthScore();
+  const bands=[{max:39,label:'Needs attention',color:'#A03A22'},{max:69,label:'On track, room to grow',color:'#2557C7'},{max:100,label:'Strong shape',color:'#2E8B6F'}];
+  const band=bands.find(b=>sc.total<=b.max);
+  return { ok:true, html:
+    '<div class="card is-primary"><h4>Plan Health Score</h4><div class="cap">'+band.label+'</div>' +
+      '<div class="score-dial"><div class="dial-num" style="color:'+band.color+'">'+sc.total+'</div><div class="dial-bars">' +
+        '<div class="dbar-row"><span class="dbar-label">Funding</span><div class="dbar-track"><div class="dbar-fill" style="width:'+(sc.funding/40*100)+'%"></div></div><span class="dbar-val">'+sc.funding+'/40</span></div>' +
+        '<div class="dbar-row"><span class="dbar-label">Emergency</span><div class="dbar-track"><div class="dbar-fill" style="width:'+(sc.emergency/20*100)+'%"></div></div><span class="dbar-val">'+sc.emergency+'/20</span></div>' +
+        '<div class="dbar-row"><span class="dbar-label">Stress survival</span><div class="dbar-track"><div class="dbar-fill" style="width:'+(sc.stress/25*100)+'%"></div></div><span class="dbar-val">'+sc.stress+'/25</span></div>' +
+        '<div class="dbar-row"><span class="dbar-label">Discipline</span><div class="dbar-track"><div class="dbar-fill" style="width:'+(sc.discipline/15*100)+'%"></div></div><span class="dbar-val">'+sc.discipline+'/15</span></div>' +
+      '</div></div></div>'
+  };
+}
+
+const ADVISOR_RESULT_KINDS = {
+  retirement: { title: 'Retirement Lab', build: resultCanvasRetirement },
+  portfolio: { title: 'Build a Portfolio', build: resultCanvasPortfolio },
+  livefrontier: { title: 'Test Real Investments', build: resultCanvasLiveFrontier },
+  mc: { title: 'Monte Carlo', build: resultCanvasMC },
+  stepup: { title: 'Step-Up SIP', build: resultCanvasStepUp },
+  swp: { title: 'Sustainable Withdrawal', build: resultCanvasSWP },
+  fx: { title: 'Cross-Border', build: resultCanvasFX },
+  joint: { title: 'Joint Children Corpus', build: resultCanvasJoint },
+  health: { title: 'Plan Health', build: resultCanvasHealth },
+};
+function advisorShowResult(kind) {
+  const spec = ADVISOR_RESULT_KINDS[kind];
+  if (!spec) return { ok:false, error:'No result kind "'+kind+'". Valid: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ') };
+  const r = spec.build();
+  if (!r.ok) return { ok:false, error: r.error };
+  resultCanvasOpen(spec.title, r.html);
+  return { ok:true, shown: kind };
+}
+
+function executeAdvisorTool(name, args) {
+  if (name === 'get_state') {
+    return JSON.stringify({ state: L, tab: L.tab, tabs: ADVISOR_TABS });
+  }
+  if (name === 'get_results') return JSON.stringify(advisorGetResults());
+  if (name === 'navigate') {
+    const tab = args && args.tab;
+    if (!ADVISOR_TABS.includes(tab)) return JSON.stringify({ ok:false, error:'No tab named "'+tab+'". Valid: '+ADVISOR_TABS.join(', ') });
+    L.tab = tab;
+    render();
+    return JSON.stringify({ ok:true, tab });
+  }
+  if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
+  if (name === 'set_weights') return JSON.stringify(advisorSetWeights(args && args.weights));
+  if (name === 'apply_preset') return JSON.stringify(advisorApplyPreset(args && args.name));
+  if (name === 'analyze_portfolio') return JSON.stringify(advisorAnalyzePortfolio());
+  if (name === 'frontier_gap') return JSON.stringify(advisorFrontierGap());
+  if (name === 'list_assets') return JSON.stringify(advisorListAssets());
+  if (name === 'search_instruments') return advisorSearchInstruments(args && args.query);
+  if (name === 'add_instrument') return advisorAddInstrument(args && args.symbol);
+  if (name === 'remove_instrument') return JSON.stringify(advisorRemoveInstrument(args && args.symbol));
+  if (name === 'compare_live') return JSON.stringify(advisorCompareLive());
+  if (name === 'run_monte_carlo') return JSON.stringify(advisorRunMonteCarlo(args || {}));
+  if (name === 'stress_test') return JSON.stringify(advisorStressTest(args && args.scenario));
+  if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
+  if (name === 'show_result') return JSON.stringify(advisorShowResult(args && args.kind));
+  return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
+}
+
+window.GOALDEN_ADVISOR_CONFIG = {
+  state: L,
+  knowledge: ADVISOR_KNOWLEDGE,
+  app: 'Goalden — The Lab',
+  pageLabel: 'Level 3 — The Lab',
+  tools: function () { return advisorTools(); },
+  page: function () { return L.tab || 'home'; },
+  screens: function () { return ADVISOR_TABS; },
+  executeTool: function (name, args) { return executeAdvisorTool(name, args); },
+  lang: function () { return L.country === 'US' ? 'en-US' : 'en-IN'; },
+  greeting: 'Hi! I can run any of these tools for you. Tell me what you\'re trying to figure out, or just ask a question.',
+  placeholder: 'Ask, or tap the mic…',
+  showDisclaimer: true
+};
+
 render();
 </script>
+<script src="advisor.js"></script>
 </body>
 </html>

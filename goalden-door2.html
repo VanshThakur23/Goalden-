@@ -315,6 +315,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .alloc-return-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:12px;border-top:1px solid rgba(20,40,63,.1)}
 .alloc-return-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.04em;margin-bottom:3px}
 .alloc-return-value{font-family:'Newsreader',serif;font-size:19px;font-weight:600;color:var(--paper)}
+
 </style>
 </head>
 <body>
@@ -328,6 +329,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
   <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
 </div>
 <div class="stage" id="stage"></div>
+
+
+</div>
 
 <script>
 'use strict';
@@ -2197,7 +2201,245 @@ function attach(screen){
 }
 
 backBtn.addEventListener('click',()=>{if(G.si>0)go(-1);});
+
+/* =====================================================================
+   AI ADVISOR — conversational overlay. Talks to POST /api/chat (the Worker
+   in prod, local_server.py in dev). The model returns either plain text or
+   a tool call; we execute the tool against G, feed the result back, and
+   loop until it produces a plain answer. The model never touches G
+   directly — every mutation goes through executeAdvisorTool.
+   ===================================================================== */
+const ADVISOR_FIELDS = [
+  { name:'country', type:'string', enum:['IN','US'], desc:'Country/currency: IN for India ₹, US for United States $.' },
+  { name:'monthlyExpense', type:'integer', min:0, max:100000000, desc:'Typical monthly spending, in the chosen currency.' },
+  { name:'monthlyCapacity', type:'integer', min:0, max:10000000, desc:'How much they can invest each month.' },
+  { name:'emergencyStatus', type:'string', enum:['full','partial','no'], desc:'Emergency fund status: full (6+ months), partial (some), or no (none).' },
+  { name:'emergencyPrioritize', type:'boolean', desc:'Whether to build the emergency fund first (true) or skip it (false).' },
+  { name:'cap_0', type:'integer', enum:[1,2,3,4], desc:'Capacity answer 1: income reliability (4=very steady … 1=uncertain).' },
+  { name:'cap_1', type:'integer', enum:[1,2,3,4], desc:'Capacity answer 2: how many people rely on the income (4=just me … 1=large family).' },
+  { name:'cap_2', type:'integer', enum:[1,2,3,4], desc:'Capacity answer 3: loan EMI burden (4=none … 1=more than 40%).' },
+  { name:'cap_3', type:'integer', enum:[1,2,3,4], desc:'Capacity answer 4: what fraction of savings this is (4=small slice … 1=nearly everything).' },
+  { name:'tol_0', type:'integer', enum:[1,2,3,4], desc:'Tolerance answer 1: reaction to a 30% drop (4=buy more … 1=sell everything).' },
+  { name:'tol_1', type:'integer', enum:[1,2,3,4], desc:'Tolerance answer 2: market-linked experience (4=7+ years … 1=first time).' },
+  { name:'tol_2', type:'integer', enum:[1,2,3,4], desc:'Tolerance answer 3: impact if the money were lost (4=nothing changes … 1=devastating).' },
+  { name:'tol_3', type:'integer', enum:[1,2,3,4], desc:'Tolerance answer 4: can they sleep when down 20% (4=comfortably … 1=would sell).' },
+  { name:'tol_4', type:'integer', enum:[1,2,3,4], desc:'Tolerance answer 5: path preference (4=high return with swings … 1=guaranteed).' },
+];
+
+const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with three levels — they all share the same math, so moving to a deeper level never wastes anything the user already entered. It supports India (₹) and the United States ($).
+- Level 1 — Quick Calculate: a fast single-goal answer in about two minutes, for first-timers.
+- Level 2 — The Full Plan (this page): a risk-profiling questionnaire that builds a multi-goal plan with recommended fund categories.
+- Level 3 — The Lab: full assumption control, Monte Carlo, efficient frontier, and live real-market-data testing.
+The user is currently on Level 2.
+
+This is "Goalden — The Full Plan" (Level 2): a guided risk-profiling questionnaire that builds a multi-goal investment plan.
+
+What it does: scores the user's risk capacity and risk tolerance, names a risk bucket, then for each goal applies a horizon-based "equity ceiling" (glide path) and recommends actual fund categories with plain-English reasons.
+
+Screens: country -> capacity questions (income reliability, dependents, loan EMI burden, concentration) -> emergency fund status -> (optional) emergency prioritization -> budget (monthly savings capacity) -> tolerance questions (reaction to a 30% drop, market experience, impact of loss, sleep during downturns, path preference) -> risk profile -> goals hub -> plan -> optional "The Case".
+
+Scoring: capacity and tolerance are each scored 1-4 per question. The final score is the LOWER of the two totals — capacity caps tolerance, so the app never pushes someone past their stated comfort. The score maps to a bucket.
+
+Risk buckets (equity/debt/hybrid): Conservative 20/60/20, Moderately Conservative 35/50/15, Moderate 50/35/15, Growth-Oriented 70/20/10, Aggressive 85/10/5.
+
+Horizon ceiling (glide path): a goal's equity is capped by its time horizon, rising through anchors at 2, 4, 7, 12 and 18 years. It can only pull equity DOWN — never above the user's own tolerance. It is a ceiling, not a floor.
+
+Goals (each calculated separately): retirement (monthly expense, current age, retire age), education (annual fee, years, 4-year duration), house/generic (amount, years). Emergency fund: 3-6 months of expenses (partial/full) invested at the debt rate.
+
+Calculations: same corpus/SIP engine as Level 1, plus per-goal horizon-adjusted allocation. The plan totals all goal SIPs, adds the emergency-fund SIP, and compares against monthly capacity to report a surplus or shortfall.
+
+Assumptions (per country): India (₹): inflation 6%, education 10%, debt 7%, hybrid 10%, equity 12%, post-ret 9%, life expectancy 78, FD 6.5%. US ($): inflation 2.5%, education 5%, debt 4.5%, hybrid 7%, equity 9%, post-ret 6%, life expectancy 82, FD 4%.
+
+Data sources: same real historical Sensex (India, FY1980-2023) / S&P 500 (US, 1928-2024) series as Level 1 for "The Case". No live market data here.
+
+Behavior note: when the user is looking at their plan (or asking about it), prefer showing them the relevant chart or comparison over describing it in words — call show_result with the closest matching kind, then give a one-line explanation of what's now on screen.`;
+
+function advisorTools() {
+  const screens = flow();
+  return [
+    { type:'function', function:{ name:'navigate', description:'Move the app to a named screen. Valid screens right now: '+screens.join(', ')+'.', parameters:{ type:'object', properties:{ screen:{ type:'string', enum:screens } }, required:['screen'] } } },
+    { type:'function', function:{ name:'set_value', description:'Set one input/answer. Use it to fill in a value the user just told you. Field meanings: '+ADVISOR_FIELDS.map(f=>f.name+' = '+f.desc).join(' '), parameters:{ type:'object', properties:{ field:{ type:'string', enum:ADVISOR_FIELDS.map(f=>f.name) }, value:{} }, required:['field','value'] } } },
+    { type:'function', function:{ name:'add_goal', description:'Add a financial goal to the plan. For retirement pass type=retirement, retireAge, monthlyExpense, currentAge. For education pass type=education, annualFee, years. For house pass type=house, amount, years. For other pass type=generic, amount, years. Optionally existingSavings for any.', parameters:{ type:'object', properties:{ type:{ type:'string', enum:['retirement','education','house','generic'] }, retireAge:{ type:'integer' }, monthlyExpense:{ type:'integer' }, currentAge:{ type:'integer' }, annualFee:{ type:'integer' }, amount:{ type:'integer' }, years:{ type:'integer' }, existingSavings:{ type:'integer' } }, required:['type'] } } },
+    { type:'function', function:{ name:'get_state', description:'Return everything the user has entered so far, plus the current screen.' } },
+    { type:'function', function:{ name:'get_results', description:'Run the current plan calculation and return the key numbers (risk bucket, monthly SIPs, surplus/shortfall).' } },
+    { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
+    { type:'function', function:{ name:'show_result', description:'Open the results canvas showing a real chart or comparison. Valid kinds: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ')+'.', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:Object.keys(ADVISOR_RESULT_KINDS) } }, required:['kind'] } } },
+  ];
+}
+
+function advisorSetValue(field, value) {
+  const spec = ADVISOR_FIELDS.find(f => f.name === field);
+  if (!spec) return { ok:false, error:'Unknown field "'+field+'". Valid: '+ADVISOR_FIELDS.map(f=>f.name).join(', ') };
+  if (value === undefined || value === null || value === '') return { ok:false, error:'Missing value for '+field };
+  if (spec.type === 'integer') {
+    value = parseInt(value, 10);
+    if (!isFinite(value)) return { ok:false, error:'Value for '+field+' must be a number.' };
+  } else if (spec.type === 'boolean') {
+    value = (value === true || value === 'true' || value === 1 || value === '1');
+  }
+  if (spec.enum && !spec.enum.includes(value)) return { ok:false, error:'Invalid value for '+field+'. Allowed: '+spec.enum.join(', ') };
+  if (spec.min !== undefined && value < spec.min) return { ok:false, error:'Value for '+field+' is too low — it must be at least '+spec.min+'.' };
+  if (spec.max !== undefined && value > spec.max) return { ok:false, error:'Value for '+field+' is too high — it must be at most '+spec.max+'.' };
+  if (field.startsWith('cap_')) G.capA[parseInt(field.slice(4), 10)] = value;
+  else if (field.startsWith('tol_')) G.tolA[parseInt(field.slice(4), 10)] = value;
+  else if (field === 'emergencyStatus') { G.emergencyStatus = value; G.emergencyPrioritize = null; }
+  else G[field] = value;
+  const f = flow();
+  G.si = Math.max(0, Math.min(f.length - 1, G.si));
+  render();
+  return { ok:true, field, value, page:f[G.si] };
+}
+
+function advisorAddGoal(args) {
+  const type = args.type;
+  let goal;
+  if (type === 'retirement') {
+    if (!args.retireAge || !args.monthlyExpense || !args.currentAge) return { ok:false, error:'A retirement goal needs retireAge, monthlyExpense and currentAge.' };
+    goal = { type:'retirement', label:'Retirement', retireAge:args.retireAge, monthlyExpense:args.monthlyExpense, currentAge:args.currentAge, years:Math.max(1, args.retireAge - args.currentAge), existingSavings:args.existingSavings || 0 };
+  } else if (type === 'education') {
+    if (!args.annualFee || !args.years) return { ok:false, error:'An education goal needs annualFee and years.' };
+    goal = { type:'education', label:'Education', annualFee:args.annualFee, years:args.years, duration:4, existingSavings:args.existingSavings || 0 };
+  } else {
+    if (!args.amount || !args.years) return { ok:false, error:'This goal needs amount and years.' };
+    const sub = type === 'house' ? 'house' : 'generic';
+    goal = { type:'generic', label: sub === 'house' ? 'House' : 'Other goal', amount:args.amount, years:args.years, genSub:sub, existingSavings:args.existingSavings || 0 };
+  }
+  G.goals.push(goal);
+  G.addingGoal = false; G.editingIndex = null;
+  const f = flow();
+  G.si = f.indexOf('plan');
+  render();
+  return { ok:true, added:goal, page:'plan' };
+}
+
+function advisorGetResults() {
+  if (!G.country) return { ok:false, error:'Need a country/currency first — ask the user whether they are in India or the United States.' };
+  if (G.capA.every(x => x != null) && G.tolA.every(x => x != null)) {
+    const sc = scoreBuckets();
+    G.bucket = sc.bucket; G.capScore = sc.capScore; G.tolScore = sc.tolScore;
+  }
+  const plan = buildPlan();
+  return { ok:true, result:{
+    riskBucket: G.bucket ? BUCKETS[G.bucket].name : 'not yet determined',
+    monthlyCapacity: plan.cap,
+    emergencyFund: plan.emg.needed ? { amount:plan.emg.amount, monthlySIP:plan.emg.sip } : (plan.emg.declined ? 'declined' : 'already funded'),
+    goals: plan.goals.map(g => ({ label:g.label, corpus:g.corpus, monthlySIP:g.sip })),
+    totalMonthlySIP: plan.totalSIP,
+    shortfallOrSurplus: plan.diff,
+    status: plan.status,
+  } };
+}
+
+const ADVISOR_HIGHLIGHT_TARGETS = {
+  screen: '.screen',
+  plan: '.plan-scroll',
+  profile: '.profile-card',
+  total: '.plan-total',
+};
+function advisorHighlight(name) {
+  const sel = ADVISOR_HIGHLIGHT_TARGETS[name];
+  if (!sel) return { ok:false, error:'No highlight target "'+name+'". Valid: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ') };
+  const el = document.querySelector(sel);
+  if (!el) return { ok:false, error:'That element is not on screen right now.' };
+  try { el.scrollIntoView({ behavior:'smooth', block:'center' }); } catch (e) {}
+  el.classList.add('advisor-pulse');
+  setTimeout(() => el.classList.remove('advisor-pulse'), 1600);
+  return { ok:true, target:name };
+}
+
+/* =====================================================================
+   RESULTS CANVAS — the show_result tool renders an EXISTING comparison card
+   or chart (built from the app's own calc functions) into #resultCanvas, so
+   the AI can show a real visual instead of re-typing numbers. Each `kind` is
+   a fixed enum — the model can only pick from things the page already
+   renders, never pass raw values for the frontend to draw.
+   ===================================================================== */
+function resultCanvasSummary() {
+  const c = cfg();
+  if (!G.country) return '<div class="gr-note">Pick your country first.</div>';
+  const plan = buildPlan();
+  const b = G.bucket ? BUCKETS[G.bucket] : null;
+  const statusLabel = { ok:'Fits within your savings', warn:'Slightly over — small adjustments needed', gap:'Gap: plan needs adjustment' }[plan.status];
+  return '<div class="alloc-card"><div class="section-head">Your plan at a glance</div>' +
+    '<div class="alloc-return-row"><div><div class="alloc-return-label">Total monthly SIP</div><div class="alloc-return-value">'+c.fmt(plan.totalSIP)+'</div></div>' +
+    '<div><div class="alloc-return-label">Your capacity</div><div class="alloc-return-value">'+c.fmt(plan.cap)+'</div></div></div>' +
+    '<div class="gr-note" style="margin-top:10px">'+statusLabel+' ('+(plan.diff>=0?'+':'−')+c.fmt(Math.abs(plan.diff))+'/mo)'+(b?' · '+b.name+' profile':'')+'.</div></div>';
+}
+function resultCanvasGoals() {
+  const c = cfg();
+  if (!G.country) return '<div class="gr-note">Pick your country first.</div>';
+  const plan = buildPlan();
+  if (!plan.goals.length) return '<div class="gr-note">No goals added yet — tell me what you\'re saving for and I\'ll add it.</div>';
+  const rows = plan.goals.map(g => '<div class="alloc-return-row" style="margin-top:8px"><div><div class="alloc-return-label">'+g.label+'</div><div class="alloc-return-value">'+c.fmt(g.sip)+'/mo</div></div><div style="text-align:right"><div class="alloc-return-label">Corpus</div><div class="alloc-return-value">'+c.compact(g.corpus)+'</div></div></div>').join('');
+  return '<div class="alloc-card"><div class="section-head">Each goal</div>'+rows+'</div>';
+}
+function resultCanvasAlloc() {
+  const c = cfg();
+  if (!G.bucket) return '<div class="gr-note">Complete the risk questionnaire to see your allocation.</div>';
+  const b = BUCKETS[G.bucket];
+  const baseRate = bucketRate(G.bucket);
+  const baseReal = realRate(baseRate, c.d.inflation);
+  return '<div class="alloc-card"><div class="section-head">Your '+b.name+' profile, as an allocation</div>' +
+    '<div class="alloc-flex">'+allocationDonut(b.eq, b.de, b.hy, 'cv-alloc')+'<div class="alloc-legend">'+allocationLegend(b.eq, b.de, b.hy)+'</div></div>' +
+    '<div class="alloc-return-row"><div><div class="alloc-return-label">Expected return</div><div class="alloc-return-value">'+(baseRate*100).toFixed(1)+'%</div></div>' +
+    '<div><div class="alloc-return-label">After '+(c.d.inflation*100).toFixed(0)+'% inflation</div><div class="alloc-return-value" style="color:'+(baseReal>0?'#8FC79E':'#E8977A')+'">'+(baseReal*100).toFixed(1)+'%</div></div></div></div>';
+}
+function resultCanvasProfile() {
+  if (!G.bucket) return '<div class="gr-note">Complete the risk questionnaire to see your profile.</div>';
+  const b = BUCKETS[G.bucket];
+  return '<div class="profile-card pc-'+b.cls+'"><div class="pc-label">Your profile</div><div class="pc-name">'+b.name+'</div><div class="pc-tagline">'+b.tagline+'</div><div class="pc-desc">'+b.desc+'</div></div>';
+}
+
+const ADVISOR_RESULT_KINDS = {
+  summary: { title: 'Your plan at a glance', build: resultCanvasSummary },
+  goals: { title: 'Each goal', build: resultCanvasGoals },
+  alloc: { title: 'Your allocation', build: resultCanvasAlloc },
+  profile: { title: 'Your risk profile', build: resultCanvasProfile },
+};
+function advisorShowResult(kind) {
+  const spec = ADVISOR_RESULT_KINDS[kind];
+  if (!spec) return { ok:false, error:'No result kind "'+kind+'". Valid: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ') };
+  resultCanvasOpen(spec.title, spec.build());
+  return { ok:true, shown: kind };
+}
+
+function executeAdvisorTool(name, args) {
+  if (name === 'get_state') {
+    return JSON.stringify(Object.assign({}, G, { page: flow()[G.si] || null, screens: flow() }));
+  }
+  if (name === 'get_results') return JSON.stringify(advisorGetResults());
+  if (name === 'navigate') {
+    const screen = args && args.screen;
+    const idx = flow().indexOf(screen);
+    if (idx === -1) return JSON.stringify({ ok:false, error:'No screen named "'+screen+'". Valid: '+flow().join(', ') });
+    G.si = idx;
+    render();
+    return JSON.stringify({ ok:true, screen, page:screen });
+  }
+  if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
+  if (name === 'add_goal') return JSON.stringify(advisorAddGoal(args || {}));
+  if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
+  if (name === 'show_result') return JSON.stringify(advisorShowResult(args && args.kind));
+  return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
+}
+
+window.GOALDEN_ADVISOR_CONFIG = {
+  state: G,
+  knowledge: ADVISOR_KNOWLEDGE,
+  app: 'Goalden — The Full Plan',
+  pageLabel: 'Level 2 — The Full Plan',
+  tools: function () { return advisorTools(); },
+  page: function () { return flow()[G.si] || null; },
+  screens: function () { return flow(); },
+  executeTool: function (name, args) { return executeAdvisorTool(name, args); },
+  lang: function () { return G.country === 'US' ? 'en-US' : 'en-IN'; },
+  greeting: 'Hi! I can help you build a full plan. Tell me a bit about yourself, or just ask a question.',
+  placeholder: 'Ask, or tap the mic…',
+  showDisclaimer: false
+};
+
 render();
 </script>
+<script src="advisor.js"></script>
 </body>
 </html>

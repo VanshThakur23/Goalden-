@@ -1938,7 +1938,256 @@ backBtn.addEventListener('click', () => {
   if (S.quickEdit) { S.quickEdit = false; S.si = flow().indexOf('results'); render(); return; }
   if (S.si>0) go(-1);
 });
+
+/* =====================================================================
+   AI ADVISOR — conversational overlay. Talks to POST /api/chat (the Worker
+   in prod, local_server.py in dev). The model returns either plain text or
+   a tool call; we execute the tool against the real app state, feed the
+   result back, and loop until it produces a plain answer. The model never
+   touches S directly — every mutation goes through executeAdvisorTool.
+   ===================================================================== */
+const ADVISOR_FIELDS = [
+  { name:'country', type:'string', enum:['IN','US'], desc:'Country/currency: IN for India ₹, US for United States $.' },
+  { name:'goalType', type:'string', enum:['retirement','education','generic','delay'], desc:'The goal to plan: retirement, education (child college), generic (house/car/wedding/travel), or delay (cost of waiting).' },
+  { name:'age', type:'integer', min:16, max:75, desc:'Current age in years (16-75).' },
+  { name:'retireAge', type:'integer', min:35, max:85, desc:'Retirement age in years (above current age, 35-85).' },
+  { name:'monthlyExpense', type:'integer', min:0, max:100000000, desc:'Typical monthly spending, in the chosen currency.' },
+  { name:'annualFee', type:'integer', min:0, max:100000000, desc:'Annual college fee today, in the chosen currency.' },
+  { name:'yearsToCollege', type:'integer', min:1, max:22, desc:'Years until college starts.' },
+  { name:'courseDuration', type:'integer', min:1, max:8, desc:'College course duration in years.' },
+  { name:'genType', type:'string', enum:['house','car','wedding','travel'], desc:'For a generic goal: house, car, wedding, or travel.' },
+  { name:'genAmount', type:'integer', min:0, max:1000000000, desc:'Generic goal amount today, in the chosen currency.' },
+  { name:'genYears', type:'integer', min:1, max:30, desc:'Years until the generic goal is needed.' },
+  { name:'existingSavings', type:'integer', min:0, max:1000000000, desc:'Existing savings already set aside for this goal.' },
+  { name:'risk', type:'string', enum:['cautious','balanced','growth'], desc:'Risk comfort: cautious (low), balanced (medium), growth (high).' },
+];
+
+const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with three levels — they all share the same math, so moving to a deeper level never wastes anything the user already entered. It supports India (₹) and the United States ($).
+- Level 1 — Quick Calculate (this page): a fast single-goal answer in about two minutes, for first-timers.
+- Level 2 — The Full Plan: a risk-profiling questionnaire that builds a multi-goal plan with recommended fund categories.
+- Level 3 — The Lab: full assumption control, Monte Carlo, efficient frontier, and live real-market-data testing.
+The user is currently on Level 1.
+
+This is "Goalden — Quick Calculate" (Level 1): a fast single-goal calculator.
+
+What it does: takes a few plain-language inputs and returns the lump sum (corpus) needed by a target date and the monthly amount (SIP) to save now to reach it. "The Case" screen adds a deeper proof with real historical market data.
+
+Goal types:
+- retirement: monthly expenses today, current age, retirement age.
+- education: annual college fee today, years until it starts, course duration.
+- generic (house/car/wedding/travel): amount today and years until needed.
+- delay ("cost of waiting"): shows how postponing a goal raises the required monthly saving.
+
+Risk options and their asset splits (equity/debt/hybrid): cautious 25/60/15, balanced 50/35/15, growth 75/15/10.
+
+Calculations: the target corpus is the present value of future withdrawals using an inflation-adjusted ("real") rate, with withdrawals at the start of each year. The monthly SIP is what compounds at the pre-retirement rate to close the gap between that corpus and what existing savings grow to. Results include the corpus in future and today's money, a fixed-deposit comparison at the country FD rate, a "retire 5 years earlier/later" comparison, and a cost-of-delay figure.
+
+Assumptions (per country):
+- India (₹): inflation 6%, education inflation 10%, debt 7%, hybrid 10%, equity 12%, post-retirement return 9%, life expectancy 78, FD rate 6.5%.
+- US ($): inflation 2.5%, education inflation 5%, debt 4.5%, hybrid 7%, equity 9%, post-retirement 6%, life expectancy 82, FD rate 4%.
+
+Data sources: "The Case" uses real historical annual returns — Sensex (India, FY1980-2023) and S&P 500 (US, 1928-2024) — to show how often N-year windows lost money and the worst/best windows. Price returns, no fabricated or estimated values. This Level does not fetch live market data.
+
+Behavior note: when the user is looking at their results (or asking about them), prefer showing them the relevant chart or comparison over describing it in words — call show_result with the closest matching kind, then give a one-line explanation of what's now on screen.`;
+
+function advisorTools() {
+  const screens = flow();
+  return [
+    { type:'function', function:{ name:'navigate', description:'Move the app to a named screen. Valid screens right now: '+screens.join(', ')+'.', parameters:{ type:'object', properties:{ screen:{ type:'string', enum:screens } }, required:['screen'] } } },
+    { type:'function', function:{ name:'set_value', description:'Set one input/answer. Use it to fill in a value the user just told you. Field meanings: '+ADVISOR_FIELDS.map(f=>f.name+' = '+f.desc).join(' '), parameters:{ type:'object', properties:{ field:{ type:'string', enum:ADVISOR_FIELDS.map(f=>f.name) }, value:{} }, required:['field','value'] } } },
+    { type:'function', function:{ name:'get_state', description:'Return everything the user has entered so far, plus the current screen.' } },
+    { type:'function', function:{ name:'get_results', description:'Run the current calculation and return the key numbers (monthly SIP, corpus, etc.).' } },
+    { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
+    { type:'function', function:{ name:'show_result', description:'Open the results canvas showing a real chart or comparison. Valid kinds: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ')+'.', parameters:{ type:'object', properties:{ kind:{ type:'string', enum:Object.keys(ADVISOR_RESULT_KINDS) } }, required:['kind'] } } },
+  ];
+}
+
+function advisorSetValue(field, value) {
+  const spec = ADVISOR_FIELDS.find(f => f.name === field);
+  if (!spec) return { ok:false, error:'Unknown field "'+field+'". Valid: '+ADVISOR_FIELDS.map(f=>f.name).join(', ') };
+  if (value === undefined || value === null || value === '') return { ok:false, error:'Missing value for '+field };
+  if (spec.enum && !spec.enum.includes(value)) return { ok:false, error:'Invalid value for '+field+'. Allowed: '+spec.enum.join(', ') };
+  if (spec.type === 'integer') {
+    value = parseInt(value, 10);
+    if (!isFinite(value)) return { ok:false, error:'Value for '+field+' must be a number.' };
+  }
+  if (spec.min !== undefined && value < spec.min) return { ok:false, error:'Value for '+field+' is too low — it must be at least '+spec.min+'.' };
+  if (spec.max !== undefined && value > spec.max) return { ok:false, error:'Value for '+field+' is too high — it must be at most '+spec.max+'.' };
+  if (field === 'goalType') {
+    S.goalType = value;
+    S.si = S.country ? flow().indexOf('goal') : 0;
+  } else if (field === 'age' && S.retireAge && S.retireAge <= value) {
+    S.age = value; S.retireAge = null;
+  } else {
+    S[field] = value;
+  }
+  const f = flow();
+  S.si = Math.max(0, Math.min(f.length - 1, S.si));
+  render();
+  return { ok:true, field, value:S[field], page:f[S.si] };
+}
+
+function advisorGetResults() {
+  if (!S.country) return { ok:false, error:'Need a country/currency first — ask the user whether they are in India or the United States.' };
+  if (!S.goalType) return { ok:false, error:'No goal chosen yet — ask the user what they want to plan for.' };
+  if (S.goalType === 'retirement') {
+    if (S.age == null || S.retireAge == null || S.monthlyExpense == null) return { ok:false, error:'Need age, retirement age and monthly expense first.' };
+    const r = calcRetirement();
+    return { ok:true, result:{ goalType:'retirement', age:S.age, retireAge:S.retireAge, monthlyExpense:S.monthlyExpense, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), yearsToRetire:r.yrs, expectedReturnPct:(r.preRate*100).toFixed(1) } };
+  }
+  if (S.goalType === 'education') {
+    if (S.annualFee == null || S.yearsToCollege == null || S.courseDuration == null) return { ok:false, error:'Need annual fee, years until college and course duration first.' };
+    const r = calcEducation();
+    return { ok:true, result:{ goalType:'education', annualFee:S.annualFee, yearsToCollege:S.yearsToCollege, courseDuration:S.courseDuration, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), expectedReturnPct:(r.preRate*100).toFixed(1) } };
+  }
+  if (S.goalType === 'generic') {
+    if (S.genAmount == null || S.genYears == null) return { ok:false, error:'Need goal amount and years until needed first.' };
+    const r = calcGeneric();
+    return { ok:true, result:{ goalType:'generic', genType:S.genType, amountToday:S.genAmount, years:S.genYears, inflatedGoal:Math.round(r.inflatedGoal), monthlySIP:Math.round(r.sip), expectedReturnPct:(r.preRate*100).toFixed(1) } };
+  }
+  if (S.goalType === 'delay') return { ok:false, error:'The cost-of-delay comparison shows inside a real goal result. Pick retirement, education or a purchase first.' };
+  return { ok:false, error:'Unknown goal type.' };
+}
+
+// Highlight replaces the old explain() keyword map: the model already answers
+// "what does X mean" from ADVISOR_KNOWLEDGE (far richer than a six-entry map),
+// so this tool does the one thing the model can't — scroll the user's eye to
+// the exact on-screen element being talked about and pulse it briefly.
+const ADVISOR_HIGHLIGHT_TARGETS = {
+  screen: '.screen',
+  corpus: '.hero-number',
+  action: '.action-card',
+  results: '.result-scroll',
+};
+function advisorHighlight(name) {
+  const sel = ADVISOR_HIGHLIGHT_TARGETS[name];
+  if (!sel) return { ok:false, error:'No highlight target "'+name+'". Valid: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ') };
+  const el = document.querySelector(sel);
+  if (!el) return { ok:false, error:'That element is not on screen right now.' };
+  try { el.scrollIntoView({ behavior:'smooth', block:'center' }); } catch (e) {}
+  el.classList.add('advisor-pulse');
+  setTimeout(() => el.classList.remove('advisor-pulse'), 1600);
+  return { ok:true, target:name };
+}
+
+/* =====================================================================
+   RESULTS CANVAS — the show_result tool renders an EXISTING comparison card
+   or chart (built from the app's own calc functions) into #resultCanvas, so
+   the AI can show a real visual instead of re-typing numbers. Each `kind` is
+   a fixed enum — the model can only pick from things the page already
+   renders, never pass raw values for the frontend to draw.
+   ===================================================================== */
+function resultCanvasSummary() {
+  const c = cfg();
+  const res = advisorGetResults();
+  if (!res.ok) return '<div class="gr-note">'+res.error+'</div>';
+  const r = res.result;
+  const goalLabel = { retirement:'Retirement', education:'Education', generic:'A purchase', delay:'Cost of waiting' }[S.goalType] || 'Goal';
+  const big = r.corpus != null ? r.corpus : (r.inflatedGoal != null ? r.inflatedGoal : null);
+  const monthly = r.monthlySIP != null ? r.monthlySIP : r.sip;
+  let html = '<div class="hero-number"><div class="hero-label">'+goalLabel+' — the number</div>';
+  if (big != null) html += '<div class="hero-figure">'+c.compact(big)+'</div>';
+  if (monthly != null) html += '<div class="hero-sub">Save '+c.fmt(Math.round(monthly))+'/month to get there.</div>';
+  return html + '</div>';
+}
+function resultCanvasDelay() {
+  if (S.goalType === 'retirement') {
+    if (S.age == null || S.retireAge == null || S.monthlyExpense == null) return '<div class="gr-note">Fill in your retirement inputs first.</div>';
+    const r = calcRetirement();
+    return delayCard(r.delay, r.yrs) || '<div class="gr-note">No delay comparison for this plan.</div>';
+  }
+  if (S.goalType === 'education') {
+    if (S.annualFee == null || S.yearsToCollege == null || S.courseDuration == null) return '<div class="gr-note">Fill in your education inputs first.</div>';
+    const r = calcEducation();
+    return delayCard(r.delay, S.yearsToCollege) || '<div class="gr-note">No delay comparison for this plan.</div>';
+  }
+  return '<div class="gr-note">The cost-of-waiting comparison applies to retirement or education goals.</div>';
+}
+function resultCanvasRetire() {
+  const c = cfg();
+  if (S.goalType !== 'retirement') return '<div class="gr-note">This comparison applies to retirement goals.</div>';
+  if (S.age == null || S.retireAge == null || S.monthlyExpense == null) return '<div class="gr-note">Fill in your retirement inputs first.</div>';
+  const rows = calcRetireAgeCompare();
+  return rows ? retireAgeCompareCard(rows, c) : '<div class="gr-note">No comparison available.</div>';
+}
+function resultCanvasFd() {
+  const c = cfg();
+  if (S.goalType === 'retirement') {
+    if (S.age == null || S.retireAge == null || S.monthlyExpense == null) return '<div class="gr-note">Fill in your retirement inputs first.</div>';
+    const r = calcRetirement();
+    return r.alreadyMet ? '<div class="gr-note">No SIP needed, so there is nothing to compare against an FD.</div>' : fdComparisonCardHtml(r.sip, r.yrs, r.corpus, r.d, c);
+  }
+  if (S.goalType === 'generic') {
+    if (S.genAmount == null || S.genYears == null) return '<div class="gr-note">Fill in your goal amount and years first.</div>';
+    const r = calcGeneric();
+    return r.sip <= 0 ? '<div class="gr-note">No SIP needed, so there is nothing to compare.</div>' : fdComparisonCardHtml(r.sip, S.genYears, r.inflatedGoal, r.d, c);
+  }
+  return '<div class="gr-note">The FD comparison applies to retirement or purchase goals.</div>';
+}
+function resultCanvasAlloc() {
+  if (!S.risk) return '<div class="gr-note">Pick a risk level first to see the allocation split.</div>';
+  const d = cfg().d;
+  const a = riskAllocation();
+  const preRate = riskRate();
+  const real = realRate(preRate, d.inflation);
+  return '<div class="chart-card"><div class="chart-title">Where this money would sit</div>' +
+    '<div class="alloc-flex">' + allocationDonut(a.eq, a.de, a.hy, 'cv-alloc-donut') + '<div class="alloc-legend">' + allocationLegend(a.eq, a.de, a.hy) + '</div></div>' +
+    '<div class="alloc-return-row">' +
+    '<div><div class="alloc-return-label">Expected return</div><div class="alloc-return-value">'+(preRate*100).toFixed(1)+'%</div></div>' +
+    '<div><div class="alloc-return-label">After '+(d.inflation*100).toFixed(0)+'% inflation</div><div class="alloc-return-value" style="color:'+(real>0?'#8FC79E':'#E8977A')+'">'+(real*100).toFixed(1)+'%</div></div>' +
+    '</div></div>';
+}
+
+const ADVISOR_RESULT_KINDS = {
+  summary: { title: 'Your number', build: resultCanvasSummary },
+  delay: { title: 'Cost of waiting', build: resultCanvasDelay },
+  retire: { title: 'Retire at a different age', build: resultCanvasRetire },
+  fd: { title: 'Fixed Deposit comparison', build: resultCanvasFd },
+  alloc: { title: 'Where the money sits', build: resultCanvasAlloc },
+};
+function advisorShowResult(kind) {
+  const spec = ADVISOR_RESULT_KINDS[kind];
+  if (!spec) return { ok:false, error:'No result kind "'+kind+'". Valid: '+Object.keys(ADVISOR_RESULT_KINDS).join(', ') };
+  resultCanvasOpen(spec.title, spec.build());
+  return { ok:true, shown: kind };
+}
+
+function executeAdvisorTool(name, args) {
+  if (name === 'get_state') {
+    return JSON.stringify(Object.assign({}, S, { page: flow()[S.si] || null, screens: flow() }));
+  }
+  if (name === 'get_results') return JSON.stringify(advisorGetResults());
+  if (name === 'navigate') {
+    const screen = args && args.screen;
+    const idx = flow().indexOf(screen);
+    if (idx === -1) return JSON.stringify({ ok:false, error:'No screen named "'+screen+'". Valid: '+flow().join(', ') });
+    S.si = idx; S.quickEdit = false;
+    render();
+    return JSON.stringify({ ok:true, screen, page:screen });
+  }
+  if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
+  if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
+  if (name === 'show_result') return JSON.stringify(advisorShowResult(args && args.kind));
+  return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
+}
+
+window.GOALDEN_ADVISOR_CONFIG = {
+  state: S,
+  knowledge: ADVISOR_KNOWLEDGE,
+  app: 'Goalden — Quick Calculate',
+  pageLabel: 'Level 1 — Quick Calculate',
+  tools: function () { return advisorTools(); },
+  page: function () { return flow()[S.si] || null; },
+  screens: function () { return flow(); },
+  executeTool: function (name, args) { return executeAdvisorTool(name, args); },
+  lang: function () { return S.country === 'US' ? 'en-US' : 'en-IN'; },
+  greeting: 'Hi! I can help you plan. Tell me what you\'re saving for — retirement, education, a big purchase — or just ask a question.',
+  placeholder: 'Ask, or tap the mic…',
+  showDisclaimer: false
+};
+
 render();
 </script>
+<script src="advisor.js"></script>
 </body>
 </html>
