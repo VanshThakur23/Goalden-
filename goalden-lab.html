@@ -610,6 +610,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 
 <button class="print-btn" id="printBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span>Print / Save as PDF</span></button>
 
+<script src="goalden-engine.js"></script>
 <script>
 'use strict';
 /* =====================================================================
@@ -693,18 +694,16 @@ window.addEventListener('resize', ()=>{
 });
 
 /* =====================================================================
-   ENGINE (verbatim port)
+   ENGINE — the shared primitives (inflateExpense, realRate, corpusRequired,
+   solveSIP, effectiveMonthlyRate, accumulationSchedule) now live in
+   goalden-engine.js, loaded above. Only the Lab-specific extensions stay
+   here: solveStepUpSIP, swpWithdrawal, drawdownWithShock.
    ===================================================================== */
-function inflateExpense(amt,phases,f){if(f===undefined)f=1;for(const p of phases)amt*=Math.pow(1+p.rate,p.years);return amt*f}
-function realRate(r,i){return(1+r)/(1+i)-1}
-function corpusRequired(rate,years,w,due){if(rate===0)return w*years;let pv=w*(1-Math.pow(1+rate,-years))/rate;return due?pv*(1+rate):pv}
-function solveSIP(rate,periods,fv,due){if(rate===0)return fv/periods;let f=(Math.pow(1+rate,periods)-1)/rate;return fv/(due?f*(1+rate):f)}
 function solveStepUpSIP(rate,growth,periods,fv,due){
   if(Math.abs(rate-growth)<1e-9){const f=periods*Math.pow(1+rate,periods-1)*(due?(1+rate):1);return fv/f;}
   let f=(Math.pow(1+rate,periods)-Math.pow(1+growth,periods))/(rate-growth);
   return fv/(due?f*(1+rate):f);
 }
-function effectiveMonthlyRate(r){return Math.pow(1+r,1/12)-1}
 function swpWithdrawal(rate,years,corpus,due){
   if(rate===0)return corpus/years;
   let f=(1-Math.pow(1+rate,-years))/rate;
@@ -724,19 +723,6 @@ function drawdownWithShock(opts, shockYear, shockReturn){
     w*=(1+opts.inflation);
   }
   return{rows,ranOutYear,finalBalance:bal};
-}
-function accumulationSchedule(o){
-  const rows=[];let bal=o.opening||0,contrib=o.sip,total=0;
-  for(let i=1;i<=o.periods;i++){
-    let close;
-    if(o.due){const b2=bal+contrib;close=b2*(1+o.rate);}
-    else{close=bal*(1+o.rate)+contrib;}
-    total+=contrib;
-    rows.push({period:i,closeBal:close,contributed:total});
-    bal=close;
-    contrib*=(1+(o.stepUp||0));
-  }
-  return{rows,finalBalance:bal};
 }
 
 /* =====================================================================

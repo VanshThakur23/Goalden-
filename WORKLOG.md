@@ -557,6 +557,54 @@ Format:
 
 ---
 
+## 2026-08-17 — opencode — Phase 1: shared engine + tests
+
+### Done
+- Created goalden-engine.js (repo root): inflateExpense, realRate,
+  corpusRequired, solveSIP, effectiveMonthlyRate, accumulationSchedule,
+  marketSeries, marketName, compoundPath, marketGrowthPath, rollingWindows,
+  worstWindow, bestWindow, + the SENSEX/SP500 data arrays. Loaded as a plain
+  <script src="goalden-engine.js"> before each page's inline script. Bottom
+  has a `typeof module`-guarded module.exports shim so it's require()-able
+  from engine.test.js with zero effect on the browser tag.
+- Reconciled accumulationSchedule to the superset signature across all 3
+  pages: loops `periods` (was `years` in goalden.html + door2), returns
+  `contributed` on every row (door2 used to drop it), supports `stepUp`
+  (0 = flat). goalden.html (4 call sites) + door2 (3 call sites) renamed
+  years→periods and added stepUp:0; lab call sites unchanged (already used
+  periods/stepUp). Formula is algebraically identical to before — no output
+  change for existing (non-step-up) callers.
+- Made the market helpers portable (the BLOCKER): marketSeries/marketName
+  now take `country` as an explicit param instead of reading S.country /
+  G.country. Updated their 5+1 call sites in each of goalden.html and door2.
+- Removed the 6 shared math functions from all three pages (kept lab-specific
+  solveStepUpSIP / swpWithdrawal / drawdownWithShock in the Lab).
+- Fixed the stale goalden.html ENGINE comment (claimed /goalden-engine/
+  engine.test.js) → now points at goalden-engine.js + engine.test.js (root).
+- Created engine.test.js: node --test, 8 tests, zero deps.
+
+### Verified
+- node --test engine.test.js: 8/8 PASS.
+- grep: inflateExpense/realRate/corpusRequired/solveSIP/effectiveMonthlyRate/
+  accumulationSchedule each appear exactly once (goalden-engine.js), zero in
+  the three page files.
+- goalden-engine.js has no S.country/G.country references (only a comment).
+- All 3 pages include <script src="goalden-engine.js"> before their inline
+  script; node --check clean on all inline scripts; node --check on
+  goalden-engine.js clean.
+- Numeric trace: goalden.html retirement 25y×12×5000 → contributed 1,500,000;
+  door2 20y×12×8000 → 1,920,000; solveSIP round-trips to exactly 5000.
+
+### Constraints respected
+- No build step ✓ | No behavior change to existing callers ✓ | No new deps ✓
+
+### Known / not done
+- No commit made (per the git rule).
+- Not browser-tested: goalden-engine.js must actually load in a real browser
+  (script ordering) — worth a cache-bust pass on all 3 doors.
+
+---
+
 ## 2026-08-17 — Claude Code — Phase 0 verification + fix, ROADMAP.md added
 
 - Live-verified opencode's Phase 0 in the Browser pane against local_server.py

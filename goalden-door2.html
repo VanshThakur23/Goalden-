@@ -333,6 +333,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 
 </div>
 
+<script src="goalden-engine.js"></script>
 <script>
 'use strict';
 
@@ -363,14 +364,10 @@ function disposeChart(id){ if(chartInstances[id]){ chartInstances[id].inst.dispo
 function deferChartInit(fn){ setTimeout(fn, 0); }
 
 /* =====================================================================
-   ENGINE — same functions as goalden.html, copy-pasted verbatim
+   ENGINE — the shared financial math now lives in goalden-engine.js
+   (loaded above), so inflateExpense/realRate/corpusRequired/solveSIP/
+   effectiveMonthlyRate/accumulationSchedule are not redefined here.
    ===================================================================== */
-function inflateExpense(amt,phases,f){if(f===undefined)f=1;for(const p of phases)amt*=Math.pow(1+p.rate,p.years);return amt*f}
-function realRate(r,i){return(1+r)/(1+i)-1}
-function corpusRequired(rate,years,w,due){if(rate===0)return w*years;let pv=w*(1-Math.pow(1+rate,-years))/rate;return due?pv*(1+rate):pv}
-function solveSIP(rate,periods,fv,due){if(rate===0)return fv/periods;let f=(Math.pow(1+rate,periods)-1)/rate;return fv/(due?f*(1+rate):f)}
-function effectiveMonthlyRate(r){return Math.pow(1+r,1/12)-1}
-function accumulationSchedule(o){const rows=[];let bal=o.opening||0;for(let i=1;i<=o.years;i++){let c=o.due?(bal+o.sip)*(1+o.rate):(bal*(1+o.rate)+o.sip);rows.push({period:i,closeBal:c});bal=c;}return{rows,finalBalance:bal}}
 // mountainChart() labels each point "Year N" from its raw array index -- feeding it
 // accumulationSchedule()'s rows directly (one row per MONTH, since callers pass
 // years:yrs*12) mislabels month 109 as "Year 109". Bucket to yearly first.
@@ -461,108 +458,11 @@ function recommendInstruments(country, horizonYears, bucketId, goalType){
   return {fits, excludedForHorizon, stretch};
 }
 
-// =========================================================================
-// =========================================================================
-// REAL HISTORICAL MARKET DATA
-// Sensex: fiscal-year (April-to-April) annual returns, FY1979-80 through
-// FY2022-23, 44 real data points. Source: freefincal.com's compilation of
-// Sensex closing values, itself built from BSE data (values before 1992
-// are BSE's own re-based figures). This is price return; Sensex dividend
-// yield has historically been small (1-2%), so total return would run
-// slightly higher than what is shown here, not lower.
-// S&P 500: calendar-year returns, 1928-2024, 97 real data points.
-// 1928-2015 is price return (S&P 500 price index, no dividends), sourced
-// from a compilation of Cowles Commission / S&P historical data.
-// 2016-2024 is total return (dividends reinvested), sourced from
-// Macrotrends S&P 500 total-return series. The methodology genuinely
-// differs at that seam; both halves are real, reported figures, not
-// smoothed or blended to hide the join.
-// Neither series is fabricated or estimated. Both stop at real, cited
-// years rather than being extended with a guess for "this year so far."
-// =========================================================================
-const SENSEX_ANNUAL_RETURNS = [
-  {y:1980,r:0.0350},{y:1981,r:0.3525},{y:1982,r:0.2712},{y:1983,r:-0.0376},
-  {y:1984,r:0.1606},{y:1985,r:0.4239},{y:1986,r:0.5957},{y:1987,r:-0.0895},
-  {y:1988,r:-0.2221},{y:1989,r:0.8226},{y:1990,r:0.0816},{y:1991,r:0.5245},
-  {y:1992,r:2.6761},{y:1993,r:-0.4732},{y:1994,r:0.6357},{y:1995,r:-0.1228},
-  {y:1996,r:0.0281},{y:1997,r:0.0051},{y:1998,r:0.1583},{y:1999,r:-0.0714},
-  {y:2000,r:0.3707},{y:2001,r:-0.2942},{y:2002,r:-0.0185},{y:2003,r:-0.1198},
-  {y:2004,r:0.8633},{y:2005,r:0.1505},{y:2006,r:0.7508},{y:2007,r:0.0770},
-  {y:2008,r:0.2546},{y:2009,r:-0.3663},{y:2010,r:0.7868},{y:2011,r:0.0977},
-  {y:2012,r:-0.1000},{y:2013,r:0.0793},{y:2014,r:0.1899},{y:2015,r:0.2590},
-  {y:2016,r:-0.1058},{y:2017,r:0.1836},{y:2018,r:0.1118},{y:2019,r:0.1689},
-  {y:2020,r:-0.2729},{y:2021,r:0.7700},{y:2022,r:0.1800},{y:2023,r:-0.0048},
-];
-const SP500_ANNUAL_RETURNS = [
-  {y:1928,r:0.4381},{y:1929,r:-0.0830},{y:1930,r:-0.2512},{y:1931,r:-0.4384},
-  {y:1932,r:-0.0864},{y:1933,r:0.4998},{y:1934,r:-0.0119},{y:1935,r:0.4674},
-  {y:1936,r:0.3194},{y:1937,r:-0.3534},{y:1938,r:0.2928},{y:1939,r:-0.0110},
-  {y:1940,r:-0.1067},{y:1941,r:-0.1277},{y:1942,r:0.1917},{y:1943,r:0.2506},
-  {y:1944,r:0.1903},{y:1945,r:0.3582},{y:1946,r:-0.0843},{y:1947,r:0.0520},
-  {y:1948,r:0.0570},{y:1949,r:0.1830},{y:1950,r:0.3081},{y:1951,r:0.2368},
-  {y:1952,r:0.1815},{y:1953,r:-0.0121},{y:1954,r:0.5256},{y:1955,r:0.3260},
-  {y:1956,r:0.0744},{y:1957,r:-0.1046},{y:1958,r:0.4372},{y:1959,r:0.1206},
-  {y:1960,r:0.0034},{y:1961,r:0.2664},{y:1962,r:-0.0881},{y:1963,r:0.2261},
-  {y:1964,r:0.1642},{y:1965,r:0.1240},{y:1966,r:-0.0997},{y:1967,r:0.2380},
-  {y:1968,r:0.1081},{y:1969,r:-0.0824},{y:1970,r:0.0356},{y:1971,r:0.1422},
-  {y:1972,r:0.1876},{y:1973,r:-0.1431},{y:1974,r:-0.2590},{y:1975,r:0.3700},
-  {y:1976,r:0.2383},{y:1977,r:-0.0698},{y:1978,r:0.0651},{y:1979,r:0.1852},
-  {y:1980,r:0.3174},{y:1981,r:-0.0470},{y:1982,r:0.2042},{y:1983,r:0.2234},
-  {y:1984,r:0.0615},{y:1985,r:0.3124},{y:1986,r:0.1849},{y:1987,r:0.0581},
-  {y:1988,r:0.1654},{y:1989,r:0.3148},{y:1990,r:-0.0306},{y:1991,r:0.3023},
-  {y:1992,r:0.0749},{y:1993,r:0.0997},{y:1994,r:0.0133},{y:1995,r:0.3720},
-  {y:1996,r:0.2268},{y:1997,r:0.3310},{y:1998,r:0.2834},{y:1999,r:0.2089},
-  {y:2000,r:-0.0903},{y:2001,r:-0.1185},{y:2002,r:-0.2197},{y:2003,r:0.2836},
-  {y:2004,r:0.1074},{y:2005,r:0.0483},{y:2006,r:0.1561},{y:2007,r:0.0548},
-  {y:2008,r:-0.3655},{y:2009,r:0.2594},{y:2010,r:0.1482},{y:2011,r:0.0210},
-  {y:2012,r:0.1589},{y:2013,r:0.3215},{y:2014,r:0.1352},{y:2015,r:0.0136},
-  {y:2016,r:0.0954},{y:2017,r:0.1942},{y:2018,r:-0.0624},{y:2019,r:0.2888},
-  {y:2020,r:0.1626},{y:2021,r:0.2689},{y:2022,r:-0.1944},{y:2023,r:0.2423},
-  {y:2024,r:0.2331},
-];
-// Helper functions used across "The Case" module below.
-function marketSeries(){ return G.country==='US' ? SP500_ANNUAL_RETURNS : SENSEX_ANNUAL_RETURNS; }
-function marketName(){ return G.country==='US' ? 'S&P 500' : 'Sensex'; }
-// Growth path of a lump sum through a specific slice of the real return
-// series, starting at index `startIdx` for `years` years.
-// Constant-rate compounding path (for gold/FD in the race chart, which
-// use a single illustrative rate rather than a year-by-year series).
-function compoundPath(rate, years, startAmount, startYear){
-  const path=[{y:startYear, v:startAmount}];
-  let bal=startAmount;
-  for(let i=1;i<=years;i++){ bal*=(1+rate); path.push({y:startYear+i, v:bal}); }
-  return path;
-}
-function marketGrowthPath(series, startIdx, years, startAmount){
-  const path=[{y:series[startIdx].y-1, v:startAmount}];
-  let bal=startAmount;
-  for(let i=startIdx;i<startIdx+years && i<series.length;i++){
-    bal*=(1+series[i].r);
-    path.push({y:series[i].y, v:bal});
-  }
-  return path;
-}
-// Every real N-year window in the series: start year, CAGR, and whether
-// it ended above water. This is what "how often does N years lose money"
-// and "what does the worst N-year start look like" both draw from.
-function rollingWindows(series, years){
-  const out=[];
-  for(let i=0;i+years<=series.length;i++){
-    let bal=1;
-    for(let j=i;j<i+years;j++) bal*=(1+series[j].r);
-    out.push({startYear:series[i].y, startIdx:i, cagr:Math.pow(bal,1/years)-1, finalMultiple:bal});
-  }
-  return out;
-}
-function worstWindow(series, years){
-  const w=rollingWindows(series, years);
-  return w.reduce((worst,cur)=>cur.cagr<worst.cagr?cur:worst, w[0]);
-}
-function bestWindow(series, years){
-  const w=rollingWindows(series, years);
-  return w.reduce((best,cur)=>cur.cagr>best.cagr?cur:best, w[0]);
-}
-
+// Real historical market data (Sensex + S&P 500 series) and its helpers
+// (marketSeries(country), marketName(country), compoundPath,
+// marketGrowthPath, rollingWindows, worstWindow, bestWindow) now live in
+// goalden-engine.js, loaded above. marketSeries/marketName take `country`
+// as an explicit parameter — they no longer read G.country directly.
 
 // ---- Charts for "The Case" screen ----
 // A three-line race chart: real market history vs constant-rate gold vs
@@ -683,7 +583,7 @@ const GOLD_RATE = { IN: 0.109, US: 0.056 }; // India: RBI Handbook of Statistics
 const HOUSE_RATE_RANGE = { IN: [0.08, 0.10], US: [0.035, 0.045] }; // Broad, widely-cited long-run ranges; real estate returns vary enormously by city and property, more than any other asset class here, on purpose not reduced to one falsely precise number.
 
 function sCase() {
-  const c = cfg(), series = marketSeries(), name = marketName();
+  const c = cfg(), series = marketSeries(G.country), name = marketName(G.country);
   const nYears = series.length;
   const raceAmt = G.country==='US' ? 10000 : 100000;
 
@@ -796,7 +696,7 @@ function infoIconD1(text){
   return ' <span class="term-i" data-def="'+text.replace(/"/g,'&quot;')+'">i</span>';
 }
 function renderTimeMachine(startIdx){
-  const c = cfg(), series = marketSeries();
+  const c = cfg(), series = marketSeries(G.country);
   const tmYears = Math.min(15, series.length-1);
   const raceAmt = G.country==='US' ? 10000 : 100000;
   const path = marketGrowthPath(series, startIdx, tmYears, raceAmt);
@@ -811,12 +711,12 @@ function renderTimeMachine(startIdx){
 function updateRiskShrinkMarker(selectedYears){
   const entry = chartInstances['case-riskshrink'];
   if(!entry) return;
-  const series = marketSeries();
+  const series = marketSeries(G.country);
   const pct = riskShrinkPctAt(series, selectedYears);
   entry.inst.setOption({series:[riskShrinkMarkerOption(selectedYears, pct)]});
 }
 function renderHoldResult(years){
-  const series = marketSeries();
+  const series = marketSeries(G.country);
   const w = rollingWindows(series, years);
   const losing = w.filter(x=>x.finalMultiple<1).length;
   const pct = Math.round(100*losing/w.length);
@@ -835,7 +735,7 @@ function attachCaseHandlers(){
   const tmResult = document.getElementById('tm-result');
   const tmLabel = document.getElementById('tm-year-label');
   if (tmSlider) {
-    const series = marketSeries();
+    const series = marketSeries(G.country);
     tmResult.innerHTML = renderTimeMachine(parseInt(tmSlider.value));
     tmSlider.addEventListener('input', () => {
       const idx = parseInt(tmSlider.value);
@@ -1692,7 +1592,7 @@ function renderPlan(){
       : bn;
     const rec=recommendInstruments(G.country, g.years, eid, g.type);
     const mRate=effectiveMonthlyRate(rate);
-    const accRows=accumulationSchedule({sip, rate:mRate, years:g.years*12, due:true, opening:g.existingSavings||0}).rows;
+    const accRows=accumulationSchedule({sip, rate:mRate, periods:g.years*12, due:true, opening:g.existingSavings||0, stepUp:0}).rows;
     const drawRowsChart = g.type==='retirement' ? drawdownSchedule({openingCorpus:g.corpus, firstWithdrawal:g.expAtRet, inflation:cfg().d.inflation, nominalRate:g.postGoalRate, years:g.drawYrs, due:true}) : null;
     const chartsHtml = g.type==='retirement'
       ? `<div class="gr-chart-row">
@@ -1723,7 +1623,7 @@ function renderPlan(){
   let chartHtml='', fdCardHtml='';
   if(topGoal&&plan.totalSIP>0){
     const mRate=effectiveMonthlyRate(bucketRate(G.bucket));
-    const rows=accumulationSchedule({sip:plan.totalSIP,rate:mRate,years:topGoal.years*12,due:true}).rows;
+    const rows=accumulationSchedule({sip:plan.totalSIP,rate:mRate,periods:topGoal.years*12,due:true,stepUp:0}).rows;
     chartHtml=`<div class="section-head">What your combined SIP builds over ${topGoal.years} years</div>
     <div style="background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.1);border-radius:13px;padding:14px 12px 6px;margin-bottom:16px">${mountainChart(yearlyMountainRows(rows),'total')}</div>`;
 
@@ -1733,7 +1633,7 @@ function renderPlan(){
     // years, only the destination changes.
     const combinedActual = rows[rows.length-1].closeBal;
     const mFd = effectiveMonthlyRate(cfg().d.fdRate);
-    const fdFinal = accumulationSchedule({sip:plan.totalSIP,rate:mFd,years:topGoal.years*12,due:true}).finalBalance;
+    const fdFinal = accumulationSchedule({sip:plan.totalSIP,rate:mFd,periods:topGoal.years*12,due:true,stepUp:0}).finalBalance;
     const fdDiff = combinedActual - fdFinal;
     fdCardHtml=`<div class="alloc-card">
       <div class="section-head" style="margin-top:0">The same ${c.fmt(plan.totalSIP)}/month, in a Fixed Deposit instead</div>
