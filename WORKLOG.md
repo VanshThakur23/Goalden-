@@ -520,6 +520,43 @@ Format:
 
 ---
 
+## 2026-08-17 — opencode — Phase 0.5: response format
+
+### Done
+- advisor.js: bot messages now render markdown-lite — **bold**, "- "/"* "
+  lists, and pipe tables — via innerHTML; user and system messages stay on
+  textContent. Escape runs BEFORE the transform (advisorMarkdown), so model
+  markup can't execute. Added minimal CSS for strong/ul/table inside bot
+  bubbles.
+- src/worker.js: replaced the mandatory 5-emoji template with MODE A/B/C
+  selection (A=quick fact, B=numeric result with symbol rows, C=comparison
+  pipe table); model declares mode on line 1 ("MODE: X"); the client strips
+  that line before rendering. Updated the "other rules" reference.
+- local_server.py: system prompt mirrored verbatim; mock now emits the same
+  MODE prefix — MODE: A for term answers/greeting, MODE: B for build/plan
+  replies and the demo turns — via a `_mock_mode()` helper.
+- Added smoke-05.js (repo root): asserts innerHTML + MODE-strip in advisor.js,
+  MODE A/B/C in worker.js and local_server.py, and runs the real
+  advisorMarkdown transform (extracted from source) against bold/list/table/
+  MODE-strip/escape inputs.
+
+### Verified
+- Self-checks 1–4 all pass (node -e checks + transform inline test).
+- smoke-05.js: 11/11 PASS.
+- node --check advisor.js + src/worker.js: OK.
+- local_server.py py_compile OK; existing 17-scenario mock test still PASS.
+
+### Constraints respected
+- No build step ✓ | local_server.py mirrored ✓ | No client-side keys ✓
+
+### Known / not done
+- No commit made (per the git rule).
+- Not browser-tested: markdown rendering + table styling + MODE-strip need a
+  visual pass (cache-bust URL).
+- MODE: C tables render with a default border via the added CSS; polish TBD.
+
+---
+
 ## 2026-08-17 — Claude Code — Phase 0 verification + fix, ROADMAP.md added
 
 - Live-verified opencode's Phase 0 in the Browser pane against local_server.py

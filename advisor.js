@@ -51,6 +51,14 @@ body.advisor-docked{transition:padding-right .25s ease}
 .adv-msg.bot{align-self:flex-start;background:#EFF3FA;color:var(--ink);border-bottom-left-radius:3px;font-family:'Figtree',sans-serif}
 .adv-msg.bot.speaking{border-left:3px solid var(--gold);animation:advisorSpeakingGlow 1.2s ease-in-out infinite}
 @keyframes advisorSpeakingGlow{0%,100%{box-shadow:0 0 0 2px rgba(37,87,199,.12)}50%{box-shadow:0 0 0 6px rgba(37,87,199,.22)}}
+/* Markdown-lite inside bot bubbles (bold, lists, tables) — rendered via
+   advisorMarkdown(); these rules give the generated tags real styling. */
+.adv-msg.bot strong{font-weight:700}
+.adv-msg.bot ul{margin:4px 0;padding-left:18px}
+.adv-msg.bot li{margin:2px 0}
+.adv-msg.bot table{border-collapse:collapse;margin:6px 0;font-size:14px}
+.adv-msg.bot th,.adv-msg.bot td{border:1px solid rgba(20,40,63,.22);padding:4px 9px;text-align:left;vertical-align:top}
+.adv-msg.bot th{background:rgba(37,87,199,.08);font-weight:700}
 .adv-msg.sys{align-self:flex-start;background:transparent;color:rgba(20,40,63,.5);font-family:'Spline Sans Mono',monospace;font-size:11px;padding:0 4px}
 .adv-step{display:flex;align-items:flex-start;gap:7px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.55);padding:1px 2px;line-height:1.4}
 .adv-step .adv-step-tick{color:var(--gold);font-weight:600;flex-shrink:0}
@@ -227,11 +235,63 @@ function advisorTrim() {
   advisor.messages = tail;
 }
 
+// Markdown-lite renderer for assistant (bot) bubbles. Security ordering is
+// load-bearing: escape FIRST (advisorEscapeHtml turns the model's text into
+// inert plain text), THEN strip the MODE line, THEN re-add only the fixed set
+// of safe tags below. Anything the model emits that looks like markup is
+// already escaped by the time we get here, so it cannot execute.
+function advisorMarkdown(text) {
+  let s = advisorEscapeHtml(text);
+  // The model declares its reply shape on line 1 ("MODE: A" / "B" / "C").
+  // It's a styling hint for the system prompt, never shown to the user.
+  s = s.replace(/^MODE\s*:\s*[ABC]\s*(?:\r?\n)?/i, '');
+  // **word** -> <strong>word</strong> (only literal ** survives escaping).
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  const lines = s.split('\n');
+  const out = [];
+  let listBuf = null, tableBuf = null;
+  const flushList = () => { if (listBuf) { out.push('<ul>' + listBuf.join('') + '</ul>'); listBuf = null; } };
+  const flushTable = () => { if (tableBuf) { out.push('<table>' + tableBuf.join('') + '</table>'); tableBuf = null; } };
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i].trim();
+    // "- " / "* " bullets collapse into one <ul> (consecutive runs). "*" must
+    // be followed by whitespace so "**bold**" on its own line never matches.
+    if (/^[-*]\s+/.test(ln)) {
+      flushTable();
+      if (!listBuf) listBuf = [];
+      listBuf.push('<li>' + ln.replace(/^[-*]\s+/, '') + '</li>');
+      continue;
+    }
+    // Pipe rows |a|b| form a table; first row is the header.
+    if (/^\|.+\|$/.test(ln)) {
+      flushList();
+      const cells = ln.slice(1, -1).split('|').map((c) => c.trim());
+      const tag = tableBuf ? 'td' : 'th';
+      if (!tableBuf) tableBuf = [];
+      tableBuf.push('<tr>' + cells.map((c) => '<' + tag + '>' + c + '</' + tag + '>').join('') + '</tr>');
+      continue;
+    }
+    flushList();
+    flushTable();
+    out.push(ln);
+  }
+  flushList();
+  flushTable();
+  return out.join('<br>');
+}
+
 function advisorAddMsg(role, text) {
   const msgs = document.getElementById('advisorMsgs');
   const div = document.createElement('div');
   div.className = 'adv-msg ' + role;
-  div.textContent = text;
+  // Assistant ("bot") messages are the model's own words — render markdown
+  // (bold, lists, tables) via innerHTML. User input and client system notices
+  // stay on textContent so nothing a person types is ever interpreted.
+  if (role === 'bot' || role === 'tool') {
+    div.innerHTML = advisorMarkdown(text);
+  } else {
+    div.textContent = text;
+  }
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
   return div;
