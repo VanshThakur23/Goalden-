@@ -1731,6 +1731,29 @@ function advance() {
   else { go(1); }
 }
 
+/* =====================================================================
+   PERSISTENCE + BROWSER BACK
+   S lives only in page memory, so a refresh / Back / mobile tab-discard
+   used to lose the whole plan mid-questionnaire. Two fixes sharing the
+   Lab's localStorage pattern (goalden-lab.html): save S on every render
+   and offer an explicit "Resume?" prompt on load — never silently restore,
+   some users want a fresh start — and mirror each screen into a history
+   entry so the browser Back button walks screens instead of leaving the
+   page.
+   ===================================================================== */
+const STATE_KEY = 'goaldenD1State';
+function persistState() { try { localStorage.setItem(STATE_KEY, JSON.stringify(S)); } catch (e) {} }
+function clearSavedState() { try { localStorage.removeItem(STATE_KEY); } catch (e) {} }
+// pushState only when the screen actually changed: same-screen re-renders
+// (picking an answer re-renders the current screen) must not pile up
+// duplicate history entries, and a popstate-driven render arrives with the
+// hash already matching, so it naturally skips the push.
+function syncHistory() {
+  const hash = '#' + flow()[S.si];
+  if (location.hash === hash) return;
+  try { history.pushState({ si: S.si }, '', hash); } catch (e) {}
+}
+
 function render() {
   const f = flow(), screen = f[S.si];
   let html = '';
@@ -1765,6 +1788,8 @@ function render() {
   if (screen==='case') window.scrollTo(0,0);
   renderProgress();
   attach(screen);
+  persistState();
+  syncHistory();
 }
 
 /* =====================================================================
@@ -1937,6 +1962,18 @@ function attach(screen) {
 backBtn.addEventListener('click', () => {
   if (S.quickEdit) { S.quickEdit = false; S.si = flow().indexOf('results'); render(); return; }
   if (S.si>0) go(-1);
+});
+
+// Browser Back/Forward walks screens. The browser has already moved to the
+// previous entry, so render() below sees the hash matching the screen and
+// skips its own pushState. If the entry names a screen that has vanished
+// from flow() (dynamic screens like 'case'), fall back to Back-button
+// behaviour rather than rendering a blank screen.
+window.addEventListener('popstate', () => {
+  const name = (location.hash || '').slice(1);
+  const idx = flow().indexOf(name);
+  if (idx >= 0) { S.quickEdit = false; S.viewingCase = name === 'case'; S.si = idx; render(); }
+  else if (S.si > 0) { S.si -= 1; render(); }
 });
 
 /* =====================================================================
@@ -2253,8 +2290,48 @@ window.GOALDEN_ADVISOR_CONFIG = {
   placeholder: 'Ask, or tap the mic…',
   showDisclaimer: false
 };
+(function boot() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch (e) {}
+  // A stale #hash from a previous session (e.g. #results with an empty S)
+  // would otherwise let popstate jump a fresh visitor onto a blank screen —
+  // wipe it before the first render lays down a clean history entry.
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  if (saved && typeof saved.si === 'number' && saved.si > 0) {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(20,40,63,.45);z-index:900;display:flex;align-items:center;justify-content:center';
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:14px;padding:26px 28px;max-width:420px;width:calc(100vw - 48px);box-shadow:0 18px 50px rgba(20,40,63,.3);text-align:center';
+    card.innerHTML = '<div style="font-family:\'Newsreader\',serif;font-size:23px;font-weight:600;color:#14283F;margin-bottom:8px">Pick up where you left off?</div>'
+      + '<div style="font-size:14px;color:rgba(20,40,63,.75);margin-bottom:20px;line-height:1.5">You were partway through a plan on this device. Resume it, or start fresh.</div>';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:10px;justify-content:center';
+    const mkBtn = (label, primary) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'flex:1;padding:11px 14px;border-radius:10px;border:1px solid ' + (primary ? '#2557C7' : 'rgba(20,40,63,.25)')
+        + ';background:' + (primary ? '#2557C7' : 'transparent') + ';color:' + (primary ? '#fff' : '#14283F')
+        + ';font-size:14px;cursor:pointer;font-family:inherit';
+      return b;
+    };
+    const yes = mkBtn('Resume', true), no = mkBtn('Start fresh', false);
+    yes.addEventListener('click', () => {
+      Object.assign(S, saved);
+      // Saved si can outrun the flow if the save predates a flow change;
+      // clamp so a restore can never land on a blank screen.
+      S.si = Math.max(0, Math.min(flow().length - 1, S.si));
+      ov.remove(); render();
+    });
+    no.addEventListener('click', () => { clearSavedState(); ov.remove(); render(); });
+    row.append(yes, no);
+    card.append(row);
+    ov.append(card);
+    document.body.append(ov);
+  } else {
+    render();
+  }
+})();
 
-render();
 </script>
 <script src="advisor.js"></script>
 </body>

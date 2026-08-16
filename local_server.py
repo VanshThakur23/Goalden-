@@ -14,6 +14,7 @@ Then open http://localhost:8000/index.html
 
 import json
 import os
+import re
 import sys
 import urllib.request
 import urllib.parse
@@ -290,35 +291,266 @@ def _deepseek_chat(messages, tools, api_key):
             'Authorization': f'Bearer {api_key}',
         },
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
+    # 25s cap mirrors the Worker's AbortSignal.timeout(25000) — a hung
+    # upstream must raise here, not leave the browser spinner forever.
+    with urllib.request.urlopen(req, timeout=25) as resp:
         data = json.loads(resp.read().decode('utf-8'))
     choice = (data.get('choices') or [{}])[0]
     return choice.get('message') or {'role': 'assistant', 'content': ''}
 
 
-def _mock_chat(body):
-    """Deterministic stand-in when no API key is set.
+def _friendly_chat_error(e):
+    """Mirror of the Worker's friendlyChatError(): users get one plain
+    sentence per failure class; the real detail stays on the server log."""
+    msg = str(e or '')
+    if 'HTTPError' in msg and '429' in msg:
+        return 'The AI service is busy right now — please try again in a moment.'
+    if 'HTTPError' in msg and re.search(r'5\d\d', msg):
+        return 'The AI service is having trouble — please try again shortly.'
+    if 'timed out' in msg.lower() or 'timeout' in msg.lower():
+        return 'The AI took too long to answer — please try again.'
+    return 'The advisor hit an unexpected problem — please try again.'
 
-    Drives the same tool loop the frontend would run against a real model: if
-    there's any app state yet (S/G have goalType, L has a tab and inputs), it
-    requests get_results(); once the tool result comes back it replies with
-    plain text and stops. This exercises executeTool -> feed-back -> plain-
-    answer with no network and no key, on every page (not just Door 1).
+
+_MOCK_NOTE = ('\n\n(Mock mode — no API key set. This reply is scripted, but every step you '
+              'just watched was the real tool loop driving the real app.)')
+
+_MOCK_AB = (
+    "I can either:\n"
+    "A) Do it all for you — I'll ask for the few numbers I actually need, then fill everything in, run the calculation, and hand you a full report.\n"
+    "B) Walk you through it step by step — you do each screen, I explain as we go.\n"
+    "Which would you prefer?\n"
+    "(Mock mode — no API key set — but pick either one: I really will drive the app, only my words are scripted.)"
+)
+
+# Plain-language canned answers for the terms a demo audience actually asks
+# about. Keyed by lowercase substrings; matched only for real questions (or a
+# bare "sip?") so "help me plan my sip" doesn't get hijacked by the glossary.
+_MOCK_TERMS = [
+    (('risk profile', 'risk tolerance', 'risk capacity'),
+     "Your risk profile is two different things measured separately: how much market movement your finances can objectively absorb (capacity — income stability, dependents, debts) and how much you can watch without panicking (tolerance). Goalden scores both and uses the LOWER one, so the plan never asks more of you than your situation can carry."),
+    (('sip',),
+     "A SIP (Systematic Investment Plan) is investing a fixed amount every month automatically, instead of trying to guess the single right moment to invest a lump sum. Same amount, every month — the discipline does the work."),
+    (('corpus',),
+     "Corpus is the total pot you need saved by the day the goal arrives. For retirement, it's the amount that — combined with returns — can pay your expenses for the rest of your life."),
+    (('inflation',),
+     "Inflation is things getting more expensive over time. At 6% a year, what costs 50,000 today costs about 90,000 in ten years. That's why every goal in Goalden is computed in future money, not today's."),
+    (('frontier',),
+     "The efficient frontier is the curved line of best-possible mixes: at each level of risk, the mix on that line earns the most return possible for that risk. A mix below the line is being out-earned by a mix with identical risk."),
+    (('sharpe',),
+     "The Sharpe ratio measures reward per unit of risk: how much extra return you earn above a safe bank deposit for each point of risk taken. Above 1 is generally good; above 2 is very good."),
+    (('monte carlo',),
+     "Monte Carlo runs your plan through a thousand plausible market futures and counts how often you end up okay. It's a stress test of your plan's luck, not a prediction of yours."),
+    (('diversif',),
+     "Diversification means not depending on any one thing: spreading money across assets that don't all fall at the same time, so one bad event can't sink everything. It's the only kind of risk reduction that's genuinely free."),
+    (('compounding', 'compound'),
+     "Compounding is your returns earning their own returns. Given enough time it does more work than your contributions do — which is why starting earlier beats saving more."),
+]
+
+
+def _mock_tool_specs(body):
+    specs = {}
+    for t in body.get('tools') or []:
+        fn = t.get('function') or {}
+        if fn.get('name'):
+            specs[fn['name']] = fn
+    return specs
+
+
+def _mock_enum(fn_spec, prop):
+    """Enum values for a tool property, handling both plain enums and
+    array-of-enum (compose_briefing.sections uses items.enum)."""
+    spec = ((fn_spec.get('parameters') or {}).get('properties') or {}).get(prop) or {}
+    if spec.get('enum'):
+        return spec['enum']
+    items = spec.get('items') or {}
+    return items.get('enum') or []
+
+
+def _mock_navigate(navigate_spec):
+    """navigate's argument is called screen (doors) or tab (Lab) — find
+    whichever property carries the enum, then prefer a destination with
+    numbers on it so the demo lands somewhere interesting."""
+    props = ((navigate_spec.get('parameters') or {}).get('properties') or {})
+    for pname, p in props.items():
+        enum = (p.get('enum') if isinstance(p, dict) else None) or []
+        if not enum and isinstance(p, dict):
+            enum = (p.get('items') or {}).get('enum') or []
+        if enum:
+            for pref in ('results', 'plan', 'home'):
+                if pref in enum:
+                    return pname, pref
+            return pname, enum[min(1, len(enum) - 1)]
+    return None, None
+
+
+def _mock_pretty_key(k):
+    """'monthly_sip'/'monthlySip' -> 'Monthly sip' for the summary lines."""
+    spaced = re.sub(r'(?<!^)(?=[A-Z])', ' ', k.replace('_', ' '))
+    return spaced.strip().capitalize()
+
+
+def _mock_summarize(content):
+    """Format a tool result as a short human summary instead of raw JSON.
+    Tolerates truncated/invalid JSON (the client truncates >3,500 chars)."""
+    try:
+        data = json.loads(content)
+    except Exception:
+        return 'Result: ' + (content or '')[:200]
+    if not isinstance(data, dict):
+        return 'Result: ' + str(data)[:200]
+    if data.get('ok') is False and data.get('error'):
+        # The app's honest missing-input answer is worth showing as-is.
+        return 'The app says: ' + str(data['error'])
+    lines = []
+    for k, v in data.items():
+        key = _mock_pretty_key(k)
+        if isinstance(v, bool):
+            lines.append(f"{key}: {'yes' if v else 'no'}")
+        elif isinstance(v, (int, float)):
+            shown = round(v, 2) if isinstance(v, float) else v
+            lines.append(f'{key}: {shown}')
+        elif isinstance(v, str) and len(v) <= 40:
+            lines.append(f'{key}: {v}')
+        if len(lines) >= 6:
+            break
+    if not lines:
+        return 'Done — the numbers are on your screen now.'
+    return '\n'.join(lines)
+
+
+def _mock_term_answer(text):
+    t = text.strip().rstrip('?').strip()
+    is_question = any(k in text for k in
+                      ('what is', "what's", 'what does', 'explain', 'mean',
+                       'difference between', 'how does'))
+    for keys, answer in _MOCK_TERMS:
+        if any(k in t for k in keys) and (is_question or len(t) <= 30):
+            return answer
+    return None
+
+
+def _mock_build_intent(text):
+    return any(k in text for k in
+               ('plan', 'calculate', 'how much do i need', 'how much should i',
+                'retire', 'save for', 'college', 'build me', 'goal',
+                'help me save', 'help me invest'))
+
+
+def _mock_demo_turn(specs):
+    """One batched turn of real tool calls: set a value, move the app, run
+    the calculation. Reads each tool's schema so it only ever sends arguments
+    the page will accept (country is an IN/US enum on all three doors)."""
+    calls = []
+    sv = specs.get('set_value')
+    if sv and 'country' in (_mock_enum(sv, 'field') or []):
+        calls.append({'id': 'call_mock_sv', 'type': 'function',
+                      'function': {'name': 'set_value',
+                                   'arguments': json.dumps({'field': 'country', 'value': 'IN'})}})
+    nav = specs.get('navigate')
+    if nav:
+        argname, target = _mock_navigate(nav)
+        if target:
+            calls.append({'id': 'call_mock_nav', 'type': 'function',
+                          'function': {'name': 'navigate',
+                                       'arguments': json.dumps({argname: target})}})
+    if 'get_results' in specs:
+        calls.append({'id': 'call_mock_res', 'type': 'function',
+                      'function': {'name': 'get_results', 'arguments': '{}'}})
+    if not calls:
+        return {'role': 'assistant', 'content': _MOCK_AB}
+    return {'role': 'assistant',
+            'content': 'Let me set that up on the real app — watch the steps as they happen.',
+            'tool_calls': calls}
+
+
+def _mock_chat(body):
+    """Scripted stand-in when no API key is set.
+
+    A decision tree, not a random-reply generator: a term question gets a
+    real plain-language answer; a build request gets the same A/B choice the
+    system prompt teaches the real model; picking A (or arriving with state)
+    triggers a genuine batched tool sequence (set_value -> navigate ->
+    get_results), then a formatted summary parsed from the actual tool JSON,
+    then a real compose_briefing call so the demo ends on the report page.
+    Every page's tool schemas are read from the request body, so the same
+    tree drives Door 1, Door 2, the Lab and index.html without knowing which
+    one it is talking to.
     """
     messages = body.get('messages') or []
     state = body.get('state') or {}
-    if messages and messages[-1].get('role') == 'tool':
-        result = (messages[-1].get('content') or '')[:400]
-        return {'role': 'assistant',
-                'content': f'(mock mode) Here is what your numbers look like:\n{result}'}
-    if not state:
-        return {'role': 'assistant',
-                'content': "Hi, I'm your Goalden advisor (mock mode — no API key set). "
-                           "Tell me what you're planning for — retirement, education, a "
-                           "big purchase — or ask a question, and I'll walk you through it."}
-    return {'role': 'assistant', 'content': None,
-            'tool_calls': [{'id': 'call_mock_1', 'type': 'function',
-                            'function': {'name': 'get_results', 'arguments': '{}'}}]}
+    specs = _mock_tool_specs(body)
+
+    text = ''
+    for m in reversed(messages):
+        if m.get('role') == 'user' and m.get('content'):
+            text = str(m['content']).strip().lower()
+            break
+    last = messages[-1] if messages else {}
+
+    # ---- we are mid-loop: the last message is a tool result ----
+    if last.get('role') == 'tool':
+        name = last.get('name') or ''
+        briefed = any(m.get('role') == 'tool' and m.get('name') == 'compose_briefing'
+                      for m in messages)
+        if briefed:
+            return {'role': 'assistant', 'content':
+                    'And that is the full report — every number in it came from the app\'s '
+                    'own math, not from me. Scroll the briefing, print it if you like, and '
+                    'ask me to change anything you want explored differently.' + _MOCK_NOTE}
+        if name == 'get_results':
+            summary = _mock_summarize(last.get('content') or '')
+            bf = specs.get('compose_briefing')
+            if bf:
+                enum = _mock_enum(bf, 'sections') or []
+                chosen = [s for s in ('headline', 'assumptions', 'next', 'retirement') if s in enum][:3] or enum[:3]
+                return {'role': 'assistant',
+                        'content': 'Here is what your plan currently says:\n' + summary
+                                   + '\n\nLet me put this together as a proper report page for you.',
+                        'tool_calls': [{'id': 'call_mock_brief', 'type': 'function',
+                                        'function': {'name': 'compose_briefing',
+                                                     'arguments': json.dumps({
+                                                         'title': 'Your plan so far',
+                                                         'intro': 'Everything in this briefing was computed by Goalden from your own inputs.',
+                                                         'sections': chosen})}}]}
+            return {'role': 'assistant', 'content': 'Here is what your plan currently says:\n' + summary + _MOCK_NOTE}
+        if 'get_results' in specs:
+            return {'role': 'assistant',
+                    'content': 'Done — you saw each step land on the real form. Now let me run the actual calculation.',
+                    'tool_calls': [{'id': 'call_mock_res', 'type': 'function',
+                                    'function': {'name': 'get_results', 'arguments': '{}'}}]}
+        return {'role': 'assistant', 'content': 'Done — that change is live on your screen.' + _MOCK_NOTE}
+
+    # ---- plain user turn ----
+    if text in ('a', 'b', 'a)', 'b)', 'yes', 'y', 'do it', 'do it all', 'do it for me',
+                'go ahead', 'option a', 'walk me through it', 'walk me through',
+                'guide me', 'option b', 'b) walk me through it step by step'):
+        if text.startswith(('b', 'walk', 'guide', 'option b')):
+            return {'role': 'assistant', 'content':
+                    "Great — we'll go one screen at a time. Move on whenever you're ready, "
+                    'and ask me about anything you see: a term, a number, or why a question '
+                    'is asked at all. (Mock mode — no API key set — so my explanations here '
+                    'are canned, but the app itself is fully live.)'}
+        return _mock_demo_turn(specs)
+
+    term = _mock_term_answer(text)
+    if term:
+        return {'role': 'assistant', 'content': term + _MOCK_NOTE}
+
+    if _mock_build_intent(text):
+        # With state already on screen, demo immediately; fresh session gets
+        # the same A/B offer the real model is instructed to make.
+        if state and ('set_value' in specs or 'navigate' in specs or 'get_results' in specs):
+            return _mock_demo_turn(specs)
+        return {'role': 'assistant', 'content': _MOCK_AB}
+
+    if text and len(text) <= 24 and text.split()[0] in ('hi', 'hello', 'hey', 'namaste'):
+        return {'role': 'assistant', 'content':
+                "Hi! I'm your Goalden advisor. Tell me what you're planning for — retirement, "
+                "education, a big purchase — or ask me about any money term you see on screen."
+                + _MOCK_NOTE}
+
+    return {'role': 'assistant', 'content': _MOCK_AB}
 
 
 def chat(body):
@@ -389,7 +621,10 @@ class Handler(SimpleHTTPRequestHandler):
                 body = json.loads(self.rfile.read(length).decode('utf-8') or '{}')
                 return self._send_json({'message': chat(body)})
             except Exception as e:
-                return self._send_json({'error': str(e) or 'Chat failed'}, 502)
+                # Never leak urllib/DeepSeek internals to the page — the same
+                # mapping the Worker applies (see _friendly_chat_error).
+                print(f'chat error: {e}', file=sys.stderr)
+                return self._send_json({'error': _friendly_chat_error(e)}, 502)
         return self._send_json({'error': 'Not found'}, 404)
 
     def log_message(self, fmt, *args):

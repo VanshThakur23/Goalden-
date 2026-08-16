@@ -541,7 +541,10 @@ function advisorAddStep(text) {
   const msgs = document.getElementById('advisorMsgs');
   const div = document.createElement('div');
   div.className = 'adv-step';
-  div.innerHTML = '<span class="adv-step-tick">·</span><span>' + text + '</span>';
+  // describeTool() interpolates model-controlled tool arguments into these
+  // sentences, so the text must be escaped before it reaches innerHTML —
+  // a hallucinated field name containing markup would otherwise execute.
+  div.innerHTML = '<span class="adv-step-tick">·</span><span>' + advisorEscapeHtml(text) + '</span>';
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
   return div;
@@ -587,6 +590,9 @@ async function advisorLoop(silent) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: advisorBuildBody(),
+      // A hung Worker/upstream must not spin the "…" forever — the Worker
+      // side times out at 25s too, this is the belt to its braces.
+      signal: AbortSignal.timeout(25000),
     });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -681,6 +687,8 @@ async function advisorContinue(silent) {
     const msg = (e && e.message) ? e.message : '';
     if (/DEEPSEEK_API_KEY|secret is not set|api key/i.test(msg)) {
       advisorAddMsg('sys', "The advisor isn't switched on yet — the site owner needs to add an API key.");
+    } else if (/TimeoutError|AbortError|timeout|aborted|timed out/i.test(msg)) {
+      advisorAddMsg('sys', 'The advisor took too long to answer — please try again.');
     } else if (/too large|413|payload|too long/i.test(msg)) {
       advisorAddMsg('sys', 'That request was too large to send. Try asking about one instrument or one tool at a time.');
     } else {

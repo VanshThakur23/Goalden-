@@ -426,3 +426,128 @@ Format:
   per-chart "Explain this" buttons and layered follow-up chips inside the chat
   were not added (they'd reuse the same advisorAsk path — small follow-up).
 - No commit made (per the git rule).
+
+---
+
+## 2026-08-16 — opencode — Phase 0: demo resilience (6 fixes)
+
+### 1. Persist + Resume (goalden.html, goalden-door2.html)
+- S and G were page-memory only — refresh/Back/tab-discard lost the whole
+  plan/questionnaire. Both now save state to localStorage on every render()
+  (`goaldenD1State` / `goaldenD2State`, Lab's try/catch pattern).
+- On load (boot IIFE replacing the bare `render()`): if a save exists AND
+  si > 0, an explicit "Pick up where you left off?" overlay offers
+  Resume / Start fresh — never silently restores. Restore clamps si to
+  flow().length so it can't land on a blank screen. Decline clears the key.
+- "Start over" (rb) needs no extra wiring: its render() re-persists si:0.
+
+### 2. Mock / fallback mode (local_server.py, src/worker.js)
+- `_mock_chat` was: any state → always get_results → dump 400 chars of raw
+  JSON. Replaced with a scripted decision tree (all page-agnostic — reads
+  each page's tool schemas from the request body):
+  - term question / bare term ("what is a sip", "sip?") → canned
+    plain-language answer (9 terms: risk profile, SIP, corpus, inflation,
+    frontier, Sharpe, Monte Carlo, diversification, compounding);
+  - build request with no state → the exact A/B choice the system prompt
+    teaches the real model; picking B → walk-through reply;
+  - build request (or picking A) with tools available → ONE batched turn of
+    real calls: set_value country=IN (enum-valid on all 3 doors) →
+    navigate (prefers results/plan/home; reads screen-vs-tab arg name) →
+    get_results; then narration + get_results; then a formatted summary
+    parsed from the tool JSON (camelCase/snake keys prettified, floats
+    rounded, ok:false errors surfaced as "The app says: …") + a real
+    compose_briefing call (sections picked from the page's enum); then a
+    wrap-up. Demo now shows step rows, navigation, the calc, and the
+  briefing page with zero key/network.
+- Worker: missing DEEPSEEK_API_KEY no longer hard-502s — returns 200 with
+  a friendly "not switched on for conversations on this deployment… the
+  rest of Goalden works normally" assistant message + console.log.
+
+### 3. Timeouts + friendly errors (advisor.js, src/worker.js, local_server.py)
+- AbortSignal.timeout(25000) on the client /api/chat fetch AND the Worker's
+  DeepSeek fetch; local_server's urlopen timeout 60s → 25s (mirror).
+- Worker catch no longer leaks e.message verbatim: friendlyChatError()
+  maps 429/5xx/timeout/other to four plain sentences, real error to
+  console.log. local_server mirrors it (_friendly_chat_error, imported
+  `re`), and do_POST's catch uses it too.
+- Client error branch adds a Timeout/Abort case ("took too long — try
+  again").
+
+### 4. Lab country bug (goalden-lab.html advisorSetValue)
+- Every value was parseInt/parseFloat'd, so set_value('country','IN')
+  became NaN ("must be a number") — the advisor could never switch the
+  Lab's country. Numeric coercion now only for spec.type integer/number;
+  string enums pass through to the enum check.
+
+### 5. Browser Back (goalden.html, goalden-door2.html)
+- syncHistory() in render(): pushState('#'+screen) only when the hash
+  actually changed (same-screen re-renders and popstate-driven renders
+  don't push). popstate handler maps the hash to flow().indexOf(name)
+  (clearing quickEdit/viewingCase as needed); vanished dynamic screens
+  (case, emergency_choice, goal sub-screens) fall back to Back-button
+  behaviour instead of a blank screen. Boot replaceState-wipes any stale
+  #hash so a fresh visitor can't popstate onto an empty results screen.
+  Advisor-driven navigate() flows through render(), so AI tours are
+  Back-walkable too.
+
+### 6. Escaped step rows (advisor.js)
+- advisorAddStep() routed describeTool() text (which interpolates
+  model-controlled tool arguments) into innerHTML raw. Now wrapped in
+  advisorEscapeHtml() — hallucinated markup in a field name can't execute.
+
+### Verification
+- `node --check` on advisor.js, worker.js and every inline script in all 4
+  HTML files: ALL OK (script: temp/opencode/check_phase0.py).
+- local_server.py: py_compile OK.
+- Mock decision tree: 17/17 scenario tests pass (term/bare-term/A-B/pick-A
+  batched sequence/navigate arg names/summary formatting/briefing sections/
+  honest ok:false error/walk-through/greeting/all 4 friendly-error classes)
+  — temp/opencode/test_mock.py. Plus a live HTTP round-trip on :8071.
+- friendlyChatError regexes reviewed against callDeepSeek's thrown shapes.
+- Still NOT browser-tested (no browser in this env) — manual pass wanted
+  for: resume overlay after mid-questionnaire refresh, Back walking
+  screens incl. case/goal sub-screens, mock demo on each of the 4 pages.
+
+### Known / not done
+- No commit made (per the git rule).
+- Door2 popstate into goal sub-screens keeps addingGoal=true if Back exits
+  the add-goal flow (harmless: flow still contains them; forward Next from
+  plan is not affected).
+- Phase 1+ items from the critique (tooltip a11y, TTS emoji strip, Firefox
+  mic hide, etc.) not started.
+
+- Last commit pushed: none by opencode (git/GitHub is Claude Code's job)
+
+---
+
+## 2026-08-17 — Claude Code — Phase 0 verification + fix, ROADMAP.md added
+
+- Live-verified opencode's Phase 0 in the Browser pane against local_server.py
+  (no key set, so mock mode exercised naturally): resume-on-refresh, browser
+  Back walking screens, the Lab country `set_value` fix, and the mock demo
+  flow (term question, "do it all" batched sequence, briefing render) — all
+  confirmed working, zero console errors.
+- **Found and fixed a real bug during verification**: `goalden-door2.html`'s
+  resume feature was completely dead on normal page load. The `boot()` IIFE
+  (the resume-prompt logic) had been pasted *inside* the plan-file-import
+  handler's `try` block — between `G.si=f.indexOf('plan');` and its `catch`
+  — instead of at top level. It only would have run if a user imported a
+  plan file. The original unconditional `render();` was still sitting at the
+  bottom of the file, so every page load skipped the resume check entirely
+  and silently reset saved state to blank. `goalden.html`'s `boot()` was
+  structured correctly and unaffected. Fixed by moving the IIFE to where the
+  bare `render();` was and restoring the import handler's original
+  `render();`/`catch` structure. Re-verified live: resume overlay now
+  appears and restores correctly on door2.
+- Added `ROADMAP.md` (repo root) — the multi-phase agentic roadmap opencode
+  should read alongside this file each session. Phase 0 marked done there.
+- Added Phase 0.5 (response format) to the roadmap after finding
+  `advisorAddMsg` uses `div.textContent` (`advisor.js:234`) — the chat UI
+  renders no markdown at all, so the model's own `**bold**` syntax shows as
+  literal asterisks. Confirmed live in an earlier session's transcript. Folds
+  in the standing critique that one rigid 5-row/100-word format is forced
+  onto every reply type regardless of content.
+- Committed and pushed Phase 0 (opencode's 6 fixes + my structural fix) and
+  ROADMAP.md.
+- Next: hand opencode the Phase 0.5 (response format) prompt.
+- Last commit pushed: see git log.
