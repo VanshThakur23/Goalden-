@@ -705,6 +705,50 @@ Format:
 
 ---
 
+## 2026-08-17 — opencode — Phase 4: plan objects + approval
+
+### Done
+- Added two advisor-level tools in advisor.js (shared across all 4 pages, not
+  per-page): propose_plan(steps) and execute_plan(planId). Tool defs live in
+  ADVISOR_INTERNAL_TOOLS, appended to the page's tool list inside
+  advisorBuildBody() (advTools().concat(...)), so the model always sees them.
+- propose_plan stores advisor.pendingPlan = {id, steps, approved} — a field on
+  the advisor object (NOT pushed into advisor.messages), so it survives
+  advisorTrim() which only slices messages. Renders an editable checklist as a
+  bot bubble (checkbox per step, default checked, label via textContent, one
+  "Run plan" button).
+- execute_plan runs only the checked steps IN ORDER through advExecuteTool
+  (the same dispatch every other tool uses — no parallel path), collects
+  {ranSteps, skippedSteps, results}, clears pendingPlan. planId mismatch →
+  clear {ok:false, error}, never runs the wrong plan. Dispatch branches added
+  in the tool loop alongside compose_briefing.
+- "Run plan" click: executes the plan, feeds the result back as a synthetic
+  tool round-trip, then continues the loop so the model closes out (briefing).
+- New user message clears any lingering pendingPlan (no stale-plan confusion).
+- worker.js + local_server.py "Choice before action" prompt updated
+  (byte-identical): propose_plan first for multi-field/hesitant cases, direct
+  skill tools still fine for a clearly-confirmed "just do it."
+- Added smoke-07.js (repo root, 13 structural assertions).
+
+### Verified
+- smoke-07.js: ALL PASS (13). engine.test.js 8/8; smoke-02/05/06 ALL PASS
+  (build_goal_plan/run_full_analysis/add_goal still present — no regression).
+- propose_plan x5, execute_plan x6 in advisor.js (defs + dispatch + helper).
+- pendingPlan: top-level advisor field; advisorTrim body has zero pendingPlan
+  references; cleared on execute + on new user message.
+- Functional test (extracted real executePlan): checked steps ran in order,
+  unchecked step skipped + reported, pendingPlan cleared, wrong planId →
+  {ok:false,error} with no execution.
+- node --check clean (advisor.js, worker.js, all inline scripts); py_compile OK.
+
+### Known / not done
+- No commit made (per the git rule).
+- Not browser-tested: checklist render, checkbox→approved wiring, Run-plan →
+  continue-loop flow need a live pass (cache-bust URLs). Live DeepSeek still
+  unverified (no key).
+
+---
+
 ## 2026-08-17 — Claude Code — Phase 0 verification + fix, ROADMAP.md added
 
 - Live-verified opencode's Phase 0 in the Browser pane against local_server.py

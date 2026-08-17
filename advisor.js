@@ -114,6 +114,12 @@ body.advisor-docked{transition:padding-right .25s ease}
 .advisor-chip{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.25);color:var(--gold);border-radius:999px;padding:5px 12px;font-family:'Figtree',sans-serif;font-size:12px;cursor:pointer;transition:background .15s ease}
 .advisor-chip:hover{background:rgba(37,87,199,.16)}
 .advisor-ask-link{background:none;border:none;color:var(--gold);cursor:pointer;font-family:'Spline Sans Mono',monospace;font-size:10.5px;padding:0;text-decoration:underline;margin-left:6px}
+/* Plan objects (Phase 4) — an editable, human-in-the-loop checklist the model
+   proposes and the user approves before anything executes. */
+.adv-plan{width:100%;max-width:100%}
+.adv-plan-row{display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-family:'Figtree',sans-serif;font-size:14px;line-height:1.4}
+.adv-plan-row input[type=checkbox]{width:16px;height:16px;flex-shrink:0;cursor:pointer;accent-color:var(--gold)}
+.adv-plan-run{display:block;margin:10px 0 2px;background:var(--gold);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-family:'Figtree',sans-serif;font-weight:700;font-size:14px;cursor:pointer}
 `;
 (function injectAdvisorCss() {
   const s = document.createElement('style');
@@ -179,7 +185,7 @@ body.advisor-docked{transition:padding-right .25s ease}
    State — conversation + persistence (sessionStorage, shared key).
    ===================================================================== */
 const ADVISOR_STORE_KEY = 'goalden_advisor_v1';
-const advisor = { messages: [], busy: false, mode: 'fab' };
+const advisor = { messages: [], busy: false, mode: 'fab', pendingPlan: null };
 let advisorThinkingEl = null;
 const advisorVoice = { on: true, listening: false, rec: null };
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -580,10 +586,125 @@ function advisorCleanMessages(messages) {
 // F0 — build the request body, and guard client-side: if the serialised body
 // is still too large (even after projection), drop state to a skeleton and tell
 // the model which pull-tools to use, rather than firing a request certain to 413.
+// =====================================================================
+// Plan objects (Phase 4) — human-in-the-loop approval. The model can propose
+// a multi-step plan, the user sees an editable checklist, and only the steps
+// still checked actually run. propose_plan/execute_plan are advisor-level
+// tools (shared by all four pages), appended to the page's tool list in
+// advisorBuildBody() so the model always knows about them.
+// =====================================================================
+const ADVISOR_INTERNAL_TOOLS = [
+  { type:'function', function:{ name:'propose_plan', description:'Propose a multi-step action plan for the user to review and approve BEFORE anything runs. Pass steps: an array of {tool, args, label} where label is a short human-readable description of what the step does. The user gets an editable checklist with a "Run plan" button — nothing executes until they click it.', parameters:{ type:'object', properties:{ steps:{ type:'array', items:{ type:'object', properties:{ tool:{ type:'string' }, args:{ type:'object' }, label:{ type:'string' } }, required:['tool','label'] } } }, required:['steps'] } } },
+  { type:'function', function:{ name:'execute_plan', description:'Execute the steps of the pending plan that was proposed with propose_plan. Runs only the steps the user left checked, in order, through the same tool dispatch as any other call. Pass planId (optional; must match the pending plan if provided).', parameters:{ type:'object', properties:{ planId:{ type:'string' } }, required:[] } } },
+];
+
+function proposePlan(args) {
+  args = args || {};
+  const steps = Array.isArray(args.steps) ? args.steps : [];
+  if (!steps.length) return { ok:false, error:'propose_plan needs a non-empty steps array of {tool, args, label}.' };
+  for (let i = 0; i < steps.length; i++) {
+    if (!steps[i] || !steps[i].tool) return { ok:false, error:'Step ' + i + ' is missing a tool name.' };
+  }
+  const plan = {
+    id: 'plan_' + Date.now() + '_' + Math.floor(Math.random() * 1e4),
+    steps: steps,
+    approved: steps.map(function () { return true; }),
+  };
+  advisor.pendingPlan = plan;
+  advisorRenderPlan(plan);
+  return { ok:true, planId: plan.id, stepCount: steps.length, note:'Waiting for the user to review and click "Run plan".' };
+}
+
+function executePlan(planId) {
+  const plan = advisor.pendingPlan;
+  if (!plan) return { ok:false, error:'There is no pending plan to run.' };
+  if (planId != null && plan.id !== planId) return { ok:false, error:'That plan is no longer pending — the current pending plan has a different id, or none exists.' };
+  // Run checked steps IN ORDER through the SAME dispatch every other tool
+  // uses (advExecuteTool) — no parallel path, no bypassed validation.
+  const ranSteps = [];
+  const skippedSteps = [];
+  const results = [];
+  const runOne = function (step, i) {
+    const key = step.label || step.tool;
+    if (!plan.approved[i]) { skippedSteps.push(key); return null; }
+    let r;
+    try {
+      r = advExecuteTool(step.tool, step.args || {});
+    } catch (e) {
+      r = JSON.stringify({ ok:false, error:'Step failed: ' + (e && e.message || e) });
+    }
+    if (r && typeof r.then === 'function') {
+      return Promise.resolve(r).then(function (resolved) {
+        results.push({ step: key, tool: step.tool, result: resolved });
+        ranSteps.push(key);
+      });
+    }
+    results.push({ step: key, tool: step.tool, result: r });
+    ranSteps.push(key);
+    return null;
+  };
+  const chain = (function () {
+    let p = Promise.resolve();
+    plan.steps.forEach(function (step, i) { p = p.then(function () { return runOne(step, i); }); });
+    return p;
+  })();
+  return chain.then(function () {
+    advisor.pendingPlan = null;
+    return { ok:true, ranSteps: ranSteps, skippedSteps: skippedSteps, results: results };
+  });
+}
+
+// Render the editable checklist into the chat as a bot bubble. Labels use
+// textContent (never innerHTML) so model-controlled text cannot inject markup.
+function advisorRenderPlan(plan) {
+  const msgs = document.getElementById('advisorMsgs');
+  const el = document.createElement('div');
+  el.className = 'adv-msg bot adv-plan';
+  const list = document.createElement('div');
+  plan.steps.forEach(function (step, i) {
+    const row = document.createElement('label');
+    row.className = 'adv-plan-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.addEventListener('change', function () {
+      // The checkbox gates execution — this must write the backing state.
+      if (advisor.pendingPlan) advisor.pendingPlan.approved[i] = cb.checked;
+    });
+    const lbl = document.createElement('span');
+    lbl.textContent = step.label || step.tool;
+    row.appendChild(cb);
+    row.appendChild(lbl);
+    list.appendChild(row);
+  });
+  const runBtn = document.createElement('button');
+  runBtn.className = 'adv-plan-run';
+  runBtn.textContent = 'Run plan';
+  runBtn.addEventListener('click', advisorRunPlanClick);
+  el.appendChild(list);
+  el.appendChild(runBtn);
+  msgs.appendChild(el);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// "Run plan" click: execute the checked steps, feed the result back into the
+// conversation as a synthetic tool round-trip, then continue the loop so the
+// model can close out (e.g. compose the briefing).
+async function advisorRunPlanClick() {
+  const plan = advisor.pendingPlan;
+  if (!plan || advisor.busy) return;
+  const planId = plan.id;
+  const result = await executePlan(planId);
+  advisor.messages.push({ role:'assistant', content:null, tool_calls:[{ id:'call_plan_run', type:'function', function:{ name:'execute_plan', arguments: JSON.stringify({ planId: planId }) } }] });
+  advisor.messages.push({ role:'tool', tool_call_id:'call_plan_run', name:'execute_plan', content: JSON.stringify(result) });
+  advisorEnterDock();
+  await advisorContinue(false);
+}
+
 function advisorBuildBody() {
   const body = {
     messages: advisorCleanMessages(advisor.messages),
-    tools: advTools(),
+    tools: advTools().concat(ADVISOR_INTERNAL_TOOLS),
     state: advisorState(),
     knowledge: ADVISOR_CFG.knowledge || '',
     context: { page: advPage(), app: ADVISOR_CFG.app || 'Goalden', screens: advScreens() },
@@ -703,6 +824,8 @@ async function advisorLoop(silent) {
         const stepRow = advisorAddStep(advisorDescribe(name, args));
         let result;
         if (name === 'compose_briefing') result = JSON.stringify(composeBriefing(args));
+        else if (name === 'propose_plan') result = JSON.stringify(proposePlan(args));
+        else if (name === 'execute_plan') result = executePlan(args && args.planId);
         else result = advExecuteTool(name, args);
         if (result && typeof result.then === 'function') result = await result;
         // Truncate large tool results before storing — chart data and price
@@ -797,6 +920,9 @@ async function advisorSend() {
   const text = ta.value.trim();
   if (!text) return;
   ta.value = '';
+  // A new, unrelated message abandons any still-pending plan — it must never
+  // linger and let a later execute_plan run steps from a different turn.
+  advisor.pendingPlan = null;
   advisorAddMsg('user', text);
   advisor.messages.push({ role: 'user', content: text });
   advisorPersist();
