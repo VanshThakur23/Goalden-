@@ -97,7 +97,7 @@ function chatJson(data, status, origin) {
  * function's; we pass whatever symbol we're given straight through.
  */
 async function fetchEquityHistory(symbol) {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5y&interval=1d`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=10y&interval=1d`;
   const res = await fetch(url, {
     headers: {
       // Yahoo's chart endpoint 999s requests with no UA at all.

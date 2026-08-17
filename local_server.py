@@ -33,7 +33,7 @@ def upstream_json(url, headers=None):
 
 def fetch_equity_history(symbol):
     url = ('https://query1.finance.yahoo.com/v8/finance/chart/'
-           f'{urllib.parse.quote(symbol)}?range=5y&interval=1d')
+           f'{urllib.parse.quote(symbol)}?range=10y&interval=1d')
     data = upstream_json(url, headers={'User-Agent': UA, 'Accept': 'application/json'})
     chart = data.get('chart') or {}
     if chart.get('error'):

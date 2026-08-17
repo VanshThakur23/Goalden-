@@ -27,7 +27,11 @@
    cooling off toward the far edges) gives the page real depth without
    costing any contrast where it matters: text still sits on solid white
    cards, this only affects the canvas showing through the gaps. */
-body{background:radial-gradient(120% 90% at 50% 0%,#FBFDFF 0%,#F5F8FC 45%,#E9F0FA 100%);background-attachment:fixed;color:var(--paper);font-family:'Figtree',system-ui,sans-serif;min-height:100vh;line-height:1.5}
+/* Desktop: body is a fixed-height flex column (header, then the shell) so
+   the shell's own row can be height-bounded and its two columns can each
+   scroll independently -- see .labshell below. Mobile undoes all of this
+   back to plain document flow (see the max-width:860px block). */
+body{background:radial-gradient(120% 90% at 50% 0%,#FBFDFF 0%,#F5F8FC 45%,#E9F0FA 100%);background-attachment:fixed;color:var(--paper);font-family:'Figtree',system-ui,sans-serif;line-height:1.5;height:100vh;overflow:hidden;display:flex;flex-direction:column}
 h1,h2,h3{font-family:'Newsreader',serif;line-height:1.25}
 main b,main strong{color:var(--ink2)}
 .mono{font-family:'Spline Sans Mono',monospace}
@@ -35,7 +39,7 @@ main b,main strong{color:var(--ink2)}
 :is(button,a,input,[tabindex]):focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 
 /* --- top nav --- */
-header{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid rgba(20,40,63,.12)}
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 28px;border-bottom:1px solid rgba(20,40,63,.12);flex-shrink:0}
 .brand{font-family:'Newsreader',serif;font-weight:700;font-size:19px;color:var(--gold);text-decoration:none;display:inline-block}
 .brand span{color:var(--paper);font-weight:400;font-style:italic;font-size:13px;margin-left:6px;opacity:.65}
 /* Two very different jobs share this space: a first-visit chooser (big,
@@ -45,18 +49,19 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
    read as clutter rather than navigation. A vertical sidebar fixes that:
    9 tools stack cleanly in one column with no scrolling and no wrapping,
    and it reads as a map of the Lab rather than a strip of buttons. */
-.labshell{display:flex;align-items:flex-start}
-.labshell main{flex:1;min-width:0}
+/* Independent dual-pane scroll: .labshell is height-bounded (flex:1 inside
+   the fixed-height body above) and both columns stretch to fill that height
+   and scroll on their own -- the nav is always fully visible/reachable with
+   its own scrollbar, and dragging main's scrollbar no longer drags a sticky
+   nav along a "mostly frozen, then catches up" path (the old position:sticky
+   approach: the nav's own box was exactly as tall as main via align-self:
+   stretch, so a short inner nav stayed pinned for nearly the whole page and
+   only moved in one abrupt burst near the bottom -- removed below). */
+.labshell{display:flex;align-items:stretch;flex:1;min-height:0;overflow:hidden}
+.labshell main{flex:1;min-width:0;overflow-y:auto}
 .tabbar{background:linear-gradient(180deg,rgba(37,87,199,.06),rgba(37,87,199,.02));position:relative}
 .tabbar.is-home{display:none} /* the home screen itself, in #main, is the chooser */
-.tabbar.is-slim{width:228px;flex-shrink:0;border-right:1px solid rgba(37,87,199,.18);align-self:stretch;padding:22px 14px 24px;transition:width .18s ease,padding .18s ease}
-/* align-self:stretch above makes the nav's own box exactly as tall as the
-   output column, which is what draws the full-height border/gradient --
-   but it also means the box has zero scroll travel, so `position:sticky`
-   on the box itself is a no-op (verified: it scrolls off with the page).
-   Sticky belongs on the *inner* content instead, which is shorter than
-   the box and can travel within it. */
-#tabbarInner{position:sticky;top:14px}
+.tabbar.is-slim{width:228px;flex-shrink:0;border-right:1px solid rgba(37,87,199,.18);padding:22px 14px 24px;transition:width .18s ease,padding .18s ease;overflow-y:auto}
 .tabs{display:flex;gap:8px;flex-wrap:wrap}
 .tab{font-family:'Spline Sans Mono',monospace;font-size:11.5px;letter-spacing:.02em;color:rgba(20,40,63,.68);background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:2px 12px 12px 12px;padding:9px 16px;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .1s}
 .tab:hover{color:var(--paper);border-color:rgba(37,87,199,.5);background:rgba(20,40,63,.08);transform:translateX(2px)}
@@ -83,9 +88,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 .tabbar.is-slim.nav-collapsed .nav-toggle-btn{margin:0}
 .tabbar.is-slim.nav-collapsed .nav-toggle-btn svg{transform:rotate(180deg)}
 @media(max-width:860px){
-  .labshell{flex-direction:column}
+  /* Undo the desktop dual-pane scroll entirely -- narrow screens get one
+     normal page scroll, nav on top (its own horizontal strip below), main
+     content below, exactly as before this change. */
+  body{height:auto;overflow:visible;display:block}
+  .labshell{flex-direction:column;flex:none;min-height:0;overflow:visible}
+  .labshell main{overflow-y:visible}
+  .tabbar.is-slim{overflow-y:visible}
   .tabbar.is-slim{width:100%;border-right:none;border-bottom:1px solid rgba(37,87,199,.18);padding:12px 20px}
-  #tabbarInner{position:static}
   .slim-row{flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px}
   .slim-back{padding:4px 0}
   .slim-current{display:none}
@@ -1346,14 +1356,17 @@ function collapsibleSection(extraToggleClass, toggleHtml, bodyHtml){
   <div class="explain-panel tall"><div class="explain-panel-inner controls">${bodyHtml}</div></div>`;
 }
 // One "where to next" card at the bottom of every tab. items is 1-2
-// {q, tab} pairs -- q is the question this tool's output raises that the
-// next tool answers, tab is a TABS id. Plain data-tab-switch buttons, so
-// no per-instance JS: attach()'s existing #main-scoped listener binds
-// them like any other nav button.
+// {q, tab, carry} pairs -- q is the question this tool's output raises that
+// the next tool answers, tab is a TABS id. carry is optional {field, value}:
+// when present, the target field is set to value before switching tabs, so
+// a number this tool just computed actually lands on the next tool instead
+// of the user re-entering it. Plain data-tab-switch buttons otherwise --
+// attach()'s existing #main-scoped listener binds them like any other nav
+// button and applies the carry attributes if present.
 function nextStepCard(items){
   return `<div class="card next-step-card">
     <div class="ns-label">Where to next</div>
-    ${items.map(it=>`<button class="ns-btn" data-tab-switch="${it.tab}">${it.q}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>`).join('')}
+    ${items.map(it=>`<button class="ns-btn" data-tab-switch="${it.tab}"${it.carry?` data-carry-field="${it.carry.field}" data-carry-value="${it.carry.value}"`:''}>${it.q}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>`).join('')}
   </div>`;
 }
 // Which L_DEFAULTS keys a given tab's "Reset" button should restore.
@@ -1924,7 +1937,7 @@ function renderFX(){
       This comparison never used today's actual exchange rate. It only used the two growth rates and the depreciation rate. The starting exchange rate cancels out completely.
       </div>
     </div>
-    ${nextStepCard([{q:'Use this effective return as the growth rate in a savings plan.', tab:'retirement'}])}
+    ${nextStepCard([{q:'Use this effective return as the growth rate in a savings plan.', tab:'retirement', carry:{field:'ret.preRate', value:Math.max(4, Math.min(16, Math.round(res.effectiveAnnualReturn*1000)/10))}}])}
   </div>
   </div>`;
 }
@@ -4191,13 +4204,21 @@ function liveOutputHTML(ready, rfPct){
       ${loading.length? 'Fetching real prices&hellip;' : 'Add at least two usable instruments on the left to compute a frontier.<br><span class="cap">Two gives the exact closed-form curve from your class exercise; three or more switches to a simulated cloud, same as Build a Portfolio.</span>'}
     </div>` + instrumentDropdown;
   }
-  return errorBanner + (ready.length===2 ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(liveComputeMulti(), rfPct))
+  const isTwoAsset = ready.length===2;
+  const multiComputed = isTwoAsset ? null : liveComputeMulti();
+  // Same "current mix" return the stat cards above already show (portfolioReturn
+  // over either the two-asset slider weight or the selected multi-asset weights),
+  // recomputed here so it can be carried into the Retirement tab's growth field.
+  const mixRet = isTwoAsset
+    ? (() => { const [a,b]=ready; const sa=L.live.data[a.key].stats, sb=L.live.data[b.key].stats; const w=L.live.weight/100; return portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]); })()
+    : (() => { let weights=L.live.selectedWeights; if(!weights||weights.length!==multiComputed.items.length) weights=multiComputed.items.map(()=>1/multiComputed.items.length); return portfolioReturn(weights, multiComputed.returns); })();
+  return errorBanner + (isTwoAsset ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(multiComputed, rfPct))
     + instrumentDropdown
     + explainDropdown('Why do you show two different return numbers?', `
       The <b>expected-return</b> figure ((1+average daily move)<sup>trading days per year</sup> &minus; 1) is what the frontier, Sharpe ratio and tangency point below are built from. Mean-variance portfolio math needs a return figure that combines <i>linearly</i> across assets &ndash; a compounded return does not have that property, so the optimiser can't use it. This is also the convention used in the coursework this tool extends (a two-asset frontier worksheet), hand-checked against its own SBI figures (~29.9% return, ~21.3% risk over a comparable window) before being trusted here.<br><br>
       The <b>compounded</b> figure is what actually holding the instrument the whole window would have turned into &ndash; the number a real account statement would show. The two can disagree a lot for a volatile instrument: something that falls 50% then rises 50% averages 0% on the expected-return measure but is actually down 25% compounded. Both numbers are real; they answer different questions, so both are shown rather than picking one and hiding the other.
     `)
-    + nextStepCard([{q:'Turn this real-world return into a savings plan.', tab:'retirement'}]);
+    + nextStepCard([{q:'Turn this real-world return into a savings plan.', tab:'retirement', carry:{field:'ret.preRate', value:Math.max(4, Math.min(16, Math.round(mixRet*1000)/10))}}]);
 }
 
 function renderLiveFrontier(){
@@ -4447,6 +4468,16 @@ function attach(){
   // another listener and a single click would eventually fire render()
   // several times over.
   document.querySelectorAll('#main [data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{
+    // nextStepCard's optional carry: a "field.subfield" dotted path and a
+    // numeric value computed by the tool being left. Written into L before
+    // the tab switches, so the destination tool opens already showing the
+    // number that motivated the click instead of its stale default.
+    const carryField=el.dataset.carryField, carryValue=el.dataset.carryValue;
+    if(carryField && carryValue!==undefined && carryValue!==''){
+      const parts=carryField.split('.'); let obj=L;
+      for(let i=0;i<parts.length-1;i++) obj=obj[parts[i]];
+      obj[parts[parts.length-1]]=parseFloat(carryValue);
+    }
     L.tab=el.dataset.tabSwitch;
     try{ localStorage.setItem('goaldenLabLastTab', L.tab); }catch(e){}
     render();
