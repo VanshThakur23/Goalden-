@@ -655,6 +655,56 @@ Format:
 
 ---
 
+## 2026-08-17 — opencode — Phase "compound skills" (build_goal_plan / run_full_analysis)
+
+### Done
+- goalden.html: added a build_goal_plan tool (tool def + executeAdvisorTool
+  branch + describeTool case). One call sets country + goalType + every
+  goal-relevant param via advisorSetValue (no parallel validator), jumps to
+  results, runs advisorGetResults, and returns {ok, results, flags, setFields,
+  skipped}. Per-goal allowed-field map (retirement/education/generic); delay
+  returns a clear error (it's a comparison, not a plan). Any bad set_value
+  stops immediately with {ok:false, error, failedField} — no partial apply.
+- goalden-door2.html: same build_goal_plan name, adapted to the multi-goal
+  questionnaire — sets country + profiling fields (cap_0-3, tol_0-4,
+  monthlyCapacity, emergencyStatus, etc.) via advisorSetValue and goals via
+  advisorAddGoal, then runs buildPlan()/advisorGetResults once at the end.
+- goalden-lab.html: run_full_analysis tool (different name — multi-tab page).
+  Sets L.tab, applies params through advisorSetValue (dotted-path ADVISOR_FIELDS,
+  accepts bare or dotted keys), runs that tab's advisorGetResults. One tab per
+  call; no cross-tab composition.
+- [skill-metric] console.log around each skill branch (performance.now delta).
+- "Choice before action" prompt updated in goalden.html + door2 knowledge AND
+  worker.js + local_server.py (byte-identical): option A now prefers the skill
+  tool in one call, then compose_briefing; option B unchanged (primitives).
+- Added smoke-06.js (repo root, 15 structural assertions).
+
+### Turn-count comparison (derived, not live-measured)
+- Before (primitives) a goalden.html "do it all" retirement = ~9 tool calls:
+  set_value ×6 (country, goalType, age, retireAge, monthlyExpense, risk),
+  navigate results, get_results, compose_briefing.
+- After (skill) = 2 tool calls: build_goal_plan + compose_briefing.
+- NOTE: this is a code-inspection estimate (no browser/live DeepSeek in this
+  env); the exact primitive count depends on how the model batches set_value
+  calls. Not a network-tab measurement.
+
+### Verified
+- smoke-06.js: ALL PASS (15). engine.test.js 8/8, smoke-05.js + smoke-02.js
+  ALL PASS, mock test ALL PASS (no regression).
+- grep -c build_goal_plan: goalden.html 6, door2 6; run_full_analysis lab 4.
+- worker.js vs local_server.py: MODE: A count 4 vs 4; skill-tool mentions 2 vs 2.
+- node --check clean on all JS + inline scripts; py_compile OK.
+- No new math functions — the skill branches call advisorSetValue/
+  advisorGetResults/advisorAddGoal only (grep confirms).
+
+### Known / not done
+- No commit made (per the git rule).
+- Not browser-tested: skill execution + [skill-metric] logging + the
+  invalid-param partial-apply rejection need a live pass (cache-bust URLs).
+  Live DeepSeek still unverified (no key).
+
+---
+
 ## 2026-08-17 — Claude Code — Phase 0 verification + fix, ROADMAP.md added
 
 - Live-verified opencode's Phase 0 in the Browser pane against local_server.py

@@ -5463,6 +5463,7 @@ function advisorTools() {
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view (no pulse). Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
+    { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, fx, joint, mc or health. params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
   ];
 }
 
@@ -6216,6 +6217,30 @@ function executeAdvisorTool(name, args) {
     return JSON.stringify({ ok:true, tab });
   }
   if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
+  if (name === 'run_full_analysis') {
+    const start = performance.now();
+    const tab = args && args.tab;
+    const params = (args && args.params) || {};
+    const PREFIX = { retirement:'ret', stepup:'step', swp:'swp', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+    if (!PREFIX[tab]) return JSON.stringify({ ok:false, error:'Invalid tab. Valid: retirement, stepup, swp, fx, joint, mc, health. (portfolio/livefrontier use set_weights/add_instrument.)' });
+    if (typeof params !== 'object' || Array.isArray(params)) return JSON.stringify({ ok:false, error:'params must be an object.' });
+    const prefix = PREFIX[tab];
+    L.tab = tab;
+    const setFields = [];
+    const skipped = [];
+    for (const k in params) {
+      // Accept bare names (preRate) or full dotted paths (ret.preRate).
+      const field = (k.indexOf('.') !== -1) ? k : (prefix + '.' + k);
+      if (!ADVISOR_FIELDS[field]) { skipped.push(k); continue; }
+      const r = advisorSetValue(field, params[k]);
+      if (!r.ok) return JSON.stringify({ ok:false, error:r.error, failedField:field });
+      setFields.push(field);
+    }
+    render();
+    const results = advisorGetResults();
+    console.log('[skill-metric] run_full_analysis ' + (performance.now()-start).toFixed(0) + 'ms');
+    return JSON.stringify({ ok:true, results: results.result, flags: results.flags, setFields: setFields, skipped: skipped });
+  }
   if (name === 'set_weights') return JSON.stringify(advisorSetWeights(args && args.weights));
   if (name === 'apply_preset') return JSON.stringify(advisorApplyPreset(args && args.name));
   if (name === 'analyze_portfolio') return JSON.stringify(advisorAnalyzePortfolio());
@@ -6267,6 +6292,7 @@ function advisorDescribeTool(name, args) {
     case 'explain_instrument': return 'Explaining ' + args.symbol;
     case 'highlight': case 'scroll_to': return 'Pointing you at the ' + args.element;
     case 'compose_briefing': return 'Putting together your briefing';
+    case 'run_full_analysis': return 'Running the ' + tabLabel(args.tab) + ' analysis';
     default: return null;
   }
 }

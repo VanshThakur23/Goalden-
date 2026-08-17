@@ -1912,7 +1912,7 @@ Choice before action (mandatory, ALWAYS the first move): The moment the user ask
 A) Do it all for you — I'll ask for the few numbers I actually need, then fill everything in, run the calculation, and hand you a full report.
 B) Walk you through it step by step — you do each screen, I explain as we go.
 Which would you prefer?"
-Wait for their reply. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative: if they haven't given you the numbers yet, ask for the essential few in ONE consolidated message (not one field at a time); once you have them, fill every value, navigate, run get_results, narrating briefly as you go, and ALWAYS finish by calling compose_briefing so the result lands as a full report page with graphs — never just a chat summary. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it.`;
+Wait for their reply. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative: if they haven't given you the numbers yet, ask for the essential few in ONE consolidated message (not one field at a time). Once you have them, prefer calling build_goal_plan ONCE with { goalType, country, params } to fill every field and run the calculation in a single step (instead of one set_value per field), narrating briefly as you go, and ALWAYS finish by calling compose_briefing so the result lands as a full report page with graphs — never just a chat summary. If build_goal_plan fails, or you need to correct a single value afterwards, use set_value for just that correction. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it, using set_value one field at a time.`;
 
 // F5 — one contextual suggestion chip on the results screen, grounded in the
 // goal type. Rendered by the page, sent through the real send path on click.
@@ -1935,6 +1935,7 @@ function advisorTools() {
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
+    { type:'function', function:{ name:'build_goal_plan', description:'Build a complete single-goal plan in ONE call: set the country, goal type and every relevant input, jump to the result, and run the calculation — much faster than many set_value calls. params keys by goalType: retirement = age, retireAge, monthlyExpense, risk, existingSavings; education = annualFee, yearsToCollege, courseDuration, risk, existingSavings; generic = genType, genAmount, genYears, risk, existingSavings.', parameters:{ type:'object', properties:{ goalType:{ type:'string', enum:['retirement','education','generic','delay'] }, country:{ type:'string', enum:['IN','US'] }, params:{ type:'object' } }, required:['goalType','country'] } } },
   ];
 }
 
@@ -2166,6 +2167,41 @@ function executeAdvisorTool(name, args) {
     return JSON.stringify({ ok:true, screen, page:screen });
   }
   if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
+  if (name === 'build_goal_plan') {
+    const start = performance.now();
+    const goalType = args && args.goalType;
+    const country = args && args.country;
+    const params = (args && args.params) || {};
+    if (!['retirement','education','generic','delay'].includes(goalType)) return JSON.stringify({ ok:false, error:'Invalid goalType. Valid: retirement, education, generic, delay.' });
+    if (!['IN','US'].includes(country)) return JSON.stringify({ ok:false, error:'Invalid country. Valid: IN, US.' });
+    if (goalType === 'delay') return JSON.stringify({ ok:false, error:"'delay' is a comparison inside a real goal, not a standalone plan — pick retirement, education or generic." });
+    // Fields valid for each goalType; anything else in params is reported as skipped, never silently misapplied.
+    const ALLOWED = {
+      retirement: ['age','retireAge','monthlyExpense','risk','existingSavings'],
+      education: ['annualFee','yearsToCollege','courseDuration','risk','existingSavings'],
+      generic: ['genType','genAmount','genYears','risk','existingSavings'],
+    };
+    const allowed = ALLOWED[goalType];
+    const setFields = ['country','goalType'];
+    const skipped = [];
+    // Every value routes through advisorSetValue — no parallel validator here.
+    let r = advisorSetValue('country', country);
+    if (!r.ok) return JSON.stringify({ ok:false, error:r.error, failedField:'country' });
+    r = advisorSetValue('goalType', goalType);
+    if (!r.ok) return JSON.stringify({ ok:false, error:r.error, failedField:'goalType' });
+    for (const k in params) {
+      if (allowed.indexOf(k) === -1) { skipped.push(k); continue; }
+      const r2 = advisorSetValue(k, params[k]);
+      if (!r2.ok) return JSON.stringify({ ok:false, error:r2.error, failedField:k });
+      setFields.push(k);
+    }
+    const idx = flow().indexOf('results');
+    S.si = idx; S.quickEdit = false;
+    render();
+    const results = advisorGetResults();
+    console.log('[skill-metric] build_goal_plan ' + (performance.now()-start).toFixed(0) + 'ms');
+    return JSON.stringify({ ok:true, results: results.result, flags: results.flags, setFields: setFields, skipped: skipped });
+  }
   if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
   if (name === 'scroll_to') return JSON.stringify(advisorHighlight(args && args.element));
   return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
@@ -2183,6 +2219,7 @@ function advisorDescribeTool(name, args) {
     case 'get_state': return 'Reading your answers';
     case 'highlight': case 'scroll_to': return 'Pointing you at the ' + args.element;
     case 'compose_briefing': return 'Putting together your briefing';
+    case 'build_goal_plan': return 'Building your ' + (args.goalType || 'goal') + ' plan';
     default: return null;
   }
 }

@@ -2198,7 +2198,7 @@ Choice before action (mandatory, ALWAYS the first move): The moment the user ask
 A) Do it all for you — I'll ask for the few numbers I actually need, then fill everything in, run the plan, and hand you a full report.
 B) Walk you through it step by step — you do each screen, I explain as we go.
 Which would you prefer?"
-Wait for their reply. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative: if they haven't given you the numbers yet, ask for the essential few in ONE consolidated message (not one field at a time) — include a quick risk-comfort question (e.g. "and how would you describe your comfort with investment risk — cautious, moderate, or aggressive?") alongside the financial numbers, since this page's whole point is a risk-profiled plan. If they answer it, you still can't skip the actual questionnaire screens (there's no shortcut field for it) — quickly click through the risk-profile screens yourself using their stated comfort level to pick each answer, narrating briefly ("since you said moderate, I'll answer these consistently"), then continue to the goal(s) and plan. If they don't answer the risk question or you can't tell, proceed anyway using a moderate default — but say so plainly in your final report ("I used a moderate risk profile since we didn't fully cover your risk comfort — you can redo the questionnaire anytime for a more tailored mix"), never silently. Once everything is set, fill every value, navigate, run get_results, narrating briefly as you go, and ALWAYS finish by calling compose_briefing so the result lands as a full report page with graphs — never just a chat summary. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it.`;
+Wait for their reply. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative: if they haven't given you the numbers yet, ask for the essential few in ONE consolidated message (not one field at a time) — include a quick risk-comfort question (e.g. "and how would you describe your comfort with investment risk — cautious, moderate, or aggressive?") alongside the financial numbers, since this page's whole point is a risk-profiled plan. If they answer it, you still can't skip the actual questionnaire screens (there's no shortcut field for it) — quickly click through the risk-profile screens yourself using their stated comfort level to pick each answer, narrating briefly ("since you said moderate, I'll answer these consistently"), then continue to the goal(s) and plan. If they don't answer the risk question or you can't tell, proceed anyway using a moderate default — but say so plainly in your final report ("I used a moderate risk profile since we didn't fully cover your risk comfort — you can redo the questionnaire anytime for a more tailored mix"), never silently. Once everything is set, prefer calling build_goal_plan ONCE (with country and a params object carrying the questionnaire answers, capacity and goals) instead of one set_value/add_goal call per field, narrating briefly as you go, and ALWAYS finish by calling compose_briefing so the result lands as a full report page with graphs — never just a chat summary. If build_goal_plan fails, or you need to correct a single value afterwards, use set_value/add_goal for just that correction. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it.`;
 
 // F5 — one contextual suggestion chip on the plan screen.
 function advisorChipsHTML() {
@@ -2218,6 +2218,7 @@ function advisorTools() {
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
+    { type:'function', function:{ name:'build_goal_plan', description:'Build the full multi-goal plan in ONE call instead of many set_value/add_goal calls. Pass country plus a params object: monthlyCapacity, monthlyExpense, emergencyStatus (full/partial/no), emergencyPrioritize (true/false), cap_0..cap_3 and tol_0..tol_4 (each 1-4, the risk-questionnaire answers), and goals (an array of goal objects shaped like add_goal: {type: retirement|education|house|generic, retireAge, monthlyExpense, currentAge, annualFee, amount, years, existingSavings}).', parameters:{ type:'object', properties:{ country:{ type:'string', enum:['IN','US'] }, params:{ type:'object' } }, required:['country','params'] } } },
   ];
 }
 
@@ -2441,6 +2442,37 @@ function executeAdvisorTool(name, args) {
   }
   if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
   if (name === 'add_goal') return JSON.stringify(advisorAddGoal(args || {}));
+  if (name === 'build_goal_plan') {
+    const start = performance.now();
+    const country = args && args.country;
+    const params = (args && args.params) || {};
+    if (!['IN','US'].includes(country)) return JSON.stringify({ ok:false, error:'Invalid country. Valid: IN, US.' });
+    const setFields = ['country'];
+    const skipped = [];
+    let r = advisorSetValue('country', country);
+    if (!r.ok) return JSON.stringify({ ok:false, error:r.error, failedField:'country' });
+    const goals = params.goals;
+    for (const k in params) {
+      if (k === 'goals') continue;
+      const spec = ADVISOR_FIELDS.find(function (f) { return f.name === k; });
+      if (!spec) { skipped.push(k); continue; }
+      const r2 = advisorSetValue(k, params[k]);
+      if (!r2.ok) return JSON.stringify({ ok:false, error:r2.error, failedField:k });
+      setFields.push(k);
+    }
+    if (Array.isArray(goals)) {
+      for (let i = 0; i < goals.length; i++) {
+        const ga = advisorAddGoal(goals[i] || {});
+        if (!ga.ok) return JSON.stringify({ ok:false, error:ga.error, failedField:'goals['+i+']' });
+        setFields.push('goals['+i+']');
+      }
+    } else if (goals != null) {
+      skipped.push('goals');
+    }
+    const results = advisorGetResults();
+    console.log('[skill-metric] build_goal_plan ' + (performance.now()-start).toFixed(0) + 'ms');
+    return JSON.stringify({ ok:true, results: results.result, flags: results.flags, setFields: setFields, skipped: skipped });
+  }
   if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
   if (name === 'scroll_to') return JSON.stringify(advisorHighlight(args && args.element));
   return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
@@ -2453,6 +2485,7 @@ function advisorDescribeTool(name, args) {
     case 'navigate': return 'Going to ' + args.screen;
     case 'set_value': return 'Setting ' + args.field + ' to ' + args.value;
     case 'add_goal': return 'Adding your goal';
+    case 'build_goal_plan': return 'Building your full plan';
     case 'get_results': return 'Building your plan';
     case 'read_current_chart': return 'Reading the plan on your screen';
     case 'read_current_result': return 'Reading your plan';
