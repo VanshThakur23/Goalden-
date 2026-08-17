@@ -116,6 +116,53 @@ verification, and mechanical guardrail enforcement:
 - Enforce the advice guardrail (`src/worker.js:324-327`) in code, not prompt.
 - Visible "every figure recomputed from your inputs ✓" stamp.
 
+### Phase 8 — streaming responses
+
+Today `/api/chat` is fully blocking: the client `await`s the entire DeepSeek
+turn before anything appears. A multi-sentence MODE B/C reply renders all at
+once after several seconds of silence — the single biggest perceived-latency
+complaint. Stream the model's token output so text appears as it's generated.
+
+- Opt-in `stream:true` flag on the request body. Server behavior is unchanged
+  when it's absent — `agent-evals/runner.js` never sets it, so the eval
+  harness keeps getting the old synchronous JSON response with zero changes
+  required there.
+- Worker/local_server become dumb byte-forwarders of DeepSeek's own SSE
+  stream when `stream:true` — no server-side parsing of deltas, all
+  accumulation logic lives once, client-side, in `advisor.js`.
+- Client accumulates `content` and `tool_calls` deltas (by `index`, per
+  OpenAI/DeepSeek streaming semantics), live-updates a plain-text bubble as
+  content arrives, then applies `advisorGuardrail`/`advisorMarkdown` once
+  on the complete text before finalizing — never mid-stream, so a
+  half-formed sentence can't slip past the guardrail.
+- Mock mode (no key) wraps its existing scripted reply as a single SSE chunk
+  so the client only ever has one parsing code path.
+
+### Phase 9 — federated tooling
+
+Today the advisor only sees the page it's currently on — Door 1's advisor
+can't read Door 2's goals or the Lab's portfolio. Federated tooling removes
+that wall: one config object carrying all three pages' state and tools, so a
+single conversation can span "take my Door 2 retirement goal and stress-test
+it in the Lab." `advisor.js`'s loop itself doesn't change — it just gets a
+bigger config to read from.
+
+Real complexity is in ownership and verification, not the loop:
+
+- Which page "owns" a field when two pages both define something with the
+  same name (e.g. `country`) — needs an explicit source-of-truth per field,
+  not last-write-wins.
+- The Phase 2 recompute-and-compare audit has to diff figures against
+  whichever page's engine call actually produced them — a briefing that
+  blends Lab and Door 2 data needs to know which figures came from where.
+- Scope this phase's first cut narrowly: read-across (the advisor can *read*
+  another page's state/results) before write-across (the advisor can *act*
+  on another page's fields) — read-across is most of the value with far
+  less risk of one page corrupting another's invariants.
+
+Not started until Phase 8 verifies green (standing rule: one phase per
+opencode session, don't start the next until the last one is green).
+
 ### Briefing upgrade (folded into Phases 2–3)
 
 The AI currently controls only title, intro prose, and which pre-built sections

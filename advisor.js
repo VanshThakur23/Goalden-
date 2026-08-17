@@ -746,6 +746,9 @@ function advisorBuildBody() {
     state: advisorState(),
     knowledge: ADVISOR_CFG.knowledge || '',
     context: { page: advPage(), app: ADVISOR_CFG.app || 'Goalden', screens: advScreens() },
+    // Opt-in streaming flag: the server byte-forwards DeepSeek's SSE when set,
+    // and behaves exactly as before when absent (agent-evals never sets it).
+    stream: true,
   };
   let serialized = JSON.stringify(body);
   if (serialized.length > 60000) {
@@ -877,6 +880,83 @@ function advisorToggleTrace() {
   if (advisor.traceOpen) advisorRenderTrace();
 }
 
+// Phase 8 — streaming client. Reads DeepSeek's SSE stream and accumulates
+// content + tool_calls deltas (keyed by `index`, per OpenAI/DeepSeek streaming
+// semantics). onDelta(text) fires whenever accumulated content grows, so the
+// UI can type out. Returns the SAME shape as the old blocking response plus
+// ttfbMs (time-to-first-byte) — the server can no longer report a separate
+// upstream latency once it streams, so latencyMs is null here.
+async function advisorFetchStream(bodyStr, onDelta) {
+  const reqStart = Date.now();
+  const resp = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: bodyStr,
+    // A hung Worker/upstream must not spin forever — mirrors the Worker side.
+    signal: AbortSignal.timeout(25000),
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err.error || ('Server responded ' + resp.status));
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  let usage = null;
+  let ttfbMs = null;
+  const toolCalls = [];
+  let finished = false;
+  while (!finished) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buffer.indexOf('\n\n')) !== -1) {
+      const event = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const lines = event.split('\n');
+      for (const line of lines) {
+        if (line.indexOf('data:') !== 0) continue;
+        const payload = line.slice(5).trim();
+        if (payload === '[DONE]') { finished = true; break; }
+        let chunk;
+        try { chunk = JSON.parse(payload); } catch (e) { continue; }
+        if (chunk.usage) usage = chunk.usage;
+        const choice = (chunk.choices && chunk.choices[0]) || {};
+        const delta = choice.delta || {};
+        if (delta.content) {
+          if (ttfbMs === null) ttfbMs = Date.now() - reqStart;
+          content += delta.content;
+          onDelta(content);
+        }
+        if (delta.tool_calls) {
+          if (ttfbMs === null) ttfbMs = Date.now() - reqStart;
+          for (const tc of delta.tool_calls) {
+            const i = tc.index;
+            if (!toolCalls[i]) toolCalls[i] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+            // id/name/arguments may each arrive whole or split — concatenate.
+            toolCalls[i].id += (tc.id || '');
+            if (tc.function && tc.function.name) toolCalls[i].function.name += tc.function.name;
+            if (tc.function && tc.function.arguments) toolCalls[i].function.arguments += tc.function.arguments;
+          }
+        }
+      }
+      if (finished) break;
+    }
+  }
+  return {
+    message: {
+      role: 'assistant',
+      content: content || null,
+      tool_calls: toolCalls.length ? toolCalls.filter(Boolean) : undefined,
+    },
+    usage: usage,
+    latencyMs: null,
+    ttfbMs: ttfbMs,
+  };
+}
+
 async function advisorLoop(silent) {
   // F7d — track whether read_current_chart was called this turn so we can
   // append layered follow-up chips below the final bot reply.
@@ -888,19 +968,24 @@ async function advisorLoop(silent) {
   // "taking too many steps" before it ever finished the job.
   for (let step = 0; step < 18; step++) {
     const reqStart = Date.now();
-    const resp = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: advisorBuildBody(),
-      // A hung Worker/upstream must not spin the "…" forever — the Worker
-      // side times out at 25s too, this is the belt to its braces.
-      signal: AbortSignal.timeout(25000),
+    let streamBubble = null;
+    const data = await advisorFetchStream(advisorBuildBody(), function (text) {
+      // Type the reply out as content deltas arrive. Deliberately NOT
+      // advisorAddMsg — that would re-run guardrail/markdown on every partial
+      // chunk. Plain textContent here; the transforms run once at the end.
+      if (!streamBubble) {
+        advisorHideThinking();
+        const msgs = document.getElementById('advisorMsgs');
+        const div = document.createElement('div');
+        div.className = 'adv-msg bot';
+        div.textContent = text;
+        msgs.appendChild(div);
+        msgs.scrollTop = msgs.scrollHeight;
+        streamBubble = div;
+      } else {
+        streamBubble.textContent = text;
+      }
     });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || ('Server responded ' + resp.status));
-    }
-    const data = await resp.json();
     const roundTripMs = Date.now() - reqStart;
     const msg = data.message || {};
     advisorRecordTrace({
@@ -909,12 +994,16 @@ async function advisorLoop(silent) {
       toolCalls: (msg.tool_calls || []).map(function (tc) { return tc.function && tc.function.name; }),
       hasReply: !!msg.content && !(msg.tool_calls && msg.tool_calls.length),
       roundTripMs: roundTripMs,
-      // latencyMs is the upstream DeepSeek call only (server-measured); the
-      // gap to roundTripMs is Worker/network overhead. Both null in mock mode.
-      upstreamMs: typeof data.latencyMs === 'number' ? data.latencyMs : null,
+      // ttfbMs is the time-to-first-byte proxy for the streamed path — the
+      // server no longer reports a separate upstream latency once it streams.
+      upstreamMs: typeof data.ttfbMs === 'number' ? data.ttfbMs : null,
       usage: data.usage || null,
     });
     if (msg.tool_calls && msg.tool_calls.length) {
+      // A tool-call turn's narration (msg.content alongside tool_calls) stays
+      // silent as before — any streamed partial bubble from it is discarded,
+      // never finalized.
+      if (streamBubble && streamBubble.parentNode) streamBubble.parentNode.removeChild(streamBubble);
       advisorEnterDock();
       advisor.messages.push({ role: 'assistant', content: msg.content || null, tool_calls: msg.tool_calls });
       let reduceMotion = false;
@@ -951,8 +1040,16 @@ async function advisorLoop(silent) {
       continue;
     }
     if (msg.content) {
-      advisorHideThinking();
-      const botEl = advisorAddMsg('bot', msg.content);
+      let botEl;
+      if (streamBubble) {
+        // Finalize the streamed bubble in place: guardrail + markdown run once
+        // on the complete text, never on a half-formed sentence mid-stream.
+        streamBubble.innerHTML = advisorMarkdown(advisorGuardrail(msg.content));
+        botEl = streamBubble;
+      } else {
+        advisorHideThinking();
+        botEl = advisorAddMsg('bot', msg.content);
+      }
       // F7d — append layered follow-up chips after a chart explanation so the
       // user can go deeper without having to think of the next question.
       if (readChartCalled && ADVISOR_CFG.chartFollowUps) {

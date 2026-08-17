@@ -805,6 +805,8 @@ Format:
   is over "run" scenarios only. Live-mode pass rate is non-deterministic by
   nature; treat repeated-run averages as the signal.
 
+---
+
 ### Claude Code verification + fixes on top of Phase 6
 - Re-verified opencode's runner.js/scenarios.json by reading the full source
   (not trusting the WORKLOG self-report), then reproduced the 71%/64% runs
@@ -946,3 +948,117 @@ phase myself.
 - Trace panel is session-only (not persisted to `sessionStorage` like
   `advisor.messages` is) — a page reload loses the log. Deliberate: it's a
   dev/demo tool, not a feature users depend on across reloads.
+
+---
+
+## 2026-08-17 — opencode — Phase 8: streaming responses
+
+### Done
+- src/worker.js: added callDeepSeekStream() (stream:true + stream_options.
+  include_usage, same 25s abort; pipes res.body straight through as a
+  text/event-stream Response — no delta parsing server-side). /api/chat handler
+  branches on body.stream === true: no-key → the static "not switched on"
+  message wrapped as one SSE chunk; real key → callDeepSeekStream; stream falsy
+  → unchanged callDeepSeek + chatJson. Origin/rate-limit/body-cap/message-cap
+  all still apply before the branch.
+- local_server.py: added _deepseek_chat_stream (byte-forwarding generator),
+  _wrap_mock_as_sse (mock message → one SSE chunk, tool_calls mapped by index),
+  and Handler._send_sse (manual chunked transfer encoding). do_POST branches on
+  body.get('stream') is True → _send_sse; else the unchanged chat()+_send_json.
+- advisor.js: advisorBuildBody() now sets stream:true (page UI only — the eval
+  harness builds its own body and never sets it). New advisorFetchStream()
+  reads resp.body via getReader(), buffers + splits on \n\n, accumulates
+  content + tool_calls deltas (keyed by index, id/name/arguments concatenated),
+  merges a trailing usage chunk, records ttfbMs on the first delta, and returns
+  {message, usage, latencyMs:null, ttfbMs}. advisorLoop now streams a plain-
+  text bubble as content arrives (never advisorAddMsg mid-stream), then
+  finalizes it once with advisorMarkdown(advisorGuardrail(content)). A tool-call
+  turn discards any streamed narration bubble so narration stays silent as
+  before. Trace upstreamMs now reads ttfbMs (time-to-first-byte proxy) instead
+  of the removed server-measured latencyMs.
+
+### Verified (opencode)
+- node --check advisor.js + worker.js clean; python ast.parse local_server.py
+  clean (note: the task's exact `open()` command trips cp1252 on Windows —
+  must pass encoding='utf-8'; the file itself parses fine).
+- smoke-08.js: ALL PASS (21 assertions, incl. the negative check that
+  agent-evals/runner.js + scenarios.json contain zero "stream" occurrences).
+- Mock mode live test (Node fetch): stream:true → 200 text/event-stream,
+  body = data:{…}\n\ndata:[DONE]; stream omitted → 200 application/json, old
+  shape byte-identical in structure.
+- LIVE mode (DEEPSEEK_API_KEY set): one real streamed call → 88 SSE events,
+  content deltas present, [DONE] present, and the usage block arrived in a late
+  chunk (prompt/completion/total_tokens + cache hit/miss) — confirms
+  stream_options.include_usage works against DeepSeek's API.
+- Client accumulation tested against a fake chunked SSE (content split across
+  chunks, a tool_call whose name+arguments were split across two deltas):
+  reassembled to content "Hello world", tool_call {id:call_x, name:set_value,
+  arguments:{"field":1}}, usage merged, ttfbMs numeric — PASS.
+- engine.test.js 8/8; smoke-02/05/06/07 ALL PASS (no regression).
+
+### Known / not done (opencode)
+- NOT browser-tested: the visible type-out, the deferred guardrail/markdown
+  finalization, and the tool-call-turn bubble-discard need a live-browser pass
+  (cache-bust URL) — Claude Code's job.
+- The earlier manual curl checks failed purely from PowerShell→curl arg quoting
+  mangling, not the code; Node-fetch verification is authoritative.
+
+### Claude Code verification — found and fixed a real data-loss bug in local_server.py
+
+Live-browser testing (goalden.html, real DEEPSEEK_API_KEY, actual chat UI) of
+opencode's streamed replies showed small words silently missing at scattered
+positions — e.g. "SIP (Systematic Investment)" missing "Plan", "not putting
+all your eggs in one." missing "basket". Reproduced 3/3 in the browser.
+
+**Root-caused with a byte-level tee-and-diff**, not guesswork:
+- The literal shipped `advisorFetchStream` (extracted verbatim from advisor.js
+  and eval'd) ran clean 5/5 times in Node — ruling out the client-side SSE
+  parsing algorithm as the cause.
+- Instrumented local_server.py to tee every byte `_deepseek_chat_stream` read
+  from DeepSeek to a log file, then made one browser request and compared: the
+  server read 306 complete, correct characters from DeepSeek; the browser only
+  reassembled 293. The 13-character gap matched exactly three missing
+  substrings ("your ", ",", " basket") — proving the loss happened between
+  `_send_sse`'s write and the browser's receipt, not before.
+- **Root cause**: `_send_sse` hand-rolled HTTP chunked transfer encoding
+  (`Transfer-Encoding: chunked` + manual `%x\r\n<data>\r\n` framing per
+  ~4096-byte upstream read). Node's fetch/undici tolerated whatever was subtly
+  off in that framing; Chromium's HTTP parser silently dropped bytes from some
+  frames.
+- **First fix attempt (no framing, `Connection: close`, raw byte writes) did
+  not fix it** — same symptom persisted on a re-test. Root-caused *that* to a
+  stale process: two old server instances were still bound to the test ports
+  (Windows allows multiple `SO_REUSEADDR` listeners; the "restarted" server
+  was answering from the old, un-fixed code all along, confirmed via a raw
+  TCP socket client bypassing all HTTP libraries — it read back
+  `Transfer-Encoding: chunked` headers from a process I'd supposedly killed).
+  Force-killed every PID actually bound to the ports (`netstat -ano`), started
+  one clean instance, and re-verified: raw-socket read and 3 separate browser
+  fetch() calls all reassembled byte-for-byte identical, complete content
+  (lengths matched the server-side tee exactly: 311/421/353 chars, zero loss).
+- `local_server.py`'s `_send_sse` now sends no `Transfer-Encoding` header and
+  no manual framing at all — it writes raw bytes and signals end-of-body via
+  `Connection: close`, avoiding any possibility of a chunk-framing bug. This
+  is dev-only; `src/worker.js`'s `callDeepSeekStream` was never affected since
+  Cloudflare's native `Response(readableStream)` piping has no hand-rolled
+  framing to get wrong.
+
+### Verified (Claude Code)
+- `python -c "import ast; ast.parse(...)"` clean on the fixed local_server.py.
+- `node smoke-08.js`: updated the two assertions that asserted the OLD
+  chunked-encoding implementation's presence to instead assert `Connection:
+  close` and the absence of a hand-rolled `Transfer-Encoding` header — ALL
+  PASS, 21/21.
+- `node smoke-02/05/06/07.js`: ALL PASS. `node --test engine.test.js`: 8/8.
+- Live in the browser (goalden.html, cleared chat, real DEEPSEEK_API_KEY):
+  two fresh questions ("what is a mutual fund, briefly?", "what is
+  compounding, briefly?") both rendered complete, coherent, correctly
+  streamed replies with zero console errors — confirms the visible type-out,
+  deferred guardrail/markdown finalization, and the fix all work end-to-end
+  through the real UI, not just raw-fetch diagnostics.
+
+### Known / not done
+- No commit made yet (per the git rule — pending user review).
+- Diagnostic/scratchpad scripts used for root-causing (byte-tee server,
+  raw-socket test client) live outside the repo in the session scratchpad,
+  not committed.

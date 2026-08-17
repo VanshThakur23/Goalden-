@@ -326,6 +326,63 @@ def _deepseek_chat(messages, tools, api_key):
     return message, data.get('usage'), latency_ms
 
 
+def _deepseek_chat_stream(messages, tools, api_key):
+    """Streaming variant of _deepseek_chat: same body plus stream:True and
+    stream_options.include_usage, byte-forwarding DeepSeek's raw SSE stream.
+    No parsing/re-encoding here — the client owns all delta accumulation.
+    Raises the same way as _deepseek_chat on an upstream error (urlopen
+    raises HTTPError before any bytes are yielded), so _friendly_chat_error
+    still applies."""
+    req = urllib.request.Request(
+        DEEPSEEK_URL,
+        data=json.dumps({
+            'model': 'deepseek-chat',
+            'messages': messages,
+            'tools': tools if tools else None,
+            'tool_choice': 'auto' if tools else None,
+            'temperature': 0.3,
+            'max_tokens': 1100,
+            'stream': True,
+            'stream_options': {'include_usage': True},
+        }).encode('utf-8'),
+        headers={
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}',
+        },
+    )
+    # 25s cap mirrors the Worker's AbortSignal.timeout(25000).
+    resp = urllib.request.urlopen(req, timeout=25)
+    try:
+        while True:
+            chunk = resp.read(4096)
+            if not chunk:
+                break
+            yield chunk
+    finally:
+        resp.close()
+
+
+def _wrap_mock_as_sse(message):
+    """Wrap the mock's existing message dict as ONE SSE chunk so a streaming
+    client has exactly one parsing path whether the reply is real or mock."""
+    delta = {}
+    if message.get('tool_calls'):
+        delta['tool_calls'] = [
+            {'index': i, 'id': tc['id'], 'type': 'function',
+             'function': {'name': tc['function']['name'],
+                          'arguments': tc['function']['arguments']}}
+            for i, tc in enumerate(message['tool_calls'])
+        ]
+        if message.get('content'):
+            delta['content'] = message['content']
+        finish = 'tool_calls'
+    else:
+        delta['content'] = message.get('content', '')
+        finish = 'stop'
+    chunk = {'choices': [{'delta': delta, 'finish_reason': finish}]}
+    return (f'data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n').encode('utf-8')
+
+
 def _friendly_chat_error(e):
     """Mirror of the Worker's friendlyChatError(): users get one plain
     sentence per failure class; the real detail stays on the server log."""
@@ -607,6 +664,32 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_sse(self, byte_iterable):
+        # No Content-Length (size isn't known upfront) and no Transfer-Encoding
+        # framing either — a hand-rolled chunked encoder here previously wrote
+        # each 4096-byte upstream read as its own `%x\r\n<data>\r\n` frame, and
+        # Chromium's HTTP parser was silently dropping bytes from some of those
+        # frames (confirmed by teeing the exact bytes read from DeepSeek against
+        # what a live browser fetch() reassembled for the same response: 3
+        # small SSE deltas — "your ", ",", " basket" — never arrived, while
+        # Node's fetch reassembled the identical byte stream with zero loss,
+        # i.e. Node tolerated whatever was subtly wrong with the framing and
+        # Chromium did not). Simplest correct fix: no framing at all. Write
+        # raw bytes and signal end-of-body by closing the connection — the
+        # client reads until EOF, exactly like an HTTP/1.0 response.
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Connection', 'close')
+        self.end_headers()
+        for chunk in byte_iterable:
+            if not chunk:
+                continue
+            self.wfile.write(chunk)
+            self.wfile.flush()
+        self.close_connection = True
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query)
@@ -654,6 +737,16 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 length = int(self.headers.get('Content-Length') or 0)
                 body = json.loads(self.rfile.read(length).decode('utf-8') or '{}')
+                api_key = os.environ.get('DEEPSEEK_API_KEY')
+                if body.get('stream') is True:
+                    if api_key:
+                        messages = [{'role': 'system', 'content': _build_system_prompt(body)}]
+                        messages += body.get('messages') or []
+                        return self._send_sse(_deepseek_chat_stream(messages, body.get('tools') or [], api_key))
+                    # Mock mode: same scripted message dict as today, wrapped
+                    # as one SSE chunk so the client has a single parse path.
+                    message = _mock_chat(body)
+                    return self._send_sse([_wrap_mock_as_sse(message)])
                 message, usage, latency_ms = chat(body)
                 return self._send_json({'message': message, 'usage': usage, 'latencyMs': latency_ms})
             except Exception as e:

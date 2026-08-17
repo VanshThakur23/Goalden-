@@ -367,6 +367,49 @@ async function callDeepSeek(messages, tools, apiKey) {
   };
 }
 
+// Streaming variant of callDeepSeek: same request, but `stream:true` +
+// `stream_options.include_usage` so DeepSeek's raw SSE bytes (content deltas,
+// tool-call deltas, and a trailing usage chunk) are piped straight through to
+// the client. The server is a dumb byte-forwarder — all delta accumulation
+// and parsing lives client-side in advisor.js. If the upstream errors, throw
+// the same shape as callDeepSeek so friendlyChatError() still applies (this
+// happens before any bytes are piped).
+async function callDeepSeekStream(messages, tools, apiKey, origin) {
+  const res = await fetch(DEEPSEEK_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    signal: AbortSignal.timeout(25000),
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages,
+      tools: tools && tools.length ? tools : undefined,
+      tool_choice: tools && tools.length ? 'auto' : undefined,
+      temperature: 0.3,
+      max_tokens: 1100,
+      stream: true,
+      stream_options: { include_usage: true },
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`DeepSeek returned ${res.status}: ${text.slice(0, 300)}`);
+  }
+  // Pipe res.body straight through — never read/parse/re-serialize the deltas.
+  return new Response(res.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'Access-Control-Allow-Origin': origin || '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}
+
 // Users never need to see upstream status codes, secret names or response
 // bodies — map the failure classes to one plain sentence each and keep the
 // real detail in the Worker logs where the operator can find it.
@@ -465,9 +508,25 @@ export default {
         // say that in plain language instead of surfacing a raw 502 bubble.
         if (!apiKey) {
           console.log('chat: DEEPSEEK_API_KEY secret is not set — replying with not-configured message');
-          return chatJson({ message: { role: 'assistant', content: "I'm not switched on for conversations on this deployment — the site owner needs to add an AI API key first. Everything else in Goalden works normally, so feel free to explore, or come back once the advisor is live." }, usage: null, latencyMs: 0 }, 200, origin);
+          const notConfigured = { role: 'assistant', content: "I'm not switched on for conversations on this deployment — the site owner needs to add an AI API key first. Everything else in Goalden works normally, so feel free to explore, or come back once the advisor is live." };
+          if (body.stream === true) {
+            // Same static message, wrapped as one SSE chunk so a streaming
+            // client still has exactly one parsing code path.
+            const sse = 'data: ' + JSON.stringify({ choices: [{ delta: { role: 'assistant', content: notConfigured.content }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n';
+            return new Response(sse, { status: 200, headers: {
+              'Content-Type': 'text/event-stream; charset=utf-8',
+              'Cache-Control': 'no-cache',
+              'Access-Control-Allow-Origin': origin || '*',
+              'Access-Control-Allow-Methods': 'POST, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type',
+            } });
+          }
+          return chatJson({ message: notConfigured, usage: null, latencyMs: 0 }, 200, origin);
         }
         const messages = [{ role: 'system', content: buildSystemPrompt(body) }].concat(body.messages || []);
+        if (body.stream === true) {
+          return callDeepSeekStream(messages, body.tools || [], apiKey, origin);
+        }
         const { message, usage, latencyMs } = await callDeepSeek(messages, body.tools || [], apiKey);
         return chatJson({ message, usage, latencyMs }, 200, origin);
       } catch (e) {
