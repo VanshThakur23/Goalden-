@@ -56,6 +56,12 @@ if (!m) {
 
   const s3 = 'Your mix is 60% equity, 40% debt';
   check(advisorGuardrail(s3) === s3, "allocation statement NOT flagged (60% equity / 40% debt)");
+
+  // Title-case recommendation object, no price target and no ALL-CAPS ticker
+  // (agent-evals/Phase 6 surfaced this gap in the ALL-CAPS-only check).
+  const s4 = 'You should buy Reliance now, it is a great pick';
+  check(advisorGuardrail(s4) !== s4 && advisorGuardrail(s4).indexOf("I can't recommend specific investments") !== -1,
+    "title-case recommendation flagged (buy Reliance, no price target)");
 }
 
 console.log(fail ? `\n${fail} FAILURES` : '\nALL PASS');

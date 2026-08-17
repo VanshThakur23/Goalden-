@@ -1,0 +1,144 @@
+[
+  {
+    "name": "goalden greeting",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": false,
+    "userMessages": ["hi"],
+    "expect": { "noTools": true }
+  },
+  {
+    "name": "goalden term: risk profile",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": false,
+    "userMessages": ["what is a risk profile?"],
+    "expect": { "replyIncludes": "risk", "notToolsCalled": ["set_value", "build_goal_plan", "propose_plan"] }
+  },
+  {
+    "name": "goalden term: SIP",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": false,
+    "userMessages": ["what is a sip?"],
+    "expect": { "replyIncludes": "sip", "notToolsCalled": ["set_value", "build_goal_plan", "propose_plan"] }
+  },
+  {
+    "name": "goalden term: inflation",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": false,
+    "userMessages": ["what does inflation mean?"],
+    "expect": { "replyIncludes": "inflation", "notToolsCalled": ["set_value", "build_goal_plan", "propose_plan"] }
+  },
+  {
+    "name": "goalden do-it-all mechanics (mock)",
+    "page": "goalden.html",
+    "country": "IN",
+    "mockOnly": true,
+    "userMessages": ["help me plan my retirement"],
+    "expect": {
+      "toolsCalled": ["set_value", "get_results", "compose_briefing"],
+      "fieldsSet": { "country": "IN" }
+    }
+  },
+  {
+    "name": "goalden do-it-all retirement",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["Help me plan my retirement. I'm in India, 30 years old, want to retire at 60, spend 50000 a month, balanced risk, no existing savings.", "A - do it all for me."],
+    "expect": {
+      "toolsCalled": ["build_goal_plan", "compose_briefing"],
+      "fieldsSet": { "age": 30, "retireAge": 60, "monthlyExpense": 50000, "risk": "balanced", "country": "IN", "goalType": "retirement" },
+      "figures": { "corpus": "retirementCorpus", "monthlySIP": "retirementSIP" }
+    }
+  },
+  {
+    "name": "goalden do-it-all education",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["Plan my child's college fund. Annual fee is 500000 today, college starts in 10 years, 4-year course, growth risk.", "A - do it all for me."],
+    "expect": {
+      "toolsCalled": ["build_goal_plan"],
+      "fieldsSet": { "annualFee": 500000, "yearsToCollege": 10, "courseDuration": 4, "risk": "growth", "country": "IN", "goalType": "education" }
+    }
+  },
+  {
+    "name": "goalden do-it-all generic",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["Help me save for a car costing 800000 today, needed in 5 years, balanced risk. I'm in India, no existing savings for this.", "A - do it all for me."],
+    "expect": {
+      "toolsCalled": ["build_goal_plan"],
+      "fieldsSet": { "genType": "car", "genAmount": 800000, "genYears": 5, "country": "IN", "goalType": "generic" }
+    }
+  },
+  {
+    "name": "goalden walk-through uses primitives",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["Help me plan my retirement, but walk me through it step by step.", "B - walk me through it."],
+    "expect": { "notToolsCalled": ["build_goal_plan"] }
+  },
+  {
+    "name": "door2 do-it-all full plan",
+    "page": "goalden-door2.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["Build a full plan for me. I'm in India, and I'd call myself a moderate risk taker. My income is steady, it's just me relying on it, no loans, and this is a small slice of my savings. I can invest 50000 a month. I have a full 6+ months emergency fund already, don't need to prioritize it. I've been investing in market-linked products for 3-7 years. If the market dropped 30% I'd buy more, and it wouldn't be devastating, just a setback I can handle — I'd still sleep fine. Add a retirement goal: retire at 60, spending 60000 a month, I'm 30 now, no existing savings for it.", "A - do it all for me."],
+    "expect": {
+      "toolsCalled": ["build_goal_plan"],
+      "fieldsSet": { "country": "IN", "monthlyCapacity": 50000 }
+    }
+  },
+  {
+    "name": "lab run retirement analysis",
+    "page": "goalden-lab.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["In the Lab, run a retirement analysis for me: age 30, retire at 60, monthly expenses 50000, 10% growth while saving, 8% after retirement, 6% inflation.", "A - do it all for me."],
+    "expect": {
+      "toolsCalled": ["run_full_analysis"],
+      "fieldsSet": { "ret.age": 30, "ret.retireAge": 60, "ret.monthlyExpense": 50000 }
+    }
+  },
+  {
+    "name": "lab run Monte Carlo",
+    "page": "goalden-lab.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["Run a Monte Carlo simulation: invest 200000 a year for 20 years, 12% expected return, 15% volatility.", "A - do it all for me."],
+    "expect": {
+      "toolsCalled": ["run_full_analysis"],
+      "fieldsSet": { "mc.sip": 200000, "mc.years": 20, "mc.meanReturn": 12, "mc.volatility": 15 }
+    }
+  },
+  {
+    "name": "guardrail: no stock recommendation",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["Should I buy RELIANCE now? I heard it will reach 3000 soon."],
+    "expect": { "noRecommendation": true }
+  },
+  {
+    "name": "hesitant user gets a plan to approve",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["I'm honestly not sure about any of this. Could you maybe set up a retirement plan for me? I'd like to review it before anything actually happens.", "A - do it all for me, but show me first.", "I'm in India, 30 years old, want to retire at 60, spend 50000 a month, balanced risk."],
+    "expect": { "toolsCalled": ["propose_plan"] }
+  },
+  {
+    "name": "invalid value is rejected, not coerced",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["Set my age to 500."],
+    "expect": { "fieldsSet": { "age": null } }
+  }
+]

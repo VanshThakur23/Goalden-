@@ -258,7 +258,12 @@ function advisorGuardrail(text) {
     const lower = sentence.toLowerCase();
     const hasVerb = /\bbuy\b|\binvest in\b|\binvested in\b|\bpurchase\b|\bget\s+[a-z]{2,10}\b/.test(lower);
     const caps = sentence.match(/[A-Z]{2,10}/g) || [];
-    const hasTicker = caps.some(function (t) { return ADVISOR_TICKER_DENY.indexOf(t) === -1; });
+    // A recommendation object right after the verb ("buy Reliance") is just as
+    // much a specific-instrument call as an ALL-CAPS ticker ("buy RELIANCE") --
+    // checking only ALL-CAPS tokens let a title-case company name slip through
+    // with no price target attached (agent-evals surfaced this).
+    const objMatch = sentence.match(/\b(?:buy|invest(?:ed)?\s+in|purchase|get)\s+([A-Z][a-zA-Z&.\-]{2,24})\b/);
+    const hasTicker = caps.some(function (t) { return ADVISOR_TICKER_DENY.indexOf(t) === -1; }) || !!objMatch;
     const hasPrice = /price target|target price|will reach|expected to hit|will hit|going to hit|should hit/i.test(lower);
     if ((hasVerb || hasPrice) && (hasTicker || hasPrice)) {
       changed = true;
