@@ -1622,8 +1622,31 @@ function advance() {
    page.
    ===================================================================== */
 const STATE_KEY = 'goaldenD1State';
-function persistState() { try { localStorage.setItem(STATE_KEY, JSON.stringify(S)); } catch (e) {} }
+function persistState() { try { localStorage.setItem(STATE_KEY, JSON.stringify(Object.assign({}, S, { _savedAt: Date.now() }))); } catch (e) {} }
 function clearSavedState() { try { localStorage.removeItem(STATE_KEY); } catch (e) {} }
+
+// Phase 9 — federated read-across. read_other_page lets the advisor READ (never
+// write) another door's saved localStorage snapshot. The result is a separate,
+// clearly-labeled object the model can quote from — it is NEVER merged into S,
+// so a field that exists on multiple pages (e.g. country) can't be silently
+// overwritten by last-write-wins.
+const OTHER_PAGE_KEYS = { door2: 'goaldenD2State', lab: 'goaldenLabState' };
+const OTHER_PAGE_LABELS = { door2: 'The Full Plan', lab: 'The Lab' };
+function readOtherPage(page) {
+  const key = OTHER_PAGE_KEYS[page];
+  if (!key) return { ok:false, error:'Unknown page "'+page+'". Valid: '+Object.keys(OTHER_PAGE_KEYS).join(', ') };
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return { ok:true, page: page, asOf: null, state: null, note: 'No saved data from ' + page + ' yet.' };
+    const saved = JSON.parse(raw);
+    const state = Object.assign({}, saved);
+    const asOf = state._savedAt || null;
+    delete state._savedAt;
+    return { ok:true, page: page, asOf: asOf, state: state };
+  } catch (e) {
+    return { ok:false, error: 'Could not read saved data for ' + page + '.', page: page };
+  }
+}
 // pushState only when the screen actually changed: same-screen re-renders
 // (picking an answer re-renders the current screen) must not pile up
 // duplicate history entries, and a popstate-driven render arrives with the
@@ -1936,6 +1959,7 @@ function advisorTools() {
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
     { type:'function', function:{ name:'build_goal_plan', description:'Build a complete single-goal plan in ONE call: set the country, goal type and every relevant input, jump to the result, and run the calculation — much faster than many set_value calls. params keys by goalType: retirement = age, retireAge, monthlyExpense, risk, existingSavings; education = annualFee, yearsToCollege, courseDuration, risk, existingSavings; generic = genType, genAmount, genYears, risk, existingSavings.', parameters:{ type:'object', properties:{ goalType:{ type:'string', enum:['retirement','education','generic','delay'] }, country:{ type:'string', enum:['IN','US'] }, params:{ type:'object' } }, required:['goalType','country'] } } },
+    { type:'function', function:{ name:'read_other_page', description:'Read-only snapshot of another page\'s saved data (from that page\'s own localStorage). page: door2 (The Full Plan) or lab (The Lab). Returns {page, asOf, state} — context to quote from, NEVER to be merged into this page\'s inputs.', parameters:{ type:'object', properties:{ page:{ type:'string', enum:Object.keys(OTHER_PAGE_KEYS) } }, required:['page'] } } },
   ];
 }
 
@@ -2202,6 +2226,7 @@ function executeAdvisorTool(name, args) {
     console.log('[skill-metric] build_goal_plan ' + (performance.now()-start).toFixed(0) + 'ms');
     return JSON.stringify({ ok:true, results: results.result, flags: results.flags, setFields: setFields, skipped: skipped });
   }
+  if (name === 'read_other_page') return JSON.stringify(readOtherPage(args && args.page));
   if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
   if (name === 'scroll_to') return JSON.stringify(advisorHighlight(args && args.element));
   return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
@@ -2220,6 +2245,7 @@ function advisorDescribeTool(name, args) {
     case 'highlight': case 'scroll_to': return 'Pointing you at the ' + args.element;
     case 'compose_briefing': return 'Putting together your briefing';
     case 'build_goal_plan': return 'Building your ' + (args.goalType || 'goal') + ' plan';
+    case 'read_other_page': return 'Reading your saved ' + (OTHER_PAGE_LABELS[args.page] || args.page) + ' data';
     default: return null;
   }
 }

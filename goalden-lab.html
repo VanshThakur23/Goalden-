@@ -4456,6 +4456,7 @@ function render(){
     '<div class="ps">'+cfg().name+' &middot; printed '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})+'</div>';
   attach();
   syncStickyPanels();
+  persistLabState();
 }
 
 function attach(){
@@ -4985,6 +4986,34 @@ if(!consumeDoor2Handoff()){
 try{ L.navCollapsed = localStorage.getItem('goaldenLabNavCollapsed')==='1'; }catch(e){}
 try{ L.panelCollapsed = localStorage.getItem('goaldenLabPanelCollapsed')==='1'; }catch(e){}
 
+// Phase 9 — federated read-across + a Lab state snapshot. Door 1/2 already save
+// their full state for refresh-resume (goaldenD1State / goaldenD2State); the
+// Lab only saved cosmetics, so persist a COMPACT snapshot (stateForAdvisor, no
+// raw price arrays) so read_other_page on the other doors has real Lab data.
+const LAB_STATE_KEY = 'goaldenLabState';
+function persistLabState(){ try{ localStorage.setItem(LAB_STATE_KEY, JSON.stringify(Object.assign({}, stateForAdvisor(), { _savedAt: Date.now() }))); }catch(e){} }
+
+// read_other_page is READ-ONLY: it returns a separate, clearly-labeled object
+// from another page's localStorage, never merged into L (so a field like
+// `country` that exists on multiple pages can't be overwritten last-write-wins).
+const OTHER_PAGE_KEYS = { door1: 'goaldenD1State', door2: 'goaldenD2State' };
+const OTHER_PAGE_LABELS = { door1: 'Quick Calculate', door2: 'The Full Plan' };
+function readOtherPage(page){
+  const key = OTHER_PAGE_KEYS[page];
+  if(!key) return { ok:false, error:'Unknown page "'+page+'". Valid: '+Object.keys(OTHER_PAGE_KEYS).join(', ') };
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return { ok:true, page:page, asOf:null, state:null, note:'No saved data from '+page+' yet.' };
+    const saved = JSON.parse(raw);
+    const state = Object.assign({}, saved);
+    const asOf = state._savedAt || null;
+    delete state._savedAt;
+    return { ok:true, page:page, asOf:asOf, state:state };
+  }catch(e){
+    return { ok:false, error:'Could not read saved data for '+page+'.', page:page };
+  }
+}
+
 document.getElementById('printBtn').addEventListener('click',()=>window.print());
 // #navToggleBtn lives outside #tabbarInner (a static sibling in the HTML
 // shell), so it survives every renderTabs() rebuild -- bind it once here
@@ -5464,6 +5493,7 @@ function advisorTools() {
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view (no pulse). Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
     { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, fx, joint, mc or health. params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
+    { type:'function', function:{ name:'read_other_page', description:'Read-only snapshot of another page\'s saved data (from that page\'s own localStorage). page: door1 (Quick Calculate) or door2 (The Full Plan). Returns {page, asOf, state} — context to quote from, NEVER to be merged into this page\'s inputs.', parameters:{ type:'object', properties:{ page:{ type:'string', enum:Object.keys(OTHER_PAGE_KEYS) } }, required:['page'] } } },
   ];
 }
 
@@ -6241,6 +6271,7 @@ function executeAdvisorTool(name, args) {
     console.log('[skill-metric] run_full_analysis ' + (performance.now()-start).toFixed(0) + 'ms');
     return JSON.stringify({ ok:true, results: results.result, flags: results.flags, setFields: setFields, skipped: skipped });
   }
+  if (name === 'read_other_page') return JSON.stringify(readOtherPage(args && args.page));
   if (name === 'set_weights') return JSON.stringify(advisorSetWeights(args && args.weights));
   if (name === 'apply_preset') return JSON.stringify(advisorApplyPreset(args && args.name));
   if (name === 'analyze_portfolio') return JSON.stringify(advisorAnalyzePortfolio());
@@ -6293,6 +6324,7 @@ function advisorDescribeTool(name, args) {
     case 'highlight': case 'scroll_to': return 'Pointing you at the ' + args.element;
     case 'compose_briefing': return 'Putting together your briefing';
     case 'run_full_analysis': return 'Running the ' + tabLabel(args.tab) + ' analysis';
+    case 'read_other_page': return 'Reading your saved ' + (OTHER_PAGE_LABELS[args.page] || args.page) + ' data';
     default: return null;
   }
 }

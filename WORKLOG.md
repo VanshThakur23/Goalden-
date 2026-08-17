@@ -1062,3 +1062,67 @@ all your eggs in one." missing "basket". Reproduced 3/3 in the browser.
 - Diagnostic/scratchpad scripts used for root-causing (byte-tee server,
   raw-socket test client) live outside the repo in the session scratchpad,
   not committed.
+
+---
+
+## 2026-08-17 — opencode — Phase 9: federated tooling (read-across)
+
+### Done
+- Added a read-only `read_other_page(page)` tool to all three pages
+  (goalden.html, goalden-door2.html, goalden-lab.html) — client-side only,
+  reads the OTHER two pages' saved localStorage via the existing Phase 0 keys
+  (goaldenD1State / goaldenD2State), returning {page, asOf, state} (or a "no
+  saved data yet" note). Wired into advisorTools / executeAdvisorTool /
+  advisorDescribeTool on each page.
+- Field-ownership rule held: readOtherPage returns a fresh Object.assign({},
+  saved) object and never writes into S/G/L, never calls set_value/render,
+  never writes localStorage (read-only). The model can only quote it.
+- Added a `_savedAt` timestamp to Door 1/2's persistState (via Object.assign so
+  the existing resume logic keeps working unchanged), and added a Lab
+  full-state snapshot (goaldenLabState = stateForAdvisor() compact projection,
+  no raw price arrays) saved in the Lab's render() — the Lab previously
+  persisted only cosmetics, so read-across had nothing meaningful to read.
+- System-prompt addition in worker.js + local_server.py (mirrored):
+  read_other_page returns READ-ONLY context from another page; never call
+  set_value with values copied from it without the user's explicit
+  confirmation.
+- Added smoke-09.js (repo root, 38 structural assertions).
+
+### Verified
+- node --check clean (advisor.js, worker.js + all inline scripts); python
+  ast.parse local_server.py clean.
+- smoke-09.js: ALL PASS (38) — tool defined+wired on all 3 pages, readOtherPage
+  body is read-only (reads localStorage, never writes, never set_value/render/
+  S-G-L assignment), keys are the OTHER pages', Lab persists goaldenLabState,
+  worker/local_server mirror matches.
+- smoke-02/05/06/07/08 all PASS; engine.test.js 8/8 (no regression).
+- agent-evals loadPage still OK for all 3 pages (Lab render now calls
+  persistLabState — confirmed no vm break).
+- Functional test (extracted readOtherPage): door2 read returns {page, asOf,
+  state} with _savedAt stripped; no-data → {state:null, note}; invalid page →
+  clear error.
+
+### Known / not done (opencode)
+- NOT browser-tested: cross-page read-across needs a same-origin browser session
+  (each page actually writing then reading localStorage across a real tab flow).
+- Read-across is intentionally read-only; write-across and compose_briefing /
+  Phase-2-audit blending are future phases (out of scope).
+
+### Claude Code verification
+- Ran the exact same-origin cross-tab flow opencode flagged as untested: on
+  goalden.html, set real S values (country/goal/age/retireAge/expense) and
+  called persistState(); on goalden-lab.html, called persistLabState(); then
+  on goalden-door2.html called the real shipped readOtherPage('door1') and
+  readOtherPage('lab') directly (not a reimplementation).
+- Door 1's read came back exact and complete: country IN, age 30, retireAge
+  60, goal retirement, expense 50000 — everything persisted, nothing dropped.
+  Lab's read came back with the expected keys (ret, portfolio, mc, snapshots,
+  etc.), asOf populated on both.
+- readOtherPage('bogus') returned a clean {ok:false, error:...} listing valid
+  pages, not a throw.
+- Confirmed Door 2's own G object was byte-identical before and after both
+  reads (gMutated: false) — the read-only/no-merge guarantee holds live, not
+  just in the smoke-09.js regex checks.
+- Zero console errors throughout. `node smoke-02..09.js` + `node --test
+  engine.test.js` all green; `node --check`/`ast.parse` clean.
+- Phase 9 (read-across) verified green end-to-end.
