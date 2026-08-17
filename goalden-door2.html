@@ -2285,6 +2285,22 @@ function advisorReadCurrentChart() {
 }
 function advisorReadCurrentResult() { return advisorGetResults(); }
 
+// Part B — cross-field sanity flags (advisory, not blocking). Check 1 is the
+// clear one here: required SIP vs the user's stated monthly capacity. Checks
+// 2 & 3 are skipped — Door 2 has no single household monthly-expense field
+// (spending lives per-goal on retirement goals), so there is no one number to
+// sanity-check against without inventing one.
+function crossFieldSanity(state, country) {
+  const flags = [];
+  if (state.country && state.monthlyCapacity != null && state.goals && state.goals.length) {
+    const plan = buildPlan();
+    if (plan.totalSIP > 0 && state.monthlyCapacity > 0 && plan.totalSIP > 1.5 * state.monthlyCapacity) {
+      flags.push('The plan needs about ' + cfg().fmt(Math.round(plan.totalSIP)) + '/month, but you stated ' + cfg().fmt(Math.round(state.monthlyCapacity)) + '/month — required savings are over 1.5x your stated capacity.');
+    }
+  }
+  return flags;
+}
+
 function advisorGetResults() {
   if (!G.country) return { ok:false, error:'Need a country/currency first — ask the user whether they are in India or the United States.' };
   if (G.capA.every(x => x != null) && G.tolA.every(x => x != null)) {
@@ -2300,7 +2316,7 @@ function advisorGetResults() {
     totalMonthlySIP: plan.totalSIP,
     shortfallOrSurplus: plan.diff,
     status: plan.status,
-  } };
+  }, flags: crossFieldSanity(G, G.country) };
 }
 
 const ADVISOR_HIGHLIGHT_TARGETS = {
@@ -2372,10 +2388,13 @@ const BRIEFING_SECTIONS = {
     const plan = buildPlan();
     const b = G.bucket ? BUCKETS[G.bucket] : null;
     const statusLabel = { ok:'Fits within your savings', warn:'Slightly over — small adjustments needed', gap:'Gap: plan needs adjustment' }[plan.status];
+    // figures keys mirror advisorGetResults()'s result fields so composeBriefing
+    // can re-verify these numbers from a fresh buildPlan() via get_results.
+    const figures = { totalMonthlySIP: plan.totalSIP, monthlyCapacity: plan.cap, shortfallOrSurplus: plan.diff };
     return { ok:true, html: '<div class="alloc-card"><div class="section-head">Your plan</div>' +
       '<div class="alloc-return-row"><div><div class="alloc-return-label">Total monthly SIP</div><div class="alloc-return-value">'+c.fmt(plan.totalSIP)+'</div></div>' +
       '<div><div class="alloc-return-label">Your capacity</div><div class="alloc-return-value">'+c.fmt(plan.cap)+'</div></div></div>' +
-      '<div class="gr-note" style="margin-top:10px">'+statusLabel+' ('+(plan.diff>=0?'+':'−')+c.fmt(Math.abs(plan.diff))+'/mo)'+(b?' · '+b.name+' profile':'')+'.</div></div>' };
+      '<div class="gr-note" style="margin-top:10px">'+statusLabel+' ('+(plan.diff>=0?'+':'−')+c.fmt(Math.abs(plan.diff))+'/mo)'+(b?' · '+b.name+' profile':'')+'.</div></div>', figures: figures };
   } },
   goals: { title: 'Each goal', build: function () {
     const c = cfg();

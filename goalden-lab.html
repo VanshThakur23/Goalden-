@@ -5803,13 +5803,47 @@ function advisorReadCurrentResult() {
   return advisorGetResults();
 }
 
+// Part B — cross-field sanity flags (advisory, not blocking). Gated on the
+// current tab so a check only fires when its inputs are actually on screen.
+// All three checks apply somewhere in the Lab: capacity (Plan Health),
+// retirement corpus-vs-expense, and expense magnitude (Retirement Lab).
+function crossFieldSanity(state, country) {
+  const flags = [];
+  const c = cfg();
+  // 3. Expense magnitude for the country (Retirement Lab's monthly expense).
+  if (state.tab === 'retirement' && state.ret && state.ret.monthlyExpense != null) {
+    const lo = country === 'US' ? 500 : 10000;
+    const hi = country === 'US' ? 100000 : 2000000;
+    if (state.ret.monthlyExpense < lo) flags.push('Monthly expense looks unusually low for ' + (country === 'US' ? 'the US' : 'India') + ' — check it is the full monthly amount.');
+    else if (state.ret.monthlyExpense > hi) flags.push('Monthly expense looks unusually high — check whether that figure is monthly or annual.');
+  }
+  // 2. Corpus vs retirement-year expense, roughly 15x-40x.
+  if (state.tab === 'retirement' && state.ret && state.ret.age != null && state.ret.retireAge != null && state.ret.monthlyExpense) {
+    const res = calcRetLab();
+    const annual = state.ret.monthlyExpense * 12;
+    if (annual > 0 && res.corpus > 0) {
+      const ratio = res.corpus / annual;
+      if (ratio < 15) flags.push('This corpus is only about ' + Math.round(ratio) + 'x one year of spending — below the usual safe range.');
+      else if (ratio > 40) flags.push('This corpus is about ' + Math.round(ratio) + 'x one year of spending — well above the usual range; double-check the expense figure.');
+    }
+  }
+  // 1. Required SIP vs stated capacity (Plan Health).
+  if (state.tab === 'health' && state.health && state.health.capacity != null && state.health.totalSIP != null) {
+    if (state.health.capacity > 0 && state.health.totalSIP > 1.5 * state.health.capacity) {
+      flags.push('Your total SIP of ' + c.fmt(Math.round(state.health.totalSIP)) + '/month is over 1.5x your stated capacity of ' + c.fmt(Math.round(state.health.capacity)) + '/month.');
+    }
+  }
+  return flags;
+}
+
 function advisorGetResults() {
   if (!L.country) return { ok:false, error:'Need a country/currency first — ask the user whether they are in India or the United States.' };
   const c = cfg();
   const tab = L.tab;
+  const flags = crossFieldSanity(L, L.country);
   if (tab === 'retirement') {
     const res = calcRetLab();
-    return { ok:true, result:{ tool:'Retirement Lab', age:L.ret.age, retireAge:L.ret.retireAge, corpus:Math.round(res.corpus), monthlySIP:Math.round(res.sip), corpusTodayMoney:Math.round(res.realCorpus), supportsMonthlySpend:Math.round(res.expAtRet/12), years:res.yrs, drawYrs:res.drawYrs } };
+    return { ok:true, result:{ tool:'Retirement Lab', age:L.ret.age, retireAge:L.ret.retireAge, corpus:Math.round(res.corpus), monthlySIP:Math.round(res.sip), corpusTodayMoney:Math.round(res.realCorpus), supportsMonthlySpend:Math.round(res.expAtRet/12), years:res.yrs, drawYrs:res.drawYrs }, flags:flags };
   }
   if (tab === 'stepup') {
     const s = L.step;
@@ -5864,7 +5898,7 @@ function advisorGetResults() {
   }
   if (tab === 'health') {
     const sc = calcHealthScore();
-    return { ok:true, result:{ tool:'Plan Health', score:sc.total, capacity:L.health.capacity, totalSIP:L.health.totalSIP, breakdown:{ funding:sc.funding, emergency:sc.emergency, stress:sc.stress, discipline:sc.discipline } } };
+    return { ok:true, result:{ tool:'Plan Health', score:sc.total, capacity:L.health.capacity, totalSIP:L.health.totalSIP, breakdown:{ funding:sc.funding, emergency:sc.emergency, stress:sc.stress, discipline:sc.discipline } }, flags:flags };
   }
   return { ok:true, result:{ tool: tab === 'home' ? 'Home' : tab, note:'Pick a tool to explore.' } };
 }
@@ -6062,7 +6096,11 @@ function briefingHeadline() {
   const rows = Object.keys(res).filter(function (k) { return !skip[k] && !(res[k] && typeof res[k] === 'object'); }).map(function (k) {
     return '<div class="stat"><div class="stat-label">' + k + '</div><div class="stat-value">' + fmt(res[k]) + '</div></div>';
   }).join('');
-  return { ok:true, html: '<div class="card"><h4>' + (res.tool || 'Result') + '</h4><div class="stat-row">' + (rows || '<div class="gr-note">Nothing to summarise yet.</div>') + '</div></div>' };
+  // Every numeric scalar in the result becomes an auditable figure — composeBriefing
+  // re-reads them via get_results and blocks on any drift.
+  const figures = {};
+  Object.keys(res).forEach(function (k) { if (typeof res[k] === 'number') figures[k] = res[k]; });
+  return { ok:true, html: '<div class="card"><h4>' + (res.tool || 'Result') + '</h4><div class="stat-row">' + (rows || '<div class="gr-note">Nothing to summarise yet.</div>') + '</div></div>', figures: figures };
 }
 function briefingStress() {
   const c = cfg();

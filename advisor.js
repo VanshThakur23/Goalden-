@@ -106,6 +106,7 @@ body.advisor-docked{transition:padding-right .25s ease}
 .briefing-section{margin-bottom:26px}
 .briefing-section h2{font-family:'Newsreader',serif;font-weight:600;font-size:19px;color:var(--ink);margin-bottom:10px}
 .briefing-err{padding:12px 16px;background:rgba(20,40,63,.05);border:1px dashed rgba(20,40,63,.2);border-radius:10px;font-size:14px;color:rgba(20,40,63,.7);font-family:'Figtree',sans-serif}
+.briefing-verified{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:rgba(20,40,63,.5);padding:6px 10px;border:1px solid rgba(95,168,117,.35);border-radius:6px;background:rgba(95,168,117,.08);display:inline-block;margin-bottom:16px}
 .briefing-footer{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:16px;border-top:1px solid rgba(20,40,63,.1)}
 .briefing-footer button{background:var(--gold);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-family:'Figtree',sans-serif;font-weight:600;font-size:13.5px;cursor:pointer}
 @media print{#advisorFab,#advisorPanel,#resultCanvas{display:none!important}#briefing{position:static;display:block!important;background:#fff}#briefingHead .rc-btns{display:none!important}}
@@ -235,6 +236,34 @@ function advisorTrim() {
   advisor.messages = tail;
 }
 
+// Part C — advice guardrail, enforced in code. Best-effort heuristic layered
+// on top of the system-prompt instruction, NOT a guarantee: it rewrites only
+// a sentence that BOTH carries a recommendation verb (or price-target phrase)
+// AND points at something ticker-shaped or price-shaped. Descriptive mentions
+// ("TCS returned 8% last year") carry no verb and are left untouched. On a
+// match only the flagged sentence is replaced with a neutral one (never the
+// whole message), and console.warn surfaces it during development.
+const ADVISOR_TICKER_DENY = ['SIP','FD','ETF','NAV','CAGR','NPS','ELSS','PPF','NSE','BSE','REIT','AMC','SEBI','AUM','SWP','USD','INR','GBP','EUR','XIRR','EMI','FV','PV','IIP','GDP','IPO'];
+function advisorGuardrail(text) {
+  if (typeof text !== 'string' || !text) return text;
+  const parts = text.split(/(?<=[.!?\n])/);
+  let changed = false;
+  const out = parts.map(function (sentence) {
+    const lower = sentence.toLowerCase();
+    const hasVerb = /\bbuy\b|\binvest in\b|\binvested in\b|\bpurchase\b|\bget\s+[a-z]{2,10}\b/.test(lower);
+    const caps = sentence.match(/[A-Z]{2,10}/g) || [];
+    const hasTicker = caps.some(function (t) { return ADVISOR_TICKER_DENY.indexOf(t) === -1; });
+    const hasPrice = /price target|target price|will reach|expected to hit|will hit|going to hit|should hit/i.test(lower);
+    if ((hasVerb || hasPrice) && (hasTicker || hasPrice)) {
+      changed = true;
+      console.warn('[advisor] guardrail rewrote a recommendation-shaped sentence:', sentence.trim());
+      return "I can't recommend specific investments — but I can model any instrument you name.";
+    }
+    return sentence;
+  });
+  return changed ? out.join('') : text;
+}
+
 // Markdown-lite renderer for assistant (bot) bubbles. Security ordering is
 // load-bearing: escape FIRST (advisorEscapeHtml turns the model's text into
 // inert plain text), THEN strip the MODE line, THEN re-add only the fixed set
@@ -288,7 +317,7 @@ function advisorAddMsg(role, text) {
   // (bold, lists, tables) via innerHTML. User input and client system notices
   // stay on textContent so nothing a person types is ever interpreted.
   if (role === 'bot' || role === 'tool') {
-    div.innerHTML = advisorMarkdown(text);
+    div.innerHTML = advisorMarkdown(advisorGuardrail(text));
   } else {
     div.textContent = text;
   }
@@ -793,6 +822,24 @@ function briefingClose() {
   document.getElementById('briefingBody').innerHTML = '';
 }
 
+// Part A — recompute-and-compare. A briefing section may bake a number into
+// its HTML from whatever calc path its builder happened to call; this
+// re-reads the SAME keys through the page's canonical live entry point
+// (executeTool('get_results')) so the audit is genuinely independent of the
+// value the builder captured. Returns { ok:true, values:{key:value} } with
+// only the keys that exist in the fresh result, or { ok:false } if there is
+// no result to recompute against.
+function advisorRecomputeFigures(keys) {
+  let raw;
+  try { raw = advExecuteTool('get_results', {}); } catch (e) { return { ok: false, error: 'Could not re-read results: ' + e.message }; }
+  let res;
+  try { res = (typeof raw === 'string') ? JSON.parse(raw) : raw; } catch (e) { return { ok: false, error: 'Could not parse recomputed results.' }; }
+  if (!res || res.ok !== true || !res.result) return { ok: false, error: (res && res.error) || 'No result available to recompute.' };
+  const values = {};
+  keys.forEach(function (k) { if (res.result[k] != null) values[k] = res.result[k]; });
+  return { ok: true, values: values };
+}
+
 function composeBriefing(args) {
   args = args || {};
   const sections = Array.isArray(args.sections) ? args.sections : [];
@@ -802,14 +849,45 @@ function composeBriefing(args) {
   if (typeof builders === 'function') builders = builders();
   builders = builders || {};
   let html = '';
-  if (intro) html += '<div id="briefingIntro">' + advisorEscapeHtml(intro) + '</div>';
   let shown = 0;
   const missing = [];
-  sections.forEach(function (type) {
+  // Run every section builder first and audit its figures BEFORE rendering
+  // any of them — a single mismatch blocks the whole briefing, never a
+  // partially-baked one.
+  const built = sections.map(function (type) {
     const spec = builders[type];
-    if (!spec) { missing.push(type); return; }
+    if (!spec) { missing.push(type); return { type, spec, r: null }; }
     let r;
     try { r = (typeof spec.build === 'function') ? spec.build() : spec; } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    return { type, spec, r };
+  });
+  for (const item of built) {
+    const { type, spec, r } = item;
+    if (!spec) continue;
+    if (r && r.ok && r.figures && Object.keys(r.figures).length) {
+      const audit = advisorRecomputeFigures(Object.keys(r.figures));
+      if (audit.ok) {
+        for (const k in r.figures) {
+          const reported = r.figures[k];
+          const recomputed = audit.values[k];
+          if (reported == null || recomputed == null) continue;
+          // Relative tolerance 0.1%: catches real drift, tolerates float noise.
+          const rel = Math.abs(reported - recomputed) / Math.max(1e-9, Math.abs(recomputed));
+          if (rel >= 0.001) {
+            return { ok: false, error: 'figure_mismatch', section: type, key: k, reported: reported, recomputed: recomputed };
+          }
+        }
+      }
+    }
+  }
+  // Prepend the verification stamp once every audited figure passed.
+  let anyFigures = false;
+  built.forEach(function (item) { if (item.r && item.r.ok && item.r.figures && Object.keys(item.r.figures).length) anyFigures = true; });
+  if (anyFigures) html += '<div class="briefing-verified">✓ Every figure recomputed from your inputs</div>';
+  if (intro) html += '<div id="briefingIntro">' + advisorEscapeHtml(intro) + '</div>';
+  built.forEach(function (item) {
+    const { type, spec, r } = item;
+    if (!spec) return;
     html += '<div class="briefing-section"><h2>' + advisorEscapeHtml(spec.title || type) + '</h2>';
     if (r && r.ok) { html += r.html; shown++; }
     else { html += '<div class="briefing-err">' + advisorEscapeHtml((r && r.error) || 'This section needs more input before it can be shown.') + '</div>'; }

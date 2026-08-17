@@ -1983,23 +1983,50 @@ function advisorReadCurrentChart() {
 }
 function advisorReadCurrentResult() { return advisorGetResults(); }
 
+// Part B — cross-field sanity flags (advisory, not blocking). A flagged value
+// may be exactly what the user intends, so these are heads-ups, never errors.
+// Check 1 (SIP vs stated capacity) is skipped: Level 1 has no field where the
+// user states how much they can save each month.
+function crossFieldSanity(state, country) {
+  const flags = [];
+  // 3. Expense magnitude plausible for the selected country (wide net).
+  if (state.monthlyExpense != null) {
+    const lo = country === 'US' ? 500 : 10000;
+    const hi = country === 'US' ? 100000 : 2000000;
+    if (state.monthlyExpense < lo) flags.push('Monthly expense looks unusually low for ' + (country === 'US' ? 'the US' : 'India') + ' — check it is the full monthly amount, not just one category.');
+    else if (state.monthlyExpense > hi) flags.push('Monthly expense looks unusually high — check whether that figure is monthly or annual.');
+  }
+  // 2. Corpus vs retirement-year expense, roughly 15x-40x (safe-withdrawal range).
+  if (state.goalType === 'retirement' && state.age != null && state.retireAge != null && state.monthlyExpense != null && state.country) {
+    const r = calcRetirement();
+    const annual = state.monthlyExpense * 12;
+    if (annual > 0 && r.corpus > 0) {
+      const ratio = r.corpus / annual;
+      if (ratio < 15) flags.push('This retirement corpus is only about ' + Math.round(ratio) + 'x one year of spending — below the usual safe range, so the plan may be fragile.');
+      else if (ratio > 40) flags.push('This retirement corpus is about ' + Math.round(ratio) + 'x one year of spending — well above the usual range; double-check the expense figure.');
+    }
+  }
+  return flags;
+}
+
 function advisorGetResults() {
   if (!S.country) return { ok:false, error:'Need a country/currency first — ask the user whether they are in India or the United States.' };
   if (!S.goalType) return { ok:false, error:'No goal chosen yet — ask the user what they want to plan for.' };
+  const flags = crossFieldSanity(S, S.country);
   if (S.goalType === 'retirement') {
     if (S.age == null || S.retireAge == null || S.monthlyExpense == null) return { ok:false, error:'Need age, retirement age and monthly expense first.' };
     const r = calcRetirement();
-    return { ok:true, result:{ goalType:'retirement', age:S.age, retireAge:S.retireAge, monthlyExpense:S.monthlyExpense, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), yearsToRetire:r.yrs, expectedReturnPct:(r.preRate*100).toFixed(1) } };
+    return { ok:true, result:{ goalType:'retirement', age:S.age, retireAge:S.retireAge, monthlyExpense:S.monthlyExpense, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), yearsToRetire:r.yrs, expectedReturnPct:(r.preRate*100).toFixed(1) }, flags:flags };
   }
   if (S.goalType === 'education') {
     if (S.annualFee == null || S.yearsToCollege == null || S.courseDuration == null) return { ok:false, error:'Need annual fee, years until college and course duration first.' };
     const r = calcEducation();
-    return { ok:true, result:{ goalType:'education', annualFee:S.annualFee, yearsToCollege:S.yearsToCollege, courseDuration:S.courseDuration, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), expectedReturnPct:(r.preRate*100).toFixed(1) } };
+    return { ok:true, result:{ goalType:'education', annualFee:S.annualFee, yearsToCollege:S.yearsToCollege, courseDuration:S.courseDuration, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), expectedReturnPct:(r.preRate*100).toFixed(1) }, flags:flags };
   }
   if (S.goalType === 'generic') {
     if (S.genAmount == null || S.genYears == null) return { ok:false, error:'Need goal amount and years until needed first.' };
     const r = calcGeneric();
-    return { ok:true, result:{ goalType:'generic', genType:S.genType, amountToday:S.genAmount, years:S.genYears, inflatedGoal:Math.round(r.inflatedGoal), monthlySIP:Math.round(r.sip), expectedReturnPct:(r.preRate*100).toFixed(1) } };
+    return { ok:true, result:{ goalType:'generic', genType:S.genType, amountToday:S.genAmount, years:S.genYears, inflatedGoal:Math.round(r.inflatedGoal), monthlySIP:Math.round(r.sip), expectedReturnPct:(r.preRate*100).toFixed(1) }, flags:flags };
   }
   if (S.goalType === 'delay') return { ok:false, error:'The cost-of-delay comparison shows inside a real goal result. Pick retirement, education or a purchase first.' };
   return { ok:false, error:'Unknown goal type.' };
@@ -2104,7 +2131,13 @@ const BRIEFING_SECTIONS = {
     const res = r.result;
     const big = res.corpus != null ? res.corpus : res.inflatedGoal;
     const monthly = res.monthlySIP != null ? res.monthlySIP : res.sip;
-    return { ok:true, html: '<div class="hero-number"><div class="hero-label">Your number</div><div class="hero-figure">' + c.compact(big) + '</div><div class="hero-sub">Save ' + c.fmt(Math.round(monthly)) + '/month to get there.</div></div>' };
+    // figures lets composeBriefing re-verify every number this section bakes,
+    // from a fresh advisorGetResults() — keys match the result field names.
+    const figures = {};
+    if (res.corpus != null) figures.corpus = res.corpus;
+    if (res.inflatedGoal != null) figures.inflatedGoal = res.inflatedGoal;
+    if (res.monthlySIP != null) figures.monthlySIP = res.monthlySIP;
+    return { ok:true, html: '<div class="hero-number"><div class="hero-label">Your number</div><div class="hero-figure">' + c.compact(big) + '</div><div class="hero-sub">Save ' + c.fmt(Math.round(monthly)) + '/month to get there.</div></div>', figures: figures };
   } },
   assumptions: { title: 'Assumptions used', build: function () {
     const d = cfg().d;

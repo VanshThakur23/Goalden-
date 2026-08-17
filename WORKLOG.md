@@ -605,6 +605,56 @@ Format:
 
 ---
 
+## 2026-08-17 — opencode — Phase 2: verification layer
+
+### Done
+- Recompute-and-compare audit (Part A): BRIEFING_SECTIONS builders that bake
+  state-derived numbers now also return a `figures` map {key:value} (goalden
+  headline, door2 headline, Lab headline = all numeric scalar result fields).
+  composeBriefing (advisor.js) re-reads those keys through a FRESH
+  executeTool('get_results') (advisorRecomputeFigures) and blocks the whole
+  briefing on any drift ≥0.1% — returns {ok:false, error:'figure_mismatch',
+  section, key, reported, recomputed}. Clean briefings get a visible
+  ".briefing-verified" stamp ("✓ Every figure recomputed from your inputs").
+- Cross-field sanity flags (Part B): crossFieldSanity(state,country) added to
+  all 3 pages, wired into get_results as a `flags` array. goalden.html: check
+  2 (retirement corpus 15x-40x of annual expense) + check 3 (expense magnitude
+  per country); skips check 1 (no capacity field). door2: check 1 (required
+  SIP >1.5x stated monthlyCapacity); skips 2/3 (no single expense field).
+  Lab: all three, gated on tab (retirement corpus/expense/magnitude, health
+  SIP-vs-capacity).
+- Advice guardrail in code (Part C): advisorGuardrail() in advisor.js, run on
+  every bot message before the markdown transform. Rewrites only the flagged
+  sentence (recommendation verb + ticker/price-phrase) with a neutral line and
+  console.warn; descriptive mentions ("TCS returned 8%") pass through.
+  Documented as best-effort heuristic, not a guarantee.
+- Mirrored figure_mismatch + flags instructions into worker.js and
+  local_server.py system prompts.
+- Added smoke-02.js (repo root): 16 assertions covering figures/figure_mismatch/
+  crossFieldSanity presence + the 3 guardrail test strings.
+
+### Verified
+- node --test engine.test.js: 8/8 PASS (goalden-engine.js untouched).
+- smoke-02.js: ALL PASS (16).
+- Forced-mismatch audit test (extracted real advisorRecomputeFigures): wrong
+  corpus (150000 vs 1500000) → figure_mismatch; clean figures → ok:true; +1
+  drift on a small figure (years 31 vs 30) → figure_mismatch.
+- Guardrail strings: "TCS returned 8%..." → unchanged; "buy RELIANCE ... will
+  reach 3000" → neutral rewrite; "60% equity, 40% debt" → unchanged.
+- node --check clean on advisor.js/worker.js + all inline scripts; py_compile OK.
+
+### Constraints respected
+- No build step ✓ | worker/local_server mirrored ✓ | No new math formulas
+  (recompute reuses get_results/calc paths) ✓
+
+### Known / not done
+- No commit made (per the git rule).
+- Not browser-tested: the stamp, the block-on-mismatch, and the guardrail
+  rewrite need a real-browser pass (cache-bust URLs). No live DeepSeek key, so
+  the figure_mismatch retry loop is only exercised via the local mock.
+
+---
+
 ## 2026-08-17 — Claude Code — Phase 0 verification + fix, ROADMAP.md added
 
 - Live-verified opencode's Phase 0 in the Browser pane against local_server.py
