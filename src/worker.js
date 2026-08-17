@@ -332,6 +332,7 @@ When a user asks "what should I buy?", explain the categories, show the trade-of
 }
 
 async function callDeepSeek(messages, tools, apiKey) {
+  const t0 = Date.now();
   const res = await fetch(DEEPSEEK_URL, {
     method: 'POST',
     headers: {
@@ -356,7 +357,14 @@ async function callDeepSeek(messages, tools, apiKey) {
   }
   const data = await res.json();
   const choice = (data.choices && data.choices[0]) || {};
-  return choice.message || { role: 'assistant', content: '' };
+  return {
+    message: choice.message || { role: 'assistant', content: '' },
+    // DeepSeek's usage block (prompt/completion/total_tokens, cache hit/miss)
+    // — passed straight through so the client can show real cost/latency
+    // instead of an estimate. Absent on some error paths, hence the fallback.
+    usage: data.usage || null,
+    latencyMs: Date.now() - t0,
+  };
 }
 
 // Users never need to see upstream status codes, secret names or response
@@ -457,11 +465,11 @@ export default {
         // say that in plain language instead of surfacing a raw 502 bubble.
         if (!apiKey) {
           console.log('chat: DEEPSEEK_API_KEY secret is not set — replying with not-configured message');
-          return chatJson({ message: { role: 'assistant', content: "I'm not switched on for conversations on this deployment — the site owner needs to add an AI API key first. Everything else in Goalden works normally, so feel free to explore, or come back once the advisor is live." } }, 200, origin);
+          return chatJson({ message: { role: 'assistant', content: "I'm not switched on for conversations on this deployment — the site owner needs to add an AI API key first. Everything else in Goalden works normally, so feel free to explore, or come back once the advisor is live." }, usage: null, latencyMs: 0 }, 200, origin);
         }
         const messages = [{ role: 'system', content: buildSystemPrompt(body) }].concat(body.messages || []);
-        const message = await callDeepSeek(messages, body.tools || [], apiKey);
-        return chatJson({ message }, 200, origin);
+        const { message, usage, latencyMs } = await callDeepSeek(messages, body.tools || [], apiKey);
+        return chatJson({ message, usage, latencyMs }, 200, origin);
       } catch (e) {
         console.log('chat error:', (e && e.message) || e);
         return chatJson({ error: friendlyChatError(e) }, 502, origin);

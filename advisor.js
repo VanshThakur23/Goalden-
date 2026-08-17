@@ -89,6 +89,20 @@ body.advisor-docked{transition:padding-right .25s ease}
 #resultCanvasHead .rc-btns{display:flex;align-items:center;gap:2px;flex-shrink:0}
 #resultCanvasHead button{background:none;border:none;color:rgba(20,40,63,.55);cursor:pointer;font-size:15px;padding:2px 6px;line-height:1}
 #resultCanvasBody{flex:1;overflow-y:auto;padding:14px;-webkit-overflow-scrolling:touch}
+#advisorTrace{position:fixed;right:18px;top:18px;z-index:1002;width:340px;max-width:calc(100vw - 36px);max-height:70vh;background:var(--card);border:1px solid rgba(20,40,63,.14);border-radius:14px;box-shadow:0 12px 40px rgba(20,40,63,.28);display:none;flex-direction:column;overflow:hidden}
+#advisorTrace.open{display:flex}
+#advisorTraceHead{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid rgba(20,40,63,.1);background:var(--bg);flex-shrink:0}
+#advisorTraceHead .t{font-family:'Newsreader',serif;font-weight:700;font-size:14px;color:var(--ink)}
+#advisorTraceHead .rc-btns{display:flex;align-items:center;gap:2px}
+#advisorTraceHead button{background:none;border:none;color:rgba(20,40,63,.55);cursor:pointer;font-size:15px;padding:2px 6px;line-height:1}
+#advisorTraceSummary{padding:10px 12px;border-bottom:1px solid rgba(20,40,63,.1);font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.7);display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;flex-shrink:0}
+#advisorTraceSummary b{color:var(--ink);font-weight:700}
+#advisorTraceBody{flex:1;overflow-y:auto;padding:4px 12px 10px}
+.adv-trace-row{padding:7px 0;border-bottom:1px dashed rgba(20,40,63,.1);font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.65)}
+.adv-trace-row:last-child{border-bottom:none}
+.adv-trace-row .adv-trace-tools{color:var(--ink);font-weight:700;display:block;margin-bottom:1px}
+.adv-trace-empty{padding:20px 6px;text-align:center;color:rgba(20,40,63,.4);font-family:'Spline Sans Mono',monospace;font-size:11px}
+@media(max-width:480px){#advisorTrace{left:0;right:0;top:0;width:auto;max-width:none;max-height:60vh;border-radius:0;border:none}}
 @media(max-width:480px){
   #advisorPanel,#advisorPanel.mode-dock,#advisorPanel.mode-focus{left:0;right:0;bottom:0;top:auto;width:auto;max-width:none;height:90vh;max-height:90vh;border-radius:0;border:none;margin:0}
   #advisorFab{right:12px;bottom:12px}
@@ -144,6 +158,7 @@ body.advisor-docked{transition:padding-right .25s ease}
       '<div id="advisorHead">' +
         '<div><div class="t">Goalden advisor</div><div class="s">Ask me anything</div></div>' +
         '<div class="rc-btns">' +
+          '<button id="advisorTraceBtn" aria-label="Developer trace" title="Developer trace: tokens &amp; latency">🔍</button>' +
           '<button id="advisorMode" aria-label="Dock or focus" title="Dock to the side / focus">⤢</button>' +
           '<button id="advisorVoice" aria-label="Speak replies aloud" title="Speak replies aloud">🔊</button>' +
           '<button id="advisorClear" aria-label="Clear chat" title="Clear chat" style="font-size:13px">🗑</button>' +
@@ -177,6 +192,17 @@ body.advisor-docked{transition:padding-right .25s ease}
         '</div>' +
       '</div>' +
       '<div id="briefingBody"></div>' +
+    '</div>' +
+    '<div id="advisorTrace" aria-label="Developer trace">' +
+      '<div id="advisorTraceHead">' +
+        '<div class="t">Trace</div>' +
+        '<div class="rc-btns">' +
+          '<button id="advisorTraceClear" aria-label="Clear trace" title="Clear trace" style="font-size:13px">🗑</button>' +
+          '<button id="advisorTraceClose" aria-label="Close" title="Close">✕</button>' +
+        '</div>' +
+      '</div>' +
+      '<div id="advisorTraceSummary"></div>' +
+      '<div id="advisorTraceBody"></div>' +
     '</div>';
   document.body.insertAdjacentHTML('beforeend', html);
 })();
@@ -185,8 +211,15 @@ body.advisor-docked{transition:padding-right .25s ease}
    State — conversation + persistence (sessionStorage, shared key).
    ===================================================================== */
 const ADVISOR_STORE_KEY = 'goalden_advisor_v1';
-const advisor = { messages: [], busy: false, mode: 'fab', pendingPlan: null };
+const advisor = { messages: [], busy: false, mode: 'fab', pendingPlan: null, trace: [], traceOpen: false };
 let advisorThinkingEl = null;
+
+// Phase 7 — per-call cost estimate. DeepSeek's own usage block gives exact
+// token counts; this rate is the only unverifiable part (prices change), so
+// it lives in one place and the panel labels totals as "est." — check
+// https://api-docs.deepseek.com/quick_start/pricing before trusting it for
+// anything beyond a rough per-plan comparison.
+const ADVISOR_PRICE_PER_M = { prompt: 0.27, completion: 1.10 }; // USD / 1M tokens, deepseek-chat, cache-miss
 const advisorVoice = { on: true, listening: false, rec: null };
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -791,6 +824,59 @@ function advisorFlash(name, result) {
 }
 function advisorPause(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
+// Phase 7 — one entry per /api/chat round trip: what the model decided (tool
+// calls or a final reply), how long it took, and how many tokens it cost.
+// Kept on advisor.trace (not advisor.messages) so it survives advisorTrim()
+// and clearing the chat, the same way pendingPlan does.
+const ADVISOR_TRACE_MAX = 200;
+function advisorRecordTrace(entry) {
+  advisor.trace.push(entry);
+  if (advisor.trace.length > ADVISOR_TRACE_MAX) advisor.trace.shift();
+  if (advisor.traceOpen) advisorRenderTrace();
+}
+function advisorTraceStats() {
+  let calls = 0, promptTokens = 0, completionTokens = 0, totalTokens = 0, roundTripMs = 0, upstreamMs = 0;
+  advisor.trace.forEach(function (e) {
+    calls++;
+    roundTripMs += e.roundTripMs || 0;
+    if (typeof e.upstreamMs === 'number') upstreamMs += e.upstreamMs;
+    if (e.usage) {
+      promptTokens += e.usage.prompt_tokens || 0;
+      completionTokens += e.usage.completion_tokens || 0;
+      totalTokens += e.usage.total_tokens || 0;
+    }
+  });
+  const estCost = (promptTokens / 1e6) * ADVISOR_PRICE_PER_M.prompt + (completionTokens / 1e6) * ADVISOR_PRICE_PER_M.completion;
+  return { calls, promptTokens, completionTokens, totalTokens, roundTripMs, upstreamMs, estCost };
+}
+function advisorRenderTrace() {
+  const summaryEl = document.getElementById('advisorTraceSummary');
+  const bodyEl = document.getElementById('advisorTraceBody');
+  if (!summaryEl || !bodyEl) return;
+  const s = advisorTraceStats();
+  summaryEl.innerHTML =
+    '<div>Calls</div><div><b>' + s.calls + '</b></div>' +
+    '<div>Tokens</div><div><b>' + s.totalTokens.toLocaleString() + '</b></div>' +
+    '<div>Round trip</div><div><b>' + s.roundTripMs.toLocaleString() + 'ms</b></div>' +
+    '<div>Upstream</div><div><b>' + (s.upstreamMs ? s.upstreamMs.toLocaleString() + 'ms' : '—') + '</b></div>' +
+    '<div>Est. cost</div><div><b>' + (s.totalTokens ? '$' + s.estCost.toFixed(4) : '—') + '</b></div>';
+  if (!advisor.trace.length) {
+    bodyEl.innerHTML = '<div class="adv-trace-empty">No /api/chat calls yet this session.</div>';
+    return;
+  }
+  bodyEl.innerHTML = advisor.trace.slice().reverse().map(function (e) {
+    const label = e.toolCalls.length ? e.toolCalls.join(', ') : (e.hasReply ? 'final reply' : '(empty)');
+    const tok = e.usage ? (e.usage.total_tokens + ' tok') : 'mock — no usage';
+    return '<div class="adv-trace-row"><span class="adv-trace-tools">' + advisorEscapeHtml(label) + '</span>' +
+      e.roundTripMs + 'ms · ' + tok + '</div>';
+  }).join('');
+}
+function advisorToggleTrace() {
+  advisor.traceOpen = !advisor.traceOpen;
+  document.getElementById('advisorTrace').classList.toggle('open', advisor.traceOpen);
+  if (advisor.traceOpen) advisorRenderTrace();
+}
+
 async function advisorLoop(silent) {
   // F7d — track whether read_current_chart was called this turn so we can
   // append layered follow-up chips below the final bot reply.
@@ -801,6 +887,7 @@ async function advisorLoop(silent) {
   // exchange and was cutting off real multi-step automation mid-flow with
   // "taking too many steps" before it ever finished the job.
   for (let step = 0; step < 18; step++) {
+    const reqStart = Date.now();
     const resp = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -814,7 +901,19 @@ async function advisorLoop(silent) {
       throw new Error(err.error || ('Server responded ' + resp.status));
     }
     const data = await resp.json();
+    const roundTripMs = Date.now() - reqStart;
     const msg = data.message || {};
+    advisorRecordTrace({
+      step: step,
+      ts: reqStart,
+      toolCalls: (msg.tool_calls || []).map(function (tc) { return tc.function && tc.function.name; }),
+      hasReply: !!msg.content && !(msg.tool_calls && msg.tool_calls.length),
+      roundTripMs: roundTripMs,
+      // latencyMs is the upstream DeepSeek call only (server-measured); the
+      // gap to roundTripMs is Worker/network overhead. Both null in mock mode.
+      upstreamMs: typeof data.latencyMs === 'number' ? data.latencyMs : null,
+      usage: data.usage || null,
+    });
     if (msg.tool_calls && msg.tool_calls.length) {
       advisorEnterDock();
       advisor.messages.push({ role: 'assistant', content: msg.content || null, tool_calls: msg.tool_calls });
@@ -1074,6 +1173,12 @@ document.getElementById('advisorClose').addEventListener('click', () => {
   advisorStopSpeech();
   advisorSetMode('fab');
   try { document.getElementById('advisorFab').focus(); } catch (e) {}
+});
+document.getElementById('advisorTraceBtn').addEventListener('click', advisorToggleTrace);
+document.getElementById('advisorTraceClose').addEventListener('click', advisorToggleTrace);
+document.getElementById('advisorTraceClear').addEventListener('click', () => {
+  advisor.trace = [];
+  advisorRenderTrace();
 });
 document.getElementById('advisorSend').addEventListener('click', advisorSend);
 document.getElementById('advisorText').addEventListener('keydown', (e) => {

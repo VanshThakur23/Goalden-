@@ -25,7 +25,7 @@ check(/name === 'execute_plan'/.test(advisor), 'advisor.js: execute_plan dispatc
 check(/advTools\(\)\.concat\(ADVISOR_INTERNAL_TOOLS\)/.test(advisor), 'advisor.js: internal tools appended to page tools');
 
 // 2. pendingPlan is a field on the advisor object, not inside messages.
-check(/const advisor = \{ messages: \[\], busy: false, mode: 'fab', pendingPlan: null \}/.test(advisor),
+check(/const advisor = \{[^}]*\bpendingPlan:\s*null\b[^}]*\}/.test(advisor),
   'advisor.js: pendingPlan is a top-level advisor field');
 check(/advisor\.pendingPlan\s*=\s*plan\b/.test(advisor), 'advisor.js: proposePlan stores pendingPlan');
 check(/advisor\.pendingPlan\s*=\s*null/.test(advisor), 'advisor.js: pendingPlan cleared (execute + new message)');

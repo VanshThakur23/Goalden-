@@ -884,3 +884,65 @@ Format:
   ROADMAP.md.
 - Next: hand opencode the Phase 0.5 (response format) prompt.
 - Last commit pushed: see git log.
+
+## 2026-08-17 — Claude Code — Phase 7: packaging (README, instrumentation, trace panel)
+
+Implemented directly (not via opencode) per explicit instruction to do this
+phase myself.
+
+### Done
+- **Server-side usage/latency plumbing** (`src/worker.js`, `local_server.py`,
+  mirrored): `callDeepSeek`/`_deepseek_chat` now time the upstream call and
+  return DeepSeek's `usage` block (prompt/completion/total tokens) alongside
+  the message; `/api/chat` responses carry `{message, usage, latencyMs}`.
+  No-key/mock branches return `usage: null, latencyMs: 0` for a consistent
+  response shape.
+- **Client-side trace log** (`advisor.js`): `advisor.trace[]` records one
+  entry per `/api/chat` round trip — tool calls or final reply, client
+  round-trip ms, server-reported upstream ms, and the usage block. Lives as
+  a field on `advisor` (like `pendingPlan`), so it survives `advisorTrim()`
+  and isn't part of the message history sent back to the model.
+- **Developer trace panel** (🔍 button in the advisor header): a fixed
+  top-right panel (pattern matches `#resultCanvas`/`#briefing`) showing a
+  live summary (calls, total tokens, round-trip/upstream ms, an estimated
+  cost) and a reverse-chronological per-call log. Cost estimate uses a
+  single labeled, comment-documented rate constant
+  (`ADVISOR_PRICE_PER_M`) rather than claiming precision — real token counts
+  are exact (from the API), the dollar figure is explicitly an estimate.
+- **README.md** rewritten: added an agent-architecture section with a
+  Mermaid sequence diagram of the `/api/chat` loop, a table of the three
+  doors, and short sections on the verification layer, plan objects, the
+  shared engine, and the eval harness — written for both a GitHub reader
+  and an interviewer. Removed a stale claim ("this environment has no
+  Node.js") left over from an earlier session.
+- Fixed a brittle regression test while touching this code: `smoke-07.js`
+  asserted the exact literal `const advisor = { messages: [], busy: false,
+  mode: 'fab', pendingPlan: null }` — adding `trace`/`traceOpen` fields
+  broke it on a change that had nothing to do with what the test was
+  actually checking (that `pendingPlan` is a top-level field). Loosened to
+  a field-presence regex.
+
+### Verified
+- Live in the browser (`goalden.html`, live DeepSeek mode): asked a real
+  question, opened the trace panel, confirmed real numbers — 5,022 tokens,
+  2,276ms round trip / 1,936ms upstream, $0.0014 estimated cost. Clear and
+  Close buttons both work; empty state renders correctly after clearing.
+  Zero console errors.
+- `node --test engine.test.js`: 8/8 pass.
+- `node smoke-02.js` through `smoke-07.js`: all ALL PASS (after the
+  smoke-07 regex fix above).
+- `node agent-evals/runner.js` against a second local_server.py instance
+  (scratch port, killed after the run): 14 run / 13 passed / 1 failed / 1
+  skipped — 93%, matching the Phase 6 baseline exactly. The one failure
+  ("door2 do-it-all full plan" this run) is the same documented live-model
+  non-determinism from Phase 6, not a regression — which scenario fails
+  varies run to run, but the rate doesn't move.
+- `node --check` clean on `advisor.js` and `src/worker.js`;
+  `python -c "import ast; ast.parse(...)"` clean on `local_server.py`.
+
+### Known / not done
+- Cost-per-token rate in `ADVISOR_PRICE_PER_M` is a manually-set constant,
+  not fetched from anywhere — update it if DeepSeek's pricing changes.
+- Trace panel is session-only (not persisted to `sessionStorage` like
+  `advisor.messages` is) — a page reload loses the log. Deliberate: it's a
+  dev/demo tool, not a feature users depend on across reloads.

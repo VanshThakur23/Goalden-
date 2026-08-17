@@ -16,6 +16,7 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -311,12 +312,18 @@ def _deepseek_chat(messages, tools, api_key):
             'Authorization': f'Bearer {api_key}',
         },
     )
+    t0 = time.monotonic()
     # 25s cap mirrors the Worker's AbortSignal.timeout(25000) — a hung
     # upstream must raise here, not leave the browser spinner forever.
     with urllib.request.urlopen(req, timeout=25) as resp:
         data = json.loads(resp.read().decode('utf-8'))
+    latency_ms = int((time.monotonic() - t0) * 1000)
     choice = (data.get('choices') or [{}])[0]
-    return choice.get('message') or {'role': 'assistant', 'content': ''}
+    message = choice.get('message') or {'role': 'assistant', 'content': ''}
+    # Mirrors the Worker's callDeepSeek() return shape: message plus the
+    # upstream usage block (prompt/completion/total_tokens) and latency, so
+    # the client's trace panel shows real cost/latency, not an estimate.
+    return message, data.get('usage'), latency_ms
 
 
 def _friendly_chat_error(e):
@@ -586,7 +593,8 @@ def chat(body):
     api_key = os.environ.get('DEEPSEEK_API_KEY')
     if api_key:
         return _deepseek_chat(messages, body.get('tools') or [], api_key)
-    return _mock_chat(body)
+    # Mock mode has no real upstream call, so no usage/latency to report.
+    return _mock_chat(body), None, 0
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -646,7 +654,8 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 length = int(self.headers.get('Content-Length') or 0)
                 body = json.loads(self.rfile.read(length).decode('utf-8') or '{}')
-                return self._send_json({'message': chat(body)})
+                message, usage, latency_ms = chat(body)
+                return self._send_json({'message': message, 'usage': usage, 'latencyMs': latency_ms})
             except Exception as e:
                 # Never leak urllib/DeepSeek internals to the page — the same
                 # mapping the Worker applies (see _friendly_chat_error).
