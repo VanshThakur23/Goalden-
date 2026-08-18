@@ -1719,10 +1719,12 @@ function comparePortfolio(){
   const tan = mix(wTan), mv = mix(wMinVar);
   const cal = capitalAllocationLine(rf, tan.ret, tan.vol);
   const sharpeAt = function(w){ const m = mix(w); return m.vol > 0 ? (m.ret - rf)/m.vol : -Infinity; };
-  lastFrontierData = { frontier: frontier, assetPoints: [{ label: a.symbol, ret: retA, vol: sdA }, { label: b.symbol, ret: retB, vol: sdB }], currentPoint: { vol: mv.vol, ret: mv.ret }, cal: cal, tangencyPoint: { vol: tan.vol, ret: tan.ret }, currentMixLabel: 'min-variance mix', minVarPoint: { vol: mv.vol, ret: mv.ret } };
+  lastFrontierData = { frontier: frontier, assetPoints: [{ label: a.symbol, ret: retA, vol: sdA }, { label: b.symbol, ret: retB, vol: sdB }], currentPoint: { vol: mv.vol, ret: mv.ret }, cal: cal, tangencyPoint: { vol: tan.vol, ret: tan.ret }, currentMixLabel: 'min-variance mix', minVarPoint: { vol: mv.vol, ret: mv.ret }, riskFree: rf, minVariance: { ret: mv.ret, vol: mv.vol, sharpe: sharpeAt(wMinVar) }, tangency: { ret: tan.ret, vol: tan.vol, sharpe: sharpeAt(wTan) } };
   return { ok:true, instruments: [ { symbol: a.symbol, label: a.label, annualReturnPct: +(retA*100).toFixed(2), annualVolPct: +(sdA*100).toFixed(2) }, { symbol: b.symbol, label: b.label, annualReturnPct: +(retB*100).toFixed(2), annualVolPct: +(sdB*100).toFixed(2) } ], correlation: +c12.toFixed(3), riskFreePct: +(rf*100).toFixed(1), minVariance: { weights: [+wMinVar.toFixed(3), +(1-wMinVar).toFixed(3)], returnPct: +(mv.ret*100).toFixed(2), volPct: +(mv.vol*100).toFixed(2), sharpe: +sharpeAt(wMinVar).toFixed(3) }, tangency: { weights: [+wTan.toFixed(3), +(1-wTan).toFixed(3)], returnPct: +(tan.ret*100).toFixed(2), volPct: +(tan.vol*100).toFixed(2), sharpe: +sharpeAt(wTan).toFixed(3) } };
 }
-function renderFrontierChart(){
+const FRONTIER_CHART_TITLES = { frontier: 'Efficient frontier', bar: 'Return vs. risk', radar: 'Risk/return profile' };
+function renderFrontierChart(chartType){
+  const type = ['frontier','bar','radar'].includes(chartType) ? chartType : 'frontier';
   if(!lastFrontierData){ const r = comparePortfolio(); if(!r.ok) return r; }
   const d = lastFrontierData;
   let panel = document.getElementById('advisor-frontier-panel');
@@ -1732,7 +1734,9 @@ function renderFrontierChart(){
     panel.style.cssText = 'position:fixed;left:18px;top:18px;z-index:1500;background:#fff;border:1px solid rgba(20,40,63,.15);border-radius:14px;box-shadow:0 12px 40px rgba(20,40,63,.25);padding:12px 14px;width:460px;max-width:calc(100vw - 36px);';
     const head = document.createElement('div');
     head.style.cssText = 'position:relative;margin-bottom:6px;';
-    head.innerHTML = '<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:16px;color:#14283F">Efficient frontier</div><div style="font-family:\'Spline Sans Mono\',monospace;font-size:10px;color:rgba(20,40,63,.5)">' + d.assetPoints[0].label + ' vs ' + d.assetPoints[1].label + '</div>';
+    const titleBox = document.createElement('div');
+    titleBox.id = 'advisor-frontier-title';
+    head.appendChild(titleBox);
     const close = document.createElement('button');
     close.textContent = '✕';
     close.style.cssText = 'position:absolute;top:0;right:0;background:none;border:none;font-size:16px;cursor:pointer;color:rgba(20,40,63,.5);line-height:1;padding:2px 4px;';
@@ -1745,8 +1749,12 @@ function renderFrontierChart(){
     panel.appendChild(chart);
     document.body.appendChild(panel);
   }
-  initChart('advisor-frontier-chart', liveFrontierChartOption(d.frontier, d.assetPoints, d.currentPoint, d.cal, d.tangencyPoint, d.currentMixLabel, d.minVarPoint));
-  return { ok:true, rendered:true };
+  document.getElementById('advisor-frontier-title').innerHTML = '<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:16px;color:#14283F">' + FRONTIER_CHART_TITLES[type] + '</div><div style="font-family:\'Spline Sans Mono\',monospace;font-size:10px;color:rgba(20,40,63,.5)">' + d.assetPoints[0].label + ' vs ' + d.assetPoints[1].label + '</div>';
+  const opt = type === 'bar' ? barComparisonChartOption(d.assetPoints)
+    : type === 'radar' ? radarComparisonChartOption(d.assetPoints, d.minVariance, d.tangency, d.riskFree)
+    : liveFrontierChartOption(d.frontier, d.assetPoints, d.currentPoint, d.cal, d.tangencyPoint, d.currentMixLabel, d.minVarPoint);
+  initChart('advisor-frontier-chart', opt);
+  return { ok:true, rendered:true, chartType:type };
 }
 // pushState only when the screen actually changed: same-screen re-renders
 // (picking an answer re-renders the current screen) must not pile up
@@ -2065,7 +2073,7 @@ function advisorTools() {
     { type:'function', function:{ name:'add_instrument', description:'Fetch a real instrument\'s price history and add it to the comparison (max 4). Pass a ticker (e.g. TCS.NS, RELIANCE.NS, AAPL) or a fund code.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'remove_instrument', description:'Remove an instrument from the comparison.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'compare_portfolio', description:'Compare exactly two added instruments: correlation, the risk-minimizing split, and the best-Sharpe (tangency) split, each with return/vol/Sharpe. Requires exactly 2 instruments via add_instrument.', parameters:{ type:'object', properties:{} } } },
-    { type:'function', function:{ name:'render_frontier_chart', description:'Render the efficient-frontier chart for the last compare_portfolio into a floating chart panel.', parameters:{ type:'object', properties:{} } } },
+    { type:'function', function:{ name:'render_frontier_chart', description:'Render a chart for the last compare_portfolio into a floating chart panel. Pass chartType to pick which visual best explains what you\'re about to say: "frontier" (default) shows the full risk/return curve and where the two blends sit on it — best when explaining the tradeoff itself; "bar" is a plain side-by-side of each instrument\'s return and risk — best for a quick, simple comparison; "radar" profiles return/risk/Sharpe for both instruments plus the two blends on one shape — best when summarizing several dimensions at once.', parameters:{ type:'object', properties:{ chartType:{ type:'string', enum:['frontier','bar','radar'] } } } } },
   ];
 }
 
@@ -2337,7 +2345,7 @@ function executeAdvisorTool(name, args) {
   if (name === 'add_instrument') return addInstrument(args && args.symbol);
   if (name === 'remove_instrument') return JSON.stringify(removeInstrument(args && args.symbol));
   if (name === 'compare_portfolio') return JSON.stringify(comparePortfolio());
-  if (name === 'render_frontier_chart') return JSON.stringify(renderFrontierChart());
+  if (name === 'render_frontier_chart') return JSON.stringify(renderFrontierChart(args && args.chartType));
   if (name === 'highlight') return JSON.stringify(advisorHighlight(args && args.element));
   if (name === 'scroll_to') return JSON.stringify(advisorHighlight(args && args.element));
   return JSON.stringify({ ok:false, error:'Unknown tool: '+name });
@@ -2361,7 +2369,7 @@ function advisorDescribeTool(name, args) {
     case 'add_instrument': return 'Adding ' + args.symbol;
     case 'remove_instrument': return 'Removing ' + args.symbol;
     case 'compare_portfolio': return 'Comparing your two instruments';
-    case 'render_frontier_chart': return 'Drawing the frontier chart';
+    case 'render_frontier_chart': return 'Drawing the ' + ((args && args.chartType) || 'frontier') + ' chart';
     default: return null;
   }
 }

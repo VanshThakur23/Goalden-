@@ -478,6 +478,64 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
 }
 
 /* ---------------------------------------------------------------------
+   Phase 12 — alternate chart-option builders for the same compare_portfolio
+   result. Gives the advisor a choice of visual encoding instead of always
+   rendering the same efficient-frontier scatter: a grouped bar for a quick
+   side-by-side, a radar for a multi-dimensional profile. Every number here
+   comes from the caller's already-computed data (compare_portfolio) — these
+   functions only pick how to draw it, never compute new figures.
+   --------------------------------------------------------------------- */
+function barComparisonChartOption(assetPoints){
+  const labels = assetPoints.map(function(a){ return a.label; });
+  return {
+    animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
+    grid:{left:54,right:20,top:36,bottom:40,containLabel:true},
+    legend:{top:0, textStyle:{fontSize:10.5,color:'rgba(20,40,63,.6)',fontFamily:"'Spline Sans Mono',monospace"}},
+    xAxis:{type:'category', data:labels, axisLabel:{fontSize:10.5,color:'rgba(20,40,63,.6)'}},
+    yAxis:{type:'value', name:'PER YEAR', nameLocation:'middle', nameGap:44,
+      nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.5)'}, axisLabel:{formatter:function(v){ return (v*100).toFixed(0)+'%'; }},
+      splitLine:{lineStyle:{color:'rgba(20,40,63,.05)'}}},
+    tooltip:{trigger:'axis', confine:true, textStyle:{fontFamily:"'Figtree',sans-serif", fontSize:12},
+      valueFormatter:function(v){ return (v*100).toFixed(2)+'%'; }},
+    series:[
+      { name:'Return', type:'bar', data:assetPoints.map(function(a){ return a.ret; }), itemStyle:{color:'#2557C7'}, barGap:'20%' },
+      { name:'Risk', type:'bar', data:assetPoints.map(function(a){ return a.vol; }), itemStyle:{color:'#D97757'} },
+    ],
+  };
+}
+function radarComparisonChartOption(assetPoints, minVariance, tangency, riskFreeRate){
+  const rf = riskFreeRate || 0;
+  const sharpeOf = function(ret, vol){ return vol > 0 ? (ret - rf) / vol : 0; };
+  const assetSharpes = assetPoints.map(function(a){ return sharpeOf(a.ret, a.vol); });
+  const rets = assetPoints.map(function(a){ return a.ret; }).concat([minVariance.ret, tangency.ret]);
+  const vols = assetPoints.map(function(a){ return a.vol; }).concat([minVariance.vol, tangency.vol]);
+  const sharpes = assetSharpes.concat([minVariance.sharpe, tangency.sharpe]).filter(function(s){ return isFinite(s); });
+  const maxRet = Math.max.apply(null, rets) * 1.2 || 0.01;
+  const maxVol = Math.max.apply(null, vols) * 1.2 || 0.01;
+  const maxSharpe = (sharpes.length ? Math.max.apply(null, sharpes.map(Math.abs)) : 1) * 1.2 || 1;
+  const indicator = [
+    { name:'Return', max:maxRet },
+    { name:'Risk', max:maxVol },
+    { name:'Sharpe', max:maxSharpe },
+  ];
+  const point = function(ret, vol, sharpe){ return [ret, vol, isFinite(sharpe) ? sharpe : 0]; };
+  const colors = ['#8FC79E', '#2557C7', '#14283F', '#D97757'];
+  const data = assetPoints.map(function(a, i){
+    return { name:a.label, value:point(a.ret, a.vol, assetSharpes[i]), itemStyle:{color:colors[i % colors.length]} };
+  });
+  data.push({ name:'Safest mix', value:point(minVariance.ret, minVariance.vol, minVariance.sharpe), itemStyle:{color:'#8FC79E'}, lineStyle:{type:'dashed'} });
+  data.push({ name:'Best balance', value:point(tangency.ret, tangency.vol, tangency.sharpe), itemStyle:{color:'#14283F'}, lineStyle:{type:'dashed'} });
+  return {
+    animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
+    legend:{top:0, textStyle:{fontSize:9.5,color:'rgba(20,40,63,.6)',fontFamily:"'Spline Sans Mono',monospace"}},
+    tooltip:{trigger:'item', confine:true, textStyle:{fontFamily:"'Figtree',sans-serif", fontSize:12},
+      formatter:function(p){ const v=p.value; return `<b>${p.name}</b><br/>Return: ${(v[0]*100).toFixed(2)}% &nbsp; Risk: ${(v[1]*100).toFixed(2)}% &nbsp; Sharpe: ${v[2].toFixed(2)}`; }},
+    radar:{indicator:indicator, radius:'62%', splitLine:{lineStyle:{color:'rgba(20,40,63,.08)'}}, axisName:{fontSize:10.5,color:'rgba(20,40,63,.6)'}},
+    series:[{ type:'radar', data:data, symbolSize:5, lineStyle:{width:2}, areaStyle:{opacity:.08} }],
+  };
+}
+
+/* ---------------------------------------------------------------------
    BM25 retrieval (Phase 11) — dependency-free keyword-relevance scoring.
    The Worker/local_server use this to route which tools / knowledge chunks
    are relevant to the user's latest message, so the model is never shown
@@ -560,6 +618,7 @@ if (typeof module !== 'undefined' && module.exports) {
     populationCovariance, computeCovarianceMatrix, portfolioReturn, portfolioVariance,
     twoAssetFrontier, minVarianceWeightTwoAsset, tangencyWeightTwoAsset,
     capitalAllocationLine, liveFrontierChartOption,
+    barComparisonChartOption, radarComparisonChartOption,
     bm25Tokenize, bm25Rank, filterToolsByQuery,
   };
 }

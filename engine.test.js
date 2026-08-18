@@ -253,4 +253,39 @@ test('filterToolsByQuery: tool family survives whole when one member is triggere
   }
 });
 
+// ---- Phase 12: alternate chart-option builders (bar / radar) ----
+
+test('barComparisonChartOption: one series per metric, one bar per asset', () => {
+  const assetPoints = [{ label: 'RELIANCE.NS', ret: 0.24, vol: 0.27 }, { label: 'TCS.NS', ret: 0.11, vol: 0.24 }];
+  const opt = engine.barComparisonChartOption(assetPoints);
+  assert.strictEqual(opt.series.length, 2, 'return and risk series');
+  assert.strictEqual(opt.xAxis.data.length, 2, 'one category per asset');
+  assert.deepStrictEqual(opt.series[0].data, [0.24, 0.11]);
+  assert.deepStrictEqual(opt.series[1].data, [0.27, 0.24]);
+});
+
+test('radarComparisonChartOption: 3 indicators, 4 data points (2 assets + 2 mixes)', () => {
+  const assetPoints = [{ label: 'A', ret: 0.20, vol: 0.25 }, { label: 'B', ret: 0.12, vol: 0.18 }];
+  const minVariance = { ret: 0.15, vol: 0.16, sharpe: 0.6 };
+  const tangency = { ret: 0.19, vol: 0.22, sharpe: 0.65 };
+  const opt = engine.radarComparisonChartOption(assetPoints, minVariance, tangency, 0.065);
+  assert.strictEqual(opt.radar.indicator.length, 3);
+  assert.deepStrictEqual(opt.radar.indicator.map((i) => i.name), ['Return', 'Risk', 'Sharpe']);
+  assert.strictEqual(opt.series[0].data.length, 4, 'asset A, asset B, safest mix, best balance');
+  assert.strictEqual(opt.series[0].data[0].name, 'A');
+  assert.strictEqual(opt.series[0].data[2].name, 'Safest mix');
+});
+
+test('radarComparisonChartOption: every axis max is >= the values it bounds', () => {
+  const assetPoints = [{ label: 'A', ret: 0.30, vol: 0.05 }, { label: 'B', ret: 0.05, vol: 0.30 }];
+  const minVariance = { ret: 0.10, vol: 0.10, sharpe: 0.4 };
+  const tangency = { ret: 0.28, vol: 0.20, sharpe: 1.1 };
+  const opt = engine.radarComparisonChartOption(assetPoints, minVariance, tangency, 0.065);
+  const [retInd, riskInd] = opt.radar.indicator;
+  const rets = opt.series[0].data.map((d) => d.value[0]);
+  const vols = opt.series[0].data.map((d) => d.value[1]);
+  assert.ok(retInd.max >= Math.max(...rets), 'return axis bounds every plotted return');
+  assert.ok(riskInd.max >= Math.max(...vols), 'risk axis bounds every plotted vol');
+});
+
 

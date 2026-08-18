@@ -1305,3 +1305,54 @@ touched at all. Claude Code finished the phase directly.
   per page) not implemented — lower-stakes than tool routing per the
   original scope note, left for a follow-up.
 - No commit made yet in this entry's session — see next commit.
+
+---
+
+## 2026-08-18 — Claude Code — Phase 12: AI-chosen chart type for portfolio comparisons
+
+### Context
+Scoped down from the earlier "AI-composable chart/report tool" discussion,
+deliberately kept narrow and sequenced after Phase 11 so the model has
+grounded tool descriptions to choose from. The AI now picks among 3
+predefined chart types for the existing 2-asset comparison instead of
+always rendering the frontier chart — reusing 100% tool-computed numbers,
+zero new hallucination surface.
+
+### Done
+- goalden-engine.js: added barComparisonChartOption(assetPoints) and
+  radarComparisonChartOption(assetPoints, minVariance, tangency,
+  riskFreeRate), pure chart-option builders matching the existing
+  liveFrontierChartOption's palette/fonts. Exported via the module.exports
+  shim.
+- comparePortfolio() in goalden.html and goalden-door2.html now stashes
+  minVariance/tangency/riskFree on lastFrontierData so the radar builder
+  has what it needs.
+- renderFrontierChart(chartType) — was renderFrontierChart() — validates
+  chartType against ['frontier','bar','radar'] (default 'frontier'),
+  branches to the right builder. Refactored the panel header to a
+  dedicated #advisor-frontier-title div so the title updates per chart
+  type without fragile innerHTML surgery on the close button.
+- render_frontier_chart's tool schema gained an optional chartType enum
+  with a description of when to use each; dispatch forwards
+  args.chartType; describeTool reflects the chosen type.
+- worker.js and local_server.py system prompts both got one added
+  sentence telling the model to actually pick a chartType instead of
+  defaulting to frontier out of habit (mirrored wording).
+- goalden-lab.html deliberately untouched — keeps its own toolset.
+
+### Verified
+- node --test engine.test.js: 25/25 PASS (3 new Phase 12 tests: bar series/
+  category shape, radar indicator/data-point count, radar axis bounds).
+- smoke-09.js, smoke-10.js, smoke-11.js: ALL PASS (no regression).
+- smoke-12.js (new, 18 assertions): ALL PASS — builders exist/exported,
+  both doors wire chartType through schema/dispatch/render, lab untouched,
+  both server prompts carry the guidance sentence.
+- Live in browser, both goalden.html and goalden-door2.html: added
+  RELIANCE.NS + TCS.NS, called compare_portfolio, then
+  render_frontier_chart with no chartType / 'bar' / 'radar' — all three
+  render, panel title updates correctly each time ("Efficient frontier" /
+  "Return vs. risk" / "Risk/return profile"), zero console errors on
+  either page.
+
+### Known / not done
+- Nothing outstanding. Ready to commit.
