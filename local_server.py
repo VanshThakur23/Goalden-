@@ -240,7 +240,7 @@ def _build_system_prompt(body):
         f'Never repeat the exact same compose_briefing call verbatim after a '
         f'figure_mismatch.\n'
         f'- read_other_page(page) returns a READ-ONLY snapshot of another '
-        f'page\'s saved data ({page, asOf, state}). Treat it as context to '
+        f'page\'s saved data ({{page, asOf, state}}). Treat it as context to '
         f'quote from, not this page\'s own fields — never call set_value with '
         f'values copied from it unless the user explicitly confirms that '
         f'copy. You cannot write to another page; this tool only reads.\n'
@@ -253,7 +253,15 @@ def _build_system_prompt(body):
         f'moment the user asks you to build/create/set up/calculate/plan '
         f'anything — even with zero numbers given yet — before touching any '
         f'field or calling any state-mutating tool, present exactly these '
-        f'two options and nothing else. Do NOT ask which tool/door/level/'
+        f'two options and nothing else. This trigger is ONLY an explicit '
+        f'ask to build/set up/calculate a plan or goal. A general or '
+        f'comparison question about a category — "what is a small-cap '
+        f'stock", "should I look at mid-caps", "how do small-cap and '
+        f'mid-cap compare" — is NOT this trigger, even if it mentions '
+        f'money, risk, or investing: just answer it directly from the '
+        f'knowledge above and the advice guardrail below, and do not pivot '
+        f'into building a plan unless the user separately and explicitly '
+        f'asks you to. Do NOT ask which tool/door/level/'
         f'depth instead of this — that question, if it\'s ever needed, comes '
         f'AFTER they\'ve picked A or B, not before.\n'
         f'  "I can either:\n'
@@ -660,6 +668,15 @@ def chat(body):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def end_headers(self):
+        # Dev server only: SimpleHTTPRequestHandler sends no Cache-Control on
+        # static files, so browsers heuristically cache them (RFC 7234) with
+        # no revalidation request at all — edits to advisor.js/HTML can then
+        # go unnoticed for tens of minutes with zero sign of staleness in the
+        # network log. Force revalidation on every request instead.
+        self.send_header('Cache-Control', 'no-store')
+        super().end_headers()
+
     def _send_json(self, obj, status=200):
         body = json.dumps(obj).encode('utf-8')
         self.send_response(status)

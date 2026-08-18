@@ -31,22 +31,35 @@ const advLang = (typeof ADVISOR_CFG.lang === 'function') ? ADVISOR_CFG.lang : ((
    disclaimer rule (only rendered when showDisclaimer is true).
    ===================================================================== */
 const ADVISOR_CSS = `
-#advisorFab{position:fixed;right:18px;bottom:18px;z-index:1000;width:56px;height:56px;border-radius:50%;background:var(--gold);color:#fff;border:none;box-shadow:0 6px 20px rgba(20,40,63,.35);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s ease}
-#advisorFab:hover{transform:translateY(-2px)}
-#advisorFab svg{width:26px;height:26px}
-#advisorPanel{position:fixed;right:18px;bottom:86px;z-index:1001;width:460px;max-width:calc(100vw - 36px);max-height:min(75vh,720px);display:none;flex-direction:column;background:var(--card);border:1px solid rgba(20,40,63,.14);border-radius:14px;box-shadow:0 12px 40px rgba(20,40,63,.28);overflow:hidden}
-#advisorPanel.open{display:flex}
-#advisorPanel.mode-dock{right:0;top:0;bottom:0;width:400px;max-width:100vw;height:100vh;max-height:100vh;border-radius:0;border-top:none;border-bottom:none;border-right:none}
-#advisorPanel.mode-focus{left:0;right:0;top:5vh;bottom:5vh;margin:0 auto;width:680px;max-width:calc(100vw - 32px);height:90vh;max-height:90vh;border-radius:16px}
+#advisorFab{position:fixed;right:18px;bottom:18px;z-index:1000;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#3f6fe0);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(20,40,63,.32);transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .2s ease;animation:advisorFabBreathe 3.4s ease-in-out infinite}
+#advisorFab::before{content:'';position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 0 rgba(63,111,224,.45);animation:advisorFabPing 2.6s cubic-bezier(0,0,.2,1) infinite}
+#advisorFab.is-open::before{animation:none;box-shadow:none}
+#advisorFab:hover{transform:translateY(-3px) scale(1.05)}
+#advisorFab:active{transform:translateY(-1px) scale(.96)}
+#advisorFab .fi{position:relative;width:24px;height:24px}
+#advisorFab .fi svg{position:absolute;inset:0;width:24px;height:24px;transition:opacity .25s ease,transform .3s cubic-bezier(.34,1.56,.64,1)}
+#advisorFab .fi-chat{opacity:1;transform:rotate(0deg) scale(1)}
+#advisorFab .fi-close{opacity:0;transform:rotate(-45deg) scale(.6)}
+#advisorFab.is-open .fi-chat{opacity:0;transform:rotate(45deg) scale(.6)}
+#advisorFab.is-open .fi-close{opacity:1;transform:rotate(0deg) scale(1)}
+@keyframes advisorFabBreathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes advisorFabPing{0%{box-shadow:0 0 0 0 rgba(63,111,224,.4)}70%{box-shadow:0 0 0 14px rgba(63,111,224,0)}100%{box-shadow:0 0 0 0 rgba(63,111,224,0)}}
+#advisorPanel{position:fixed;right:18px;bottom:86px;z-index:1001;width:460px;max-width:calc(100vw - 36px);max-height:min(75vh,720px);display:flex;flex-direction:column;background:var(--card);border:1px solid rgba(20,40,63,.14);border-radius:16px;box-shadow:0 24px 64px rgba(20,40,63,.32),0 2px 10px rgba(20,40,63,.1);overflow:hidden;opacity:0;visibility:hidden;pointer-events:none;transform:translateY(14px) scale(.96);transform-origin:bottom right;transition:opacity .2s ease,transform .2s cubic-bezier(.34,1.2,.64,1),visibility 0s linear .2s}
+#advisorPanel.open{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0) scale(1);transition:opacity .3s cubic-bezier(.22,1,.36,1),transform .3s cubic-bezier(.22,1,.36,1),visibility 0s linear 0s}
+#advisorPanel.mode-dock{right:0;top:0;bottom:0;width:400px;max-width:100vw;height:100vh;max-height:100vh;border-radius:0;border-top:none;border-bottom:none;border-right:none;transform-origin:right center}
+#advisorPanel.mode-focus{left:0;right:0;top:5vh;bottom:5vh;margin:0 auto;width:680px;max-width:calc(100vw - 32px);height:90vh;max-height:90vh;border-radius:16px;transform-origin:center}
 body.advisor-docked{transition:padding-right .25s ease}
 @media(min-width:900px){body.advisor-docked{padding-right:400px}}
-#advisorHead{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(20,40,63,.1);background:var(--bg)}
+@media(prefers-reduced-motion:reduce){#advisorFab,#advisorFab::before,#advisorPanel,#advisorPanel.open{animation:none!important;transition:opacity .12s linear!important;transform:none!important}}
+#advisorHead{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(20,40,63,.1);background:linear-gradient(180deg,var(--bg),rgba(255,255,255,0))}
 #advisorHead .t{font-family:'Newsreader',serif;font-weight:700;font-size:15px;color:var(--ink)}
 #advisorHead .s{font-family:'Spline Sans Mono',monospace;font-size:9.5px;color:rgba(20,40,63,.5);letter-spacing:.04em;text-transform:uppercase}
 #advisorHead .rc-btns{display:flex;align-items:center;gap:2px}
 #advisorHead button{background:none;border:none;color:rgba(20,40,63,.55);cursor:pointer;font-size:15px;padding:2px 6px;line-height:1}
 #advisorMsgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
-.adv-msg{max-width:88%;padding:11px 14px;border-radius:12px;font-size:15.5px;line-height:1.55;white-space:pre-wrap;word-wrap:break-word}
+.adv-msg{max-width:88%;padding:11px 14px;border-radius:12px;font-size:15.5px;line-height:1.55;white-space:pre-wrap;word-wrap:break-word;animation:advisorMsgIn .28s cubic-bezier(.22,1,.36,1)}
+@keyframes advisorMsgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.adv-msg{animation:none}}
 .adv-msg.user{align-self:flex-end;background:var(--gold);color:#fff;border-bottom-right-radius:3px;font-family:'Figtree',sans-serif}
 .adv-msg.bot{align-self:flex-start;background:#EFF3FA;color:var(--ink);border-bottom-left-radius:3px;font-family:'Figtree',sans-serif}
 .adv-msg.bot.speaking{border-left:3px solid var(--gold);animation:advisorSpeakingGlow 1.2s ease-in-out infinite}
@@ -152,7 +165,10 @@ body.advisor-docked{transition:padding-right .25s ease}
     : '';
   const html =
     '<button id="advisorFab" aria-label="Ask the Goalden advisor" title="Ask the advisor">' +
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 20l1-5.4a8.5 8.5 0 1 1 17-3.1z"/></svg>' +
+      '<span class="fi">' +
+        '<svg class="fi-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 20l1-5.4a8.5 8.5 0 1 1 17-3.1z"/></svg>' +
+        '<svg class="fi-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
+      '</span>' +
     '</button>' +
     '<div id="advisorPanel">' +
       '<div id="advisorHead">' +
@@ -242,7 +258,9 @@ function advisorSetMode(mode) {
   } else {
     panel.classList.remove('open');
   }
-  document.getElementById('advisorFab').setAttribute('aria-expanded', mode === 'fab' ? 'false' : 'true');
+  const fab = document.getElementById('advisorFab');
+  fab.setAttribute('aria-expanded', mode === 'fab' ? 'false' : 'true');
+  fab.classList.toggle('is-open', mode !== 'fab');
   advisorPersist();
 }
 // When the advisor starts acting, promote the panel to dock so the user can

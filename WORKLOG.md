@@ -1126,3 +1126,63 @@ all your eggs in one." missing "basket". Reproduced 3/3 in the browser.
 - Zero console errors throughout. `node smoke-02..09.js` + `node --test
   engine.test.js` all green; `node --check`/`ast.parse` clean.
 - Phase 9 (read-across) verified green end-to-end.
+
+---
+
+## 2026-08-18 — Claude Code — two production-affecting bugs found live, both fixed
+
+Found while helping the user interpret real-world behavior they hit on the
+**deployed** site (goalden.vanshsingh23.workers.dev) — separately confirmed
+that deployment predates all of Phase 8/9/the chat redesign, so this
+diagnosis is about pre-existing behavior, not a regression from today's work.
+
+### Bug 1 — Phase 9 broke every live local_server.py chat call (502)
+`_build_system_prompt`'s read_other_page description used an f-string with
+`({page, asOf, state})` meant as literal illustrative text — but an f-string
+treats bare `{...}` as an expression to evaluate, so Python tried to
+evaluate `asOf` as a variable and crashed with `NameError: name 'asOf' is
+not defined` on every single call to `_build_system_prompt`, i.e. every
+non-mock chat turn (streaming and non-streaming both call it). `ast.parse`
+never catches this — it's syntactically valid Python, only a runtime crash
+when the f-string is actually evaluated. Neither opencode's nor my Phase 9
+verification exercised this path: both only checked syntax and the
+client-side `readOtherPage()` mechanism, never a real chat call through
+local_server.py's non-mock path. **Fixed**: escaped the literal braces
+(`{{page, asOf, state}}`). Confirmed the fix by calling
+`local_server._build_system_prompt()` directly in a Python REPL (builds
+clean, 7725 chars) and via a live `/api/chat` call (200, not 502). Does not
+affect worker.js — JS template literals don't have this bracket-collision
+issue, so production's Cloudflare Worker path was never at risk (moot for
+now anyway since none of this is deployed).
+
+### Bug 2 — advisor over-triggers "Choice before action" on informational questions
+User asked (paraphrased) "which stocks should I choose, small-cap or
+mid-cap?" and the model, instead of just answering, launched the mandatory
+A/B "do it all / walk me through it" plan-building prompt, then — once the
+user supplied age/retirement-age/expense numbers thinking that was leading
+toward a stock recommendation — called build_goal_plan + compose_briefing
+unprompted, auto-navigating to Door 2's full-plan screen and opening a
+full-page report the user never asked for. Root cause: the "Choice before
+action" rule in both system prompts fires on any language that's merely
+plan/money-adjacent ("build/create/set up/calculate/plan anything"), with no
+carve-out for a general or comparison question about an investment
+category. **Fixed** (worker.js + local_server.py, mirrored): added an
+explicit negative example — a question like "what is a small-cap stock" or
+"how do small-cap and mid-cap compare" is NOT this trigger, even if it
+mentions money/risk/investing; answer it directly instead.
+
+### Verified
+- `node --check`/`ast.parse` clean on both files.
+- `node smoke-02..09.js` all PASS; `node --test engine.test.js` 8/8.
+- Live reproduction against a real DeepSeek call (DEEPSEEK_API_KEY set):
+  the exact small-cap/mid-cap phrasing from the user's screenshot now gets a
+  direct, guardrail-respecting answer with no plan-building detour; a
+  literal "can you build me a retirement plan?" still correctly triggers the
+  A/B choice — confirms the fix didn't overcorrect.
+- Ran `node agent-evals/runner.js --base http://127.0.0.1:8091` (full live
+  suite, real model): 12/14 passed (86%), 1 skipped. The 2 failures are both
+  pre-existing, already-documented live-model non-determinism from Phase 6
+  (the "lab run Monte Carlo" tool-choice bias, and one scenario that's
+  intermittent — re-ran "hesitant user gets a plan to approve" alone
+  immediately after and it passed clean). Neither is a regression from this
+  session's wording change.
