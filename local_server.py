@@ -13,6 +13,7 @@ Then open http://localhost:8000/index.html
 """
 
 import json
+import math
 import os
 import re
 import sys
@@ -141,6 +142,120 @@ def symbol_search(query):
 # chat UI and its tool loop can be exercised with no key and no network call.
 # ---------------------------------------------------------------------------
 DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions'
+
+
+# ---------------------------------------------------------------------------
+# Phase 11 — BM25 tool/knowledge routing. Pure, dependency-free, mirrored
+# from the Worker's copy (src/worker.js) term-for-term. Filters down to the
+# tools/knowledge actually relevant to the user's latest message so the model
+# is never shown competing tools it shouldn't pick from.
+# ---------------------------------------------------------------------------
+_TOOL_ROUTE_K = 8
+_KNOWLEDGE_ROUTE_K = 3
+
+# Tool families: some multi-step chains use tools whose descriptions don't
+# share vocabulary with the natural-language query that triggers them (e.g.
+# "add_instrument"'s description talks about price history, not "risk" or
+# "pair" — a user asking to minimize risk between two stocks would never
+# individually rank add_instrument highly enough to survive top-K, even
+# though the chain cannot complete without it). If ANY member of a family
+# survives ranking, every member of that family is kept too, so a triggered
+# workflow always has its full toolset available.
+_TOOL_FAMILIES = [
+    ['search_instruments', 'add_instrument', 'remove_instrument', 'compare_portfolio', 'render_frontier_chart'],
+]
+
+
+def _bm25_tokenize(text):
+    return [t for t in re.sub(r'[^a-z0-9]+', ' ', str(text or '').lower()).split(' ') if t]
+
+
+def _bm25_rank(query, documents, k1=1.5, b=0.75):
+    q_terms = _bm25_tokenize(query)
+    docs = []
+    for d in documents:
+        terms = _bm25_tokenize(d['text'])
+        tf = {}
+        for t in terms:
+            tf[t] = tf.get(t, 0) + 1
+        docs.append({'id': d['id'], 'text': d['text'], 'terms': terms, 'tf': tf})
+    n = len(docs)
+    avg_len = (sum(len(d['terms']) for d in docs) / n) if n else 0
+    df = {}
+    for doc in docs:
+        for t in set(doc['terms']):
+            df[t] = df.get(t, 0) + 1
+
+    def idf(t):
+        d = df.get(t, 0)
+        return math.log((n - d + 0.5) / (d + 0.5) + 1)
+
+    scores = []
+    for doc in docs:
+        s = 0.0
+        for t in q_terms:
+            tf = doc['tf'].get(t, 0)
+            if not tf:
+                continue
+            denom = tf + k1 * (1 - b + b * (len(doc['terms']) / (avg_len or 1)))
+            s += idf(t) * (tf * (k1 + 1)) / denom
+        scores.append({'id': doc['id'], 'text': doc['text'], 'score': s})
+    scores.sort(key=lambda r: r['score'], reverse=True)
+    return scores
+
+
+def _latest_user_message(messages):
+    for m in reversed(messages or []):
+        if m.get('role') == 'user' and m.get('content'):
+            return str(m['content'])
+    return ''
+
+
+def _filter_tools(body):
+    tools = body.get('tools') or []
+    if len(tools) <= _TOOL_ROUTE_K:
+        return tools
+    query = _latest_user_message(body.get('messages'))
+    docs = []
+    for t in tools:
+        f = t.get('function') or {}
+        docs.append({'id': f.get('name'), 'text': f"{f.get('name', '')} {f.get('description', '')}"})
+    ranked = _bm25_rank(query, docs)
+    keep = {r['id'] for r in ranked[:_TOOL_ROUTE_K]}
+    for m in body.get('messages') or []:
+        if m.get('role') == 'assistant' and m.get('tool_calls'):
+            for tc in m['tool_calls']:
+                fn = (tc.get('function') or {}).get('name')
+                if fn:
+                    keep.add(fn)
+    for family in _TOOL_FAMILIES:
+        if any(name in keep for name in family):
+            keep.update(family)
+    return [t for t in tools if (t.get('function') or {}).get('name') in keep]
+
+
+def _filter_knowledge(body):
+    knowledge = body.get('knowledge')
+    if not isinstance(knowledge, list):
+        return knowledge or ''
+    if len(knowledge) <= _KNOWLEDGE_ROUTE_K:
+        return '\n'.join(knowledge)
+    query = _latest_user_message(body.get('messages'))
+    docs = [{'id': i, 'text': chunk} for i, chunk in enumerate(knowledge)]
+    ranked = _bm25_rank(query, docs)
+    top = sorted(r['id'] for r in ranked[:_KNOWLEDGE_ROUTE_K])
+    return '\n'.join(knowledge[i] for i in top)
+
+
+def _route_body(body):
+    """Mirrors worker.js: reassigns body['tools']/body['knowledge'] to the
+    routed subset so every downstream use (prompt text AND the DeepSeek
+    call) automatically sees the routed set."""
+    routed_tools = _filter_tools(body)
+    routed_knowledge = _filter_knowledge(body)
+    body['tools'] = routed_tools
+    body['knowledge'] = routed_knowledge
+    return body
 
 
 def _build_system_prompt(body):
@@ -684,6 +799,7 @@ def _mock_chat(body):
 
 
 def chat(body):
+    body = _route_body(body)
     messages = [{'role': 'system', 'content': _build_system_prompt(body)}]
     messages += body.get('messages') or []
     api_key = os.environ.get('DEEPSEEK_API_KEY')
@@ -788,6 +904,7 @@ class Handler(SimpleHTTPRequestHandler):
                 api_key = os.environ.get('DEEPSEEK_API_KEY')
                 if body.get('stream') is True:
                     if api_key:
+                        body = _route_body(body)
                         messages = [{'role': 'system', 'content': _build_system_prompt(body)}]
                         messages += body.get('messages') or []
                         return self._send_sse(_deepseek_chat_stream(messages, body.get('tools') or [], api_key))

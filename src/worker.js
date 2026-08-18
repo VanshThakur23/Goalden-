@@ -254,6 +254,91 @@ async function fundSearch(query) {
  */
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions';
 
+// ---------------------------------------------------------------------------
+// Phase 11 — BM25 tool/knowledge routing. Pure, dependency-free, duplicated
+// from goalden-engine.js (the Worker is an ES module and can't import the
+// plain-<script> engine; goalden-engine.js's copy is the tested canonical one).
+// ---------------------------------------------------------------------------
+function bm25Tokenize(text) {
+  return String(text == null ? '' : text).toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean);
+}
+function bm25Rank(query, documents, opts) {
+  opts = opts || {};
+  const k1 = opts.k1 != null ? opts.k1 : 1.5;
+  const b = opts.b != null ? opts.b : 0.75;
+  const qTerms = bm25Tokenize(query);
+  const docs = documents.map((d) => ({ id: d.id, text: d.text, terms: bm25Tokenize(d.text), tf: {} }));
+  docs.forEach((doc) => doc.terms.forEach((t) => { doc.tf[t] = (doc.tf[t] || 0) + 1; }));
+  const N = docs.length;
+  const avgLen = N ? docs.reduce((s, d) => s + d.terms.length, 0) / N : 0;
+  const df = {};
+  docs.forEach((doc) => { const seen = {}; doc.terms.forEach((t) => { if (!seen[t]) { seen[t] = 1; df[t] = (df[t] || 0) + 1; } }); });
+  const idf = (t) => { const d = df[t] || 0; return Math.log((N - d + 0.5) / (d + 0.5) + 1); };
+  const scores = docs.map((doc) => {
+    let s = 0;
+    qTerms.forEach((t) => {
+      const tf = doc.tf[t] || 0;
+      if (!tf) return;
+      s += idf(t) * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (doc.terms.length / (avgLen || 1))));
+    });
+    return { id: doc.id, text: doc.text, score: s };
+  });
+  scores.sort((a, b) => b.score - a.score);
+  return scores;
+}
+const TOOL_ROUTE_K = 8;
+const KNOWLEDGE_ROUTE_K = 3;
+function latestUserMessage(messages) {
+  for (let i = (messages || []).length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user' && messages[i].content) return String(messages[i].content);
+  }
+  return '';
+}
+// Tool families: some multi-step chains use tools whose descriptions don't
+// share vocabulary with the natural-language query that triggers them (e.g.
+// "add_instrument"'s description talks about price history, not "risk" or
+// "pair" — a user asking to minimize risk between two stocks would never
+// individually rank add_instrument highly enough to survive top-K, even
+// though the chain cannot complete without it). If ANY member of a family
+// survives ranking, every member of that family is kept too, so a triggered
+// workflow always has its full toolset available.
+const TOOL_FAMILIES = [
+  ['search_instruments', 'add_instrument', 'remove_instrument', 'compare_portfolio', 'render_frontier_chart'],
+];
+// Returns the filtered tool array: top-K by BM25 relevance to the latest user
+// message, PLUS every tool the model already called earlier in this
+// conversation (a mid-chain tool must never disappear), PLUS whole tool
+// families where any member survived ranking.
+function filterTools(body) {
+  const tools = body.tools || [];
+  if (tools.length <= TOOL_ROUTE_K) return tools;
+  const query = latestUserMessage(body.messages);
+  const docs = tools.map((t) => { const f = t.function || {}; return { id: f.name, text: (f.name || '') + ' ' + (f.description || '') }; });
+  const ranked = bm25Rank(query, docs);
+  const keep = new Set(ranked.slice(0, TOOL_ROUTE_K).map((r) => r.id));
+  for (const m of body.messages || []) {
+    if (m.role === 'assistant' && m.tool_calls) {
+      for (const tc of m.tool_calls) if (tc.function && tc.function.name) keep.add(tc.function.name);
+    }
+  }
+  for (const family of TOOL_FAMILIES) {
+    if (family.some((name) => keep.has(name))) family.forEach((name) => keep.add(name));
+  }
+  return tools.filter((t) => keep.has((t.function || {}).name));
+}
+// Returns knowledge as a plain string: if the client sent chunks (array),
+// BM25-rank and keep the top-3; a plain string passes through unchanged.
+function filterKnowledge(body) {
+  const knowledge = body.knowledge;
+  if (!Array.isArray(knowledge)) return knowledge || '';
+  if (knowledge.length <= KNOWLEDGE_ROUTE_K) return knowledge.join('\n');
+  const query = latestUserMessage(body.messages);
+  const docs = knowledge.map((chunk, i) => ({ id: i, text: chunk }));
+  const ranked = bm25Rank(query, docs);
+  const top = ranked.slice(0, KNOWLEDGE_ROUTE_K).map((r) => r.id).sort((a, b) => a - b);
+  return top.map((i) => knowledge[i]).join('\n');
+}
+
 function buildSystemPrompt(body) {
   const state = body.state || {};
   const ctx = body.context || {};
@@ -526,6 +611,15 @@ export default {
           }
           return chatJson({ message: notConfigured, usage: null, latencyMs: 0 }, 200, origin);
         }
+        // Phase 11: route down to the tools/knowledge actually relevant to
+        // the user's latest message before either the prompt text or the
+        // API call sees them — reassigning body.tools/body.knowledge here
+        // means every downstream use (buildSystemPrompt AND the DeepSeek
+        // calls below) automatically sees the routed set.
+        const routedTools = filterTools(body);
+        const routedKnowledge = filterKnowledge(body);
+        body.tools = routedTools;
+        body.knowledge = routedKnowledge;
         const messages = [{ role: 'system', content: buildSystemPrompt(body) }].concat(body.messages || []);
         if (body.stream === true) {
           return callDeepSeekStream(messages, body.tools || [], apiKey, origin);

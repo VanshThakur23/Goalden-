@@ -478,6 +478,73 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
 }
 
 /* ---------------------------------------------------------------------
+   BM25 retrieval (Phase 11) — dependency-free keyword-relevance scoring.
+   The Worker/local_server use this to route which tools / knowledge chunks
+   are relevant to the user's latest message, so the model is never shown
+   competing tools it shouldn't pick from. Pure arithmetic — no embeddings,
+   no network, no dependencies. This copy is the tested canonical one; the
+   Worker keeps a module-private duplicate (it can't import this plain-<script>).
+   --------------------------------------------------------------------- */
+function bm25Tokenize(text){
+  return String(text == null ? '' : text).toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean);
+}
+function bm25Rank(query, documents, opts){
+  opts = opts || {};
+  const k1 = opts.k1 != null ? opts.k1 : 1.5;
+  const b = opts.b != null ? opts.b : 0.75;
+  const qTerms = bm25Tokenize(query);
+  const docs = documents.map(function(d){ return { id: d.id, text: d.text, terms: bm25Tokenize(d.text), tf: {} }; });
+  docs.forEach(function(doc){ doc.terms.forEach(function(t){ doc.tf[t] = (doc.tf[t] || 0) + 1; }); });
+  const N = docs.length;
+  const avgLen = N ? docs.reduce(function(s, d){ return s + d.terms.length; }, 0) / N : 0;
+  const df = {};
+  docs.forEach(function(doc){ const seen = {}; doc.terms.forEach(function(t){ if(!seen[t]){ seen[t] = 1; df[t] = (df[t] || 0) + 1; } }); });
+  function idf(t){ const d = df[t] || 0; return Math.log((N - d + 0.5) / (d + 0.5) + 1); }
+  const scores = docs.map(function(doc){
+    let s = 0;
+    qTerms.forEach(function(t){
+      const tf = doc.tf[t] || 0;
+      if(!tf) return;
+      const denom = tf + k1 * (1 - b + b * (doc.terms.length / (avgLen || 1)));
+      s += idf(t) * (tf * (k1 + 1)) / denom;
+    });
+    return { id: doc.id, text: doc.text, score: s };
+  });
+  scores.sort(function(a, b){ return b.score - a.score; });
+  return scores;
+}
+// Filters an OpenAI-style tool array down to the top-K most relevant to a
+// query, always keeping any already-called tools (a mid-chain tool must never
+// disappear). Skips filtering entirely when the list is already <= K.
+//
+// Tool families: some multi-step chains use tools whose descriptions don't
+// share vocabulary with the natural-language query that triggers them (e.g.
+// "add_instrument"'s description talks about price history, not "risk" or
+// "pair" — a user asking to minimize risk between two stocks would never
+// individually rank add_instrument highly enough to survive top-K, even
+// though the chain cannot complete without it). If ANY member of a family
+// survives ranking, every member of that family is kept too, so a triggered
+// workflow always has its full toolset available.
+var TOOL_FAMILIES = [
+  ['search_instruments', 'add_instrument', 'remove_instrument', 'compare_portfolio', 'render_frontier_chart'],
+];
+function filterToolsByQuery(tools, query, alreadyCalled, opts){
+  const k = (opts && opts.k) || 8;
+  if(!Array.isArray(tools) || tools.length <= k) return tools;
+  const docs = tools.map(function(t){ const f = t.function || {}; return { id: f.name, text: (f.name || '') + ' ' + (f.description || '') }; });
+  const ranked = bm25Rank(query, docs);
+  const keep = {};
+  ranked.slice(0, k).forEach(function(r){ keep[r.id] = true; });
+  (alreadyCalled || []).forEach(function(n){ keep[n] = true; });
+  TOOL_FAMILIES.forEach(function(family){
+    if(family.some(function(name){ return keep[name]; })){
+      family.forEach(function(name){ keep[name] = true; });
+    }
+  });
+  return tools.filter(function(t){ return keep[(t.function || {}).name]; });
+}
+
+/* ---------------------------------------------------------------------
    Node compatibility shim — makes this file require()-able for
    engine.test.js. In the browser `module` is undefined, so this branch is
    never taken and the plain <script> usage is unaffected.
@@ -493,5 +560,6 @@ if (typeof module !== 'undefined' && module.exports) {
     populationCovariance, computeCovarianceMatrix, portfolioReturn, portfolioVariance,
     twoAssetFrontier, minVarianceWeightTwoAsset, tangencyWeightTwoAsset,
     capitalAllocationLine, liveFrontierChartOption,
+    bm25Tokenize, bm25Rank, filterToolsByQuery,
   };
 }

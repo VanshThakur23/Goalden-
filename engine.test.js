@@ -161,3 +161,96 @@ test('capitalAllocationLine starts at (0, rf)', () => {
   assert.ok(last.vol > 0.20 - 1e-9, 'CAL extends past the tangency risk level');
 });
 
+// ---- Phase 11: BM25 retrieval (tool routing + knowledge grounding) ----
+
+test('bm25Rank: exact keyword match beats no match', () => {
+  const docs = [
+    { id: 'a', text: 'compare two stocks for risk and return' },
+    { id: 'b', text: 'build a retirement savings plan' },
+  ];
+  const ranked = engine.bm25Rank('compare stocks risk', docs);
+  assert.strictEqual(ranked[0].id, 'a');
+  assert.ok(ranked[0].score > ranked[1].score, 'matched doc scores higher');
+  assert.strictEqual(ranked[1].score, 0, 'unmatched doc scores zero');
+});
+
+test('bm25Rank: matching 2 of 2 terms outranks 1 of 2', () => {
+  const docs = [
+    { id: 'one', text: 'correlation of two assets' },
+    { id: 'two', text: 'correlation and risk of two assets' },
+  ];
+  const ranked = engine.bm25Rank('correlation risk', docs);
+  assert.strictEqual(ranked[0].id, 'two');
+});
+
+test('bm25Rank: empty query / empty docs do not throw', () => {
+  assert.ok(Array.isArray(engine.bm25Rank('', [{ id: 'x', text: 'anything' }])));
+  assert.ok(Array.isArray(engine.bm25Rank('query', [])));
+  assert.strictEqual(engine.bm25Rank('query', []).length, 0);
+});
+
+test('bm25Rank: length normalization — a long doc does not auto-win', () => {
+  const short = { id: 'short', text: 'risk return correlation' };
+  const long = { id: 'long', text: ('the quick brown fox jumps over the lazy dog and does many unrelated financial things that are not about the query terms at all ').repeat(20) };
+  const ranked = engine.bm25Rank('risk return correlation', [long, short]);
+  // The short doc contains all 3 query terms; the long doc contains none.
+  assert.strictEqual(ranked[0].id, 'short');
+});
+
+test('filterToolsByQuery: relevant tool survives, unrelated dropped', () => {
+  const tools = [
+    { type: 'function', function: { name: 'compare_portfolio', description: 'pair stocks to minimize risk and compare their return and correlation' } },
+    { type: 'function', function: { name: 'add_instrument', description: 'add a stock' } },
+    { type: 'function', function: { name: 'search_instruments', description: 'search a stock' } },
+    { type: 'function', function: { name: 'remove_instrument', description: 'remove a stock' } },
+    { type: 'function', function: { name: 'render_frontier_chart', description: 'render a stock chart' } },
+  ];
+  // 8 more tools, each matching only one query term ("stock"), so
+  // compare_portfolio (matching 5+ terms) is clearly top and build_goal_plan
+  // (matching none) is clearly dropped.
+  for (let i = 0; i < 8; i++) tools.push({ type: 'function', function: { name: 'filler_' + i, description: 'a stock metric ' + i } });
+  tools.push({ type: 'function', function: { name: 'build_goal_plan', description: 'build a retirement or education savings plan' } });
+  const filtered = engine.filterToolsByQuery(tools, 'which stocks should i pair to minimize risk', []);
+  const names = filtered.map((t) => t.function.name);
+  assert.ok(names.includes('compare_portfolio'), 'compare_portfolio survives');
+  assert.ok(!names.includes('build_goal_plan'), 'goal-planning tool dropped');
+  assert.strictEqual(filtered.length, 8, 'filters down to K=8');
+});
+
+test('filterToolsByQuery: already-called tools are never dropped', () => {
+  const tools = [];
+  for (let i = 0; i < 12; i++) tools.push({ type: 'function', function: { name: 'tool_' + i, description: 'tool number ' + i } });
+  // add a tool whose description is irrelevant to the query but was already called
+  tools.push({ type: 'function', function: { name: 'mid_chain_tool', description: 'zzz irrelevant' } });
+  const filtered = engine.filterToolsByQuery(tools, 'apple orange banana', ['mid_chain_tool']);
+  const names = filtered.map((t) => t.function.name);
+  assert.ok(names.includes('mid_chain_tool'), 'already-called tool kept regardless of score');
+});
+
+test('filterToolsByQuery: skips filtering when <= K tools', () => {
+  const tools = [{ type: 'function', function: { name: 'a', description: 'x' } }, { type: 'function', function: { name: 'b', description: 'y' } }];
+  assert.strictEqual(engine.filterToolsByQuery(tools, 'whatever', []), tools);
+});
+
+test('filterToolsByQuery: tool family survives whole when one member is triggered', () => {
+  // Real bug found in Phase 11 live verification: add_instrument's
+  // description ("fetch price history, pass a ticker") shares no vocabulary
+  // with a natural query like "pair stocks to minimize risk", so it would
+  // individually score 0 and drop out of top-K — even though
+  // compare_portfolio cannot function without it having been called first.
+  const tools = [
+    { type: 'function', function: { name: 'search_instruments', description: 'search real stocks and ETFs by name or ticker' } },
+    { type: 'function', function: { name: 'add_instrument', description: 'fetch a real instrument price history, pass a ticker or fund code' } },
+    { type: 'function', function: { name: 'remove_instrument', description: 'remove an instrument from the comparison' } },
+    { type: 'function', function: { name: 'compare_portfolio', description: 'compare two stocks for risk minimizing split and best sharpe tangency split' } },
+    { type: 'function', function: { name: 'render_frontier_chart', description: 'render the efficient frontier chart panel' } },
+  ];
+  for (let i = 0; i < 8; i++) tools.push({ type: 'function', function: { name: 'noise_' + i, description: 'unrelated utility tool ' + i } });
+  const filtered = engine.filterToolsByQuery(tools, 'which stocks should i pair to minimize risk', []);
+  const names = filtered.map((t) => t.function.name);
+  for (const n of ['search_instruments', 'add_instrument', 'remove_instrument', 'compare_portfolio', 'render_frontier_chart']) {
+    assert.ok(names.includes(n), `${n} survives because a family member triggered`);
+  }
+});
+
+

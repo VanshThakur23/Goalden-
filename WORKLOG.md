@@ -1244,3 +1244,64 @@ mentions money/risk/investing; answer it directly instead.
   (cache-bust URLs) — Claude Code's job.
 - render_frontier_chart's floating panel is position:fixed top-left to avoid the
   advisor's right-side dock; polish (dismiss-on-Escape, mobile sizing) left for later.
+
+---
+
+## 2026-08-18 — Claude Code — Phase 11: BM25 retrieval layer (tool routing + knowledge grounding)
+
+### Context
+opencode started Phase 11 but its session ended before finishing: it built
+and tested the BM25 core (goalden-engine.js + a duplicate in worker.js) and
+wrote filterTools/filterKnowledge helpers, but never wired them into the
+actual request flow (buildSystemPrompt and the DeepSeek call sites still
+used raw, unfiltered body.tools/body.knowledge), and local_server.py wasn't
+touched at all. Claude Code finished the phase directly.
+
+### Done
+- Wired filterTools/filterKnowledge into worker.js: body.tools and
+  body.knowledge are now reassigned from the filtered output right before
+  buildSystemPrompt is called, so both the prompt text AND the tools param
+  actually sent to DeepSeek see the routed set (filtering only the prose
+  without also filtering the API payload would have been a half-fix).
+- Ported the entire BM25 layer to local_server.py from scratch (bm25 core,
+  _filter_tools, _filter_knowledge, _route_body) and wired it into both the
+  streaming and non-streaming /api/chat paths. Verified the Python and JS
+  implementations produce identical routing decisions on the same input.
+- **Found and fixed a real bug via live verification, not just structural
+  tests:** BM25 scores each tool independently, but add_instrument's
+  description ("fetch price history, pass a ticker") shares no vocabulary
+  with a natural query like "which stocks should I pair to minimize risk" —
+  so it scored 0 and silently dropped out of the filtered set, even though
+  compare_portfolio cannot function without it having been called first.
+  This would have broken the Phase 10 portfolio tool chain the moment
+  routing went live. Fixed with tool-family grouping: if any member of a
+  declared family (the 5 portfolio tools) survives ranking, every member of
+  that family is kept, mirrored identically in goalden-engine.js, worker.js,
+  and local_server.py.
+- Added a regression test for the family fix (engine.test.js) plus
+  smoke-11.js (23 structural assertions, including checks that the
+  reassignment actually happens *before* buildSystemPrompt is called, not
+  just that the filter functions exist somewhere in the file).
+- Part C (knowledge chunking) wired at the routing layer (filterKnowledge/
+  _filter_knowledge handle an array of chunks correctly), but no page yet
+  sends ADVISOR_KNOWLEDGE as chunks — client-side chunking left as a
+  follow-up; harmless no-op today since a plain string passes through
+  unchanged.
+
+### Verified
+- node --test engine.test.js: 22/22 PASS (14 pre-existing + 6 opencode BM25
+  tests + 1 new family-grouping regression test + 1 more).
+- node smoke-09.js, smoke-10.js: ALL PASS (no regression).
+- node smoke-11.js: ALL PASS (23 assertions).
+- node --check / python ast.parse clean on all three touched files.
+- Live in browser (goalden.html, real ADVISOR_CFG.tools(), 16 tools):
+  query "which stocks should i pair with apple to minimize risk" now
+  retains the full 5-tool portfolio chain (search/add/remove/compare/
+  render) together with build_goal_plan and other utility tools; confirmed
+  identical behavior in the Python mirror; zero console errors.
+
+### Known / not done
+- Client-side knowledge chunking (splitting ADVISOR_KNOWLEDGE into an array
+  per page) not implemented — lower-stakes than tool routing per the
+  original scope note, left for a follow-up.
+- No commit made yet in this entry's session — see next commit.
