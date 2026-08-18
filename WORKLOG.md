@@ -1186,3 +1186,61 @@ mentions money/risk/investing; answer it directly instead.
   intermittent — re-ran "hesitant user gets a plan to approve" alone
   immediately after and it passed clean). Neither is a regression from this
   session's wording change.
+
+---
+
+## 2026-08-17 — opencode — Phase 10: real portfolio tools on Door 1/2
+
+### Done
+- Part A — extended goalden-engine.js with 13 functions ported verbatim from
+  goalden-lab.html (computeDailyReturns, auditPriceSeries, computeReturnStats,
+  alignReturns, populationCovariance, computeCovarianceMatrix, portfolioReturn,
+  portfolioVariance, twoAssetFrontier, minVarianceWeightTwoAsset,
+  tangencyWeightTwoAsset, capitalAllocationLine, liveFrontierChartOption),
+  exported via the file's existing module.exports shim. The Lab's own copies
+  are untouched (deliberate additive duplication to avoid risk).
+- Added 6 engine.test.js cases (14 total now): computeReturnStats daily
+  mean/sd + annualization, computeCovarianceMatrix (perfectly correlated /
+  anti / mixed + diagonal identity), twoAssetFrontier endpoints + interior
+  min, minVarianceWeightTwoAsset (interior + high-corr clamp),
+  tangencyWeightTwoAsset (RELIANCE/TCS-style: negative-excess-return asset →
+  picks the higher-Sharpe pure holding, NOT the naive clamp), capitalAllocationLine
+  starts at (0, rf).
+- Part B — added 5 tools to goalden.html AND goalden-door2.html (S.instruments /
+  G.instruments, capped at 4): search_instruments (Yahoo /api/symbolsearch),
+  add_instrument (/api/history equity|fund + computeReturnStats, rejects
+  quality 'unusable' with the flag messages), remove_instrument,
+  compare_portfolio (exactly-2, correlation/min-variance/tangency with
+  return/vol/Sharpe), render_frontier_chart (floating panel via the page's
+  initChart + engine's liveFrontierChartOption). Ported liveApiGet; lastFrontierData
+  is a module var (not persisted, not in S/G). Tool defs + dispatch +
+  describeTool wired three-point-style.
+- System prompt (worker.js + local_server.py, mirrored): expanded the Advice
+  guardrail (MAY now covers discussing a named instrument via a tool, never from
+  memory) + added the "Real-stock portfolio comparison" paragraph (use the 4-tool
+  chain, never build_goal_plan, 2-asset-only, Lab-only for N>2/Monte Carlo/stress),
+  and extended the "Choice before action" small-cap carve-out with a matching
+  portfolio-comparison carve-out.
+- Added smoke-10.js (repo root, 62 structural assertions).
+
+### Verified
+- node --test engine.test.js: 14/14 PASS.
+- node smoke-09.js: ALL PASS (Phase 9 untouched). node smoke-10.js: ALL PASS.
+- smoke-02/05/06/07/08: ALL PASS (no regression).
+- node --check clean (goalden-engine.js, worker.js + all inline scripts);
+  python ast.parse local_server.py clean.
+- agent-evals loadPage OK for all 3 pages; goalden.html now exposes 16 tools,
+  door2 17 (both include the 5 new portfolio tools); Lab untouched (30 tools).
+- Functional test (vm-injected 2 synthetic instruments → compare_portfolio):
+  returns the right structure (instruments/correlation/minVariance/tangency,
+  weights summing to 1, riskFreePct). Note: synthetic constant-return data
+  produced vol≈0 + a numerically noisy correlation — a test-data artifact, not
+  a code issue; the real math is covered by the engine tests above.
+
+### Known / not done
+- No commit made (per the git rule).
+- NOT browser-tested: the floating frontier panel + render_frontier_chart visual,
+  and the full search→add→compare→chart chain, need a live-browser pass
+  (cache-bust URLs) — Claude Code's job.
+- render_frontier_chart's floating panel is position:fixed top-left to avoid the
+  advisor's right-side dock; polish (dismiss-on-Escape, mobile sizing) left for later.

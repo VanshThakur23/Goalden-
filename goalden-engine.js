@@ -179,6 +179,304 @@ function bestWindow(series, years){
   return w.reduce((best,cur)=>cur.cagr>best.cagr?cur:best, w[0]);
 }
 
+/* =====================================================================
+   REAL-INSTRUMENT PORTFOLIO MATH — ported verbatim from goalden-lab.html
+   (Phase 10) so Door 1/2 can run a 2-asset real-stock comparison without
+   going to the Lab. These are page-global-free (pure) on purpose: the
+   Lab's copies stay in the Lab untouched — this is additive duplication,
+   a deliberate tradeoff to avoid any risk to the Lab's working code.
+   ===================================================================== */
+
+function computeDailyReturns(prices){
+  const rets=[];
+  for(let i=1;i<prices.length;i++){
+    const p0=prices[i-1].close, p1=prices[i].close;
+    if(p0>0) rets.push({date:prices[i].date, r:(p1-p0)/p0});
+  }
+  return rets;
+}
+// Audits a fetched price series for the kinds of defects that can
+// silently poison mean/stdev before any of it reaches a chart or a
+// Sharpe ratio — an unadjusted stock split, a NAV that's pinned/stale,
+// a single bad print, too little history. Per this project's
+// no-fabricated-data rule, a flagged series is never repaired, clipped
+// or smoothed here: it's only labelled.
+function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoAnnual, hasCatastrophicLoss, isFund){
+  const flags=[];
+  let level='ok';
+  const bump=(lvl,code,msg,detail)=>{
+    flags.push({code, msg, detail});
+    if(lvl==='unusable') level='unusable';
+    else if(lvl==='caution' && level==='ok') level='caution';
+  };
+
+  const n=rets.length;
+  if(n<60) bump('unusable','SHORT',`Only ${n} usable daily observations — too few to trust.`);
+
+  const badPrices=prices.filter(p=>!(p.close>0)||!isFinite(p.close));
+  if(badPrices.length>0){
+    const frac=badPrices.length/prices.length;
+    bump(frac>0.01?'unusable':'caution','BADPRICE',`${badPrices.length} price point(s) were zero, negative or missing.`);
+  }
+
+  if(spanYears<1) bump('caution','SPAN','Less than a year of history — the annualised figures are a thin extrapolation.');
+
+  let maxGapDays=0;
+  for(let i=1;i<prices.length;i++){
+    const gap=(new Date(prices[i].date)-new Date(prices[i-1].date))/86400000;
+    if(gap>maxGapDays) maxGapDays=gap;
+  }
+  if(maxGapDays>30) bump('caution','GAP',`A ${Math.round(maxGapDays)}-day gap in the price history — something didn't trade or wasn't reported for a while.`);
+
+  // NSE circuit limits cap most single-day equity moves at 20%, so a
+  // >35% one-day move is almost always a corporate action or a bad
+  // print, not real trading. Funds get a tighter 10% bar: a NAV jump
+  // that size usually means a segregated-portfolio side-pocket event or
+  // a stale-then-corrected NAV, not a real one-day market move.
+  const jumpThreshold = isFund ? 0.10 : 0.35;
+  let worstJump=null;
+  rets.forEach(x=>{ if(!worstJump || Math.abs(x.r)>Math.abs(worstJump.r)) worstJump=x; });
+  if(worstJump && Math.abs(worstJump.r)>jumpThreshold){
+    bump('caution','JUMP',`A single-day move of ${(worstJump.r*100).toFixed(0)}% on ${worstJump.date} — most likely a corporate action, not a real trading day.`,worstJump);
+    // Does that jump look like an unadjusted split or bonus issue? A
+    // ~(1/k - 1) or ~(k - 1) move for a small integer k is the classic
+    // signature of a k:1 split/bonus the price history wasn't rebased for.
+    for(const k of [2,3,4,5,10]){
+      const splitDown=1/k-1, splitUp=k-1;
+      if(Math.abs(worstJump.r-splitDown)<0.03*Math.abs(splitDown) || Math.abs(worstJump.r-splitUp)<0.03*splitUp){
+        bump('caution','SPLITSIG',`Looks like an unadjusted ${k}:1 split or bonus issue on ${worstJump.date}, not a genuine one-day move.`);
+        break;
+      }
+    }
+  }
+
+  const zeroDays=rets.filter(x=>x.r===0).length;
+  if(rets.length>0 && zeroDays/rets.length>0.30) bump('caution','STALE',`${Math.round(zeroDays/rets.length*100)}% of days show exactly no price change — this barely moves, so its risk figure will look unrealistically low.`);
+
+  if(hasCatastrophicLoss) bump('unusable','IMPLAUSIBLE','A single-day move to zero or below in this series — the compounded return cannot be computed.');
+  else{
+    if(annualReturn>1.00 || annualVol>1.50) bump('unusable','IMPLAUSIBLE',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — implausible for a real instrument, almost certainly a data defect rather than genuine performance.`);
+    else if(annualReturn>0.60 || annualVol>0.80) bump('caution','WILD',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — unusually extreme; worth a second look before trusting it.`);
+    if(geoAnnual!=null && Math.sign(annualReturn)!==Math.sign(geoAnnual) && annualReturn!==0 && geoAnnual!==0){
+      bump('caution','SIGNFLIP',`The average daily move was ${annualReturn>0?'positive':'negative'}, but compounded over the full window this was ${geoAnnual>0?'a net gain':'a net loss'} — see the note below.`);
+    }
+  }
+
+  return {level, flags};
+}
+function computeReturnStats(prices, isFund){
+  const rets=computeDailyReturns(prices);
+  const n=rets.length;
+  const mean=rets.reduce((s,x)=>s+x.r,0)/n;
+  const variance=rets.reduce((s,x)=>s+(x.r-mean)*(x.r-mean),0)/n; // population, matches STDEV.P
+  const sd=Math.sqrt(variance);
+  const first=new Date(prices[0].date), last=new Date(prices[prices.length-1].date);
+  const spanYears=Math.max(0.05, (last-first)/(365.25*24*3600*1000));
+  const tradingDaysPerYear=n/spanYears;
+  // The optimiser keeps this arithmetic figure -- it's the only kind of
+  // return that's linearly combinable across assets, which mean-variance
+  // math requires, and it matches this project's coursework convention.
+  // It is NOT what an investor who held the whole period actually earned
+  // -- see geoAnnual/cagr below for that.
+  const annualReturn=Math.pow(1+mean, tradingDaysPerYear)-1;
+  const annualVol=sd*Math.sqrt(tradingDaysPerYear);
+
+  // Compounded return: what holding this the entire window actually
+  // turned into. A single day where price falls to (near) zero makes
+  // log(1+r) = -Infinity, which would poison every downstream number
+  // silently -- guarded explicitly rather than left to produce NaN/Inf.
+  const hasCatastrophicLoss = rets.some(x=>x.r<=-0.999);
+  let geoAnnual=null, cagr=null;
+  if(!hasCatastrophicLoss){
+    const logSum = rets.reduce((s,x)=>s+Math.log(1+x.r), 0);
+    geoAnnual = Math.expm1(logSum * tradingDaysPerYear / n);
+    cagr = Math.pow(prices[prices.length-1].close/prices[0].close, 1/spanYears) - 1;
+  }
+
+  const quality = auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoAnnual, hasCatastrophicLoss, !!isFund);
+
+  return {returns:rets, n, dailyMean:mean, dailySd:sd, tradingDaysPerYear,
+    annualReturn, annualVol, geoAnnual, cagr, spanYears,
+    startDate:prices[0].date, endDate:prices[prices.length-1].date, quality};
+}
+// Aligns two return series by date (different instruments can carry
+// different trading calendars/holidays) before computing covariance.
+function alignReturns(retsA, retsB){
+  const mapB=new Map(retsB.map(x=>[x.date,x.r]));
+  const a=[], b=[];
+  retsA.forEach(x=>{ if(mapB.has(x.date)){ a.push(x.r); b.push(mapB.get(x.date)); } });
+  return {a, b};
+}
+function populationCovariance(a, b){
+  const n=a.length;
+  const meanA=a.reduce((s,x)=>s+x,0)/n, meanB=b.reduce((s,x)=>s+x,0)/n;
+  let cov=0; for(let i=0;i<n;i++) cov+=(a[i]-meanA)*(b[i]-meanB);
+  return cov/n;
+}
+// Pairwise annualised covariance/correlation matrices, asset-count-agnostic.
+function computeCovarianceMatrix(statsList){
+  const n=statsList.length;
+  const covAnnual=Array.from({length:n},()=>new Array(n).fill(0));
+  const corr=Array.from({length:n},()=>new Array(n).fill(0));
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++){
+    if(i===j){ covAnnual[i][j]=statsList[i].annualVol*statsList[i].annualVol; corr[i][j]=1; continue; }
+    const {a,b}=alignReturns(statsList[i].returns, statsList[j].returns);
+    const dailyCov = a.length>10 ? populationCovariance(a,b) : 0;
+    const days=(statsList[i].tradingDaysPerYear+statsList[j].tradingDaysPerYear)/2;
+    covAnnual[i][j]=dailyCov*days;
+    corr[i][j]=statsList[i].annualVol>0 && statsList[j].annualVol>0 ? covAnnual[i][j]/(statsList[i].annualVol*statsList[j].annualVol) : 0;
+  }
+  return {covAnnual, corr};
+}
+function portfolioReturn(weights, returns){ return weights.reduce((s,w,i)=>s+w*returns[i],0); }
+function portfolioVariance(weights, vols, corr){
+  let v=0;
+  for(let i=0;i<weights.length;i++) for(let j=0;j<weights.length;j++) v+=weights[i]*weights[j]*vols[i]*vols[j]*corr[i][j];
+  return v;
+}
+// Exactly-2-instrument closed-form frontier: sweep w across [0,1] (the
+// worksheet's own approach for the two-risky-asset case). Uses the same
+// portfolioReturn()/portfolioVariance() as every other frontier, called with n=2.
+function twoAssetFrontier(retA, retB, sdA, sdB, corr, steps){
+  if(steps===undefined) steps=101;
+  const pts=[];
+  for(let i=0;i<steps;i++){
+    const w=i/(steps-1);
+    const weights=[w,1-w];
+    pts.push({ w, ret:portfolioReturn(weights,[retA,retB]), vol:Math.sqrt(portfolioVariance(weights,[sdA,sdB],[[1,corr],[corr,1]])) });
+  }
+  return pts;
+}
+// Closed-form global-minimum-variance weight for two assets, clamped to
+// [0,1] since this app never offers shorting (true unconstrained min-var
+// can fall outside that range at high correlation).
+function minVarianceWeightTwoAsset(sdA, sdB, corr){
+  const covAB=corr*sdA*sdB;
+  const denom=sdA*sdA+sdB*sdB-2*covAB;
+  if(Math.abs(denom)<1e-12) return 0.5;
+  return Math.max(0, Math.min(1, (sdB*sdB-covAB)/denom));
+}
+// Closed-form tangency weight for two risky assets given a risk-free
+// rate — the standard two-fund-separation result.
+//
+// Unlike minVarianceWeightTwoAsset above, this one CANNOT be fixed by
+// simply clamping the raw formula to [0,1]. Portfolio variance is convex
+// in w (always a bowl shape), so when its unconstrained minimum falls
+// outside [0,1] the nearest boundary really is the constrained best —
+// clamping is safe there. Sharpe ratio is not convex/concave: its one
+// stationary point is a genuine interior maximum ONLY when the raw value
+// already lands in [0,1]. When one asset's excess return over the
+// risk-free rate is negative (this instrument underperformed cash),
+// the unconstrained "optimum" wants to short that asset and lever up
+// the other one — something this app never offers — and the stationary
+// point found by the formula sits on the wrong side entirely: Sharpe is
+// then monotonic across [0,1], and naively clamping the raw value grabs
+// whichever endpoint happens to be numerically closer, not whichever
+// endpoint actually has the higher Sharpe ratio. Verified against a real
+// pair (RELIANCE.NS/TCS.NS, TCS deeply negative over the window): the
+// raw formula gave -0.90, clamped that to 0% RELIANCE / 100% TCS —
+// exactly backwards, since 100% RELIANCE alone (Sharpe 0.12) beats 100%
+// TCS alone (Sharpe -0.49) and nothing between them does better than
+// either pure holding once shorting is off the table.
+function tangencyWeightTwoAsset(retA, retB, sdA, sdB, corr, rf){
+  const covAB=corr*sdA*sdB;
+  const exA=retA-rf, exB=retB-rf;
+  const num=exA*sdB*sdB - exB*covAB;
+  const den=exA*sdB*sdB + exB*sdA*sdA - (exA+exB)*covAB;
+  const wRaw = Math.abs(den)<1e-12 ? 0.5 : num/den;
+  if(wRaw>=0 && wRaw<=1) return wRaw; // genuine interior optimum -- no shorting needed to reach it
+  const sharpeAt = w=>{
+    const ret = w*retA + (1-w)*retB;
+    const variance = w*w*sdA*sdA + (1-w)*(1-w)*sdB*sdB + 2*w*(1-w)*covAB;
+    const vol = Math.sqrt(Math.max(0, variance));
+    return vol>0 ? (ret-rf)/vol : -Infinity;
+  };
+  return sharpeAt(1) >= sharpeAt(0) ? 1 : 0;
+}
+// Capital Allocation Line: a straight line from (0, rf) through the
+// tangency point, extended to maxLeverage x the tangency risk/return —
+// mirrors the worksheet's own 0% / 100% / 200% three-point construction
+// (borrowing at the risk-free rate to lever up past the tangency mix).
+function capitalAllocationLine(rf, tanRet, tanVol, maxLeverage){
+  if(maxLeverage===undefined) maxLeverage=2;
+  if(tanVol<=0) return [{vol:0,ret:rf},{vol:0,ret:rf}];
+  const sharpe=(tanRet-rf)/tanVol;
+  const pts=[];
+  for(let lev=0; lev<=maxLeverage+1e-9; lev+=maxLeverage/20) pts.push({vol:tanVol*lev, ret:rf+sharpe*tanVol*lev});
+  return pts;
+}
+function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel, minVarPoint){
+  const pct=v=>(v*100).toFixed(2)+'%';
+  // Suppress the SAFEST label when it would land on top of an asset dot
+  // or the BEST BALANCE dot (common with 2 assets, where the min-variance
+  // mix often sits very close to one of those) -- three overlapping
+  // labels reads worse than two clear ones.
+  const vols=frontier.map(p=>p.vol), rets=frontier.map(p=>p.ret);
+  const volTol=(Math.max(...vols)-Math.min(...vols))*0.04 || 0.001;
+  const retTol=(Math.max(...rets)-Math.min(...rets))*0.04 || 0.001;
+  const near=(p,q)=>Math.abs(p.vol-q.vol)<volTol && Math.abs(p.ret-q.ret)<retTol;
+  const showSafest = minVarPoint && !near(minVarPoint,tangencyPoint) && !assetPoints.some(ap=>near(minVarPoint,{vol:ap.vol,ret:ap.ret}));
+  // capitalAllocationLine() always starts its sweep at leverage 0, i.e.
+  // cal[0] is exactly {vol:0, ret:rf} -- reading it back out here instead
+  // of threading a separate rf argument through the whole call chain.
+  const rfPoint = cal[0] || {vol:0, ret:0};
+  return {
+    animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
+    grid:{left:54,right:20,top:24,bottom:52,containLabel:true},
+    xAxis:{type:'value', min:0, name:'RISK (per year)', nameLocation:'middle', nameGap:30,
+      nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.5)'}, axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
+      splitLine:{lineStyle:{color:'rgba(20,40,63,.05)'}}},
+    yAxis:{type:'value', name:'RETURN (per year)', nameLocation:'middle', nameGap:44,
+      nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.5)'}, axisLabel:{formatter:v=>(v*100).toFixed(0)+'%'},
+      splitLine:{lineStyle:{color:'rgba(20,40,63,.05)'}}},
+    dataZoom:[{type:'inside',xAxisIndex:0},{type:'inside',yAxisIndex:0}],
+    tooltip:{trigger:'item', confine:true, extraCssText:'max-width:290px;white-space:normal;line-height:1.5',
+      textStyle:{fontFamily:"'Figtree',sans-serif", fontSize:12},
+      formatter(p){
+      const [labelA,labelB] = assetPoints.map(a=>a.label);
+      if(p.seriesName==='Frontier'){
+        const w = frontier[p.dataIndex] ? frontier[p.dataIndex].w : null;
+        const split = w!=null ? `${(w*100).toFixed(0)}% ${labelA} / ${((1-w)*100).toFixed(0)}% ${labelB}<br/>` : '';
+        return `${split}Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/><span style="color:#2557C7">Click to try this mix.</span>`;
+      }
+      if(p.seriesName==='CAL') return `<b>Capital Allocation Line.</b><br/>Starts at the risk-free rate (${pct(rfPoint.ret)}, 0% risk) and blends in more of the Best Balance mix as it climbs.<br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='Risk-free') return `<b>The risk-free rate: ${pct(rfPoint.ret)}.</b><br/>The safe baseline this comparison uses &ndash; roughly a savings account or government bond. It sits at 0% risk because it's assumed not to move. The dashed line is what you get blending this with the Best Balance mix.`;
+      if(p.seriesName==='Assets'){
+        const a=assetPoints[p.dataIndex];
+        if(!a) return '';
+        return `<b>${a.fullLabel||a.label} on its own:</b><br/>${pct(a.ret)} for ${pct(a.vol)} risk.`;
+      }
+      if(p.seriesName==='Your mix') return `<b>Your current mix${currentMixLabel?': '+currentMixLabel:''}.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/>This marks where the slider below is set right now &ndash; it isn't clickable itself. Click the <b style="color:#14283F">BEST BALANCE</b> dot or the blue curve to move it.`;
+      if(p.seriesName==='Safest') return `<b>The lowest-risk mix these two instruments can make.</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}`;
+      if(p.seriesName==='Tangency') return `<b>Best balance of risk and reward (the tangency / best-Sharpe point).</b><br/>Return: ${pct(p.value[1])} &nbsp; Risk: ${pct(p.value[0])}<br/><span style="color:#2557C7">Click to move here.</span>`;
+      return '';
+    }},
+    series:[
+      { name:'Frontier', type:'line', data:frontier.map(p=>[p.vol,p.ret]), smooth:.2, showSymbol:false,
+        itemStyle:{color:'#2557C7'}, lineStyle:{color:'#2557C7',width:2.25}, z:2 },
+      { name:'CAL', type:'line', data:cal.map(p=>[p.vol,p.ret]), showSymbol:false,
+        lineStyle:{color:'#14283F', width:1.5, type:'dashed'}, z:1 },
+      { name:'Risk-free', type:'scatter', data:[[rfPoint.vol,rfPoint.ret]], symbolSize:8,
+        itemStyle:{color:'#14283F', borderColor:'#14283F', borderWidth:1}, z:4,
+        label:{show:true, formatter:`RISK-FREE ${(rfPoint.ret*100).toFixed(1)}%`, position:'right', distance:8, color:'rgba(20,40,63,.6)', fontWeight:700, fontSize:8.5, fontFamily:"'Spline Sans Mono',monospace"} },
+      { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
+        itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1},
+        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
+      { name:'Tangency', type:'scatter', data:[[tangencyPoint.vol,tangencyPoint.ret]], symbolSize:11,
+        itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
+        label:{show:true, formatter:'BEST BALANCE', position:'bottom', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} },
+      ...(showSafest ? [{ name:'Safest', type:'scatter', data:[[minVarPoint.vol,minVarPoint.ret]], symbolSize:10,
+        itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1.5}, z:4,
+        label:{show:true, formatter:'SAFEST', position:'top', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} }] : []),
+      { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
+        itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, z:5,
+        label:{show:true, formatter:'YOUR MIX', position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
+      { name:'Your mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
+        itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:5 },
+    ],
+  };
+}
+
 /* ---------------------------------------------------------------------
    Node compatibility shim — makes this file require()-able for
    engine.test.js. In the browser `module` is undefined, so this branch is
@@ -191,5 +489,9 @@ if (typeof module !== 'undefined' && module.exports) {
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,
+    computeDailyReturns, auditPriceSeries, computeReturnStats, alignReturns,
+    populationCovariance, computeCovarianceMatrix, portfolioReturn, portfolioVariance,
+    twoAssetFrontier, minVarianceWeightTwoAsset, tangencyWeightTwoAsset,
+    capitalAllocationLine, liveFrontierChartOption,
   };
 }
