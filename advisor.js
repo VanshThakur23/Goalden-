@@ -1157,6 +1157,14 @@ async function advisorSend() {
   advisor.pendingPlan = null;
   advisorAddMsg('user', text);
   advisor.messages.push({ role: 'user', content: text });
+  // A user who asks for "a report" in a FOLLOW-UP message (comparison already
+  // ran in an earlier turn, so compare_portfolio won't necessarily be called
+  // again this turn) needs the same nudge as the same-turn case below — the
+  // same-turn nudge only fires from inside a tool-call batch, so it can never
+  // catch a bare "make me a report" reply to an already-finished comparison.
+  if (/\breport\b/i.test(text) && typeof lastComparisonResult !== 'undefined' && lastComparisonResult) {
+    advisor.messages.push({ role: 'system', content: '[reminder] The user is asking for a report on the portfolio comparison you already ran. Call compose_briefing with sections:["comparison"] ONLY (no "headline", no "allocation" — this page has no country/goal set in this conversation, those sections would just print a placeholder) before writing any other reply — do not just describe it in chat.' });
+  }
   advisorPersist();
   await advisorContinue();
 }
