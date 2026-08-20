@@ -1054,17 +1054,15 @@ async function advisorLoop(silent) {
         if (ci < msg.tool_calls.length - 1 && !reduceMotion) await advisorPause(350);
       }
       // A live model reliably explains a comparison but unreliably follows
-      // the system prompt's instruction to also call compose_briefing when
-      // the user asked for a report — a soft instruction buried in a long
-      // prompt loses to the more obvious "just answer in chat" path. A
-      // fresh, high-recency system message right before the next model call
-      // is far more likely to land than re-wording the base prompt again.
+      // the system prompt's instruction to also produce a report — a soft
+      // instruction buried in a long prompt loses to the more obvious "just
+      // answer in chat" path, even when the user never said the word
+      // "report" at all. Don't gate this on that keyword: every comparison
+      // gets a report, every time, deterministically — the model no longer
+      // has to notice or comply, it just executes what this reminder says.
       const calledNames = msg.tool_calls.map(function (tc) { return tc.function && tc.function.name; });
       if (calledNames.indexOf('compare_portfolio') !== -1 && calledNames.indexOf('compose_briefing') === -1) {
-        const lastUserMsg = advisor.messages.slice().reverse().find(function (m) { return m.role === 'user'; });
-        if (lastUserMsg && /\breport\b/i.test(lastUserMsg.content || '')) {
-          advisor.messages.push({ role: 'system', content: '[reminder] The user asked for a report. Before writing any other reply, call compose_briefing with sections:["comparison"] ONLY (no "headline", no "allocation" — this page has no country/goal set in this conversation, those sections would just print a placeholder) — do not just describe the chart in chat.' });
-        }
+        advisor.messages.push({ role: 'system', content: '[reminder] A portfolio comparison just ran. Before writing any other reply, call compose_briefing with sections:["comparison"] ONLY (no "headline", no "allocation" — this page has no country/goal set in this conversation, those sections would just print a placeholder) so the user gets an actual saved report, not just a chat description of the chart.' });
       }
       advisorTrim();
       advisorPersist();
