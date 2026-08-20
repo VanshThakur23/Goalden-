@@ -1053,16 +1053,19 @@ async function advisorLoop(silent) {
         // F2b — sequence consecutive actions so a human can watch them happen.
         if (ci < msg.tool_calls.length - 1 && !reduceMotion) await advisorPause(350);
       }
-      // A live model reliably explains a comparison but unreliably follows
-      // the system prompt's instruction to also produce a report — a soft
-      // instruction buried in a long prompt loses to the more obvious "just
-      // answer in chat" path, even when the user never said the word
-      // "report" at all. Don't gate this on that keyword: every comparison
-      // gets a report, every time, deterministically — the model no longer
-      // has to notice or comply, it just executes what this reminder says.
+      // The floating chart from render_frontier_chart is enough on its own
+      // for a plain comparison request — only force the printable report
+      // (compose_briefing) when the user actually asked for one. A live
+      // model reliably explains a comparison in chat but unreliably follows
+      // the system prompt's softer "call compose_briefing" instruction when
+      // the user did ask, so this stays a deterministic nudge, just gated on
+      // the same "report" keyword the user's message needs to contain.
       const calledNames = msg.tool_calls.map(function (tc) { return tc.function && tc.function.name; });
       if (calledNames.indexOf('compare_portfolio') !== -1 && calledNames.indexOf('compose_briefing') === -1) {
-        advisor.messages.push({ role: 'system', content: '[reminder] A portfolio comparison just ran. Before writing any other reply, call compose_briefing with sections:["comparison"] ONLY (no "headline", no "allocation" — this page has no country/goal set in this conversation, those sections would just print a placeholder) so the user gets an actual saved report, not just a chat description of the chart.' });
+        const lastUserMsg = advisor.messages.slice().reverse().find(function (m) { return m.role === 'user'; });
+        if (lastUserMsg && /\breport\b/i.test(lastUserMsg.content || '')) {
+          advisor.messages.push({ role: 'system', content: '[reminder] The user asked for a report. Before writing any other reply, call compose_briefing with sections:["comparison"] ONLY (no "headline", no "allocation" — this page has no country/goal set in this conversation, those sections would just print a placeholder) — do not just describe the chart in chat.' });
+        }
       }
       advisorTrim();
       advisorPersist();
@@ -1262,6 +1265,13 @@ function composeBriefing(args) {
   }
   html += '<div class="briefing-footer"><button data-briefing-close>Back to the app</button></div>';
   briefingOpen(title, html);
+  // Chart-bearing sections (e.g. comparison) declare an afterRender hook
+  // instead of building chart markup into r.html directly — the chart divs
+  // only exist in the DOM once briefingOpen has injected this HTML, so any
+  // echarts.init() call has to happen after, not during, section build().
+  built.forEach(function (item) {
+    if (item.spec && item.r && item.r.ok && typeof item.spec.afterRender === 'function') item.spec.afterRender(item.r);
+  });
   return { ok: true, opened: title, shownSections: shown, missing: missing };
 }
 

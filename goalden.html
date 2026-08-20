@@ -2342,10 +2342,21 @@ const BRIEFING_SECTIONS = {
     const hasCompounded = r.instruments.some(function (it) { return it.compoundedPct != null; });
     const compoundNote = hasCompounded ? '<div class="delay-row"><span class="delay-value">Compounded (actual) return reflects what the investment really earned including volatility drag; expected return is a simple average and can differ.</span></div>' : '';
     const sampledNote = r.method === 'sampled-frontier' ? '<div class="delay-row"><span class="delay-value">Weights are approximate — estimated from a sampled set of portfolios rather than solved exactly (exact solving only works for 2 instruments).</span></div>' : '';
+    const chart1Title = r.n === 2 ? 'Efficient frontier' : 'Return vs. risk';
+    const charts = '<div class="delay-title" style="margin-top:14px">'+chart1Title+'</div><div id="briefing-cmp-chart1" style="height:280px;width:100%"></div>'+
+      '<div class="delay-title" style="margin-top:14px">Risk/return profile</div><div id="briefing-cmp-chart2" style="height:280px;width:100%"></div>';
     return { ok:true, html: '<div class="delay-card"><div class="delay-title">Comparing '+r.instruments.map(function (it) { return it.label; }).join(' vs ')+'</div>'+rows+
       corrRows+
       '<div class="delay-row"><span class="delay-label">Risk-free rate</span><span class="delay-value">'+r.riskFreePct+'%</span></div>'+compoundNote+
-      mixRow('Minimum-variance mix', r.minVariance) + mixRow('Tangency (max Sharpe) mix', r.tangency) + sampledNote + '</div>' };
+      mixRow('Minimum-variance mix', r.minVariance) + mixRow('Tangency (max Sharpe) mix', r.tangency) + sampledNote + charts + '</div>' };
+  }, afterRender: function () {
+    if (!lastComparisonResult || !lastFrontierData) return;
+    const r = lastComparisonResult, d = lastFrontierData;
+    deferChartInit(function () {
+      if (r.n === 2 && d.frontier) initChart('briefing-cmp-chart1', liveFrontierChartOption(d.frontier, d.assetPoints, d.currentPoint, d.cal, d.tangencyPoint, d.currentMixLabel, d.minVarPoint));
+      else initChart('briefing-cmp-chart1', barComparisonChartOption(d.assetPoints));
+      initChart('briefing-cmp-chart2', radarComparisonChartOption(d.assetPoints, d.minVariance, d.tangency, d.riskFree));
+    });
   } },
 };
 
