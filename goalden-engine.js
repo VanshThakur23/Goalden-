@@ -405,6 +405,87 @@ function capitalAllocationLine(rf, tanRet, tanVol, maxLeverage){
   for(let lev=0; lev<=maxLeverage+1e-9; lev+=maxLeverage/20) pts.push({vol:tanVol*lev, ret:rf+sharpe*tanVol*lev});
   return pts;
 }
+/* ---------------------------------------------------------------------
+   N-asset comparison (2-4 instruments). The closed-form functions above
+   (twoAssetFrontier, minVarianceWeightTwoAsset, tangencyWeightTwoAsset)
+   are exact but strictly 2-asset -- they don't generalise. For 3-4
+   instruments we sample a long-only random-weight cloud instead, same
+   approach The Lab already uses for its own N-asset "Test Real
+   Investments" comparison (goalden-lab.html: mulberry32, randomWeights,
+   generateFrontier, bestSharpePoint) -- ported verbatim here so Door 1/2
+   can reuse it. The Lab keeps its own copy too (it's declared later in
+   that page and shadows this one there); this port only reaches Door 1/2.
+   --------------------------------------------------------------------- */
+function mulberry32(seed){
+  return function(){
+    seed|=0; seed=(seed+0x6D2B79F5)|0;
+    let t=Math.imul(seed^(seed>>>15),1|seed);
+    t=(t+Math.imul(t^(t>>>7),61|t))^t;
+    return((t^(t>>>14))>>>0)/4294967296;
+  };
+}
+function randomWeights(n, rng){
+  const cuts=[0,1];
+  for(let i=0;i<n-1;i++) cuts.push(rng());
+  cuts.sort((a,b)=>a-b);
+  const w=[];
+  for(let i=0;i<n;i++) w.push(cuts[i+1]-cuts[i]);
+  return w;
+}
+function generateFrontier(returns, vols, corr, n, seed){
+  const rng=mulberry32(seed);
+  const cloud=[];
+  for(let i=0;i<n;i++){
+    const w=randomWeights(returns.length, rng);
+    cloud.push({ w, ret:portfolioReturn(w,returns), vol:Math.sqrt(portfolioVariance(w,vols,corr)) });
+  }
+  const minV=Math.min(...cloud.map(p=>p.vol)), maxV=Math.max(...cloud.map(p=>p.vol));
+  const bins=40, binW=(maxV-minV)/bins;
+  const best=new Array(bins).fill(null);
+  cloud.forEach(p=>{
+    let b=Math.min(bins-1,Math.floor((p.vol-minV)/(binW||1)));
+    if(!best[b]||p.ret>best[b].ret) best[b]=p;
+  });
+  return { cloud, frontier:best.filter(Boolean).sort((a,b)=>a.vol-b.vol) };
+}
+function bestSharpePoint(frontier, rf){
+  let best=null, bestSharpe=-Infinity;
+  frontier.forEach(p=>{
+    if(p.vol<=0) return;
+    const s=(p.ret-rf)/p.vol;
+    if(s>bestSharpe){ bestSharpe=s; best=p; }
+  });
+  return best ? Object.assign({}, best, {sharpe:bestSharpe}) : null;
+}
+// Fixed seed (not user/session-derived) so the same instruments always
+// produce the same sampled weights across a chat explanation, the chart,
+// and a printed report within one comparison -- and across re-runs during
+// a live demo.
+const MULTI_FRONTIER_SEED = 20240101;
+function multiAssetFrontier(statsList, rf, opts){
+  opts = opts || {};
+  const samples = opts.samples || 3000;
+  const seed = opts.seed != null ? opts.seed : MULTI_FRONTIER_SEED;
+  const returns = statsList.map(function(s){ return s.annualReturn; });
+  const vols = statsList.map(function(s){ return s.annualVol; });
+  const corr = computeCovarianceMatrix(statsList).corr;
+  const gen = generateFrontier(returns, vols, corr, samples, seed);
+  const frontier = gen.frontier;
+  let mv = frontier[0];
+  for(let i=1;i<frontier.length;i++) if(frontier[i].vol<mv.vol) mv=frontier[i];
+  // bestSharpePoint attaches .sharpe to tangency automatically; the
+  // min-variance point found above does not get one for free, and
+  // radarComparisonChartOption reads minVariance.sharpe directly -- leave
+  // this off and the radar chart silently plots undefined on that axis.
+  const mvSharpe = mv.vol>0 ? (mv.ret-rf)/mv.vol : 0;
+  let tan = bestSharpePoint(frontier, rf);
+  if(!tan) tan = Object.assign({}, mv, {sharpe:mvSharpe});
+  return {
+    returns: returns, vols: vols, corr: corr, cloud: gen.cloud, frontier: frontier,
+    minVariance: { w:mv.w, ret:mv.ret, vol:mv.vol, sharpe:mvSharpe },
+    tangency: { w:tan.w, ret:tan.ret, vol:tan.vol, sharpe:tan.sharpe },
+  };
+}
 function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel, minVarPoint){
   const pct=v=>(v*100).toFixed(2)+'%';
   // Suppress the SAFEST label when it would land on top of an asset dot
@@ -415,7 +496,16 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
   const volTol=(Math.max(...vols)-Math.min(...vols))*0.04 || 0.001;
   const retTol=(Math.max(...rets)-Math.min(...rets))*0.04 || 0.001;
   const near=(p,q)=>Math.abs(p.vol-q.vol)<volTol && Math.abs(p.ret-q.ret)<retTol;
-  const showSafest = minVarPoint && !near(minVarPoint,tangencyPoint) && !assetPoints.some(ap=>near(minVarPoint,{vol:ap.vol,ret:ap.ret}));
+  const showSafest = minVarPoint && !near(minVarPoint,tangencyPoint) && !near(minVarPoint,currentPoint) && !assetPoints.some(ap=>near(minVarPoint,{vol:ap.vol,ret:ap.ret}));
+  // "Your mix" is always initialized to the min-variance mix, so it
+  // routinely lands exactly on top of SAFEST or BEST BALANCE -- two
+  // stacked, unreadable labels. Merge into one truthful label instead of
+  // offsetting by a fixed pixel amount (the chart has dataZoom, so a pixel
+  // offset that clears the overlap at default zoom collides again at
+  // another zoom level).
+  const tangencyIsCurrent = near(currentPoint, tangencyPoint);
+  const minVarIsCurrent = minVarPoint && near(currentPoint, minVarPoint);
+  const yourMixLabel = tangencyIsCurrent ? 'YOUR MIX = BEST BALANCE' : minVarIsCurrent ? 'YOUR MIX = SAFEST' : 'YOUR MIX';
   // capitalAllocationLine() always starts its sweep at leverage 0, i.e.
   // cal[0] is exactly {vol:0, ret:rf} -- reading it back out here instead
   // of threading a separate rf argument through the whole call chain.
@@ -464,13 +554,13 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
       { name:'Tangency', type:'scatter', data:[[tangencyPoint.vol,tangencyPoint.ret]], symbolSize:11,
         itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
-        label:{show:true, formatter:'BEST BALANCE', position:'bottom', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} },
+        label:{show:!tangencyIsCurrent, formatter:'BEST BALANCE', position:'bottom', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} },
       ...(showSafest ? [{ name:'Safest', type:'scatter', data:[[minVarPoint.vol,minVarPoint.ret]], symbolSize:10,
         itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1.5}, z:4,
         label:{show:true, formatter:'SAFEST', position:'top', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} }] : []),
       { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
         itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, z:5,
-        label:{show:true, formatter:'YOUR MIX', position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
+        label:{show:true, formatter:yourMixLabel, position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Your mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
         itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:5 },
     ],
@@ -619,6 +709,7 @@ if (typeof module !== 'undefined' && module.exports) {
     twoAssetFrontier, minVarianceWeightTwoAsset, tangencyWeightTwoAsset,
     capitalAllocationLine, liveFrontierChartOption,
     barComparisonChartOption, radarComparisonChartOption,
+    mulberry32, randomWeights, generateFrontier, bestSharpePoint, multiAssetFrontier,
     bm25Tokenize, bm25Rank, filterToolsByQuery,
   };
 }

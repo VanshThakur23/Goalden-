@@ -288,4 +288,46 @@ test('radarComparisonChartOption: every axis max is >= the values it bounds', ()
   assert.ok(riskInd.max >= Math.max(...vols), 'risk axis bounds every plotted vol');
 });
 
+// ---- Phase 13: N-asset sampled frontier (3-4 instrument comparisons) ----
+
+test('randomWeights: vectors sum to 1 with no negatives', () => {
+  const rng = engine.mulberry32(42);
+  for (let i = 0; i < 50; i++) {
+    const w = engine.randomWeights(4, rng);
+    assert.strictEqual(w.length, 4);
+    const sum = w.reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(sum - 1) < 1e-9, `weights sum to 1, got ${sum}`);
+    w.forEach((wt) => assert.ok(wt >= 0, `no negative weight, got ${wt}`));
+  }
+});
+
+test('generateFrontier is deterministic under a fixed seed', () => {
+  const returns = [0.20, 0.12, 0.09];
+  const vols = [0.25, 0.18, 0.15];
+  const corr = [[1, 0.3, 0.1], [0.3, 1, 0.4], [0.1, 0.4, 1]];
+  const a = engine.generateFrontier(returns, vols, corr, 500, 20240101);
+  const b = engine.generateFrontier(returns, vols, corr, 500, 20240101);
+  assert.deepStrictEqual(a.frontier, b.frontier, 'same seed produces the same sampled frontier');
+});
+
+test('multiAssetFrontier: minVariance.sharpe is always finite (radar chart reads it directly)', () => {
+  const vals = [0.01, -0.02, 0.03, 0.01, -0.01, 0.02, -0.03, 0.015, -0.025, 0.02, -0.01, 0.03];
+  const mk = (arr, ret) => ({ returns: arr.map((r, i) => ({ date: 'd' + i, r })), annualReturn: ret, annualVol: 0.2, tradingDaysPerYear: 252 });
+  const statsList = [
+    mk(vals, 0.20),
+    mk(vals.map((v) => v * 0.7), 0.12),
+    mk(vals.map((v, i) => (i < 6 ? v : -v)), 0.09),
+  ];
+  const m = engine.multiAssetFrontier(statsList, 0.065, { seed: 20240101 });
+  assert.ok(Number.isFinite(m.minVariance.sharpe), 'minVariance.sharpe is a finite number');
+  assert.ok(Number.isFinite(m.tangency.sharpe), 'tangency.sharpe is a finite number');
+  assert.strictEqual(m.minVariance.w.length, 3);
+  assert.strictEqual(m.tangency.w.length, 3);
+});
+
+test('bestSharpePoint returns null on an all-zero-vol frontier', () => {
+  const frontier = [{ w: [1, 0], ret: 0.1, vol: 0 }, { w: [0, 1], ret: 0.05, vol: 0 }];
+  assert.strictEqual(engine.bestSharpePoint(frontier, 0.065), null);
+});
+
 

@@ -454,7 +454,7 @@ const S = {
   // picked a custom post-goal mix via the "Advanced" control under the
   // relevant assumption line.
   postRetAlloc: null, eduAlloc: null,
-  // Phase 10 — real 2-asset portfolio comparison (capped at 4, used by
+  // Phase 10 — real portfolio comparison (2-4 instruments, used by
   // add_instrument / remove_instrument / compare_portfolio).
   instruments: []
 };
@@ -1651,11 +1651,12 @@ function readOtherPage(page) {
   }
 }
 
-// Phase 10 — real 2-asset portfolio comparison. The pure math (computeReturnStats,
-// computeCovarianceMatrix, twoAssetFrontier, minVarianceWeightTwoAsset,
-// tangencyWeightTwoAsset, capitalAllocationLine, liveFrontierChartOption) lives
-// in the shared goalden-engine.js; this page adds only the fetch/tool plumbing
-// and a floating chart panel. Search/add are real Yahoo/MFAPI proxies via the
+// Phase 10 — real portfolio comparison, 2-4 instruments. The pure math
+// (computeReturnStats, computeCovarianceMatrix, twoAssetFrontier,
+// minVarianceWeightTwoAsset, tangencyWeightTwoAsset, capitalAllocationLine,
+// multiAssetFrontier, liveFrontierChartOption) lives in the shared
+// goalden-engine.js; this page adds only the fetch/tool plumbing and a
+// floating chart panel. Search/add are real Yahoo/MFAPI proxies via the
 // same /api/* routes the Lab uses.
 async function liveApiGet(path){
   const res = await fetch(path);
@@ -1704,32 +1705,64 @@ function removeInstrument(symbol){
   persistState();
   return { ok:true, removed: sym };
 }
+function instrumentRow(it, st){
+  const row = { symbol: it.symbol, label: it.label, annualReturnPct: +(st.annualReturn*100).toFixed(2), annualVolPct: +(st.annualVol*100).toFixed(2) };
+  if(st.geoAnnual != null) row.compoundedPct = +(st.geoAnnual*100).toFixed(2);
+  if(st.quality && st.quality.flags && st.quality.flags.length) row.quality = { level: st.quality.level, flags: st.quality.flags.map(function(f){ return { code:f.code, msg:f.msg }; }) };
+  return row;
+}
 function comparePortfolio(){
-  if(S.instruments.length < 2) return { ok:false, error:'Need exactly two instruments to compare — add more via add_instrument (currently ' + S.instruments.length + ').' };
-  if(S.instruments.length > 2) return { ok:false, error:'This comparison is 2-asset only — remove down to two first (currently ' + S.instruments.length + ').' };
-  const a = S.instruments[0], b = S.instruments[1];
-  const stats = [a.stats, b.stats];
-  const c12 = computeCovarianceMatrix(stats).corr[0][1];
+  const n = S.instruments.length;
+  if(n < 2) return { ok:false, error:'Need at least two instruments to compare — add more via add_instrument (currently ' + n + ').' };
+  if(n > 4) return { ok:false, error:'This comparison handles 2 to 4 instruments — remove some first (currently ' + n + ').' };
+  const insts = S.instruments;
+  const stats = insts.map(function(it){ return it.stats; });
   const rf = portfolioRf();
-  const retA = stats[0].annualReturn, retB = stats[1].annualReturn;
-  const sdA = stats[0].annualVol, sdB = stats[1].annualVol;
-  const wMinVar = minVarianceWeightTwoAsset(sdA, sdB, c12);
-  const wTan = tangencyWeightTwoAsset(retA, retB, sdA, sdB, c12, rf);
-  const frontier = twoAssetFrontier(retA, retB, sdA, sdB, c12);
-  const mix = function(w){ return { ret: portfolioReturn([w,1-w],[retA,retB]), vol: Math.sqrt(portfolioVariance([w,1-w],[sdA,sdB],[[1,c12],[c12,1]])) }; };
-  const tan = mix(wTan), mv = mix(wMinVar);
-  const cal = capitalAllocationLine(rf, tan.ret, tan.vol);
-  const sharpeAt = function(w){ const m = mix(w); return m.vol > 0 ? (m.ret - rf)/m.vol : -Infinity; };
-  lastFrontierData = { frontier: frontier, assetPoints: [{ label: a.symbol, ret: retA, vol: sdA }, { label: b.symbol, ret: retB, vol: sdB }], currentPoint: { vol: mv.vol, ret: mv.ret }, cal: cal, tangencyPoint: { vol: tan.vol, ret: tan.ret }, currentMixLabel: 'min-variance mix', minVarPoint: { vol: mv.vol, ret: mv.ret }, riskFree: rf, minVariance: { ret: mv.ret, vol: mv.vol, sharpe: sharpeAt(wMinVar) }, tangency: { ret: tan.ret, vol: tan.vol, sharpe: sharpeAt(wTan) } };
-  const result = { ok:true, instruments: [ { symbol: a.symbol, label: a.label, annualReturnPct: +(retA*100).toFixed(2), annualVolPct: +(sdA*100).toFixed(2) }, { symbol: b.symbol, label: b.label, annualReturnPct: +(retB*100).toFixed(2), annualVolPct: +(sdB*100).toFixed(2) } ], correlation: +c12.toFixed(3), riskFreePct: +(rf*100).toFixed(1), minVariance: { weights: [+wMinVar.toFixed(3), +(1-wMinVar).toFixed(3)], returnPct: +(mv.ret*100).toFixed(2), volPct: +(mv.vol*100).toFixed(2), sharpe: +sharpeAt(wMinVar).toFixed(3) }, tangency: { weights: [+wTan.toFixed(3), +(1-wTan).toFixed(3)], returnPct: +(tan.ret*100).toFixed(2), volPct: +(tan.vol*100).toFixed(2), sharpe: +sharpeAt(wTan).toFixed(3) } };
+  const corr = computeCovarianceMatrix(stats).corr;
+  const correlations = [];
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) correlations.push({ a: insts[i].symbol, b: insts[j].symbol, correlation: +corr[i][j].toFixed(3) });
+  let wMin, wTan, mv, tan;
+  if(n === 2){
+    const a = insts[0], b = insts[1];
+    const retA = stats[0].annualReturn, retB = stats[1].annualReturn;
+    const sdA = stats[0].annualVol, sdB = stats[1].annualVol;
+    const c12 = corr[0][1];
+    const wMinVar = minVarianceWeightTwoAsset(sdA, sdB, c12);
+    const wTanVar = tangencyWeightTwoAsset(retA, retB, sdA, sdB, c12, rf);
+    const frontier = twoAssetFrontier(retA, retB, sdA, sdB, c12);
+    const mix = function(w){ return { ret: portfolioReturn([w,1-w],[retA,retB]), vol: Math.sqrt(portfolioVariance([w,1-w],[sdA,sdB],[[1,c12],[c12,1]])) }; };
+    const sharpeAt = function(w){ const m = mix(w); return m.vol > 0 ? (m.ret - rf)/m.vol : -Infinity; };
+    mv = mix(wMinVar); tan = mix(wTanVar);
+    wMin = [wMinVar, 1-wMinVar]; wTan = [wTanVar, 1-wTanVar];
+    const cal = capitalAllocationLine(rf, tan.ret, tan.vol);
+    lastFrontierData = { frontier: frontier, assetPoints: [{ label: a.symbol, ret: retA, vol: sdA }, { label: b.symbol, ret: retB, vol: sdB }], currentPoint: { vol: mv.vol, ret: mv.ret }, cal: cal, tangencyPoint: { vol: tan.vol, ret: tan.ret }, currentMixLabel: 'min-variance mix', minVarPoint: { vol: mv.vol, ret: mv.ret }, riskFree: rf, assetCount: n, minVariance: { ret: mv.ret, vol: mv.vol, sharpe: sharpeAt(wMinVar) }, tangency: { ret: tan.ret, vol: tan.vol, sharpe: sharpeAt(wTanVar) } };
+    mv.sharpe = sharpeAt(wMinVar); tan.sharpe = sharpeAt(wTanVar);
+  } else {
+    const m = multiAssetFrontier(stats, rf, { seed: MULTI_FRONTIER_SEED });
+    wMin = m.minVariance.w; wTan = m.tangency.w;
+    mv = m.minVariance; tan = m.tangency;
+    lastFrontierData = { assetPoints: insts.map(function(it,i){ return { label: it.symbol, ret: stats[i].annualReturn, vol: stats[i].annualVol }; }), riskFree: rf, assetCount: n, minVariance: { ret: mv.ret, vol: mv.vol, sharpe: mv.sharpe }, tangency: { ret: tan.ret, vol: tan.vol, sharpe: tan.sharpe } };
+  }
+  const result = {
+    ok:true, n:n, method: n===2 ? 'closed-form' : 'sampled-frontier',
+    instruments: insts.map(function(it,i){ return instrumentRow(it, stats[i]); }),
+    correlations: correlations,
+    riskFreePct: +(rf*100).toFixed(1),
+    minVariance: { weights: wMin.map(function(w){ return +w.toFixed(3); }), returnPct: +(mv.ret*100).toFixed(2), volPct: +(mv.vol*100).toFixed(2), sharpe: +mv.sharpe.toFixed(3) },
+    tangency: { weights: wTan.map(function(w){ return +w.toFixed(3); }), returnPct: +(tan.ret*100).toFixed(2), volPct: +(tan.vol*100).toFixed(2), sharpe: +tan.sharpe.toFixed(3) },
+    chartTypes: n===2 ? ['frontier','bar','radar'] : ['bar','radar'],
+  };
+  if(n === 2) result.correlation = correlations[0].correlation;
   lastComparisonResult = result;
   return result;
 }
 const FRONTIER_CHART_TITLES = { frontier: 'Efficient frontier', bar: 'Return vs. risk', radar: 'Risk/return profile' };
 function renderFrontierChart(chartType){
-  const type = ['frontier','bar','radar'].includes(chartType) ? chartType : 'frontier';
-  if(!lastFrontierData){ const r = comparePortfolio(); if(!r.ok) return r; }
+  if(!lastFrontierData || lastFrontierData.assetCount !== S.instruments.length){ const r = comparePortfolio(); if(!r.ok) return r; }
   const d = lastFrontierData;
+  let type = ['frontier','bar','radar'].includes(chartType) ? chartType : 'frontier';
+  let note;
+  if(type === 'frontier' && d.assetCount !== 2){ type = 'bar'; note = 'Efficient-frontier chart only applies to 2-instrument comparisons — showing the return-vs-risk bar chart instead.'; }
   let panel = document.getElementById('advisor-frontier-panel');
   if(!panel){
     panel = document.createElement('div');
@@ -1752,12 +1785,14 @@ function renderFrontierChart(chartType){
     panel.appendChild(chart);
     document.body.appendChild(panel);
   }
-  document.getElementById('advisor-frontier-title').innerHTML = '<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:16px;color:#14283F">' + FRONTIER_CHART_TITLES[type] + '</div><div style="font-family:\'Spline Sans Mono\',monospace;font-size:10px;color:rgba(20,40,63,.5)">' + d.assetPoints[0].label + ' vs ' + d.assetPoints[1].label + '</div>';
+  document.getElementById('advisor-frontier-title').innerHTML = '<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:16px;color:#14283F">' + FRONTIER_CHART_TITLES[type] + '</div><div style="font-family:\'Spline Sans Mono\',monospace;font-size:10px;color:rgba(20,40,63,.5)">' + d.assetPoints.map(function(ap){ return ap.label; }).join(' vs ') + '</div>';
   const opt = type === 'bar' ? barComparisonChartOption(d.assetPoints)
     : type === 'radar' ? radarComparisonChartOption(d.assetPoints, d.minVariance, d.tangency, d.riskFree)
     : liveFrontierChartOption(d.frontier, d.assetPoints, d.currentPoint, d.cal, d.tangencyPoint, d.currentMixLabel, d.minVarPoint);
   initChart('advisor-frontier-chart', opt);
-  return { ok:true, rendered:true, chartType:type };
+  const out = { ok:true, rendered:true, chartType:type };
+  if(note) out.note = note;
+  return out;
 }
 // pushState only when the screen actually changed: same-screen re-renders
 // (picking an answer re-renders the current screen) must not pile up
@@ -2075,8 +2110,8 @@ function advisorTools() {
     { type:'function', function:{ name:'search_instruments', description:'Search real stocks/ETFs by name or ticker (Yahoo\'s symbol database). Returns matches with symbol/name/exchange.', parameters:{ type:'object', properties:{ query:{ type:'string' } }, required:['query'] } } },
     { type:'function', function:{ name:'add_instrument', description:'Fetch a real instrument\'s price history and add it to the comparison (max 4). Pass a ticker (e.g. TCS.NS, RELIANCE.NS, AAPL) or a fund code.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'remove_instrument', description:'Remove an instrument from the comparison.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
-    { type:'function', function:{ name:'compare_portfolio', description:'Compare exactly two added instruments: correlation, the risk-minimizing split, and the best-Sharpe (tangency) split, each with return/vol/Sharpe. Requires exactly 2 instruments via add_instrument.', parameters:{ type:'object', properties:{} } } },
-    { type:'function', function:{ name:'render_frontier_chart', description:'Render a chart for the last compare_portfolio into a floating chart panel. Pass chartType to pick which visual best explains what you\'re about to say: "frontier" (default) shows the full risk/return curve and where the two blends sit on it — best when explaining the tradeoff itself; "bar" is a plain side-by-side of each instrument\'s return and risk — best for a quick, simple comparison; "radar" profiles return/risk/Sharpe for both instruments plus the two blends on one shape — best when summarizing several dimensions at once.', parameters:{ type:'object', properties:{ chartType:{ type:'string', enum:['frontier','bar','radar'] } } } } },
+    { type:'function', function:{ name:'compare_portfolio', description:'Compare 2 to 4 added instruments: pairwise correlations, the risk-minimizing split, and the best-Sharpe (tangency) split, each with return/vol/Sharpe. At exactly 2 instruments the weights are exact (closed-form); at 3-4 they are approximate, from a sampled frontier (method:"sampled-frontier" in the result) — say "approximately" when quoting those weights. Requires 2-4 instruments via add_instrument.', parameters:{ type:'object', properties:{} } } },
+    { type:'function', function:{ name:'render_frontier_chart', description:'Render a chart for the last compare_portfolio into a floating chart panel. Pass chartType to pick which visual best explains what you\'re about to say: "frontier" shows the full risk/return curve and where the two blends sit on it — best when explaining the tradeoff itself, but only works for exactly 2 instruments (at 3-4 it silently falls back to "bar", with a note in the result explaining why); "bar" (default at 3-4 instruments) is a plain side-by-side of each instrument\'s return and risk — best for a quick, simple comparison; "radar" profiles return/risk/Sharpe for all instruments plus the two blends on one shape — best when summarizing several dimensions at once.', parameters:{ type:'object', properties:{ chartType:{ type:'string', enum:['frontier','bar','radar'] } } } } },
   ];
 }
 
@@ -2293,12 +2328,24 @@ const BRIEFING_SECTIONS = {
   comparison: { title: 'Portfolio comparison', build: function () {
     if (!lastComparisonResult) return { ok:false, error:'Run a comparison first (compare_portfolio) before adding this section.' };
     const r = lastComparisonResult;
-    const rows = r.instruments.map(function (it) { return '<div class="delay-row"><span class="delay-label">'+it.label+' ('+it.symbol+')</span><span class="delay-value">'+it.annualReturnPct+'% return, '+it.annualVolPct+'% vol</span></div>'; }).join('');
-    const mixRow = function (label, m) { return '<div class="delay-row"><span class="delay-label">'+label+' ('+(m.weights[0]*100).toFixed(0)+'% / '+(m.weights[1]*100).toFixed(0)+'%)</span><span class="delay-value">'+m.returnPct+'% return, '+m.volPct+'% vol, '+m.sharpe+' Sharpe</span></div>'; };
-    return { ok:true, html: '<div class="delay-card"><div class="delay-title">Comparing '+r.instruments[0].label+' vs '+r.instruments[1].label+'</div>'+rows+
-      '<div class="delay-row"><span class="delay-label">Correlation</span><span class="delay-value">'+r.correlation+'</span></div>'+
-      '<div class="delay-row"><span class="delay-label">Risk-free rate</span><span class="delay-value">'+r.riskFreePct+'%</span></div>'+
-      mixRow('Minimum-variance mix', r.minVariance) + mixRow('Tangency (max Sharpe) mix', r.tangency) + '</div>' };
+    const rows = r.instruments.map(function (it) {
+      let extra = '';
+      if (it.compoundedPct != null) extra += '<div class="delay-row"><span class="delay-label">'+it.label+' — compounded (actual)</span><span class="delay-value">'+it.compoundedPct+'%</span></div>';
+      if (it.quality && it.quality.flags && it.quality.flags.length) extra += '<div class="delay-row"><span class="delay-label">'+it.label+' — data note</span><span class="delay-value">'+it.quality.flags.map(function (f) { return f.msg; }).join(' ')+'</span></div>';
+      return '<div class="delay-row"><span class="delay-label">'+it.label+' ('+it.symbol+')</span><span class="delay-value">'+it.annualReturnPct+'% return, '+it.annualVolPct+'% vol</span></div>'+extra;
+    }).join('');
+    const mixRow = function (label, m) {
+      const w = m.weights.map(function (wt, i) { return (wt*100).toFixed(0)+'% '+r.instruments[i].symbol; }).join(' / ');
+      return '<div class="delay-row"><span class="delay-label">'+label+' ('+w+')</span><span class="delay-value">'+m.returnPct+'% return, '+m.volPct+'% vol, '+m.sharpe+' Sharpe</span></div>';
+    };
+    const corrRows = r.correlations.map(function (c) { return '<div class="delay-row"><span class="delay-label">Correlation — '+c.a+' vs '+c.b+'</span><span class="delay-value">'+c.correlation+'</span></div>'; }).join('');
+    const hasCompounded = r.instruments.some(function (it) { return it.compoundedPct != null; });
+    const compoundNote = hasCompounded ? '<div class="delay-row"><span class="delay-value">Compounded (actual) return reflects what the investment really earned including volatility drag; expected return is a simple average and can differ.</span></div>' : '';
+    const sampledNote = r.method === 'sampled-frontier' ? '<div class="delay-row"><span class="delay-value">Weights are approximate — estimated from a sampled set of portfolios rather than solved exactly (exact solving only works for 2 instruments).</span></div>' : '';
+    return { ok:true, html: '<div class="delay-card"><div class="delay-title">Comparing '+r.instruments.map(function (it) { return it.label; }).join(' vs ')+'</div>'+rows+
+      corrRows+
+      '<div class="delay-row"><span class="delay-label">Risk-free rate</span><span class="delay-value">'+r.riskFreePct+'%</span></div>'+compoundNote+
+      mixRow('Minimum-variance mix', r.minVariance) + mixRow('Tangency (max Sharpe) mix', r.tangency) + sampledNote + '</div>' };
   } },
 };
 
@@ -2381,7 +2428,7 @@ function advisorDescribeTool(name, args) {
     case 'search_instruments': return 'Searching for ' + args.query;
     case 'add_instrument': return 'Adding ' + args.symbol;
     case 'remove_instrument': return 'Removing ' + args.symbol;
-    case 'compare_portfolio': return 'Comparing your two instruments';
+    case 'compare_portfolio': return 'Comparing your instruments';
     case 'render_frontier_chart': return 'Drawing the ' + ((args && args.chartType) || 'frontier') + ' chart';
     default: return null;
   }
