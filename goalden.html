@@ -1665,6 +1665,7 @@ async function liveApiGet(path){
   return body;
 }
 let lastFrontierData = null;
+let lastComparisonResult = null;
 function portfolioRf(){ return S.country === 'US' ? 0.04 : 0.065; }
 async function searchInstruments(query){
   const q = String(query || '').trim();
@@ -1720,7 +1721,9 @@ function comparePortfolio(){
   const cal = capitalAllocationLine(rf, tan.ret, tan.vol);
   const sharpeAt = function(w){ const m = mix(w); return m.vol > 0 ? (m.ret - rf)/m.vol : -Infinity; };
   lastFrontierData = { frontier: frontier, assetPoints: [{ label: a.symbol, ret: retA, vol: sdA }, { label: b.symbol, ret: retB, vol: sdB }], currentPoint: { vol: mv.vol, ret: mv.ret }, cal: cal, tangencyPoint: { vol: tan.vol, ret: tan.ret }, currentMixLabel: 'min-variance mix', minVarPoint: { vol: mv.vol, ret: mv.ret }, riskFree: rf, minVariance: { ret: mv.ret, vol: mv.vol, sharpe: sharpeAt(wMinVar) }, tangency: { ret: tan.ret, vol: tan.vol, sharpe: sharpeAt(wTan) } };
-  return { ok:true, instruments: [ { symbol: a.symbol, label: a.label, annualReturnPct: +(retA*100).toFixed(2), annualVolPct: +(sdA*100).toFixed(2) }, { symbol: b.symbol, label: b.label, annualReturnPct: +(retB*100).toFixed(2), annualVolPct: +(sdB*100).toFixed(2) } ], correlation: +c12.toFixed(3), riskFreePct: +(rf*100).toFixed(1), minVariance: { weights: [+wMinVar.toFixed(3), +(1-wMinVar).toFixed(3)], returnPct: +(mv.ret*100).toFixed(2), volPct: +(mv.vol*100).toFixed(2), sharpe: +sharpeAt(wMinVar).toFixed(3) }, tangency: { weights: [+wTan.toFixed(3), +(1-wTan).toFixed(3)], returnPct: +(tan.ret*100).toFixed(2), volPct: +(tan.vol*100).toFixed(2), sharpe: +sharpeAt(wTan).toFixed(3) } };
+  const result = { ok:true, instruments: [ { symbol: a.symbol, label: a.label, annualReturnPct: +(retA*100).toFixed(2), annualVolPct: +(sdA*100).toFixed(2) }, { symbol: b.symbol, label: b.label, annualReturnPct: +(retB*100).toFixed(2), annualVolPct: +(sdB*100).toFixed(2) } ], correlation: +c12.toFixed(3), riskFreePct: +(rf*100).toFixed(1), minVariance: { weights: [+wMinVar.toFixed(3), +(1-wMinVar).toFixed(3)], returnPct: +(mv.ret*100).toFixed(2), volPct: +(mv.vol*100).toFixed(2), sharpe: +sharpeAt(wMinVar).toFixed(3) }, tangency: { weights: [+wTan.toFixed(3), +(1-wTan).toFixed(3)], returnPct: +(tan.ret*100).toFixed(2), volPct: +(tan.vol*100).toFixed(2), sharpe: +sharpeAt(wTan).toFixed(3) } };
+  lastComparisonResult = result;
+  return result;
 }
 const FRONTIER_CHART_TITLES = { frontier: 'Efficient frontier', bar: 'Return vs. risk', radar: 'Risk/return profile' };
 function renderFrontierChart(chartType){
@@ -2286,6 +2289,16 @@ const BRIEFING_SECTIONS = {
   } },
   next: { title: 'What to do next', build: function () {
     return { ok:true, html: '<div class="gr-note">Adjust any input to watch the number change, or ask me to explain a specific figure against your own screen.</div>' };
+  } },
+  comparison: { title: 'Portfolio comparison', build: function () {
+    if (!lastComparisonResult) return { ok:false, error:'Run a comparison first (compare_portfolio) before adding this section.' };
+    const r = lastComparisonResult;
+    const rows = r.instruments.map(function (it) { return '<div class="delay-row"><span class="delay-label">'+it.label+' ('+it.symbol+')</span><span class="delay-value">'+it.annualReturnPct+'% return, '+it.annualVolPct+'% vol</span></div>'; }).join('');
+    const mixRow = function (label, m) { return '<div class="delay-row"><span class="delay-label">'+label+' ('+(m.weights[0]*100).toFixed(0)+'% / '+(m.weights[1]*100).toFixed(0)+'%)</span><span class="delay-value">'+m.returnPct+'% return, '+m.volPct+'% vol, '+m.sharpe+' Sharpe</span></div>'; };
+    return { ok:true, html: '<div class="delay-card"><div class="delay-title">Comparing '+r.instruments[0].label+' vs '+r.instruments[1].label+'</div>'+rows+
+      '<div class="delay-row"><span class="delay-label">Correlation</span><span class="delay-value">'+r.correlation+'</span></div>'+
+      '<div class="delay-row"><span class="delay-label">Risk-free rate</span><span class="delay-value">'+r.riskFreePct+'%</span></div>'+
+      mixRow('Minimum-variance mix', r.minVariance) + mixRow('Tangency (max Sharpe) mix', r.tangency) + '</div>' };
   } },
 };
 
