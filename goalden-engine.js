@@ -237,7 +237,7 @@ function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoA
   let worstJump=null;
   rets.forEach(x=>{ if(!worstJump || Math.abs(x.r)>Math.abs(worstJump.r)) worstJump=x; });
   if(worstJump && Math.abs(worstJump.r)>jumpThreshold){
-    bump('caution','JUMP',`A single-day move of ${(worstJump.r*100).toFixed(0)}% on ${worstJump.date} — most likely a corporate action, not a real trading day.`,worstJump);
+    bump('caution','JUMP',`A single-day move of ${(worstJump.r*100).toFixed(0)}% on ${worstJump.date} — consistent with a corporate action, a very illiquid/thinly-traded stock, or a bad print. Worth a second look before trusting it.`,worstJump);
     // Does that jump look like an unadjusted split or bonus issue? A
     // ~(1/k - 1) or ~(k - 1) move for a small integer k is the classic
     // signature of a k:1 split/bonus the price history wasn't rebased for.
@@ -255,7 +255,7 @@ function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoA
 
   if(hasCatastrophicLoss) bump('unusable','IMPLAUSIBLE','A single-day move to zero or below in this series — the compounded return cannot be computed.');
   else{
-    if(annualReturn>1.00 || annualVol>1.50) bump('unusable','IMPLAUSIBLE',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — implausible for a real instrument, almost certainly a data defect rather than genuine performance.`);
+    if(annualReturn>1.00 || annualVol>1.50) bump('unusable','IMPLAUSIBLE',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — this fetched price history can't be independently re-verified here, so this may be a genuine (if extremely illiquid) instrument rather than a data error. Either way, at this magnitude the mean-variance math this app runs would be meaningless, so it's excluded by default.`);
     else if(annualReturn>0.60 || annualVol>0.80) bump('caution','WILD',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — unusually extreme; worth a second look before trusting it.`);
     if(geoAnnual!=null && Math.sign(annualReturn)!==Math.sign(geoAnnual) && annualReturn!==0 && geoAnnual!==0){
       bump('caution','SIGNFLIP',`The average daily move was ${annualReturn>0?'positive':'negative'}, but compounded over the full window this was ${geoAnnual>0?'a net gain':'a net loss'} — see the note below.`);
