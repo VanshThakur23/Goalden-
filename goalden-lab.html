@@ -4494,27 +4494,35 @@ function attach(){
     render();
   }));
 
-  let mcRenderTimer=null;
+  let sliderRenderTimer=null;
+  // render() replaces main.innerHTML wholesale, including the very <input
+  // type=range> the browser has mid-drag — doing that synchronously inside
+  // this element's own 'input' handler destroys the DOM node the browser's
+  // native drag capture is tied to, so a real physical drag stops moving
+  // the value after its first tick (state updates fine, but the screen
+  // looks frozen). Debouncing the render past the drag lets the node stay
+  // alive for the whole gesture; only the trailing pause/release triggers
+  // the actual re-render. Mirrors the pattern MC already used for its own
+  // (heavier) reason -- deferring the expensive 1000-path simulation.
   document.querySelectorAll('input[type=range][data-k]').forEach(el=>{
     el.addEventListener('input',()=>{
       const k=el.dataset.k, tab=el.dataset.tab||'ret';
       const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
       let v=parseFloat(el.value);
-      if(k==='shockYear'){ L.ret.shock.year=v; render(); return; }
-      if(k==='swpShockYear'){ L.swp.shock.year=v; render(); return; }
-      target[k]=v;
+      if(k==='shockYear'){ L.ret.shock.year=v; }
+      else if(k==='swpShockYear'){ L.swp.shock.year=v; }
+      else target[k]=v;
       if(tab==='mc'){
         // MC's stats need the full 1000-path simulation to produce — there
-        // is no cheap closed-form shortcut like Portfolio has. So instead
-        // echo just the slider's own raw value instantly (keeps the drag
-        // itself perfectly smooth) and debounce the expensive recompute.
+        // is no cheap closed-form shortcut like Portfolio has. Echo just
+        // the slider's own raw value instantly so the number readout
+        // tracks the drag exactly, since the debounce below covers this
+        // case too now.
         const lbl=document.querySelector(`[data-mc-label="${k}"]`);
         if(lbl) lbl.textContent = k==='sip' ? cfg().fmt(v) : (k==='years' ? v : v+'%');
-        if(mcRenderTimer) clearTimeout(mcRenderTimer);
-        mcRenderTimer=setTimeout(()=>{ mcRenderTimer=null; render(); }, 130);
-        return;
       }
-      render();
+      if(sliderRenderTimer) clearTimeout(sliderRenderTimer);
+      sliderRenderTimer=setTimeout(()=>{ sliderRenderTimer=null; render(); }, 130);
     });
   });
 
