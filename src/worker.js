@@ -20,7 +20,15 @@
  *     2250+ daily entries, newest-first, DD-MM-YYYY — reversed and
  *     reformatted below to match the equity shape).
  *   - Stooq was tried first and rejected: no data for Indian equity symbols.
+ *
+ * /api/financials?symbol=TCS scrapes screener.in's public company page for
+ * Profit & Loss / Balance Sheet / Cash Flow tables (no official API exists
+ * for Indian-listed fundamentals at any price this project can justify —
+ * see fetchScreenerFinancials below for the full reasoning and cache).
  */
+
+import * as ScreenerParser from '../screener-parser.js';
+import FINANCIALS_FIXTURES from '../fixtures/financials-fixtures.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -240,6 +248,182 @@ async function fundSearch(query) {
 }
 
 /**
+ * GET /api/financials?symbol=TCS
+ * Scrapes screener.in's own public company page for the Profit & Loss,
+ * Balance Sheet and Cash Flow tables. screener.in has no API, but its
+ * robots.txt only disallows /user/*, query-filtered listing pages, and the
+ * raw source/quarter fragment endpoint — not the company pages themselves
+ * (checked directly against https://www.screener.in/robots.txt). Tries the
+ * consolidated view first (screener's default for most large caps), falls
+ * back to standalone for companies that don't publish consolidated figures
+ * (most banks, many mid-caps). Cached in-memory per Worker isolate — same
+ * "a plain Map is fine at demo scale" call as chatHits above — with a long
+ * TTL because these numbers only change once a quarter.
+ */
+const FINANCIALS_CACHE = new Map();
+const FINANCIALS_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+// caches.default survives isolate recycling (the in-memory Map does not —
+// a Worker isolate can be recycled between two requests seconds apart), so
+// it's the layer that actually makes the 14-day TTL mean something. Keyed by
+// a synthetic same-origin-shaped Request rather than the real screener.in
+// URL, since this cache holds our already-parsed result, not the raw page.
+const EDGE_CACHE_PREFIX = 'https://financials-cache.internal/v1/';
+
+function edgeCacheKey(symbol) {
+  return new Request(EDGE_CACHE_PREFIX + encodeURIComponent(symbol));
+}
+async function readEdgeCache(symbol) {
+  try {
+    const hit = await caches.default.match(edgeCacheKey(symbol));
+    if (!hit) return null;
+    return await hit.json();
+  } catch {
+    return null;
+  }
+}
+async function writeEdgeCache(symbol, entry) {
+  try {
+    await caches.default.put(
+      edgeCacheKey(symbol),
+      new Response(JSON.stringify(entry), {
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${Math.floor(FINANCIALS_TTL_MS / 1000)}` },
+      })
+    );
+  } catch {
+    // Best-effort — a cache-write failure must never fail the request that
+    // triggered it; the live scrape already succeeded by this point.
+  }
+}
+
+// Thrown by fetchScreenerPage with a `kind` so callers can tell "the company
+// genuinely isn't there" apart from "screener.in is having a bad minute" —
+// collapsing those into one error is what causes a transient 429 to get
+// reported to the user as "this company doesn't exist".
+class ScreenerPageError extends Error {
+  constructor(kind, message) {
+    super(message);
+    this.kind = kind; // 'not_found' | 'transient' | 'layout'
+  }
+}
+
+function isTransientStatus(status) {
+  return status === 429 || status >= 500;
+}
+
+async function fetchScreenerPage(symbol) {
+  const headers = {
+    // screener.in's own server-rendered HTML (not the Yahoo chart API), but
+    // the same "block requests with no UA" behavior is common enough that
+    // this matches the UA already used for Yahoo/symbol search above.
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+    Accept: 'text/html',
+  };
+
+  const readIfEvidenced = async (res, requestedUrl) => {
+    const html = await res.text();
+    if (!ScreenerParser.hasCompanyPageEvidence(html)) {
+      throw new ScreenerPageError(
+        'layout',
+        `Found a page for "${symbol}" but it doesn't look like a statements page — screener.in may be serving an interstitial, or its layout has changed.`
+      );
+    }
+    // fetch() follows redirects transparently, so a company with no
+    // consolidated statement (screener redirects /consolidated/ -> the
+    // standalone URL) returns res.ok === true here. Whether this is the
+    // consolidated or standalone view must come from where we actually
+    // landed (res.url, post-redirect), never from which URL we requested.
+    const finalUrl = res.url || requestedUrl;
+    return { html, url: finalUrl, consolidated: finalUrl.includes('/consolidated/') };
+  };
+
+  const consolidatedUrl = `https://www.screener.in/company/${encodeURIComponent(symbol)}/consolidated/`;
+  const cRes = await fetch(consolidatedUrl, { headers });
+  if (cRes.ok) return readIfEvidenced(cRes, consolidatedUrl);
+
+  const standaloneUrl = `https://www.screener.in/company/${encodeURIComponent(symbol)}/`;
+  const sRes = await fetch(standaloneUrl, { headers });
+  if (sRes.ok) return readIfEvidenced(sRes, standaloneUrl);
+
+  // Neither URL resolved. A 429/503/5xx on either attempt means screener.in
+  // itself is the problem, not the symbol — that must never be reported to
+  // the user as "this company doesn't exist".
+  if (isTransientStatus(cRes.status) || isTransientStatus(sRes.status)) {
+    throw new ScreenerPageError(
+      'transient',
+      `screener.in is rate-limiting or temporarily unavailable (status ${cRes.status}/${sRes.status}).`
+    );
+  }
+  throw new ScreenerPageError(
+    'not_found',
+    `screener.in has no page for "${symbol}" — check it's the bare NSE/BSE trading code (e.g. "TCS"), not a Yahoo-style symbol with .NS/.BO`
+  );
+}
+
+function buildFinancialsResult(symbol, html, url, consolidated) {
+  const result = { symbol, source: 'screener.in', sourceUrl: url, consolidated, fetchedAt: new Date().toISOString() };
+  const sections = { profitLoss: 'profit-loss', balanceSheet: 'balance-sheet', cashFlow: 'cash-flow' };
+  for (const key of Object.keys(sections)) {
+    const slice = ScreenerParser.screenerSectionSlice(html, sections[key]);
+    result[key] = slice ? ScreenerParser.screenerParseTable(slice) : null;
+  }
+  if (!result.profitLoss && !result.balanceSheet && !result.cashFlow) {
+    throw new ScreenerPageError(
+      'layout',
+      `Found screener.in's page for "${symbol}" but no financial-statement tables on it — the page layout may have changed`
+    );
+  }
+  result.schema = ScreenerParser.classifySchema(result.profitLoss ? result.profitLoss.rows : []);
+  return result;
+}
+
+// Precedence: fresh cache (memory, then edge) -> live scrape -> stale cache
+// (only on a transient upstream failure) -> bundled fixture -> explicit
+// error. `servedFrom` tells the UI which tier answered, so a demo showing
+// fixture or stale data is never silently indistinguishable from a live hit.
+async function fetchScreenerFinancials(symbolRaw) {
+  const symbol = String(symbolRaw || '').trim().toUpperCase().replace(/\.(NS|BO)$/, '');
+  if (!symbol) throw new Error('symbol is required');
+
+  let memCached = FINANCIALS_CACHE.get(symbol);
+  if (memCached && Date.now() - memCached.at < FINANCIALS_TTL_MS) {
+    return { ...memCached.data, servedFrom: 'cache' };
+  }
+
+  let edgeCached = await readEdgeCache(symbol);
+  if (edgeCached) {
+    FINANCIALS_CACHE.set(symbol, edgeCached); // warm the per-isolate copy
+    if (Date.now() - edgeCached.at < FINANCIALS_TTL_MS) {
+      return { ...edgeCached.data, servedFrom: 'cache' };
+    }
+  }
+
+  const stale = memCached || edgeCached;
+  try {
+    const { html, url, consolidated } = await fetchScreenerPage(symbol);
+    const result = buildFinancialsResult(symbol, html, url, consolidated);
+    const entry = { at: Date.now(), data: result };
+    FINANCIALS_CACHE.set(symbol, entry);
+    await writeEdgeCache(symbol, entry);
+    return { ...result, servedFrom: 'live' };
+  } catch (e) {
+    if (e instanceof ScreenerPageError && e.kind === 'transient' && stale) {
+      return {
+        ...stale.data,
+        servedFrom: 'cache',
+        stale: true,
+        staleReason: 'screener.in is rate-limiting or temporarily unavailable — showing the last figures fetched successfully.',
+        staleSince: new Date(stale.at).toISOString(),
+      };
+    }
+    const fixture = FINANCIALS_FIXTURES[symbol];
+    if (fixture) {
+      return { ...fixture, servedFrom: 'fixture', fixtureNote: 'Live fetch failed; showing bundled sample figures for this demo company, not a fresh scrape.' };
+    }
+    throw e;
+  }
+}
+
+/**
  * Conversational AI advisor — POST /api/chat
  *
  * The browser sends the running conversation plus the current app state and
@@ -304,6 +488,7 @@ function latestUserMessage(messages) {
 // workflow always has its full toolset available.
 const TOOL_FAMILIES = [
   ['search_instruments', 'add_instrument', 'remove_instrument', 'compare_portfolio', 'render_frontier_chart'],
+  ['search_instruments', 'get_financial_statements'],
 ];
 // Returns the filtered tool array: top-K by BM25 relevance to the latest user
 // message, PLUS every tool the model already called earlier in this
@@ -417,6 +602,8 @@ You MUST NOT: recommend a specific named stock, ETF or mutual fund to buy; predi
 When a user asks "what should I buy?", explain the categories, show the trade-off, offer to model whichever specific instruments the user names using the tools below, and say plainly that you are not a licensed adviser.
 
 Real-stock portfolio comparison: if search_instruments/add_instrument/compare_portfolio/render_frontier_chart are listed among your tools above, use them for ANY request to look up a named stock/ETF/fund, or to compare two to four of them for risk/return/correlation, or to find a risk-minimizing or best-Sharpe mix between named instruments. Do NOT substitute build_goal_plan or any goal-planning tool for this kind of request — it is a completely different task. Sequence: search_instruments to resolve the name (unless the user already gave an exact ticker), add_instrument for each of the (2 to 4) instruments involved, compare_portfolio to compute the actual numbers, render_frontier_chart so the user sees it, then explain the result in MODE: B format. At exactly 2 instruments compare_portfolio solves the mixes exactly (method:'closed-form'); at 3-4 it samples a large set of random portfolios and reports the best one found (method:'sampled-frontier') — say "approximately" when quoting those weights, never state them as exact. render_frontier_chart takes an optional chartType — pick whichever actually fits what you're about to explain (its own description spells out when to use each); the "frontier" curve chart only works at exactly 2 instruments and silently falls back to "bar" at 3-4 (the result's note field says so — pass that along instead of claiming you drew a frontier you didn't). Each instrument's result may also carry compoundedPct (the actual compounded/CAGR return, which can differ from the plain expected return — explain the difference if you quote both) and a quality caveat (data-quality flags) — state any caveat before drawing conclusions from that instrument. If add_instrument refuses with a failed data-quality check (canForce:true in the result), do not tell the user the data is definitely wrong or fake — this app fetched that price history from the same source as every other instrument and cannot independently re-verify it, so the honest position is that the numbers are too extreme for the mean-variance math to produce a meaningful result, not that they're necessarily fabricated. If the user says the data is real or insists on including it anyway, call add_instrument again with force:true, then keep every figure for that instrument clearly marked as unverified everywhere you show it — in chat and in any report — rather than presenting it on equal footing with the other instruments. If the user wants more than 4 instruments, or wants Monte Carlo simulation, historical stress-testing, or the assumption-based "Build a Portfolio" tool, those live only in the Lab (Level 3); say so plainly and describe how to get there (you cannot navigate them there yourself from this page).
+
+Financial statements: if get_financial_statements is listed among your tools, use it for any request to see a named company's Profit & Loss, Balance Sheet or Cash Flow statement, or a fundamentals question a price-history tool can't answer (revenue trend, borrowings, operating cash flow, etc). Pass the bare NSE/BSE trading code (e.g. "TCS", "RELIANCE") — strip any Yahoo-style ".NS"/".BO" suffix yourself before calling it; use search_instruments first if you only have a company name. Figures are in Rs. Crores exactly as published on screener.in, a well-known Indian investing site — NOT an official exchange or regulatory filing — so always tell the user that source plainly the first time you show a number from it. A "TTM" column, where present, means trailing twelve months, not a full fiscal year. Each of the three statement keys can come back null if that particular table wasn't on the page (common for cash flow on some smaller companies) — say plainly that section wasn't available, never fill the gap with a guess or a memorized figure. The result also carries a "schema" field ('financial' for a bank/NBFC, 'nonfinancial' for everything else) and a "servedFrom" field — if servedFrom is 'fixture' or stale is true, tell the user plainly that this isn't a fresh live number (e.g. "screener.in was unreachable, so this is a cached/sample figure, not a live pull") before discussing it; never present degraded data as if it were current. A company whose schema is 'financial' (a bank or NBFC) reports "Revenue"/"Financing Profit" instead of "Sales"/"Operating Profit", and its balance sheet is not comparable to a non-lender's — say so if asked to compare a lender's borrowings or margins against a non-lender's. Reading out a balance sheet or a revenue trend is fine; do not use it to conclude the stock is a buy or a sell yourself — that still falls under the advice guardrail above.
 
 Comparison report — MANDATORY, not optional: the floating frontier-chart panel is a live working chart, NOT a report, and you must never call it, or describe it as, "the report." If compose_briefing is listed among your tools, a comparison is only finished once you have EITHER (a) asked the user "Would you like a saved, printable report of this comparison?" and they said no, OR (b) actually called compose_briefing with sections:['comparison'] — one of those two things MUST happen in the same turn you finish explaining compare_portfolio's result, every single time, with no exceptions, even if you already showed the frontier chart. If the user's own message contained the word "report", skip the question and call compose_briefing with sections:['comparison'] immediately, in that same turn, alongside your explanation — do not wait for a further confirmation. Do NOT add 'headline' or 'allocation' to that sections array unless the user has also actually set a country/goal/bucket on this page — those need goal-plan inputs this conversation never provided and will only print a "pick your country first" placeholder.
 
@@ -571,6 +758,45 @@ export default {
         return json(await symbolSearch(q));
       } catch (e) {
         return json({ error: (e && e.message) || 'Symbol search failed' }, 502);
+      }
+    }
+
+    if (url.pathname === '/api/financials/health') {
+      // Live-parses one known-stable company and diffs the row/period shape
+      // against the bundled fixture — run this before a demo, not after it
+      // breaks. drift is a list of plain-English mismatches, empty if clean.
+      const symbol = 'TCS';
+      try {
+        const live = await fetchScreenerFinancials(symbol);
+        const fixture = FINANCIALS_FIXTURES[symbol];
+        const drift = [];
+        if (live.schema !== fixture.schema) drift.push(`schema changed: fixture=${fixture.schema} live=${live.schema}`);
+        for (const key of ['profitLoss', 'balanceSheet', 'cashFlow']) {
+          const liveSec = live[key];
+          const fixSec = fixture[key];
+          if (!liveSec !== !fixSec) { drift.push(`${key}: present in one, missing in the other`); continue; }
+          if (!liveSec) continue;
+          const liveLabels = liveSec.rows.map((r) => r.label);
+          const fixLabels = fixSec.rows.map((r) => r.label);
+          const missing = fixLabels.filter((l) => !liveLabels.includes(l));
+          if (missing.length) drift.push(`${key}: rows in fixture but not in live: ${missing.join(', ')}`);
+        }
+        return json({ ok: drift.length === 0, schemaVersion: 1, symbol, servedFrom: live.servedFrom, drift });
+      } catch (e) {
+        return json({ ok: false, schemaVersion: 1, symbol, drift: [(e && e.message) || 'health check failed'] }, 200);
+      }
+    }
+
+    if (url.pathname === '/api/financials') {
+      const symbol = url.searchParams.get('symbol');
+      if (!symbol) return json({ error: 'symbol is required' }, 400);
+      try {
+        return json(await fetchScreenerFinancials(symbol));
+      } catch (e) {
+        const status = e instanceof ScreenerPageError && e.kind === 'not_found' ? 404
+          : e instanceof ScreenerPageError && e.kind === 'transient' ? 503
+          : 502;
+        return json({ error: (e && e.message) || 'Failed to fetch financial statements' }, status);
       }
     }
 

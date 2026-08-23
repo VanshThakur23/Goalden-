@@ -330,4 +330,113 @@ test('bestSharpePoint returns null on an all-zero-vol frontier', () => {
   assert.strictEqual(engine.bestSharpePoint(frontier, 0.065), null);
 });
 
+// ---------------------------------------------------------------------------
+// screener-parser.js — golden-fixture tests against saved real screener.in
+// HTML (fixtures/screener-html/*.html, fetched 2026-08-24). These run fully
+// offline: no network call, no dependency on screener.in being reachable or
+// unchanged. If screener.in's markup drifts, GET /api/financials/health
+// (src/worker.js) catches it live; these fixtures catch a regression in the
+// parser itself.
+// ---------------------------------------------------------------------------
+const fs = require('fs');
+const path = require('path');
+const parser = require('./screener-parser.js');
+
+const FIXTURE_DIR = path.join(__dirname, 'fixtures', 'screener-html');
+function loadFixtureSection(symbol, sectionId) {
+  const html = fs.readFileSync(path.join(FIXTURE_DIR, symbol + '.html'), 'utf8');
+  const slice = parser.screenerSectionSlice(html, sectionId);
+  assert.ok(slice, `${symbol}: ${sectionId} section should be present`);
+  return parser.screenerParseTable(slice);
+}
+
+test('screener-parser: TCS profit-loss — 12 fiscal years + TTM, correct headline values', () => {
+  const pl = loadFixtureSection('TCS', 'profit-loss');
+  assert.strictEqual(pl.periods.length, 13, 'FY2015..FY2026 plus one TTM column');
+  assert.deepStrictEqual(pl.periods.slice(0, 2).map((p) => p.type), ['fy', 'fy']);
+  assert.strictEqual(pl.periods[0].year, 2015);
+  assert.strictEqual(pl.periods[11].year, 2026);
+  const last = pl.periods[pl.periods.length - 1];
+  assert.strictEqual(last.type, 'ttm', 'the 13th column is TTM, never a 13th fiscal year');
+  const sales = pl.rows.find((r) => r.label === 'Sales');
+  assert.ok(sales, 'Sales row present (as-reported label, not aliased to "Revenue")');
+  assert.strictEqual(sales.values.length, pl.periods.length, 'one value per period, no row shorter than its header');
+  assert.strictEqual(sales.values[0].value, 94648, 'FY2015 Sales');
+  assert.strictEqual(sales.values[11].value, 267021, 'FY2026 Sales');
+  assert.strictEqual(sales.values[12].value, 275859, 'TTM Sales — must never be treated as FY2027');
+});
+
+test('screener-parser: schema classifier — TCS is nonfinancial, HDFCBANK and BAJFINANCE are financial', () => {
+  const cases = [
+    ['TCS', 'nonfinancial'],
+    ['VEDL', 'nonfinancial'],
+    ['HINDALCO', 'nonfinancial'],
+    ['PAYTM', 'nonfinancial'],
+    ['HDFCBANK', 'financial'],
+    ['BAJFINANCE', 'financial'],
+  ];
+  for (const [symbol, expected] of cases) {
+    const pl = loadFixtureSection(symbol, 'profit-loss');
+    assert.strictEqual(parser.classifySchema(pl.rows), expected, `${symbol} should classify as ${expected}`);
+  }
+});
+
+test('screener-parser: HDFCBANK reports Financing Profit / Revenue, never Sales / Operating Profit', () => {
+  const pl = loadFixtureSection('HDFCBANK', 'profit-loss');
+  const labels = pl.rows.map((r) => r.label);
+  assert.ok(labels.includes('Revenue'), 'a bank reports Revenue, not Sales');
+  assert.ok(labels.includes('Financing Profit'));
+  assert.ok(!labels.includes('Sales'), 'aliasing Sales|Revenue would let bank data flow through manufacturing ratios');
+  assert.ok(!labels.includes('Operating Profit'));
+});
+
+test('screener-parser: PAYTM profit-loss has a real gap (FY2016 to FY2019), not a fabricated FY2017/18', () => {
+  const pl = loadFixtureSection('PAYTM', 'profit-loss');
+  const years = pl.periods.filter((p) => p.type === 'fy').map((p) => p.year);
+  assert.ok(years.includes(2016) && years.includes(2019), 'both endpoints of the gap are present');
+  assert.ok(!years.includes(2017) && !years.includes(2018), 'the missing years must stay missing, never interpolated');
+});
+
+test('screener-parser: balance sheet and cash flow sections parse for every fixture company', () => {
+  for (const symbol of ['TCS', 'HDFCBANK', 'VEDL', 'HINDALCO', 'BAJFINANCE', 'PAYTM']) {
+    const bs = loadFixtureSection(symbol, 'balance-sheet');
+    const cf = loadFixtureSection(symbol, 'cash-flow');
+    assert.ok(bs.rows.length > 0, `${symbol}: balance sheet should have rows`);
+    assert.ok(cf.rows.length > 0, `${symbol}: cash flow should have rows`);
+  }
+});
+
+test('screener-parser: hasCompanyPageEvidence distinguishes a real statements page from anything else', () => {
+  const html = fs.readFileSync(path.join(FIXTURE_DIR, 'TCS.html'), 'utf8');
+  assert.strictEqual(parser.hasCompanyPageEvidence(html), true);
+  assert.strictEqual(parser.hasCompanyPageEvidence('<html><body>Please enable JavaScript and cookies</body></html>'), false);
+});
+
+test('screener-parser: pickDataTable scores by fiscal-period header count, not first-match', () => {
+  const decoy = '<table class="data-table"><thead><tr><th>Note</th></tr></thead><tbody></tbody></table>';
+  const real = '<table class="data-table"><thead><tr>' +
+    '<th data-date-key="2023-03-31">Mar 2023</th><th data-date-key="TTM">TTM</th>' +
+    '</tr></thead><tbody><tr><td>Sales</td><td>100</td><td>110</td></tr></tbody></table>';
+  const section = '<div>' + decoy + real + '</div>';
+  const parsed = parser.screenerParseTable(section);
+  assert.strictEqual(parsed.periods.length, 2, 'must pick the table with real period headers, not the first data-table');
+  assert.strictEqual(parsed.rows[0].label, 'Sales');
+});
+
+test('screener-parser: parseCellValue normalises dash variants, NA, blanks and parenthesised negatives', () => {
+  const dashes = ['-', '‐', '‑', '‒', '–', '—', '−'];
+  for (const d of dashes) {
+    assert.strictEqual(parser.parseCellValue(d).value, null, `dash variant U+${d.codePointAt(0).toString(16)} must parse to null, never NaN or a string`);
+  }
+  assert.strictEqual(parser.parseCellValue('').value, null);
+  assert.strictEqual(parser.parseCellValue('NA').value, null);
+  assert.strictEqual(parser.parseCellValue('N/A').value, null);
+  assert.strictEqual(parser.parseCellValue('(1,234)').value, -1234, 'parenthesised accounting notation is negative');
+  assert.strictEqual(parser.parseCellValue('1,234').value, 1234, 'thousands separators strip cleanly');
+  assert.strictEqual(parser.parseCellValue('18.4%').value, 18.4, 'percent sign strips cleanly');
+  const cell = parser.parseCellValue('-');
+  assert.strictEqual(typeof cell.raw, 'string', 'raw is always the as-scraped text, kept for display even when value is null');
+  assert.notStrictEqual(typeof cell.value, 'string', 'value must never be a union type — never a string smuggled into a numeric field');
+});
+
 

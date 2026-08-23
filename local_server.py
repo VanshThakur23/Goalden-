@@ -136,6 +136,276 @@ def symbol_search(query):
 
 
 # ---------------------------------------------------------------------------
+# /api/financials?symbol=TCS — mirrors src/worker.js's fetchScreenerFinancials
+# term-for-term. Scrapes screener.in's public company page (no official API
+# exists for Indian-listed fundamentals) for Profit & Loss / Balance Sheet /
+# Cash Flow tables. robots.txt (checked directly) only disallows /user/*,
+# query-filtered listing pages and the raw source/quarter fragment endpoint —
+# not the company pages themselves. Cached in-process with a 14-day TTL since
+# these numbers only change once a quarter.
+# ---------------------------------------------------------------------------
+_FINANCIALS_CACHE = {}
+_FINANCIALS_TTL_SECONDS = 14 * 24 * 60 * 60
+_FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fixtures', 'financials')
+_FINANCIALS_FIXTURES = {}
+
+
+def _load_financials_fixture(symbol):
+    if symbol in _FINANCIALS_FIXTURES:
+        return _FINANCIALS_FIXTURES[symbol]
+    path = os.path.join(_FIXTURES_DIR, symbol + '.json')
+    if not os.path.isfile(path):
+        _FINANCIALS_FIXTURES[symbol] = None
+        return None
+    with open(path, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    _FINANCIALS_FIXTURES[symbol] = data
+    return data
+
+
+class ScreenerPageError(ValueError):
+    """kind is 'not_found' | 'transient' | 'layout' — mirrors src/worker.js's
+    ScreenerPageError so a rate-limited screener.in is never reported to the
+    user as 'this company doesn't exist'."""
+
+    def __init__(self, kind, message):
+        super().__init__(message)
+        self.kind = kind
+
+
+def _strip_html_tags(html):
+    text = re.sub(r'<[^>]+>', ' ', html)
+    text = text.replace('&nbsp;', ' ').replace('&amp;', '&')
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def _screener_section_slice(html, section_id):
+    m = re.search(r'<section[^>]*id="' + re.escape(section_id) + '"', html)
+    if not m:
+        return None
+    rest = html[m.end():]
+    next_m = re.search(r'<section[^>]*id="', rest)
+    return rest[:next_m.start()] if next_m else rest
+
+
+def _has_company_page_evidence(html):
+    # Every genuine statement table carries at least one data-date-key
+    # attribute — cheap, strong evidence this is a real rendered company
+    # page and not an interstitial or a redirected error page.
+    return 'data-date-key="' in html
+
+
+_DASH_RE = re.compile(r'^[-‐‑‒–—−]$')
+_NA_RE = re.compile(r'^(NA|N/A)$', re.IGNORECASE)
+
+
+def _parse_cell_value(text):
+    raw = text
+    trimmed = (text or '').strip()
+    if trimmed == '' or _DASH_RE.match(trimmed) or _NA_RE.match(trimmed):
+        return {'raw': raw, 'value': None}
+    paren_m = re.match(r'^\((.*)\)$', trimmed)
+    body = paren_m.group(1) if paren_m else trimmed
+    cleaned = body.replace(',', '').replace('%', '').strip()
+    try:
+        num = float(cleaned) if cleaned else None
+    except ValueError:
+        num = None
+    if num is None:
+        return {'raw': raw, 'value': None}
+    return {'raw': raw, 'value': -num if paren_m else num}
+
+
+def _classify_periods(raw_periods):
+    out = []
+    for p in raw_periods:
+        if p['key'] == 'TTM':
+            out.append({'type': 'ttm', 'key': 'TTM', 'label': p.get('label') or 'TTM'})
+            continue
+        year_m = re.match(r'^(\d{4})-\d{2}-\d{2}$', p.get('key') or '')
+        out.append({'type': 'fy', 'year': int(year_m.group(1)) if year_m else None, 'key': p['key'], 'label': p['label']})
+    return out
+
+
+def _pick_data_table(section_html):
+    # A section can in principle hold more than one <table class="data-table">
+    # (e.g. a future quarterly/yearly toggle) — never trust first-match
+    # blindly. Score each candidate by how many header cells look like real
+    # fiscal-period keys and take the highest-scoring one.
+    best, best_score = None, -1
+    for m in re.finditer(r'<table[^>]*class="[^"]*data-table[^"]*"[^>]*>([\s\S]*?)</table>', section_html):
+        table_html = m.group(1)
+        thead_m = re.search(r'<thead>([\s\S]*?)</thead>', table_html)
+        score = 0
+        if thead_m:
+            for th_m in re.finditer(r'<th[^>]*data-date-key="([^"]*)"[^>]*>', thead_m.group(1)):
+                if th_m.group(1) == 'TTM' or re.match(r'^\d{4}-\d{2}-\d{2}$', th_m.group(1)):
+                    score += 1
+        if score > best_score:
+            best_score, best = score, table_html
+    return best
+
+
+def _screener_parse_table(section_html):
+    table_html = _pick_data_table(section_html)
+    if table_html is None:
+        return None
+
+    raw_periods = []
+    thead_m = re.search(r'<thead>([\s\S]*?)</thead>', table_html)
+    if thead_m:
+        for m in re.finditer(r'<th[^>]*data-date-key="([^"]*)"[^>]*>([\s\S]*?)</th>', thead_m.group(1)):
+            raw_periods.append({'key': m.group(1), 'label': _strip_html_tags(m.group(2)) or m.group(1)})
+    periods = _classify_periods(raw_periods)
+
+    rows = []
+    tbody_m = re.search(r'<tbody>([\s\S]*?)</tbody>', table_html)
+    if tbody_m:
+        for tr_m in re.finditer(r'<tr[^>]*>([\s\S]*?)</tr>', tbody_m.group(1)):
+            tds = re.findall(r'<td[^>]*>([\s\S]*?)</td>', tr_m.group(1))
+            if not tds:
+                continue
+            label = re.sub(r'\+\s*$', '', _strip_html_tags(tds[0])).strip()
+            if not label:
+                continue
+            values = [_parse_cell_value(_strip_html_tags(td)) for td in tds[1:]]
+            rows.append({'label': label, 'values': values})
+    return {'periods': periods, 'rows': rows}
+
+
+def _classify_schema(profit_loss_rows):
+    labels = {r['label'] for r in (profit_loss_rows or [])}
+    has_financing = 'Financing Profit' in labels or 'Financing Margin %' in labels
+    has_operating = 'Operating Profit' in labels or 'OPM %' in labels
+    if has_financing and not has_operating:
+        return 'financial'
+    if has_operating and not has_financing:
+        return 'nonfinancial'
+    return 'unknown'
+
+
+def _is_transient_status(status):
+    return status == 429 or status >= 500
+
+
+def _fetch_screener_page(symbol):
+    headers = {'User-Agent': UA, 'Accept': 'text/html'}
+
+    def attempt(url):
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                # urllib follows redirects by default, so resp.geturl() is the
+                # final URL — a company with no consolidated statement lands
+                # on the standalone page even though we requested /consolidated/.
+                return resp.status, resp.read().decode('utf-8', errors='replace'), resp.geturl()
+        except urllib.error.HTTPError as e:
+            return e.code, None, url
+
+    consolidated_url = f'https://www.screener.in/company/{urllib.parse.quote(symbol)}/consolidated/'
+    c_status, c_html, c_final = attempt(consolidated_url)
+    if c_html is not None:
+        if not _has_company_page_evidence(c_html):
+            raise ScreenerPageError('layout', f'Found a page for "{symbol}" but it doesn\'t look like a statements page — screener.in may be serving an interstitial, or its layout has changed.')
+        return c_html, c_final, '/consolidated/' in c_final
+
+    standalone_url = f'https://www.screener.in/company/{urllib.parse.quote(symbol)}/'
+    s_status, s_html, s_final = attempt(standalone_url)
+    if s_html is not None:
+        if not _has_company_page_evidence(s_html):
+            raise ScreenerPageError('layout', f'Found a page for "{symbol}" but it doesn\'t look like a statements page — screener.in may be serving an interstitial, or its layout has changed.')
+        return s_html, s_final, '/consolidated/' in s_final
+
+    if _is_transient_status(c_status) or _is_transient_status(s_status):
+        raise ScreenerPageError('transient', f'screener.in is rate-limiting or temporarily unavailable (status {c_status}/{s_status}).')
+    raise ScreenerPageError(
+        'not_found',
+        f'screener.in has no page for "{symbol}" — check it\'s the bare '
+        f'NSE/BSE trading code (e.g. "TCS"), not a Yahoo-style symbol with .NS/.BO'
+    )
+
+
+def _build_financials_result(symbol, html, url, consolidated):
+    result = {
+        'symbol': symbol,
+        'source': 'screener.in',
+        'sourceUrl': url,
+        'consolidated': consolidated,
+        'fetchedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+    }
+    for key, section_id in (('profitLoss', 'profit-loss'), ('balanceSheet', 'balance-sheet'), ('cashFlow', 'cash-flow')):
+        slice_html = _screener_section_slice(html, section_id)
+        result[key] = _screener_parse_table(slice_html) if slice_html else None
+
+    if not result['profitLoss'] and not result['balanceSheet'] and not result['cashFlow']:
+        raise ScreenerPageError(
+            'layout',
+            f'Found screener.in\'s page for "{symbol}" but no financial-statement '
+            f'tables on it — the page layout may have changed'
+        )
+    result['schema'] = _classify_schema(result['profitLoss']['rows'] if result['profitLoss'] else [])
+    return result
+
+
+def fetch_screener_financials(symbol_raw):
+    # Precedence: fresh cache -> live scrape -> stale cache (only on a
+    # transient upstream failure) -> bundled fixture -> explicit error.
+    # `servedFrom` tells the caller which tier answered.
+    symbol = re.sub(r'\.(NS|BO)$', '', str(symbol_raw or '').strip().upper())
+    if not symbol:
+        raise ValueError('symbol is required')
+
+    cached = _FINANCIALS_CACHE.get(symbol)
+    if cached and (time.time() - cached['at']) < _FINANCIALS_TTL_SECONDS:
+        return {**cached['data'], 'servedFrom': 'cache'}
+
+    try:
+        html, url, consolidated = _fetch_screener_page(symbol)
+        result = _build_financials_result(symbol, html, url, consolidated)
+        _FINANCIALS_CACHE[symbol] = {'at': time.time(), 'data': result}
+        return {**result, 'servedFrom': 'live'}
+    except ScreenerPageError as e:
+        if e.kind == 'transient' and cached:
+            return {
+                **cached['data'],
+                'servedFrom': 'cache',
+                'stale': True,
+                'staleReason': 'screener.in is rate-limiting or temporarily unavailable — showing the last figures fetched successfully.',
+                'staleSince': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(cached['at'])),
+            }
+        fixture = _load_financials_fixture(symbol)
+        if fixture:
+            return {**fixture, 'servedFrom': 'fixture', 'fixtureNote': 'Live fetch failed; showing bundled sample figures for this demo company, not a fresh scrape.'}
+        raise
+
+
+def financials_health_check():
+    symbol = 'TCS'
+    try:
+        live = fetch_screener_financials(symbol)
+        fixture = _load_financials_fixture(symbol)
+        drift = []
+        if fixture:
+            if live.get('schema') != fixture.get('schema'):
+                drift.append(f"schema changed: fixture={fixture.get('schema')} live={live.get('schema')}")
+            for key in ('profitLoss', 'balanceSheet', 'cashFlow'):
+                live_sec, fix_sec = live.get(key), fixture.get(key)
+                if bool(live_sec) != bool(fix_sec):
+                    drift.append(f'{key}: present in one, missing in the other')
+                    continue
+                if not live_sec:
+                    continue
+                live_labels = [r['label'] for r in live_sec['rows']]
+                fix_labels = [r['label'] for r in fix_sec['rows']]
+                missing = [l for l in fix_labels if l not in live_labels]
+                if missing:
+                    drift.append(f"{key}: rows in fixture but not in live: {', '.join(missing)}")
+        return {'ok': len(drift) == 0, 'schemaVersion': 1, 'symbol': symbol, 'servedFrom': live.get('servedFrom'), 'drift': drift}
+    except Exception as e:
+        return {'ok': False, 'schemaVersion': 1, 'symbol': symbol, 'drift': [str(e) or 'health check failed']}
+
+
+# ---------------------------------------------------------------------------
 # Conversational AI advisor — /api/chat (POST)
 # Mirrors the Cloudflare Worker's /api/chat. Reads DEEPSEEK_API_KEY from the
 # environment; if it's absent, falls back to a deterministic mock reply so the
@@ -163,6 +433,7 @@ _KNOWLEDGE_ROUTE_K = 3
 # workflow always has its full toolset available.
 _TOOL_FAMILIES = [
     ['search_instruments', 'add_instrument', 'remove_instrument', 'compare_portfolio', 'render_frontier_chart'],
+    ['search_instruments', 'get_financial_statements'],
 ]
 
 
@@ -474,6 +745,37 @@ def _build_system_prompt(body):
         f'assumption-based "Build a Portfolio" tool, those live only in the '
         f'Lab (Level 3); say so plainly and describe how to get there (you '
         f'cannot navigate them there yourself from this page).\n\n'
+        f'Financial statements: if get_financial_statements is listed among '
+        f'your tools, use it for any request to see a named company\'s '
+        f'Profit & Loss, Balance Sheet or Cash Flow statement, or a '
+        f'fundamentals question a price-history tool can\'t answer (revenue '
+        f'trend, borrowings, operating cash flow, etc). Pass the bare '
+        f'NSE/BSE trading code (e.g. "TCS", "RELIANCE") — strip any '
+        f'Yahoo-style ".NS"/".BO" suffix yourself before calling it; use '
+        f'search_instruments first if you only have a company name. Figures '
+        f'are in Rs. Crores exactly as published on screener.in, a '
+        f'well-known Indian investing site — NOT an official exchange or '
+        f'regulatory filing — so always tell the user that source plainly '
+        f'the first time you show a number from it. A "TTM" column, where '
+        f'present, means trailing twelve months, not a full fiscal year. '
+        f'Each of the three statement keys can come back null if that '
+        f'particular table wasn\'t on the page (common for cash flow on '
+        f'some smaller companies) — say plainly that section wasn\'t '
+        f'available, never fill the gap with a guess or a memorized figure. '
+        f'The result also carries a "schema" field (\'financial\' for a '
+        f'bank/NBFC, \'nonfinancial\' for everything else) and a '
+        f'"servedFrom" field — if servedFrom is \'fixture\' or stale is '
+        f'true, tell the user plainly that this isn\'t a fresh live number '
+        f'(e.g. "screener.in was unreachable, so this is a cached/sample '
+        f'figure, not a live pull") before discussing it; never present '
+        f'degraded data as if it were current. A company whose schema is '
+        f'\'financial\' (a bank or NBFC) reports "Revenue"/"Financing '
+        f'Profit" instead of "Sales"/"Operating Profit", and its balance '
+        f'sheet is not comparable to a non-lender\'s — say so if asked to '
+        f'compare a lender\'s borrowings or margins against a non-lender\'s. '
+        f'Reading out a balance sheet or a revenue trend is fine; do not '
+        f'use it to conclude the stock is a buy or a sell yourself — that '
+        f'still falls under the advice guardrail above.\n\n'
         f'Comparison report — MANDATORY, not optional: the floating '
         f'frontier-chart panel is a live working chart, NOT a report, and '
         f'you must never call it, or describe it as, "the report". If '
@@ -944,6 +1246,21 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send_json(symbol_search(q))
             except Exception as e:
                 return self._send_json({'error': str(e) or 'Symbol search failed'}, 502)
+
+        if parsed.path == '/api/financials/health':
+            return self._send_json(financials_health_check())
+
+        if parsed.path == '/api/financials':
+            symbol = (qs.get('symbol') or [None])[0]
+            if not symbol:
+                return self._send_json({'error': 'symbol is required'}, 400)
+            try:
+                return self._send_json(fetch_screener_financials(symbol))
+            except ScreenerPageError as e:
+                status = 404 if e.kind == 'not_found' else 503 if e.kind == 'transient' else 502
+                return self._send_json({'error': str(e) or 'Failed to fetch financial statements'}, status)
+            except Exception as e:
+                return self._send_json({'error': str(e) or 'Failed to fetch financial statements'}, 502)
 
         return super().do_GET()
 

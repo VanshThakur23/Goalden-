@@ -1699,6 +1699,16 @@ async function addInstrument(symbol, force){
     return JSON.stringify({ ok:false, error:'Could not fetch ' + sym + ': ' + ((e && e.message) || e) });
   }
 }
+async function getFinancialStatements(symbol){
+  const sym = String(symbol || '').trim().toUpperCase().replace(/\.(NS|BO)$/, '');
+  if(!sym) return JSON.stringify({ ok:false, error:'Missing symbol.' });
+  try {
+    const data = await liveApiGet('/api/financials?symbol=' + encodeURIComponent(sym));
+    return JSON.stringify({ ok:true, statements: data });
+  } catch(e) {
+    return JSON.stringify({ ok:false, error:'Could not fetch financial statements for ' + sym + ': ' + ((e && e.message) || e) });
+  }
+}
 function removeInstrument(symbol){
   const sym = String(symbol || '').trim().toUpperCase();
   const before = S.instruments.length;
@@ -2153,6 +2163,7 @@ function advisorTools() {
     { type:'function', function:{ name:'search_instruments', description:'Search real stocks/ETFs by name or ticker (Yahoo\'s symbol database). Returns matches with symbol/name/exchange.', parameters:{ type:'object', properties:{ query:{ type:'string' } }, required:['query'] } } },
     { type:'function', function:{ name:'add_instrument', description:'Fetch a real instrument\'s price history and add it to the comparison (max 4). Pass a ticker (e.g. TCS.NS, RELIANCE.NS, AAPL) or a fund code. If the fetched history fails an automatic data-quality check, this refuses by default (canForce:true in the result) rather than silently declaring the data fake — only call again with force:true if the user has explicitly confirmed they still want it added despite the check.', parameters:{ type:'object', properties:{ symbol:{ type:'string' }, force:{ type:'boolean', description:'Only set true after the user explicitly confirms they want an instrument added despite a failed data-quality check.' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'remove_instrument', description:'Remove an instrument from the comparison.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
+    { type:'function', function:{ name:'get_financial_statements', description:'Fetch a real Indian company\'s Profit & Loss, Balance Sheet and Cash Flow statements (scraped from screener.in, not an official filing). Pass the bare NSE/BSE trading code, e.g. "TCS", not "TCS.NS".', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'compare_portfolio', description:'Compare 2 to 4 added instruments: pairwise correlations, the risk-minimizing split, and the best-Sharpe (tangency) split, each with return/vol/Sharpe. At exactly 2 instruments the weights are exact (closed-form); at 3-4 they are approximate, from a sampled frontier (method:"sampled-frontier" in the result) — say "approximately" when quoting those weights. Requires 2-4 instruments via add_instrument.', parameters:{ type:'object', properties:{} } } },
     { type:'function', function:{ name:'render_frontier_chart', description:'Render a chart for the last compare_portfolio into a floating chart panel. Pass chartType to pick which visual best explains what you\'re about to say: "frontier" shows the full risk/return curve and where the two blends sit on it — best when explaining the tradeoff itself, but only works for exactly 2 instruments (at 3-4 it silently falls back to "bar", with a note in the result explaining why); "bar" (default at 3-4 instruments) is a plain side-by-side of each instrument\'s return and risk — best for a quick, simple comparison; "radar" profiles return/risk/Sharpe for all instruments plus the two blends on one shape — best when summarizing several dimensions at once.', parameters:{ type:'object', properties:{ chartType:{ type:'string', enum:['frontier','bar','radar'] } } } } },
   ];
@@ -2457,6 +2468,7 @@ function executeAdvisorTool(name, args) {
   if (name === 'read_other_page') return JSON.stringify(readOtherPage(args && args.page));
   if (name === 'search_instruments') return searchInstruments(args && args.query);
   if (name === 'add_instrument') return addInstrument(args && args.symbol, args && args.force);
+  if (name === 'get_financial_statements') return getFinancialStatements(args && args.symbol);
   if (name === 'remove_instrument') return JSON.stringify(removeInstrument(args && args.symbol));
   if (name === 'compare_portfolio') return JSON.stringify(comparePortfolio());
   if (name === 'render_frontier_chart') return JSON.stringify(renderFrontierChart(args && args.chartType));
@@ -2481,6 +2493,7 @@ function advisorDescribeTool(name, args) {
     case 'read_other_page': return 'Reading your saved ' + (OTHER_PAGE_LABELS[args.page] || args.page) + ' data';
     case 'search_instruments': return 'Searching for ' + args.query;
     case 'add_instrument': return 'Adding ' + args.symbol;
+    case 'get_financial_statements': return 'Pulling financial statements for ' + args.symbol;
     case 'remove_instrument': return 'Removing ' + args.symbol;
     case 'compare_portfolio': return 'Comparing your instruments';
     case 'render_frontier_chart': return 'Drawing the ' + ((args && args.chartType) || 'frontier') + ' chart';
