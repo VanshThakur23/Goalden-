@@ -607,6 +607,16 @@ function benchChartOption(pins, indexed) {
   };
 }
 
+// Fixed, deterministic one-line reasons shown in the tooltip alongside each
+// series' value -- arithmetic and a template, never a model, so the tooltip
+// says the same thing on every hover and every refresh, same discipline as
+// the reading column and the divergence-rule messages.
+const PROFIT_CASH_TOOLTIP_REASONS = {
+  'Net Profit': 'Reported accounting profit for the year — includes non-cash items like depreciation and any one-time gains.',
+  'Cash from Operations': 'Actual cash the business collected in the year — the reality check on reported profit.',
+  'Cumulative CFO / NP': 'Running total of cash collected ÷ running total of profit reported, since the first year shown. 1.00 means every rupee of profit has arrived as cash.',
+};
+
 // Net Profit (bar) vs Cash from Operating Activity (line), one shared
 // y-axis — the gap between the two IS the message, and putting them on
 // two different scales would let you manufacture a crossover that isn't
@@ -627,27 +637,62 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
   const [A, B, C] = SERIES_PALETTE;
   const npData = npSeries.map((p) => p.value);
   const lastIdx = npData.length - 1;
+  const yearLabels = years.map((y) => 'FY' + String(y).slice(2));
+  // The ratio line sits flat near 1.0 for a healthy company -- with min:0
+  // and no explicit max, ECharts auto-ranged to roughly the data's own span,
+  // which ran the line along the very top edge of its grid and clipped the
+  // 1.0 reference line against the axis boundary. Give it real headroom.
+  const validRatios = cumRatio.filter((v) => v != null);
+  const maxRatio = validRatios.length ? Math.max(...validRatios, 1) : 1;
+  const ratioMax = Math.ceil(maxRatio * 1.2 * 10) / 10;
   return {
     color: [A.color, B.color, C.color],
     legend: { show: false },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => {
+        if (!params || !params.length) return '';
+        const rows = params.map((p) => {
+          const isRatio = p.seriesName === 'Cumulative CFO / NP';
+          const valText = p.value == null ? '—'
+            : isRatio ? Number(p.value).toFixed(2)
+              : 'Rs ' + Math.round(p.value).toLocaleString('en-IN') + ' Cr';
+          const reason = PROFIT_CASH_TOOLTIP_REASONS[p.seriesName];
+          return '<div style="margin-top:5px"><b style="color:' + p.color + '">' + p.seriesName + '</b>: ' + valText
+            + (reason ? '<div style="color:#8a97a8;font-size:11px;margin-top:2px;max-width:230px;white-space:normal">' + reason + '</div>' : '')
+            + '</div>';
+        }).join('');
+        return '<div style="font-weight:600">' + params[0].axisValueLabel + '</div>' + rows;
+      },
+    },
+    // Grid0's own x-axis labels are hidden -- grid1 shares the identical
+    // category list directly underneath (linked via axisPointer), so
+    // showing both was pure duplication and ate the vertical space the
+    // axis names needed, which is what was driving the label collisions.
     grid: [
-      { left: 50, right: 150, top: 20, height: '55%', containLabel: true },
-      { left: 50, right: 150, top: '68%', bottom: 24, height: '22%', containLabel: true },
+      { left: 56, right: 170, top: 40, height: '48%', containLabel: true },
+      { left: 56, right: 170, top: '66%', bottom: 40, height: '24%', containLabel: true },
     ],
     xAxis: [
-      { type: 'category', gridIndex: 0, data: years.map((y) => 'FY' + String(y).slice(2)) },
-      { type: 'category', gridIndex: 1, data: years.map((y) => 'FY' + String(y).slice(2)) },
+      { type: 'category', gridIndex: 0, data: yearLabels, axisLabel: { show: false }, axisTick: { show: false } },
+      { type: 'category', gridIndex: 1, data: yearLabels },
     ],
     yAxis: [
-      { type: 'value', gridIndex: 0, name: 'Rs Cr' },
-      { type: 'value', gridIndex: 1, name: 'Cumulative CFO/NP', min: 0 },
+      { type: 'value', gridIndex: 0, name: 'Rs Cr', nameGap: 24, nameTextStyle: { fontSize: 11, color: '#8a97a8' } },
+      { type: 'value', gridIndex: 1, name: 'CFO ÷ NP', min: 0, max: ratioMax, nameGap: 24, nameTextStyle: { fontSize: 11, color: '#8a97a8' } },
     ],
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
     series: [
       {
+        // Labelled inside the bar (not floating above it) so it can never
+        // collide with the Cash-from-Operations line's end label -- the two
+        // series often converge near the last year, which is exactly the
+        // point the chart is making, and exactly where two "above the data"
+        // labels would otherwise glue together into unreadable text.
         name: 'Net Profit', type: 'bar', xAxisIndex: 0, yAxisIndex: 0, itemStyle: { color: A.color },
         data: npData.map((v, i) => (i === lastIdx
-          ? { value: v, label: { show: true, position: 'top', color: A.color, fontWeight: 600, formatter: '{a}' } }
+          ? { value: v, label: { show: true, position: 'insideTop', distance: 6, color: '#fff', fontWeight: 600, formatter: '{a}' } }
           : v)),
       },
       {

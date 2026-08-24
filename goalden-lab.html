@@ -5586,7 +5586,7 @@ function renderStatementsShell(){
     </div>
     <div class="stmt-card">
       <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Net Profit vs Cash from Operations</div>
-      <div id="stmtProfitCashChart" style="height:280px"></div>
+      <div id="stmtProfitCashChart" style="height:360px"></div>
       <div class="stmt-caption" id="stmtCaption"></div>
     </div>
     <div id="stmtTables" class="stmt-density-compact"></div>
@@ -6154,6 +6154,49 @@ function benchCaptionText(pins, indexed, focusYear){
     ? `Indexed to 100 at ${minY!=null?'FY'+minY:'the earliest common year'} so lines are comparable regardless of scale, ${rangeTxt}: ${list}.`
     : `Actual reported values, ${rangeTxt}: ${list}.`;
 }
+// Hover tooltip for the default (over-time) Bench chart: the row's real
+// reported value for the hovered year -- never the indexed-to-100 number
+// the chart may actually be plotting, which reads as meaningless on its
+// own -- plus the same deterministic reading-column sentence (arithmetic
+// and a template, see readingSentence()) already printed next to that row
+// in the table, so "why does this matter" is answered with the one fact
+// this app already computed for it, not a fresh model-written explanation.
+function benchTooltipOverTime(pins){
+  const reasonByLabel={}; pins.forEach(p=>{ reasonByLabel[p.label]=readingSentence(p.label,p.series); });
+  return { trigger:'axis', axisPointer:{type:'shadow'}, formatter:(params)=>{
+    if(!params||!params.length) return '';
+    const yearLabel = params[0].axisValueLabel||'';
+    const year = 2000+parseInt(String(yearLabel).replace('FY',''),10);
+    const rows = params.map(p=>{
+      const isCompare = p.seriesName.indexOf(' — ')>=0;
+      const pinLabel = isCompare ? p.seriesName.split(' — ')[1] : p.seriesName;
+      const pin = pins.find(x=>x.label===pinLabel);
+      const seriesArr = pin ? (isCompare ? (pin.compareSeries||[]) : pin.series) : [];
+      const pt = seriesArr.find(s=>s.year===year);
+      const valText = (pt && pt.value!=null) ? formatCellRaw(pinLabel, pt.value) : '—';
+      const reason = (!isCompare && reasonByLabel[pinLabel]) ? `<div style="color:#8a97a8;font-size:11px;margin-top:2px;max-width:230px;white-space:normal">${advisorAttr(reasonByLabel[pinLabel])}</div>` : '';
+      return `<div style="margin-top:5px"><b style="color:${p.color}">${advisorAttr(p.seriesName)}</b>: ${advisorAttr(valText)}${reason}</div>`;
+    }).join('');
+    return `<div style="font-weight:600">FY${isNaN(year)?'':year}</div>${rows}`;
+  }};
+}
+// Bar-at-a-year mode: the x-axis is pin labels, not fiscal years, so there's
+// one reading sentence for the whole tooltip (about that row's history)
+// rather than one per bar.
+function benchTooltipAtYear(pins){
+  const reasonByLabel={}; pins.forEach(p=>{ reasonByLabel[p.label]=readingSentence(p.label,p.series); });
+  return { trigger:'axis', axisPointer:{type:'shadow'}, formatter:(params)=>{
+    if(!params||!params.length) return '';
+    const pinLabel = params[0].axisValueLabel||params[0].name||'';
+    const rows = params.map(p=>{
+      const valText = p.value!=null ? formatCellRaw(pinLabel, p.value) : '—';
+      return `<div style="margin-top:5px"><b style="color:${p.color}">${advisorAttr(p.seriesName)}</b>: ${advisorAttr(valText)}</div>`;
+    }).join('');
+    const reason = reasonByLabel[pinLabel];
+    const reasonHtml = reason ? `<div style="color:#8a97a8;font-size:11px;margin-top:4px;max-width:230px;white-space:normal">${advisorAttr(reason)}</div>` : '';
+    return `<div style="font-weight:600">${advisorAttr(pinLabel)}</div>${rows}${reasonHtml}`;
+  }};
+}
 function updateBenchChart(){
   const s=L.statements;
   const dom=document.getElementById('stmtBenchChart');
@@ -6168,6 +6211,7 @@ function updateBenchChart(){
   if(!chartInstances['stmtBenchChart']) dom.innerHTML='';
   const pins = s.pins.map(statementsPinSeries);
   const option = s.focusYear!=null ? benchChartOptionAtYear(pins, s.focusYear) : benchChartOption(pins, s.indexed);
+  option.tooltip = s.focusYear!=null ? benchTooltipAtYear(pins) : benchTooltipOverTime(pins);
   initChart('stmtBenchChart', option);
   // Bar-at-a-year mode re-keys the x-axis to pin labels, not fiscal years,
   // so a data-period hover value can't address a dataIndex on it the same
