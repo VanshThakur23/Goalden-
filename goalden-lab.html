@@ -5751,7 +5751,13 @@ function statementsOpenFlag(flagKey){
 function statementsAddToLive(){
   const sym=L.statements.primary;
   if(!sym) return;
-  liveAddInstrument({key:sym, symbol:sym, label:sym, type:'equity'});
+  // The statements tab works with bare screener.in tickers ("TCS"); Yahoo's
+  // chart endpoint (what Test Real Investments fetches from) needs the NSE
+  // exchange suffix or it 404s -- confirmed live, "Yahoo returned 404 for
+  // TCS". IN_STOCKS carries the .NS-suffixed symbol and a display name.
+  const full = sym+'.NS';
+  const known = IN_STOCKS.find(s=>s.symbol===full);
+  liveAddInstrument({key:full, symbol:full, label:(known&&known.name)||sym, type:'equity'});
   L.tab='livefrontier';
   render();
 }
@@ -6154,7 +6160,12 @@ function updateBenchChart(){
   const capEl=document.getElementById('stmtBenchCaption');
   if(!dom) return;
   if(!s.pins.length){ disposeChart('stmtBenchChart'); dom.innerHTML='<div class="cap" style="padding:20px">Pin a row below to chart it here.</div>'; if(capEl) capEl.textContent=''; return; }
-  dom.innerHTML='';
+  // Only clear the placeholder text on the 0-pins-to-1-pin transition. Once
+  // a chart instance is live, initChart() re-uses its DOM node via
+  // setOption() -- wiping innerHTML here on every subsequent pin change was
+  // orphaning that node from the live tree (echarts kept rendering into a
+  // detached SVG root), leaving the Bench blank after the first update.
+  if(!chartInstances['stmtBenchChart']) dom.innerHTML='';
   const pins = s.pins.map(statementsPinSeries);
   const option = s.focusYear!=null ? benchChartOptionAtYear(pins, s.focusYear) : benchChartOption(pins, s.indexed);
   initChart('stmtBenchChart', option);
@@ -6199,7 +6210,11 @@ function updateProfitCashChart(){
   const np = fySeries(primary.profitLoss,'Net Profit');
   const cfo = fySeries(primary.cashFlow,'Cash from Operating Activity');
   if(!np.length || !cfo.length){ if(dom){ disposeChart('stmtProfitCashChart'); dom.innerHTML='<div class="cap" style="padding:20px">Not available for this reporting format.</div>'; } if(capEl) capEl.textContent=''; return; }
-  if(dom) dom.innerHTML='';
+  // Same fix as updateBenchChart(): only clear stale placeholder markup
+  // when there's no live chart instance yet. Clearing unconditionally on
+  // every call (this function reruns on every pin/focus/toggle change)
+  // orphaned the SVG root a live instance was still rendering into.
+  if(dom && !chartInstances['stmtProfitCashChart']) dom.innerHTML='';
   const pcOption = profitVsCashChartOption(np, cfo);
   initChart('stmtProfitCashChart', pcOption);
   stmtChartYears.profitCash = pcOption.__years||[];
