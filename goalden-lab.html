@@ -73,19 +73,34 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 /* Vertical stack instead of the old horizontal scroller -- full labels,
    no clipping, no scrollbar at any width. */
 .tabs-slim{flex-direction:column;flex-wrap:nowrap;gap:3px}
-.tabs-slim .tab{font-size:11px;padding:9px 12px;text-align:left;display:flex;align-items:center;gap:8px;width:100%}
+.tabs-slim .tab{font-size:12px;padding:10px 12px;text-align:left;display:flex;align-items:center;gap:8px;width:100%}
 .tabs-slim .tab svg{width:14px;height:14px;flex-shrink:0;opacity:.8}
 .tabs-slim .tab.active svg{opacity:1}
+/* The bold/primary tools (see TABS' primary:true, home.html's own bold
+   group) get a visibly heavier row here too -- otherwise "Read the
+   Company" sits at the same weight as every other tool in a 15-row list
+   and is trivial to scroll past without noticing. */
+.tabs-slim .tab.tab-primary{font-weight:700;background:rgba(37,87,199,.07);border-color:rgba(37,87,199,.3);color:rgba(20,40,63,.85)}
+.tabs-slim .tab.tab-primary:hover{background:rgba(37,87,199,.13)}
 /* Whole-rail collapse: one button toggles the entire "All tools" nav
    between its full width and a slim strip holding just the toggle, so the
    output column can reclaim the space. main{margin:0 auto} then re-centres
-   itself for free once the rail shrinks -- no JS needed on that side. */
-.nav-toggle-btn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.16);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(20,40,63,.5);flex-shrink:0;margin-bottom:10px;transition:background .15s,color .15s}
-.nav-toggle-btn:hover{background:rgba(37,87,199,.1);color:var(--gold)}
-.nav-toggle-btn svg{width:14px;height:14px;transition:transform .18s ease}
-.tabbar.is-slim.nav-collapsed{width:44px;padding:22px 8px 24px}
+   itself for free once the rail shrinks -- no JS needed on that side. The
+   button carries a visible text label (not just a 14px icon) because a
+   bare icon in the corner of a 228px rail was easy to miss entirely. */
+.nav-toggle-btn{width:auto;height:32px;padding:0 12px 0 9px;border-radius:7px;border:1px solid rgba(20,40,63,.2);background:rgba(20,40,63,.03);display:flex;align-items:center;gap:7px;justify-content:center;cursor:pointer;color:rgba(20,40,63,.6);flex-shrink:0;margin-bottom:12px;transition:background .15s,color .15s;font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600}
+.nav-toggle-btn:hover{background:rgba(37,87,199,.12);color:var(--gold);border-color:rgba(37,87,199,.4)}
+.nav-toggle-btn svg{width:14px;height:14px;flex-shrink:0;transition:transform .18s ease}
+.nav-toggle-label{white-space:nowrap}
+/* min-width:0 overrides the flex item's default min-width:auto, which
+   otherwise floors a flex child at its content's min-content width no
+   matter what width is specified -- the actual reason this toggle used to
+   do nothing visible: the rail was declared 44px wide but the flex layout
+   refused to let it shrink past its (much wider) unhidden content. */
+.tabbar.is-slim.nav-collapsed{width:44px;min-width:0;padding:22px 8px 24px}
 .tabbar.is-slim.nav-collapsed #tabbarInner{display:none}
-.tabbar.is-slim.nav-collapsed .nav-toggle-btn{margin:0}
+.tabbar.is-slim.nav-collapsed .nav-toggle-btn{margin:0;width:28px;height:28px;padding:0}
+.tabbar.is-slim.nav-collapsed .nav-toggle-btn .nav-toggle-label{display:none}
 .tabbar.is-slim.nav-collapsed .nav-toggle-btn svg{transform:rotate(180deg)}
 @media(max-width:860px){
   /* Undo the desktop dual-pane scroll entirely -- narrow screens get one
@@ -610,16 +625,45 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
    it gets its own full-width page and its own restrained (not app-blue)
    surface language. Scoped to body.stmt-page so nothing else changes. */
 body.stmt-page main{max-width:1600px}
-.stmt-shell{display:flex;flex-direction:column;gap:18px}
-.stmt-card{background:#fff;border:1px solid rgba(20,40,63,.12);border-radius:10px;padding:22px}
+.stmt-shell{display:flex;flex-direction:column;gap:20px}
+/* Soft elevation instead of a flat 1px border -- on the app's tinted
+   radial-gradient background a shadowed white card reads as a surface you
+   could pick up, not a bordered box on a spreadsheet. The hover lift is a
+   small, free bit of "this responds to you" without touching any data
+   colour. */
+.stmt-card{background:#fff;border:1px solid rgba(20,40,63,.07);border-radius:14px;padding:24px;box-shadow:0 1px 2px rgba(20,40,63,.04),0 10px 28px -18px rgba(20,40,63,.22);transition:box-shadow .18s ease}
+.stmt-card:hover{box-shadow:0 1px 2px rgba(20,40,63,.05),0 14px 34px -16px rgba(20,40,63,.28)}
+/* Replaces the bare 10px uppercase .section-label inside this tab's own
+   cards with an icon + a real heading size -- the label alone read as a
+   filing-cabinet tab, not a title. Icons are wayfinding, not judgement:
+   one colour, no meaning encoded in which icon goes where. */
+.stmt-section-title{display:flex;align-items:center;gap:10px;font-family:'Newsreader',serif;font-weight:700;font-size:17px;color:var(--ink2);margin-bottom:16px}
+.stmt-section-title svg{width:19px;height:19px;flex-shrink:0;color:var(--gold);stroke-width:2}
 
-.stmt-topbar{background:rgba(20,40,63,.03);border:1px solid rgba(20,40,63,.12);border-radius:10px}
+/* Section jump-nav: sticks to the top of the scrolling column so a reader
+   can go straight to Balance Sheet or Compounding from wherever they are,
+   the way screener.in's own page tabs work, instead of only being able to
+   scroll. Pure anchor-jump (scrollIntoView), no active-section tracking --
+   simple and correct beats a scroll-spy that can drift out of sync. */
+.stmt-jumpnav{position:sticky;top:0;z-index:6;display:flex;flex-wrap:wrap;gap:6px;background:#fff;border:1px solid rgba(20,40,63,.12);border-radius:10px;padding:9px;box-shadow:0 2px 8px -4px rgba(20,40,63,.15)}
+.stmt-jumpnav button{font-family:'Spline Sans Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.01em;color:rgba(20,40,63,.65);background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.14);border-radius:16px;padding:7px 14px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s,border-color .12s}
+.stmt-jumpnav button:hover{background:rgba(37,87,199,.12);color:var(--gold);border-color:rgba(37,87,199,.4)}
+@media(max-width:860px){.stmt-jumpnav{overflow-x:auto;flex-wrap:nowrap;position:static}}
+
+.stmt-topbar{background:#fff;border:1px solid rgba(20,40,63,.07);border-radius:14px;box-shadow:0 1px 2px rgba(20,40,63,.04),0 10px 28px -18px rgba(20,40,63,.22)}
 .stmt-topbar-head{display:flex;align-items:center;gap:12px;padding:6px 8px 6px 16px}
 .stmt-topbar-toggle{flex:1;display:flex;align-items:baseline;gap:12px;min-width:0;background:none;border:none;padding:10px 4px;cursor:pointer;text-align:left;font:inherit}
 .stmt-topbar-title{font-family:'Newsreader',serif;font-weight:600;font-size:15px;color:var(--ink2);flex-shrink:0}
 .stmt-topbar-current{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .stmt-topbar-chevron{margin-left:auto;color:rgba(20,40,63,.4);font-size:12px;flex-shrink:0}
 .stmt-topbar-head .reset-tab-btn{flex-shrink:0}
+/* Explicit, visible affordance for reclaiming the tools rail's width --
+   the sidebar's own collapse toggle (.nav-toggle-btn) already does this,
+   but it lives off to the left where it's easy to never notice; this one
+   sits right next to the page's own title so the option is obvious the
+   moment someone opens this tab. Both toggle the exact same state. */
+.stmt-fullwidth-btn{font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.02em;color:var(--gold);background:rgba(37,87,199,.09);border:1px solid rgba(37,87,199,.35);border-radius:20px;padding:6px 13px;cursor:pointer;flex-shrink:0;white-space:nowrap;transition:background .15s}
+.stmt-fullwidth-btn:hover{background:rgba(37,87,199,.18)}
 .stmt-topbar-body{padding:0 20px 18px}
 .stmt-topbar-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px}
 @media(max-width:900px){.stmt-topbar-grid{grid-template-columns:1fr}}
@@ -636,8 +680,8 @@ body.stmt-page main{max-width:1600px}
 .stmt-controls{display:flex;flex-direction:column}
 .stmt-ctrl-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px dashed rgba(20,40,63,.12)}
 .stmt-ctrl-row:last-child{border-bottom:none;padding-bottom:0}
-.stmt-ctrl-label{display:flex;flex-direction:column;gap:2px;font-size:12.5px;font-weight:600;color:var(--ink2)}
-.stmt-ctrl-hint{font-weight:400;font-size:10.5px;color:var(--dim);line-height:1.4;max-width:280px}
+.stmt-ctrl-label{display:flex;flex-direction:column;gap:2px;font-size:13px;font-weight:600;color:var(--ink2)}
+.stmt-ctrl-hint{font-weight:400;font-size:11.5px;color:var(--dim);line-height:1.45;max-width:280px}
 .stmt-seg{display:inline-flex;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden;flex-shrink:0}
 .stmt-seg button{background:none;border:none;padding:5px 10px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);cursor:pointer;border-right:1px solid rgba(20,40,63,.12)}
 .stmt-seg button:last-child{border-right:none}
@@ -646,23 +690,33 @@ body.stmt-page main{max-width:1600px}
 .stmt-toggle-pill.active{background:rgba(37,87,199,.14);border-color:var(--gold);color:var(--gold);font-weight:600}
 
 .stmt-header-card{display:flex;flex-direction:column;gap:10px}
-.stmt-header-top{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px}
-.stmt-header-name{font-family:'Newsreader',serif;font-weight:700;font-size:34px;letter-spacing:-.01em;color:var(--ink2)}
-.stmt-header-badges{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.stmt-badge{display:inline-flex;align-items:center;font-family:'Spline Sans Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:9px;background:rgba(20,40,63,.07);color:var(--dim)}
+.stmt-header-top{display:flex;flex-wrap:wrap;align-items:center;gap:14px}
+/* A plain ticker string in serif type read as a document title, not the
+   header of something you were about to interact with -- the monogram
+   circle is the one purely decorative addition on this page, there to
+   make the top of the card feel like a profile, not a filing header. */
+.stmt-header-avatar{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,rgba(37,87,199,.16),rgba(37,87,199,.06));border:1px solid rgba(37,87,199,.25);color:var(--gold);font-family:'Newsreader',serif;font-weight:700;font-size:20px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.stmt-header-name{font-family:'Newsreader',serif;font-weight:700;font-size:32px;letter-spacing:-.01em;color:var(--ink2)}
+.stmt-header-badges{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-left:2px}
+.stmt-badge{display:inline-flex;align-items:center;font-family:'Spline Sans Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;padding:4px 9px;border-radius:9px;background:rgba(20,40,63,.07);color:var(--dim)}
 .stmt-badge.lender{background:rgba(160,58,34,.12);color:var(--red)}
 .stmt-badge.nonlender{background:rgba(46,139,111,.12);color:var(--ok)}
 .stmt-badge.standalone{background:rgba(201,154,69,.16);color:var(--warn)}
-.stmt-source-line{font-size:11px;color:var(--dim);margin-top:2px}
+.stmt-source-line{font-size:12px;color:var(--dim);margin-top:2px}
 .stmt-source-line a{color:var(--gold)}
 .stmt-sector-line{font-size:12.5px;color:rgba(20,40,63,.65)}
-.stmt-market-snapshot{display:flex;flex-wrap:wrap;gap:0;margin-top:6px;border-top:1px solid rgba(20,40,63,.09);padding-top:14px}
-.stmt-market-fact{display:flex;flex-direction:column;gap:3px;background:none;border:none;padding:0 22px 0 0;margin-right:22px;font:inherit;text-align:left;border-right:1px solid rgba(20,40,63,.09)}
-.stmt-market-fact:last-child{border-right:none;margin-right:0;padding-right:0}
+/* Stat tiles instead of divider-separated columns -- each one is its own
+   small card, so the two that are actually clickable (they pin a
+   companion-chip suggestion) read as buttons before you ever hover them,
+   not just on hover. */
+.stmt-market-snapshot{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.stmt-market-fact{display:flex;flex-direction:column;gap:4px;background:rgba(20,40,63,.03);border:1px solid rgba(20,40,63,.08);border-radius:10px;padding:10px 16px;font:inherit;text-align:left;min-width:108px;transition:background .14s ease,border-color .14s ease,transform .1s ease}
 .stmt-market-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
-.stmt-market-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;font-size:16px;font-weight:600;color:var(--ink2)}
-button.stmt-market-fact{cursor:pointer}
+.stmt-market-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;font-size:17px;font-weight:600;color:var(--ink2)}
+button.stmt-market-fact{cursor:pointer;background:rgba(37,87,199,.05);border-color:rgba(37,87,199,.18)}
+button.stmt-market-fact:hover{background:rgba(37,87,199,.11);border-color:rgba(37,87,199,.4);transform:translateY(-1px)}
 button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
+.stmt-market-clickhint{color:var(--gold);font-size:8px;opacity:.75}
 .stmt-coverage-note{flex-basis:100%;font-size:10.5px;color:var(--warn);margin-top:2px;font-style:italic}
 .stmt-stale-banner,.stmt-refusal-card,.stmt-cyclical-banner{background:rgba(201,154,69,.1);border:1px solid rgba(201,154,69,.35);border-radius:3px 12px 12px 12px;padding:12px 16px;font-size:12.5px;color:rgba(20,40,63,.8);line-height:1.55}
 .stmt-refusal-card{background:rgba(20,40,63,.045);border-color:rgba(20,40,63,.16)}
@@ -671,17 +725,24 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-refusal-card .stmt-comparable-list span{background:rgba(46,139,111,.12);color:var(--ok);border-radius:8px;padding:3px 9px;font-size:10.5px;font-family:'Spline Sans Mono',monospace}
 .stmt-error-card{background:rgba(160,58,34,.08);border:1px solid rgba(160,58,34,.3);border-radius:3px 12px 12px 12px;padding:14px 16px;font-size:12.5px;color:rgba(20,40,63,.8)}
 
-.stmt-checklist-framing{max-width:760px;margin:6px 0 16px}
-.stmt-checklist-framing p{font-size:12.5px;line-height:1.6;color:rgba(20,40,63,.78);margin:0 0 10px}
-.stmt-checklist-gate{background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:3px 12px 12px 12px;padding:14px 16px;font-size:12.5px;color:rgba(20,40,63,.8);line-height:1.55;margin-bottom:14px}
+.stmt-checklist-framing{max-width:780px;margin:6px 0 18px}
+.stmt-checklist-framing p{font-size:13.5px;line-height:1.65;color:rgba(20,40,63,.78);margin:0 0 11px}
+.stmt-checklist-gate{background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:3px 12px 12px 12px;padding:14px 16px;font-size:13px;color:rgba(20,40,63,.8);line-height:1.55;margin-bottom:14px}
 .stmt-checklist-gate .ns-btn{margin-top:10px}
-.stmt-checklist-list{display:flex;flex-direction:column;border-top:1px solid rgba(20,40,63,.09)}
-.stmt-checklist-row{display:grid;grid-template-columns:26px 1fr auto 92px;gap:14px;align-items:baseline;padding:11px 4px;border-bottom:1px solid rgba(20,40,63,.09);font-size:12.5px}
-.stmt-checklist-row.unavailable{color:rgba(20,40,63,.45)}
-.stmt-checklist-id{font-family:'Spline Sans Mono',monospace;color:var(--dim);font-size:11px}
-.stmt-checklist-label{color:var(--ink2)}
-.stmt-checklist-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;color:rgba(20,40,63,.7);white-space:nowrap}
-.stmt-checklist-state{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);text-align:right}
+.stmt-checklist-list{display:flex;flex-direction:column;border-top:1px solid rgba(20,40,63,.09);border-radius:8px;overflow:hidden}
+/* Same size, weight and prominence for a met and a failed condition --
+   the plan's explicit rule ("failed conditions render identically to met
+   ones") -- so the only things doing work here are spacing and a faint
+   zebra stripe, never colour-coding pass/fail. */
+.stmt-checklist-row{display:grid;grid-template-columns:30px 1fr auto 110px;gap:16px;align-items:center;padding:14px 12px;border-bottom:1px solid rgba(20,40,63,.09);font-size:13.5px;transition:background .12s ease}
+.stmt-checklist-row:nth-child(even){background:rgba(20,40,63,.02)}
+.stmt-checklist-row:hover{background:rgba(37,87,199,.05)}
+.stmt-checklist-row.unavailable{color:rgba(20,40,63,.42)}
+.stmt-checklist-id{font-family:'Spline Sans Mono',monospace;color:var(--dim);font-size:11.5px}
+.stmt-checklist-label{color:var(--ink2);line-height:1.4}
+.stmt-checklist-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;color:rgba(20,40,63,.72);white-space:nowrap}
+.stmt-checklist-state{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:rgba(20,40,63,.65);text-align:center;border:1px solid rgba(20,40,63,.18);background:rgba(20,40,63,.045);border-radius:10px;padding:4px 9px 4px 8px;white-space:nowrap}
+.stmt-checklist-glyph{font-size:9px;line-height:1;color:rgba(20,40,63,.5)}
 
 .stmt-depth-table{width:100%;border-collapse:collapse;margin-bottom:10px}
 .stmt-depth-table th,.stmt-depth-table td{padding:7px 10px;text-align:right;font-size:12.5px;border-bottom:1px solid rgba(20,40,63,.09)}
@@ -689,78 +750,97 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-depth-table th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:600}
 .stmt-depth-cagr{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums}
 .stmt-depth-dash{color:rgba(20,40,63,.35)}
-.stmt-depth-note{font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:4px}
-.stmt-depth-refusal{background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.16);border-radius:3px 12px 12px 12px;padding:12px 16px;font-size:12.5px;color:rgba(20,40,63,.8);line-height:1.55;margin-top:14px}
-.stmt-depth-refusal b{display:block;color:var(--ink2);margin-bottom:4px;font-size:13px}
-.stmt-depth-stats{display:flex;flex-wrap:wrap;gap:22px;margin-top:14px}
-.stmt-depth-stat{flex:1;min-width:220px}
-.stmt-depth-stat-label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--dim);margin-bottom:5px}
-.stmt-depth-stat-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;font-size:18px;font-weight:600;color:var(--ink2)}
-.stmt-depth-stat-sub{font-family:inherit;font-weight:400;font-size:11px;color:var(--dim);margin-left:8px}
+.stmt-depth-note{font-size:12px;color:var(--dim);line-height:1.55;margin-bottom:4px}
+.stmt-depth-refusal{background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.16);border-radius:3px 12px 12px 12px;padding:12px 16px;font-size:13px;color:rgba(20,40,63,.8);line-height:1.55;margin-top:14px}
+.stmt-depth-refusal b{display:block;color:var(--ink2);margin-bottom:4px;font-size:13.5px}
+.stmt-depth-stats{display:flex;flex-wrap:wrap;gap:24px 32px;margin-top:16px}
+.stmt-depth-stat{flex:1;min-width:240px;padding:14px 16px;background:rgba(20,40,63,.025);border:1px solid rgba(20,40,63,.08);border-radius:10px}
+.stmt-depth-stat-label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--dim);margin-bottom:7px;line-height:1.45}
+.stmt-depth-stat-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;font-size:19px;font-weight:600;color:var(--ink2)}
+.stmt-depth-stat-sub{font-family:inherit;font-weight:400;font-size:12px;color:var(--dim);margin-left:8px}
 
-.stmt-bench-hint{font-size:11.5px;color:var(--dim);margin-bottom:8px}
+.stmt-bench-hint{font-size:12.5px;color:var(--dim);margin-bottom:8px}
 .stmt-chips{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:8px;padding-bottom:6px}
-.stmt-chip{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:3px 10px 10px 10px;padding:5px 6px 5px 10px;font-size:11px}
+.stmt-chip{display:inline-flex;align-items:center;gap:7px;flex-shrink:0;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:3px 12px 12px 12px;padding:6px 7px 6px 11px;font-size:11.5px;transition:box-shadow .12s ease,border-color .12s ease}
+.stmt-chip:hover{border-color:rgba(37,87,199,.4);box-shadow:0 3px 10px -4px rgba(20,40,63,.25)}
 .stmt-chip-swatch{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .stmt-chip-gap{font-family:'Spline Sans Mono',monospace;color:var(--dim);white-space:nowrap}
-.stmt-chip button{background:none;border:none;cursor:pointer;color:rgba(20,40,63,.45);font-size:11px;padding:1px 3px;line-height:1}
+.stmt-chip button{background:none;border:none;cursor:pointer;color:rgba(20,40,63,.45);font-size:11.5px;padding:1px 3px;line-height:1;transition:color .12s}
 .stmt-chip button:hover{color:var(--red)}
-.stmt-chip-clear{background:none;border:1px dashed rgba(20,40,63,.3);border-radius:10px;color:var(--dim);font-size:10.5px;padding:4px 10px;cursor:pointer;flex-shrink:0}
+.stmt-chip-clear{background:none;border:1px dashed rgba(20,40,63,.32);border-radius:10px;color:var(--dim);font-size:11px;padding:5px 11px;cursor:pointer;flex-shrink:0;transition:border-color .12s,color .12s}
+.stmt-chip-clear:hover{border-color:var(--red);color:var(--red)}
 .stmt-companion-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
-.stmt-companion-chip{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.3);border-radius:3px 10px 10px 10px;padding:6px 10px;font-size:11px;color:rgba(20,40,63,.75);cursor:pointer;max-width:340px}
+.stmt-companion-chip{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.3);border-radius:3px 12px 12px 12px;padding:7px 11px;font-size:11.5px;color:rgba(20,40,63,.75);cursor:pointer;max-width:340px;transition:background .12s,border-color .12s,transform .1s}
 .stmt-companion-chip b{color:var(--gold)}
-.stmt-companion-chip:hover{border-color:var(--gold)}
+.stmt-companion-chip:hover{border-color:var(--gold);background:rgba(37,87,199,.14);transform:translateY(-1px)}
 
 .stmt-divergence-strip{margin-top:14px;padding-top:12px;border-top:1px solid rgba(20,40,63,.1)}
 .stmt-tickrow{position:relative;height:22px}
 .stmt-tick{position:absolute;top:0;width:3px;height:14px;border-radius:2px;background:var(--red);cursor:pointer;transform:translateX(-50%)}
 .stmt-tick:hover{height:20px}
-.stmt-checksummary{font-size:11px;color:var(--dim);margin-top:6px;font-family:'Spline Sans Mono',monospace}
-.stmt-flag-detail{margin-top:10px;background:rgba(160,58,34,.07);border-left:3px solid var(--red);border-radius:2px 10px 10px 2px;padding:10px 14px;font-size:12px;color:rgba(20,40,63,.85);line-height:1.55}
-.stmt-flag-detail .stmt-flag-note{display:block;margin-top:6px;color:var(--dim);font-size:11px}
-.stmt-flag-list-toggle{background:none;border:none;color:var(--gold);font-size:11px;cursor:pointer;margin-top:6px;padding:0}
+.stmt-checksummary{font-size:12px;color:var(--dim);margin-top:6px;font-family:'Spline Sans Mono',monospace}
+.stmt-flag-detail{margin-top:10px;background:rgba(160,58,34,.07);border-left:3px solid var(--red);border-radius:2px 10px 10px 2px;padding:12px 16px;font-size:13px;color:rgba(20,40,63,.85);line-height:1.6}
+.stmt-flag-detail .stmt-flag-note{display:block;margin-top:6px;color:var(--dim);font-size:12px}
+.stmt-flag-list-toggle{background:none;border:none;color:var(--gold);font-size:12px;cursor:pointer;margin-top:6px;padding:0}
 
-.stmt-caption{font-size:12px;color:rgba(20,40,63,.7);margin-top:8px;line-height:1.55;font-style:italic}
+.stmt-caption{font-size:13px;color:rgba(20,40,63,.7);margin-top:8px;line-height:1.55;font-style:italic}
 
 .stmt-density-comfortable .stmt-table td,.stmt-density-comfortable .stmt-table th{padding-top:8px;padding-bottom:8px}
 .stmt-density-compact .stmt-table td,.stmt-density-compact .stmt-table th{padding-top:5px;padding-bottom:5px}
 .stmt-density-dense .stmt-table td,.stmt-density-dense .stmt-table th{padding-top:2.5px;padding-bottom:2.5px;font-size:10.5px}
 .stmt-density-dense .stmt-spark{display:none}
+.stmt-density-dense .stmt-bar-track{height:4px}
 
 .stmt-table-wrap{overflow-x:auto;margin-top:0;border-radius:0 0 10px 10px;border:1px solid rgba(20,40,63,.12);border-top:none;contain:layout paint}
-.stmt-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:12.5px;table-layout:fixed;min-width:900px;font-variant-numeric:tabular-nums}
-.stmt-table th{text-align:right;padding:8px 8px;color:var(--dim);font-weight:600;font-size:10.5px;background:#fbfcfe;position:sticky;top:0;z-index:2;vertical-align:bottom;border-bottom:2px solid rgba(20,40,63,.14)}
+/* width:auto + table-layout:fixed with every column explicitly sized below
+   means the table's rendered width is exactly the sum of those widths --
+   never squeezed to fit the container. Before this, only the label/median/
+   reading columns had a width; every year column was left to split
+   whatever space remained, which on a 12-year table could be ~25px per
+   column -- not enough for a 6-digit rupee figure, so digits overflowed
+   their cell and visually ran into the next column's digits, reading as
+   one fused number. .stmt-table-wrap's overflow-x:auto is what makes a
+   table wider than the viewport still usable -- it scrolls instead of
+   compressing. */
+.stmt-table{width:auto;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:13.5px;table-layout:fixed;min-width:900px;font-variant-numeric:tabular-nums}
+.stmt-table th{text-align:right;padding:8px 8px;color:var(--dim);font-weight:600;font-size:11px;background:#fbfcfe;position:sticky;top:0;z-index:2;vertical-align:bottom;border-bottom:2px solid rgba(20,40,63,.14)}
 /* Frozen line-item column: on a 12-year-wide table the row label is the one
    thing that must never scroll out of view, or every number loses its
    meaning the moment you scroll right. A shadow at the freeze seam (not a
    hard border) reads as a layer sitting above the scrolling content rather
    than a rendering glitch. */
-.stmt-table th:first-child,.stmt-table td:first-child{text-align:left;width:220px;position:sticky;left:0;box-shadow:2px 0 4px -2px rgba(20,40,63,.18)}
+.stmt-table th:first-child,.stmt-table td:first-child{text-align:left;width:230px;position:sticky;left:0;box-shadow:2px 0 4px -2px rgba(20,40,63,.18)}
 .stmt-table th:first-child{z-index:3;background:#fbfcfe}
 .stmt-table td:first-child{z-index:1;background:#fff}
 .stmt-table th.stmt-th-ttm{color:var(--warn)}
-.stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.055);width:82px}
-.stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:11.5px;width:210px;white-space:normal;line-height:1.4}
+.stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.055);width:92px}
+.stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:12.5px;width:230px;white-space:normal;line-height:1.45}
+/* Every year/TTM column gets a fixed, generous width -- this is the actual
+   fix for the overlapping-digits bug above. */
+.stmt-table th:not(:first-child):not(.stmt-th-median),.stmt-table td.stmt-bar-cell{width:88px;min-width:88px}
+.stmt-density-dense .stmt-table th:not(:first-child):not(.stmt-th-median),.stmt-density-dense .stmt-table td.stmt-bar-cell{width:72px;min-width:72px}
 .stmt-table td{text-align:right;padding:7px 8px;color:rgba(20,40,63,.82);border-bottom:1px solid rgba(20,40,63,.07);position:relative;cursor:pointer}
 .stmt-table tr.stmt-row.stmt-alt td{background:rgba(20,40,63,.022)}
 .stmt-table tr.stmt-row.stmt-alt td:first-child{background:#fbfcfd}
-.stmt-table tr.stmt-row:hover td{background:rgba(37,87,199,.06)}
+.stmt-table tr.stmt-row{transition:background .1s ease}
+.stmt-table tr.stmt-row:hover td{background:rgba(37,87,199,.07)}
 .stmt-table tr.stmt-row:hover td:first-child{background:#eef3fb}
-.stmt-table tr.stmt-row.pinned td{background:rgba(37,87,199,.07)}
+.stmt-table tr.stmt-row.pinned td{background:rgba(37,87,199,.08)}
 .stmt-table tr.stmt-row.pinned td:first-child{background:#ecf2fb;border-left:3px solid var(--gold);font-weight:600}
 .stmt-table .stmt-dash{color:rgba(20,40,63,.28)}
-.stmt-rowlabel-inner{display:flex;align-items:center;gap:6px}
+.stmt-rowlabel-inner{display:flex;align-items:center;gap:7px}
 .stmt-spark{flex-shrink:0;opacity:.7}
-.stmt-def-toggle{width:13px;height:13px;border-radius:50%;border:1px solid rgba(20,40,63,.3);background:none;color:rgba(20,40,63,.5);font-size:8.5px;font-family:'Spline Sans Mono',monospace;cursor:help;flex-shrink:0;line-height:1;padding:0}
-.stmt-def-row td{background:rgba(20,40,63,.03)!important;font-family:'Figtree',sans-serif;font-size:11px;color:rgba(20,40,63,.65);padding:8px 12px!important;cursor:default;text-align:left!important;white-space:normal}
-.stmt-compare-subrow td{background:rgba(20,40,63,.02);color:rgba(20,40,63,.5);font-size:10.5px;padding-top:2px;padding-bottom:4px;border-bottom:1px solid rgba(20,40,63,.06)}
+.stmt-def-toggle{width:15px;height:15px;border-radius:50%;border:1px solid rgba(20,40,63,.32);background:none;color:rgba(20,40,63,.55);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:help;flex-shrink:0;line-height:1;padding:0;transition:background .12s,color .12s,border-color .12s}
+.stmt-def-toggle:hover{background:var(--gold);color:#fff;border-color:var(--gold)}
+.stmt-def-row td{background:rgba(20,40,63,.03)!important;font-family:'Figtree',sans-serif;font-size:12px;color:rgba(20,40,63,.65);padding:9px 12px!important;cursor:default;text-align:left!important;white-space:normal}
+.stmt-compare-subrow td{background:rgba(20,40,63,.02);color:rgba(20,40,63,.5);font-size:11.5px;padding-top:3px;padding-bottom:5px;border-bottom:1px solid rgba(20,40,63,.06)}
 .stmt-compare-subrow td:first-child{padding-left:20px;font-style:italic}
 .stmt-bar-cell{position:relative}
-.stmt-bar-track{position:absolute;left:2px;right:2px;bottom:1px;height:4px}
-.stmt-bar-fill{position:absolute;bottom:0;height:100%;border-radius:1px}
-.stmt-bar-fill.up{background:rgba(46,139,111,.55)}
-.stmt-bar-fill.down{background:rgba(201,154,69,.55)}
-.stmt-bar-fill.neutral{background:rgba(20,40,63,.3)}
+.stmt-bar-track{position:absolute;left:3px;right:3px;bottom:1px;height:6px}
+.stmt-bar-fill{position:absolute;bottom:0;height:100%;border-radius:2px 2px 1px 1px}
+.stmt-bar-fill.up{background:linear-gradient(180deg,rgba(46,139,111,.75),rgba(46,139,111,.4))}
+.stmt-bar-fill.down{background:linear-gradient(180deg,rgba(201,154,69,.75),rgba(201,154,69,.4))}
+.stmt-bar-fill.neutral{background:linear-gradient(180deg,rgba(20,40,63,.4),rgba(20,40,63,.2))}
 .stmt-tick-mark{position:absolute;bottom:0;width:1px;height:8px;background:rgba(20,40,63,.55)}
 .stmt-growth-band{height:14px;width:100%;position:relative;margin-top:3px}
 .stmt-growth-band .gb-fill{position:absolute;left:20%;right:20%;background:rgba(37,87,199,.35)}
@@ -774,9 +854,10 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 /* The whole bar is the click target, not a small icon inside it -- the
    original 18px button read as decoration, not a control, which is why
    collapsing a section was reported as not working at all. */
-.stmt-table-title{font-family:'Newsreader',serif;font-weight:700;font-size:16px;color:var(--ink2);display:flex;align-items:baseline;gap:10px;background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.12);border-radius:10px 10px 0 0;padding:13px 16px;cursor:pointer;user-select:none;transition:background .12s ease}
+.stmt-table-title{font-family:'Newsreader',serif;font-weight:700;font-size:16px;color:var(--ink2);display:flex;align-items:center;gap:10px;background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.12);border-radius:12px 12px 0 0;padding:14px 16px;cursor:pointer;user-select:none;transition:background .12s ease}
 .stmt-table-title:hover{background:rgba(37,87,199,.07)}
 .stmt-table-title:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+.stmt-table-title-icon{width:17px;height:17px;flex-shrink:0;color:var(--gold);order:-1}
 .stmt-collapse-chevron{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:rgba(20,40,63,.09);color:var(--ink2);font-size:12px;flex-shrink:0}
 .stmt-table-title:hover .stmt-collapse-chevron{background:var(--gold);color:#fff}
 .stmt-table-title-label{flex:1}
@@ -809,7 +890,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 <div class="print-header" id="printHeader"></div>
 <div class="labshell">
   <nav class="tabbar" id="tabbar">
-    <button class="nav-toggle-btn" id="navToggleBtn" title="Hide tools list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button class="nav-toggle-btn" id="navToggleBtn" title="Hide the tools list to use the full width of the screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg><span class="nav-toggle-label">Hide tools list</span></button>
     <div id="tabbarInner"></div>
   </nav>
   <main id="main"></main>
@@ -4609,7 +4690,7 @@ function renderTabs(){
         <span class="slim-current">${current.label||''}</span>
       </div>
       <div class="tabs tabs-slim">${TABS.map(t=>
-        `<button class="tab${L.tab===t.id?' active':''}" data-tab-switch="${t.id}" title="${t.blurb||''}">${t.icon||''}${t.label}</button>`).join('')}</div>`;
+        `<button class="tab${L.tab===t.id?' active':''}${t.primary?' tab-primary':''}" data-tab-switch="${t.id}" title="${t.blurb||''}">${t.icon||''}${t.label}</button>`).join('')}</div>`;
       // Nav buttons live inside #tabbarInner, only rebuilt on an actual nav
       // change -- so it's safe to bind listeners here rather than relying
       // on attach()'s broader, every-render rebind (see attach()'s own
@@ -5300,6 +5381,11 @@ const FLAG_PIN_MAP = {
   DEBTOR_BALLOON: [{section:'ratios',label:'Debtor Days'},{section:'profitLoss',label:'Sales'}],
   ASSET_SALE_GAIN: [{section:'profitLoss',label:'Other Income'},{section:'cashFlow',label:'Cash from Investing Activity'}],
   TAX_DRIVEN_MARGIN: [{section:'profitLoss',label:'Net Profit'},{section:'profitLoss',label:'Tax %'}],
+  INVENTORY_BUILD: [{section:'ratios',label:'Inventory Days'},{section:'profitLoss',label:'Sales'}],
+  INTEREST_COVER_THIN: [{section:'profitLoss',label:'Operating Profit'},{section:'profitLoss',label:'Interest'}],
+  LEVERAGE_UP_RETURNS_DOWN: [{section:'balanceSheet',label:'Borrowings'},{section:'ratios',label:'ROCE %'}],
+  CWIP_FROZEN: [{section:'balanceSheet',label:'CWIP'},{section:'balanceSheet',label:'Fixed Assets'}],
+  CAPEX_NO_REVENUE: [{section:'balanceSheet',label:'Fixed Assets'},{section:'profitLoss',label:'Sales'}],
   CORRELATED: [{section:'profitLoss',label:'Net Profit'},{section:'profitLoss',label:'Tax %'}],
 };
 
@@ -5431,6 +5517,7 @@ function renderStatementsShell(){
         <span class="stmt-topbar-current" id="stmtTopbarCurrent">${advisorAttr(s.primary||'No company open')}${s.compare?' vs '+advisorAttr(s.compare):''}</span>
         <span class="stmt-topbar-chevron">${s.topbarOpen?'▾':'▸'}</span>
       </button>
+      <button class="stmt-fullwidth-btn" id="stmtFullWidthBtn" title="Hide the tools list on the left to use the full width of the screen for reading">&#8596; Full width</button>
       <button class="reset-tab-btn" data-reset-tab="statements" title="Reset this tool's inputs back to their defaults">Reset</button>
     </div>
     <div class="stmt-topbar-body" id="stmtTopbarBody" style="display:${s.topbarOpen?'':'none'}">
@@ -5472,10 +5559,20 @@ function renderStatementsShell(){
     </div>
   </div>
   <div class="stmt-main" id="stmtRoot">
+    <nav class="stmt-jumpnav" id="stmtJumpNav">
+      <button data-stmt-jump="stmtHeaderCard">Overview</button>
+      <button data-stmt-jump="stmtBenchCard">The Bench</button>
+      <button data-stmt-jump-section="profitLoss">Profit &amp; Loss</button>
+      <button data-stmt-jump-section="balanceSheet">Balance Sheet</button>
+      <button data-stmt-jump-section="cashFlow">Cash Flow</button>
+      <button data-stmt-jump-section="ratios">Ratios</button>
+      <button data-stmt-jump="stmtDepth">Growth &amp; Returns</button>
+      <button data-stmt-jump="stmtChecklist">Compounding</button>
+    </nav>
     <div class="stmt-card" id="stmtHeaderCard"></div>
     <div id="stmtRefusal"></div>
-    <div class="stmt-card">
-      <div class="section-label">The Bench</div>
+    <div class="stmt-card" id="stmtBenchCard">
+      <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>The Bench</div>
       <div class="stmt-bench-hint" id="stmtBenchHint"></div>
       <div class="stmt-chips" id="stmtBenchChips"></div>
       <div class="stmt-companion-strip" id="stmtCompanionStrip"></div>
@@ -5488,7 +5585,7 @@ function renderStatementsShell(){
       </div>
     </div>
     <div class="stmt-card">
-      <div class="section-label">Net Profit vs Cash from Operations</div>
+      <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Net Profit vs Cash from Operations</div>
       <div id="stmtProfitCashChart" style="height:280px"></div>
       <div class="stmt-caption" id="stmtCaption"></div>
     </div>
@@ -5542,7 +5639,7 @@ async function fetchStatementsPriceHistory(symbol){
   L.statements.priceHistory[sym]={status:'loading'};
   try{
     const result = await liveApiGet('/api/history?type=equity&symbol='+encodeURIComponent(sym+'.NS'));
-    L.statements.priceHistory[sym]={status:'ready', prices:result.prices};
+    L.statements.priceHistory[sym]={status:'ready', prices:result.prices, label:result.label};
   }catch(e){
     L.statements.priceHistory[sym]={status:'error', error:(e&&e.message)||String(e)};
   }
@@ -5692,11 +5789,12 @@ function renderStatementsHeaderHTML(){
     <div class="stmt-market-fact"><span class="stmt-market-label">Market Cap</span><span class="stmt-market-value">${tr.marketCap!=null?'\u20b9'+formatCroreValue(tr.marketCap)+' Cr':'\u2014'}</span></div>
     <div class="stmt-market-fact"><span class="stmt-market-label">Price</span><span class="stmt-market-value">${tr.currentPrice!=null?'\u20b9'+formatCroreValue(tr.currentPrice):'\u2014'}</span></div>
     <div class="stmt-market-fact"><span class="stmt-market-label">52w range</span><span class="stmt-market-value">${(tr.low52w!=null&&tr.high52w!=null)?'\u20b9'+formatCroreValue(tr.low52w)+'\u2013\u20b9'+formatCroreValue(tr.high52w):'\u2014'}</span></div>
-    <button class="stmt-market-fact" data-stmt-market-companion="Stock P/E" title="Click for what to check alongside this"><span class="stmt-market-label">Stock P/E</span><span class="stmt-market-value">${tr.stockPE!=null?tr.stockPE.toFixed(1)+'x':'\u2014'}</span></button>
-    <button class="stmt-market-fact" data-stmt-market-companion="Dividend Yield" title="Click for what to check alongside this"><span class="stmt-market-label">Dividend Yield</span><span class="stmt-market-value">${tr.dividendYield!=null?tr.dividendYield.toFixed(2)+'%':'\u2014'}</span></button>
+    <button class="stmt-market-fact" data-stmt-market-companion="Stock P/E" title="Click for what to check alongside this"><span class="stmt-market-label">Stock P/E <span class="stmt-market-clickhint">&#9656;</span></span><span class="stmt-market-value">${tr.stockPE!=null?tr.stockPE.toFixed(1)+'x':'\u2014'}</span></button>
+    <button class="stmt-market-fact" data-stmt-market-companion="Dividend Yield" title="Click for what to check alongside this"><span class="stmt-market-label">Dividend Yield <span class="stmt-market-clickhint">&#9656;</span></span><span class="stmt-market-value">${tr.dividendYield!=null?tr.dividendYield.toFixed(2)+'%':'\u2014'}</span></button>
   </div>` : '';
   return `<div class="stmt-header-card">
     <div class="stmt-header-top">
+      <span class="stmt-header-avatar">${advisorAttr((r.symbol||'?').slice(0,1))}</span>
       <span class="stmt-header-name">${advisorAttr(r.symbol)}</span>
       <div class="stmt-header-badges">${badges.join('')}</div>
     </div>
@@ -5749,6 +5847,31 @@ function statementsFyEndMonth(pl){
   const m = Number(String(periods[periods.length-1].key).slice(5,7));
   return (m>=1 && m<=12) ? m : 3;
 }
+// Screener gives us a bare trading code ("TCS"); Yahoo's price history is
+// fetched by guessing "TCS.NS". For the names this app knows about, that
+// guess is screener's own convention and is solid -- but it is still a
+// guess, not a proof, and a wrong one would silently stitch the right
+// company's financials to a different company's share price without
+// throwing any error. This cross-checks Yahoo's own returned company
+// label against the name this app already has on file for that ticker
+// (the same curated list Test Real Investments uses), so a mismatch shows
+// up as a visible warning instead of a silently wrong number. Skips
+// entirely (returns null) for a ticker outside that curated list -- there
+// is no reference name to check against, so no comparison is drawn.
+function stmtNormalizeCompanyName(name){
+  const LEGAL_SUFFIXES = new Set(['LIMITED','LTD','PRIVATE','PVT','INC','PLC','CORPORATION']);
+  return String(name||'').toUpperCase().replace(/[.,&()]/g,' ').split(/\s+/)
+    .filter(w=>w && !LEGAL_SUFFIXES.has(w) && w.length>=3);
+}
+function stmtTickerIdentityCheck(sym, yahooLabel){
+  if(!yahooLabel) return null;
+  const known = IN_STOCKS.find(s=>s.symbol===sym+'.NS');
+  if(!known) return null; // outside the curated list -- nothing on file to compare against
+  const knownTokens = stmtNormalizeCompanyName(known.name);
+  const yahooTokens = new Set(stmtNormalizeCompanyName(yahooLabel));
+  const overlaps = knownTokens.some(w=>yahooTokens.has(w));
+  return { ok: overlaps, knownName: known.name, yahooLabel };
+}
 // Single source of truth for the price-dependent Phase 2 metrics --
 // re-rating spread and the P/E-history band -- shared by the Growth &
 // Returns card and the Compounding Checklist's adjacent P/E line so both
@@ -5770,7 +5893,8 @@ function statementsPeBand(sym){
   const priceFy = fyEndPriceSeries(priceHist.prices.map(p=>({date:p.date, close:p.rawClose})), fyYears, fyEndMonth);
   const epsSeries = epsFromShrink(pl, bs, faceValue);
   const band = peHistoryBand(priceFy, epsSeries);
-  return { status:'ready', band, spread10: reratingSpread(priceFy, npSeries, 10), spread5: reratingSpread(priceFy, npSeries, 5) };
+  const nameCheck = stmtTickerIdentityCheck(sym, priceHist.label);
+  return { status:'ready', band, spread10: reratingSpread(priceFy, npSeries, 10), spread5: reratingSpread(priceFy, npSeries, 5), nameCheck };
 }
 function stmtGrowthRowHTML(label, series){
   const g = growthSummary(series);
@@ -5861,9 +5985,20 @@ function renderDepthMetricsHTML(){
         <div class="stmt-depth-stat-value" style="font-size:14px">${bandTxt}</div>
       </div>
     </div>`;
+    // These two metrics blend two sources with different reach: the
+    // statement tables above come from screener.in, which typically carries
+    // ~12 years; the price series comes from Yahoo's daily chart endpoint,
+    // capped at 10. When that leaves the price side shorter than the
+    // statement side, say so plainly rather than let the mismatch pass as
+    // if both metrics saw the same span of years the tables show.
+    const statementYears = npSeries.filter(p=>p.value!=null).map(p=>p.year);
+    const priceYears = band.series.filter(p=>p.value!=null).map(p=>p.year);
+    if(statementYears.length && priceYears.length && Math.min(...statementYears) < Math.min(...priceYears)){
+      reratingBlock += `<div class="cap" style="margin-top:8px">Statement history above goes back to FY${Math.min(...statementYears)} (source: screener.in). Daily price history only reaches back to FY${Math.min(...priceYears)} (source: Yahoo Finance, capped at 10 years) — the two metrics above use the shorter, price-limited window, not the full statement history.</div>`;
+    }
   }
 
-  return `<div class="section-label">Growth & Returns</div>
+  return `<div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>Growth & Returns</div>
   <div class="cap" style="margin-bottom:10px">Derived from the same reported rows in the tables above — standard formulas, no new data.</div>
   ${growthTable}
   ${returnsBlock}
@@ -5885,12 +6020,18 @@ function renderCompoundingChecklistHTML(){
   const conditions = compoundingChecklist(bundle, {faceValue});
   const gate = checklistQualityGate(computeStatementsDivergence());
   const blocked = gate.blocked && !s.checklistDismissed;
+  // The glyph is mandatory, colour is never the only signal -- same rule
+  // the table's own ▲/▼ change cells already follow. A filled vs. hollow
+  // vs. dashed circle is scannable at a glance without needing hue, and
+  // every state still prints its own word right after it (the plan's own
+  // "prints its actual value, never just a tick" rule).
+  const stateGlyph = c => c.available ? (c.meets===true ? '●' : c.meets===false ? '○' : '–') : '–';
   const stateLabel = c => c.available ? (c.meets===true ? 'Met' : c.meets===false ? 'Not met' : 'Unclear') : 'Not available';
   const rows = conditions.map(c=>`<div class="stmt-checklist-row${c.available?'':' unavailable'}">
     <span class="stmt-checklist-id">${c.id}</span>
     <span class="stmt-checklist-label">${advisorAttr(c.label)}</span>
     <span class="stmt-checklist-value">${advisorAttr(c.value)}</span>
-    <span class="stmt-checklist-state">${stateLabel(c)}</span>
+    <span class="stmt-checklist-state"><span class="stmt-checklist-glyph">${stateGlyph(c)}</span>${stateLabel(c)}</span>
   </div>`).join('');
   const tr = bundle.topRatios;
   const peResult = statementsPeBand(s.primary);
@@ -5906,7 +6047,7 @@ function renderCompoundingChecklistHTML(){
     <div>${advisorAttr(gate.reason)}</div>
     ${blocked ? `<button class="ns-btn" data-stmt-checklist-dismiss>Show the checklist anyway</button>` : ''}
   </div>` : '';
-  return `<div class="section-label">Compounding Checklist</div>
+  return `<div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Compounding Checklist</div>
   <div class="stmt-checklist-framing">
     <p>Companies that grew steadily over decades tended to share certain patterns in their past accounts. This page checks how many of those patterns are present in ${advisorAttr(s.primary)}'s last ten years.</p>
     <p>This is a description of what already happened. It is not a forecast, not a rating, and not advice to buy or sell anything.</p>
@@ -6135,6 +6276,19 @@ function statementRowHTML(sectionKey, label, primarySection, compareSection, per
   </tr>
   <tr class="stmt-def-row" data-stmt-def-row="${advisorAttr(defKey)}" style="display:none"><td colspan="${periods.length+3}">${advisorAttr(rowDefinitionText(label))}</td></tr>${compareRow}`;
 }
+// Pure wayfinding, not judgement: one shape per statement so the eye can
+// tell four stacked tables apart while scrolling, all in the same single
+// accent colour (see .stmt-table-title svg) -- never a rainbow, never a
+// colour that could be misread as a verdict on the numbers underneath it.
+function stmtSectionIcon(sectionKey){
+  const paths = {
+    profitLoss: '<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+    balanceSheet: '<path d="M12 3v18M5 7l-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z"/><path d="M5 7h14M9 3h6"/>',
+    cashFlow: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+    ratios: '<circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/><path d="M4 20L20 4"/>'
+  };
+  return `<svg class="stmt-table-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[sectionKey]||''}</svg>`;
+}
 function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle, compareBundle, compareSymbol){
   const primSection = primaryBundle ? primaryBundle[sectionKey] : null;
   if(!primSection || !primSection.periods || !primSection.periods.length) return '';
@@ -6189,6 +6343,7 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
   const collapsed = !!L.statements.collapsedSections[sectionKey];
   return `<div class="stmt-section-block${collapsed?' stmt-collapsed':''}" data-stmt-section="${sectionKey}">
   <div class="stmt-table-title" data-stmt-collapse="${sectionKey}" role="button" tabindex="0" aria-expanded="${collapsed?'false':'true'}" title="Click to collapse or expand this section">
+    ${stmtSectionIcon(sectionKey)}
     <span class="stmt-collapse-chevron">${collapsed?'▸':'▾'}</span>
     <span class="stmt-table-title-label">${advisorAttr(sectionLabel)}</span>
     <span class="cap" style="font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:400">${sectionKey==='ratios'?'':'Rs Cr unless noted'}</span>
@@ -6331,6 +6486,19 @@ document.body.addEventListener('click', e=>{
   if(body) body.style.display = L.statements.topbarOpen ? '' : 'none';
   if(btn) btn.setAttribute('aria-expanded', L.statements.topbarOpen?'true':'false');
   if(chevron) chevron.textContent = L.statements.topbarOpen ? '▾' : '▸';
+});
+document.body.addEventListener('click', e=>{
+  const btn = e.target.closest('#stmtJumpNav button');
+  if(!btn) return;
+  // Two addressing schemes on one bar: a plain id for cards that only ever
+  // appear once (data-stmt-jump), and a canonical section key for the four
+  // statement tables, which live inside #stmtTables and are looked up by
+  // their data-stmt-section attribute so this keeps working regardless of
+  // which sections a given company's schema actually renders.
+  const target = btn.dataset.stmtJump
+    ? document.getElementById(btn.dataset.stmtJump)
+    : document.querySelector('#stmtTables [data-stmt-section="'+btn.dataset.stmtJumpSection+'"]');
+  if(target) target.scrollIntoView({behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth', block:'start'});
 });
 document.body.addEventListener('click', e=>{
   if(!e.target.closest('[data-stmt-checklist-dismiss]')) return;
@@ -6628,10 +6796,20 @@ document.getElementById('printBtn').addEventListener('click',()=>window.print())
 // shell), so it survives every renderTabs() rebuild -- bind it once here
 // rather than re-binding on every render.
 document.getElementById('tabbar').classList.toggle('nav-collapsed', L.navCollapsed);
-document.getElementById('navToggleBtn').addEventListener('click',()=>{
+function toggleLabNavCollapsed(){
   L.navCollapsed = !L.navCollapsed;
   try{ localStorage.setItem('goaldenLabNavCollapsed', L.navCollapsed?'1':'0'); }catch(e){}
   document.getElementById('tabbar').classList.toggle('nav-collapsed', L.navCollapsed);
+}
+document.getElementById('navToggleBtn').addEventListener('click', toggleLabNavCollapsed);
+// #stmtFullWidthBtn lives inside the statements tab's stable shell, which
+// can be torn down and remounted (add/remove company, tab leave-and-
+// return -- see the stable-shell rendering note), so it's bound via this
+// permanent delegated listener rather than a direct one that would go
+// stale the moment the shell remounts.
+document.body.addEventListener('click', e=>{
+  if(!e.target.closest('#stmtFullWidthBtn')) return;
+  toggleLabNavCollapsed();
 });
 // Frontier flashcard's "Move to the best mix at this risk" button: it is
 // re-created via innerHTML on every settle, so this reads the

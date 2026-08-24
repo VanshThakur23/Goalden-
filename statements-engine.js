@@ -290,16 +290,162 @@ function ruleTaxDrivenMargin(bundle) {
   return out;
 }
 
+// Inventory Days rising the same way Debtor Days does in DEBTOR_BALLOON —
+// same three-condition shape (relative change, absolute floor, absolute
+// delta) for the same reason: unsold stock piling up is only worth flagging
+// once it's deteriorated *from* a level that already mattered.
+function ruleInventoryBuild(bundle) {
+  const idays = fySeries(bundle.ratios, 'Inventory Days');
+  const salesRaw = fySeries(bundle.profitLoss, 'Sales');
+  const sales = salesRaw.length ? salesRaw : fySeries(bundle.profitLoss, 'Revenue');
+  const out = [];
+  if (!idays.length) return out; // not every business carries inventory (services, some financials) -- silently not applicable
+  for (let i = 3; i < idays.length; i++) {
+    const year = idays[i].year;
+    const t = idays[i].value, t3 = idays[i - 3].value;
+    if (t == null || t3 == null || t3 <= 0) { out.push({ year, status: 'not_applicable', reason: 'missing inventory-days data' }); continue; }
+    const ratio = t / t3;
+    const delta = t - t3;
+    const fired = ratio > 1.30 && t > 60 && delta > 15;
+    const salesT = sales[i] && sales[i].value;
+    const impliedRupees = fired && salesT != null ? (delta / 365) * salesT : null;
+    out.push({
+      year, status: fired ? 'fired' : 'clear',
+      message: fired ? 'Inventory is piling up much faster than it was three years ago — unsold stock ties up cash and risks write-downs.' : null,
+      detail: fired ? `FY${year} — inventory days rose from ${Math.round(t3)} to ${Math.round(t)} (+${Math.round(delta)} days) over 3 years.` : null,
+      materiality: fired ? (impliedRupees != null ? impliedRupees : delta) : null,
+    });
+  }
+  return out;
+}
+
+// Operating profit thinly covering interest -- a company whose interest
+// cover has fallen below a safety margin is one bad year away from
+// difficulty servicing debt. Borrowings = 0 is not_applicable, not clear:
+// there is nothing to cover, so the check has no meaning that year (the
+// same treatment condition 5 of the Compounding Checklist gives it).
+function ruleInterestCoverThin(bundle) {
+  const op = fySeries(bundle.profitLoss, 'Operating Profit');
+  const interest = fySeries(bundle.profitLoss, 'Interest');
+  const borrowRaw = fySeries(bundle.balanceSheet, 'Borrowings');
+  const borrow = borrowRaw.length ? borrowRaw : fySeries(bundle.balanceSheet, 'Borrowing');
+  const out = [];
+  for (let i = 0; i < op.length; i++) {
+    const year = op[i].year;
+    const opT = op[i].value, intT = interest[i] && interest[i].value;
+    const borrowT = borrow[i] && borrow[i].value;
+    if (borrowT === 0) { out.push({ year, status: 'not_applicable', reason: 'no borrowings this year — interest cover is moot' }); continue; }
+    if (opT == null || intT == null || intT < MATERIALITY_FLOOR) { out.push({ year, status: 'not_applicable', reason: 'missing an input, or interest expense too small to divide by' }); continue; }
+    const cover = opT / intT;
+    const fired = cover < 3;
+    out.push({
+      year, status: fired ? 'fired' : 'clear',
+      message: fired ? 'Operating profit is covering interest only thinly this year — a dip in profit could make interest payments difficult.' : null,
+      detail: fired ? `FY${year} — interest cover was ${cover.toFixed(1)}x, operating profit Rs ${Math.round(opT)} Cr against interest of Rs ${Math.round(intT)} Cr.` : null,
+      materiality: fired ? intT : null,
+    });
+  }
+  return out;
+}
+
+// Borrowings rising while ROCE falls -- new debt that isn't yet earning
+// its keep. Both legs must move: rising debt alone funds healthy growth
+// all the time, and falling ROCE alone can just mean a cyclical trough.
+function ruleLeverageUpReturnsDown(bundle) {
+  const borrowRaw = fySeries(bundle.balanceSheet, 'Borrowings');
+  const borrow = borrowRaw.length ? borrowRaw : fySeries(bundle.balanceSheet, 'Borrowing');
+  const roce = fySeries(bundle.ratios, 'ROCE %');
+  const out = [];
+  if (!borrow.length || !roce.length) return out;
+  for (let i = 1; i < borrow.length; i++) {
+    const year = borrow[i].year;
+    const borrowGrowth = pctChange(borrow[i - 1].value, borrow[i].value, MATERIALITY_FLOOR);
+    const roceT = roce[i] && roce[i].value, roceT1 = roce[i - 1] && roce[i - 1].value;
+    if (borrowGrowth == null || roceT == null || roceT1 == null) { out.push({ year, status: 'not_applicable', reason: 'missing an input, or the prior-year borrowings base is not comparable' }); continue; }
+    const roceDelta = roceT - roceT1;
+    const fired = borrowGrowth > 0.15 && roceDelta < -2;
+    out.push({
+      year, status: fired ? 'fired' : 'clear',
+      message: fired ? 'Borrowings grew while return on capital fell — the new debt does not yet appear to be earning its keep.' : null,
+      detail: fired ? `FY${year} — borrowings rose ${(borrowGrowth * 100).toFixed(0)}% while ROCE fell from ${roceT1.toFixed(1)}% to ${roceT.toFixed(1)}%.` : null,
+      materiality: fired ? Math.abs(borrow[i].value - borrow[i - 1].value) : null,
+    });
+  }
+  return out;
+}
+
+// CWIP that hasn't shrunk in three years and is still a material slice of
+// fixed assets -- capital tied up in a project that isn't converting into
+// productive, revenue-generating assets. A completed project capitalises
+// out of CWIP into Fixed Assets, so CWIP staying flat or rising is the
+// signal, not CWIP being large in isolation (some capital-intensive
+// businesses always carry a sizeable CWIP balance mid-expansion).
+function ruleCwipFrozen(bundle) {
+  const cwip = fySeries(bundle.balanceSheet, 'CWIP');
+  const fixedAssets = fySeries(bundle.balanceSheet, 'Fixed Assets');
+  const out = [];
+  if (!cwip.length) return out;
+  for (let i = 3; i < cwip.length; i++) {
+    const year = cwip[i].year;
+    const t = cwip[i].value, t3 = cwip[i - 3].value;
+    const faT = fixedAssets[i] && fixedAssets[i].value;
+    if (t == null || t3 == null || t3 < MATERIALITY_FLOOR || faT == null || faT <= 0) { out.push({ year, status: 'not_applicable', reason: 'missing CWIP or fixed-assets data, or CWIP was negligible three years ago' }); continue; }
+    const ratio = t / t3;
+    const share = t / faT;
+    const fired = ratio >= 0.90 && share > 0.10;
+    out.push({
+      year, status: fired ? 'fired' : 'clear',
+      message: fired ? 'A large share of capital has stayed tied up in unfinished projects for years without converting into productive assets.' : null,
+      detail: fired ? `FY${year} — capital work in progress was Rs ${Math.round(t)} Cr, little changed from Rs ${Math.round(t3)} Cr three years ago, and ${(share * 100).toFixed(0)}% of fixed assets.` : null,
+      materiality: fired ? t : null,
+    });
+  }
+  return out;
+}
+
+// Fixed assets growing much faster than sales over three years -- recent
+// capital spending that hasn't (yet) shown up as revenue. Silent on
+// whether it ever will; the honest claim is only that it hasn't yet.
+function ruleCapexNoRevenue(bundle) {
+  const fixedAssets = fySeries(bundle.balanceSheet, 'Fixed Assets');
+  const salesRaw = fySeries(bundle.profitLoss, 'Sales');
+  const sales = salesRaw.length ? salesRaw : fySeries(bundle.profitLoss, 'Revenue');
+  const out = [];
+  if (!fixedAssets.length || !sales.length) return out;
+  for (let i = 3; i < fixedAssets.length; i++) {
+    const year = fixedAssets[i].year;
+    const faGrowth = pctChange(fixedAssets[i - 3].value, fixedAssets[i].value, MATERIALITY_FLOOR);
+    const salesGrowth = pctChange(sales[i - 3] && sales[i - 3].value, sales[i] && sales[i].value, MATERIALITY_FLOOR);
+    if (faGrowth == null || salesGrowth == null) { out.push({ year, status: 'not_applicable', reason: 'missing an input, or a 3-year-ago base is not comparable' }); continue; }
+    const fired = faGrowth > 0.30 && salesGrowth < 0.05;
+    out.push({
+      year, status: fired ? 'fired' : 'clear',
+      message: fired ? 'Fixed assets have grown much faster than sales over three years — recent capital spending has not yet shown up as revenue.' : null,
+      detail: fired ? `FY${year - 3}–FY${year} — fixed assets grew ${(faGrowth * 100).toFixed(0)}% while sales grew ${(salesGrowth * 100).toFixed(0)}%.` : null,
+      materiality: fired ? Math.abs(fixedAssets[i].value - fixedAssets[i - 3].value) : null,
+    });
+  }
+  return out;
+}
+
 // Cash-conversion rules assume operating cash flow tracks the operating
 // business. For a lender, deploying capital into loans *is* the business,
 // so CFO is routinely and healthily negative — these rules have no meaning
 // in that domain and must not be evaluated at all, not evaluated-and-clear.
+// Same reasoning extends to inventory, interest cover, leverage, CWIP and
+// capex-vs-revenue: a bank's balance sheet doesn't separate these the same
+// way a manufacturer's does (see compareRefusal's SCHEMA_MISMATCH note).
 const DIVERGENCE_RULES = [
   { id: 'DIVIDEND_NOT_FROM_OPS', run: ruleDividendNotFromOps, validSchemas: ['nonfinancial'] },
   { id: 'CFO_DIVERGENCE', run: ruleCfoDivergence, validSchemas: ['nonfinancial'] },
   { id: 'DEBTOR_BALLOON', run: ruleDebtorBalloon, validSchemas: ['nonfinancial'] },
   { id: 'ASSET_SALE_GAIN', run: ruleAssetSaleGain, validSchemas: ['nonfinancial'] },
   { id: 'TAX_DRIVEN_MARGIN', run: ruleTaxDrivenMargin, validSchemas: ['nonfinancial', 'financial'] },
+  { id: 'INVENTORY_BUILD', run: ruleInventoryBuild, validSchemas: ['nonfinancial'] },
+  { id: 'INTEREST_COVER_THIN', run: ruleInterestCoverThin, validSchemas: ['nonfinancial'] },
+  { id: 'LEVERAGE_UP_RETURNS_DOWN', run: ruleLeverageUpReturnsDown, validSchemas: ['nonfinancial'] },
+  { id: 'CWIP_FROZEN', run: ruleCwipFrozen, validSchemas: ['nonfinancial'] },
+  { id: 'CAPEX_NO_REVENUE', run: ruleCapexNoRevenue, validSchemas: ['nonfinancial'] },
 ];
 
 // Known market-wide reporting discontinuities. A flag whose transition

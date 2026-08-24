@@ -523,7 +523,7 @@ test('statements-engine: compareRefusal allows two non-lenders through', () => {
 test('statements-engine: evaluateDivergenceRules gates cash-conversion rules off for a lender (SECTOR_GATE)', () => {
   const hdfc = loadFinancials('HDFCBANK');
   const result = stmt.evaluateDivergenceRules(hdfc);
-  assert.strictEqual(result.notApplicable, 4, 'DIVIDEND_NOT_FROM_OPS, CFO_DIVERGENCE, DEBTOR_BALLOON, ASSET_SALE_GAIN are not_applicable for a lender');
+  assert.strictEqual(result.notApplicable, 9, 'DIVIDEND_NOT_FROM_OPS, CFO_DIVERGENCE, DEBTOR_BALLOON, ASSET_SALE_GAIN, INVENTORY_BUILD, INTEREST_COVER_THIN, LEVERAGE_UP_RETURNS_DOWN, CWIP_FROZEN, CAPEX_NO_REVENUE are not_applicable for a lender');
   assert.strictEqual(result.checksRun, result.notApplicable + result.clear + result.fired, 'the check-summary line must account for every evaluated transition');
 });
 
@@ -560,6 +560,124 @@ test('statements-engine: rule guards refuse on a loss-year base rather than emit
   };
   const results = stmt.DIVERGENCE_RULES.find((r) => r.id === 'TAX_DRIVEN_MARGIN').run(bundle);
   assert.strictEqual(results[0].status, 'not_applicable', 'FY2021 vs a loss-making FY2020 base must refuse, not compute a fabricated growth rate');
+});
+
+test('statements-engine: SECTOR_GATE list is complete — every rule with no meaning for a lender is nonfinancial-only', () => {
+  const gatedIds = ['DIVIDEND_NOT_FROM_OPS', 'CFO_DIVERGENCE', 'DEBTOR_BALLOON', 'ASSET_SALE_GAIN', 'INVENTORY_BUILD', 'INTEREST_COVER_THIN', 'LEVERAGE_UP_RETURNS_DOWN', 'CWIP_FROZEN', 'CAPEX_NO_REVENUE'];
+  gatedIds.forEach((id) => {
+    const rule = stmt.DIVERGENCE_RULES.find((r) => r.id === id);
+    assert.ok(rule, `${id} must be registered in DIVERGENCE_RULES`);
+    assert.deepStrictEqual(rule.validSchemas, ['nonfinancial'], `${id} has no meaning for a lender's balance sheet and must be gated off`);
+  });
+  assert.strictEqual(stmt.DIVERGENCE_RULES.length, gatedIds.length + 1, 'exactly one rule (TAX_DRIVEN_MARGIN) is valid for both schemas');
+});
+
+test('statements-engine: INVENTORY_BUILD fires on a 3-year rise from a meaningful base, refuses when the row is absent', () => {
+  const periods = [2020, 2021, 2022, 2023].map((year) => ({ type: 'fy', year }));
+  const bundle = {
+    profitLoss: { periods, rows: [{ label: 'Sales', values: [{ value: 500 }, { value: 550 }, { value: 600 }, { value: 650 }] }] },
+    ratios: { periods, rows: [{ label: 'Inventory Days', values: [{ value: 40 }, { value: 45 }, { value: 50 }, { value: 80 }] }] },
+    schema: 'nonfinancial',
+  };
+  const rows = stmt.DIVERGENCE_RULES.find((r) => r.id === 'INVENTORY_BUILD').run(bundle);
+  assert.strictEqual(rows[0].status, 'fired', 'FY2023: 40 -> 80 days is +100% and +40 days, past the floor and the delta gate');
+  assert.ok(rows[0].materiality > 0);
+  const empty = { profitLoss: { periods: [], rows: [] }, ratios: { periods: [], rows: [] }, schema: 'nonfinancial' };
+  assert.deepStrictEqual(stmt.DIVERGENCE_RULES.find((r) => r.id === 'INVENTORY_BUILD').run(empty), [], 'no Inventory Days row means no transitions, not a wall of N/A rows');
+});
+
+test('statements-engine: INTEREST_COVER_THIN treats zero borrowings as not_applicable, never clear', () => {
+  const periods = [2023].map((year) => ({ type: 'fy', year }));
+  const bundle = {
+    profitLoss: {
+      periods,
+      rows: [
+        { label: 'Operating Profit', values: [{ value: 100 }] },
+        { label: 'Interest', values: [{ value: 5 }] },
+      ],
+    },
+    balanceSheet: { periods, rows: [{ label: 'Borrowings', values: [{ value: 0 }] }] },
+    schema: 'nonfinancial',
+  };
+  const rows = stmt.DIVERGENCE_RULES.find((r) => r.id === 'INTEREST_COVER_THIN').run(bundle);
+  assert.strictEqual(rows[0].status, 'not_applicable', 'zero borrowings means interest cover has no meaning that year, and must not read as a clean pass');
+});
+
+test('statements-engine: INTEREST_COVER_THIN fires below 3x cover when borrowings are non-zero', () => {
+  const periods = [2023].map((year) => ({ type: 'fy', year }));
+  const bundle = {
+    profitLoss: {
+      periods,
+      rows: [
+        { label: 'Operating Profit', values: [{ value: 20 }] },
+        { label: 'Interest', values: [{ value: 10 }] },
+      ],
+    },
+    balanceSheet: { periods, rows: [{ label: 'Borrowings', values: [{ value: 200 }] }] },
+    schema: 'nonfinancial',
+  };
+  const rows = stmt.DIVERGENCE_RULES.find((r) => r.id === 'INTEREST_COVER_THIN').run(bundle);
+  assert.strictEqual(rows[0].status, 'fired', '2x cover is below the 3x safety threshold');
+});
+
+test('statements-engine: LEVERAGE_UP_RETURNS_DOWN needs both legs to move together', () => {
+  const periods = [2022, 2023].map((year) => ({ type: 'fy', year }));
+  const bundleFires = {
+    balanceSheet: { periods, rows: [{ label: 'Borrowings', values: [{ value: 100 }, { value: 130 }] }] },
+    ratios: { periods, rows: [{ label: 'ROCE %', values: [{ value: 18 }, { value: 14 }] }] },
+    schema: 'nonfinancial',
+  };
+  const fired = stmt.DIVERGENCE_RULES.find((r) => r.id === 'LEVERAGE_UP_RETURNS_DOWN').run(bundleFires);
+  assert.strictEqual(fired[0].status, 'fired', 'borrowings +30% and ROCE -4pp both clear their gates');
+
+  const bundleClear = {
+    balanceSheet: { periods, rows: [{ label: 'Borrowings', values: [{ value: 100 }, { value: 130 }] }] },
+    ratios: { periods, rows: [{ label: 'ROCE %', values: [{ value: 18 }, { value: 19 }] }] },
+    schema: 'nonfinancial',
+  };
+  const clear = stmt.DIVERGENCE_RULES.find((r) => r.id === 'LEVERAGE_UP_RETURNS_DOWN').run(bundleClear);
+  assert.strictEqual(clear[0].status, 'clear', 'borrowings up but ROCE also up must not fire — rising debt funding healthy growth is not the signal');
+});
+
+test('statements-engine: CWIP_FROZEN needs both an unchanged balance and a material share of fixed assets', () => {
+  const periods = [2020, 2021, 2022, 2023].map((year) => ({ type: 'fy', year }));
+  const bundleFires = {
+    balanceSheet: {
+      periods,
+      rows: [
+        { label: 'CWIP', values: [{ value: 200 }, { value: 210 }, { value: 195 }, { value: 205 }] },
+        { label: 'Fixed Assets', values: [{ value: 800 }, { value: 850 }, { value: 900 }, { value: 950 }] },
+      ],
+    },
+    schema: 'nonfinancial',
+  };
+  const fired = stmt.DIVERGENCE_RULES.find((r) => r.id === 'CWIP_FROZEN').run(bundleFires);
+  assert.strictEqual(fired[0].status, 'fired', 'CWIP barely moved in 3 years and is ~22% of fixed assets');
+
+  const bundleSmall = {
+    balanceSheet: {
+      periods,
+      rows: [
+        { label: 'CWIP', values: [{ value: 20 }, { value: 21 }, { value: 19 }, { value: 20 }] },
+        { label: 'Fixed Assets', values: [{ value: 800 }, { value: 850 }, { value: 900 }, { value: 950 }] },
+      ],
+    },
+    schema: 'nonfinancial',
+  };
+  const small = stmt.DIVERGENCE_RULES.find((r) => r.id === 'CWIP_FROZEN').run(bundleSmall);
+  assert.strictEqual(small[0].status, 'clear', 'CWIP unchanged but only ~2% of fixed assets is not a material amount of frozen capital');
+});
+
+test('statements-engine: CAPEX_NO_REVENUE compares 3-year fixed-asset growth against 3-year sales growth', () => {
+  const periods = [2020, 2021, 2022, 2023].map((year) => ({ type: 'fy', year }));
+  const bundle = {
+    balanceSheet: { periods, rows: [{ label: 'Fixed Assets', values: [{ value: 100 }, { value: 110 }, { value: 125 }, { value: 145 }] }] },
+    profitLoss: { periods, rows: [{ label: 'Sales', values: [{ value: 500 }, { value: 505 }, { value: 510 }, { value: 512 }] }] },
+    schema: 'nonfinancial',
+  };
+  const rows = stmt.DIVERGENCE_RULES.find((r) => r.id === 'CAPEX_NO_REVENUE').run(bundle);
+  assert.strictEqual(rows[0].status, 'fired', 'fixed assets +45% against sales +2.4% over the same 3 years');
+  assert.ok(rows[0].detail.includes('FY2020'), 'the detail sentence must name the 3-year window it actually used, not just the ending year');
 });
 
 test('statements-engine: benchChartOption indexes pinned series to 100 at the first available value', () => {
