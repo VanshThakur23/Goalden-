@@ -679,16 +679,28 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
     // showing both was pure duplication and ate the vertical space the
     // axis names needed, which is what was driving the label collisions.
     grid: [
-      { left: 56, right: 170, top: 40, height: '48%', containLabel: true },
-      { left: 56, right: 170, top: '66%', bottom: 40, height: '24%', containLabel: true },
+      { left: 56, right: 80, top: 20, height: '48%', containLabel: true },
+      { left: 56, right: 80, top: '70%', bottom: 30, height: '22%', containLabel: true },
     ],
     xAxis: [
       { type: 'category', gridIndex: 0, data: yearLabels, axisLabel: { show: false }, axisTick: { show: false } },
       { type: 'category', gridIndex: 1, data: yearLabels },
     ],
+    // No axis `name` on either grid -- with two stacked grids this close
+    // together, ECharts computes each one's label-reservation space
+    // independently, blind to its neighbour, so a name reliably ends up
+    // overlapping the OTHER grid's tick labels (confirmed live: "CFO/NP"
+    // landing directly on top of the "0" tick). The chart's own title and
+    // the caption line below it already say what's being measured and in
+    // what unit, so the axis name was decoration, not information.
     yAxis: [
-      { type: 'value', gridIndex: 0, name: 'Rs Cr', nameGap: 24, nameTextStyle: { fontSize: 11, color: '#8a97a8' } },
-      { type: 'value', gridIndex: 1, name: 'CFO/NP', min: 0, max: ratioMax, nameGap: 24, nameTextStyle: { fontSize: 11, color: '#8a97a8' } },
+      { type: 'value', gridIndex: 0 },
+      // splitNumber:3 -- grid1 is only ~22% of a 360px container (roughly
+      // 80px). ECharts' default auto-ticking on a 0..ratioMax range packed
+      // in 6-7 tick labels there, each ~12px tall in an ~11px pitch, so
+      // consecutive labels ("0.2"/"0.4"/etc) overlapped each other by a
+      // pixel or two. Capping the tick count gives each label real room.
+      { type: 'value', gridIndex: 1, min: 0, max: ratioMax, splitNumber: 3 },
     ],
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
     series: [
@@ -697,31 +709,38 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
         // collide with the Cash-from-Operations line's end label -- the two
         // series often converge near the last year, which is exactly the
         // point the chart is making, and exactly where two "above the data"
-        // labels would otherwise glue together into unreadable text.
+        // labels would otherwise glue together into unreadable text. Kept to
+        // a short tag, not the full series name -- the full name is already
+        // in the chart title, the tooltip and the caption below, and a
+        // ~90px-wide bar can't reliably fit "Net Profit" without it
+        // spilling into the neighbouring column.
         name: 'Net Profit', type: 'bar', xAxisIndex: 0, yAxisIndex: 0, itemStyle: { color: A.color },
         data: npData.map((v, i) => (i === lastIdx
-          ? { value: v, label: { show: true, position: 'insideTop', distance: 6, color: '#fff', fontWeight: 600, formatter: '{a}' } }
+          ? { value: v, label: { show: true, position: 'insideTop', distance: 6, color: '#fff', fontWeight: 600, formatter: 'NP' } }
           : v)),
       },
       {
+        // Same reasoning as Net Profit's tag above -- "Cash from Operations"
+        // at 21 characters needs more right-margin than a narrower browser
+        // window leaves this chart, and reliably ran off the visible edge.
         name: 'Cash from Operations', type: 'line', xAxisIndex: 0, yAxisIndex: 0,
         lineStyle: { color: B.color, type: B.lineStyle.type }, itemStyle: { color: B.color }, symbol: B.symbol,
         data: cfoSeries.map((p) => p && p.value),
-        endLabel: { show: true, formatter: '{a}', color: B.color, fontWeight: 600 },
+        endLabel: { show: true, formatter: 'CFO', color: B.color, fontWeight: 600 },
       },
       {
         name: 'Cumulative CFO / NP', type: 'line', xAxisIndex: 1, yAxisIndex: 1,
         lineStyle: { color: C.color, type: C.lineStyle.type }, itemStyle: { color: C.color }, symbol: C.symbol,
         data: cumRatio,
-        endLabel: { show: true, formatter: '{a}', color: C.color, fontWeight: 600 },
-        // For a healthy company the ratio line sits right on top of this
-        // reference line, which makes the reference invisible exactly when
-        // it would otherwise be reassuring to see -- the label makes it
-        // legible regardless of whether the two lines happen to coincide.
+        endLabel: { show: true, formatter: 'CFO/NP', color: C.color, fontWeight: 600 },
+        // A dashed line at y=1, unlabelled -- the axis' own "1" tick already
+        // names this value. An inline text label here (tried at two
+        // different position keywords) kept rendering at the plot's left
+        // edge regardless of the keyword, landing on top of the ratio
+        // axis' own tick labels; the axis tick is the reliable annotation.
         markLine: {
           symbol: 'none', data: [{ yAxis: 1 }],
           lineStyle: { color: 'rgba(20,40,63,.5)', type: 'dashed', width: 1.5 },
-          label: { show: true, position: 'insideEndTop', formatter: '1.0 ref', color: 'rgba(20,40,63,.55)', fontSize: 10 },
         },
       },
     ],
