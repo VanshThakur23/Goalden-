@@ -610,11 +610,14 @@ function benchChartOption(pins, indexed) {
 // Fixed, deterministic one-line reasons shown in the tooltip alongside each
 // series' value -- arithmetic and a template, never a model, so the tooltip
 // says the same thing on every hover and every refresh, same discipline as
-// the reading column and the divergence-rule messages.
+// the reading column and the divergence-rule messages. Kept to one short,
+// why-it-matters clause each rather than a formula -- a longer tooltip is a
+// bigger box, and a bigger box covers more of the very chart it's meant to
+// explain.
 const PROFIT_CASH_TOOLTIP_REASONS = {
-  'Net Profit': 'Reported accounting profit for the year — includes non-cash items like depreciation and any one-time gains.',
-  'Cash from Operations': 'Actual cash the business collected in the year — the reality check on reported profit.',
-  'Cumulative CFO / NP': 'Running total of cash collected ÷ running total of profit reported, since the first year shown. 1.00 means every rupee of profit has arrived as cash.',
+  'Net Profit': "The company's reported profit — not the same as cash actually collected.",
+  'Cash from Operations': 'The cash that actually came in — the real-world check on that profit number.',
+  'Cumulative CFO / NP': 'Whether reported profit has shown up as real cash over time — 1.00 means all of it has.',
 };
 
 // Net Profit (bar) vs Cash from Operating Activity (line), one shared
@@ -651,6 +654,11 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
+      // Keeps the tooltip box inside the chart's own container instead of
+      // free-floating over whichever part of the page has room -- combined
+      // with the short, one-clause reasons above, this stops the box from
+      // swallowing half the chart it's supposed to be explaining.
+      confine: true,
       formatter: (params) => {
         if (!params || !params.length) return '';
         const rows = params.map((p) => {
@@ -680,7 +688,7 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
     ],
     yAxis: [
       { type: 'value', gridIndex: 0, name: 'Rs Cr', nameGap: 24, nameTextStyle: { fontSize: 11, color: '#8a97a8' } },
-      { type: 'value', gridIndex: 1, name: 'CFO ÷ NP', min: 0, max: ratioMax, nameGap: 24, nameTextStyle: { fontSize: 11, color: '#8a97a8' } },
+      { type: 'value', gridIndex: 1, name: 'CFO/NP', min: 0, max: ratioMax, nameGap: 24, nameTextStyle: { fontSize: 11, color: '#8a97a8' } },
     ],
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
     series: [
@@ -706,7 +714,15 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
         lineStyle: { color: C.color, type: C.lineStyle.type }, itemStyle: { color: C.color }, symbol: C.symbol,
         data: cumRatio,
         endLabel: { show: true, formatter: '{a}', color: C.color, fontWeight: 600 },
-        markLine: { symbol: 'none', data: [{ yAxis: 1 }], lineStyle: { color: 'rgba(20,40,63,.35)', type: 'dashed' } },
+        // For a healthy company the ratio line sits right on top of this
+        // reference line, which makes the reference invisible exactly when
+        // it would otherwise be reassuring to see -- the label makes it
+        // legible regardless of whether the two lines happen to coincide.
+        markLine: {
+          symbol: 'none', data: [{ yAxis: 1 }],
+          lineStyle: { color: 'rgba(20,40,63,.5)', type: 'dashed', width: 1.5 },
+          label: { show: true, position: 'insideEndTop', formatter: '1.0 ref', color: 'rgba(20,40,63,.55)', fontSize: 10 },
+        },
       },
     ],
     __years: years,

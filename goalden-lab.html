@@ -6163,7 +6163,7 @@ function benchCaptionText(pins, indexed, focusYear){
 // this app already computed for it, not a fresh model-written explanation.
 function benchTooltipOverTime(pins){
   const reasonByLabel={}; pins.forEach(p=>{ reasonByLabel[p.label]=readingSentence(p.label,p.series); });
-  return { trigger:'axis', axisPointer:{type:'shadow'}, formatter:(params)=>{
+  return { trigger:'axis', axisPointer:{type:'shadow'}, confine:true, formatter:(params)=>{
     if(!params||!params.length) return '';
     const yearLabel = params[0].axisValueLabel||'';
     const year = 2000+parseInt(String(yearLabel).replace('FY',''),10);
@@ -6185,7 +6185,7 @@ function benchTooltipOverTime(pins){
 // rather than one per bar.
 function benchTooltipAtYear(pins){
   const reasonByLabel={}; pins.forEach(p=>{ reasonByLabel[p.label]=readingSentence(p.label,p.series); });
-  return { trigger:'axis', axisPointer:{type:'shadow'}, formatter:(params)=>{
+  return { trigger:'axis', axisPointer:{type:'shadow'}, confine:true, formatter:(params)=>{
     if(!params||!params.length) return '';
     const pinLabel = params[0].axisValueLabel||params[0].name||'';
     const rows = params.map(p=>{
