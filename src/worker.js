@@ -361,7 +361,10 @@ async function fetchScreenerPage(symbol) {
 
 function buildFinancialsResult(symbol, html, url, consolidated) {
   const result = { symbol, source: 'screener.in', sourceUrl: url, consolidated, fetchedAt: new Date().toISOString() };
-  const sections = { profitLoss: 'profit-loss', balanceSheet: 'balance-sheet', cashFlow: 'cash-flow' };
+  // Debtor Days / Inventory Days / Cash Conversion Cycle / ROCE % (or ROE %
+  // for lenders) live in their own section, not on the P&L/balance sheet —
+  // needed for the debtor-balloon check and the ROCE companion metrics.
+  const sections = { profitLoss: 'profit-loss', balanceSheet: 'balance-sheet', cashFlow: 'cash-flow', ratios: 'ratios' };
   for (const key of Object.keys(sections)) {
     const slice = ScreenerParser.screenerSectionSlice(html, sections[key]);
     result[key] = slice ? ScreenerParser.screenerParseTable(slice) : null;
@@ -373,6 +376,8 @@ function buildFinancialsResult(symbol, html, url, consolidated) {
     );
   }
   result.schema = ScreenerParser.classifySchema(result.profitLoss ? result.profitLoss.rows : []);
+  result.topRatios = ScreenerParser.parseTopRatios(html);
+  result.sector = ScreenerParser.parseSectorBreadcrumb(html);
   return result;
 }
 

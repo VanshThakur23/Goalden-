@@ -284,6 +284,80 @@ def _classify_schema(profit_loss_rows):
     return 'unknown'
 
 
+def _screener_top_ratios_slice(html):
+    m = re.search(r'<ul[^>]*id="top-ratios"[^>]*>', html)
+    if not m:
+        return None
+    rest = html[m.end():]
+    end_m = re.search(r'</ul>', rest)
+    return rest[:end_m.start()] if end_m else rest
+
+
+def _parse_top_ratios(html):
+    # Today's-value snapshot facts (Market Cap, Stock P/E, 52w range, ...) —
+    # no historical dates are attached, so these surface as static companion
+    # facts and a header snapshot rather than a chartable row.
+    slice_html = _screener_top_ratios_slice(html)
+    if slice_html is None:
+        return None
+    by_name = {}
+    for li_m in re.finditer(r'<li[^>]*>([\s\S]*?)</li>', slice_html):
+        li_html = li_m.group(1)
+        name_m = re.search(r'<span class="name">([\s\S]*?)</span>', li_html)
+        if not name_m:
+            continue
+        name = _strip_html_tags(name_m.group(1))
+        numbers = []
+        for num_m in re.finditer(r'<span class="number">([^<]*)</span>', li_html):
+            cleaned = num_m.group(1).replace(',', '').strip()
+            try:
+                numbers.append(float(cleaned))
+            except ValueError:
+                numbers.append(None)
+        by_name[name] = numbers
+
+    def pick(name):
+        vals = by_name.get(name)
+        return vals[0] if vals and vals[0] is not None else None
+
+    if pick('Market Cap') is None and pick('Current Price') is None:
+        return None
+    high_low = by_name.get('High / Low')
+    return {
+        'marketCap': pick('Market Cap'),
+        'currentPrice': pick('Current Price'),
+        'high52w': high_low[0] if high_low else None,
+        'low52w': high_low[1] if high_low and len(high_low) > 1 else None,
+        'stockPE': pick('Stock P/E'),
+        'bookValue': pick('Book Value'),
+        'dividendYield': pick('Dividend Yield'),
+        'roce': pick('ROCE'),
+        'roe': pick('ROE'),
+        'faceValue': pick('Face Value'),
+    }
+
+
+def _parse_sector_breadcrumb(html):
+    # Screener's actual peer-company list loads via a separate client-side
+    # request this server doesn't make, so the breadcrumb is deliberately
+    # the only sector-adjacent fact surfaced — missing here means the UI
+    # shows nothing rather than guessing at peers.
+    sec_m = re.search(r'<section[^>]*id="peers"', html)
+    if not sec_m:
+        return None
+    chunk = html[sec_m.start():sec_m.start() + 4000]
+
+    def pick(title):
+        m = re.search(r'title="' + title + r'"[^>]*>([^<]*)<', chunk)
+        return _strip_html_tags(m.group(1)) if m else None
+
+    sector = pick('Sector')
+    industry = pick('Industry')
+    if not sector and not industry:
+        return None
+    return {'broadSector': pick('Broad Sector'), 'sector': sector, 'broadIndustry': pick('Broad Industry'), 'industry': industry}
+
+
 def _is_transient_status(status):
     return status == 429 or status >= 500
 
@@ -333,7 +407,9 @@ def _build_financials_result(symbol, html, url, consolidated):
         'consolidated': consolidated,
         'fetchedAt': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
     }
-    for key, section_id in (('profitLoss', 'profit-loss'), ('balanceSheet', 'balance-sheet'), ('cashFlow', 'cash-flow')):
+    # Debtor Days / Inventory Days / Cash Conversion Cycle / ROCE % (or ROE %
+    # for lenders) live in their own section, not on the P&L/balance sheet.
+    for key, section_id in (('profitLoss', 'profit-loss'), ('balanceSheet', 'balance-sheet'), ('cashFlow', 'cash-flow'), ('ratios', 'ratios')):
         slice_html = _screener_section_slice(html, section_id)
         result[key] = _screener_parse_table(slice_html) if slice_html else None
 
@@ -344,6 +420,8 @@ def _build_financials_result(symbol, html, url, consolidated):
             f'tables on it — the page layout may have changed'
         )
     result['schema'] = _classify_schema(result['profitLoss']['rows'] if result['profitLoss'] else [])
+    result['topRatios'] = _parse_top_ratios(html)
+    result['sector'] = _parse_sector_breadcrumb(html)
     return result
 
 

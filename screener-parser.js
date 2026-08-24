@@ -150,6 +150,74 @@ function classifySchema(profitLossRows) {
   return 'unknown';
 }
 
+// screener.in's top-of-page snapshot ratios (<ul id="top-ratios">) — Market
+// Cap, Current Price, Stock P/E, Dividend Yield, 52-week range and so on.
+// These are today's-value facts, not a time series (no historical dates are
+// attached), so they surface as static companion facts and a header
+// snapshot rather than as a row a company's history can be charted from.
+function screenerTopRatiosSlice(html) {
+  const m = /<ul[^>]*id="top-ratios"[^>]*>/.exec(html);
+  if (!m) return null;
+  const rest = html.slice(m.index + m[0].length);
+  const end = rest.search(/<\/ul>/);
+  return rest.slice(0, end === -1 ? rest.length : end);
+}
+function parseTopRatios(html) {
+  const slice = screenerTopRatiosSlice(html);
+  if (!slice) return null;
+  const byName = {};
+  const liRe = /<li[^>]*>([\s\S]*?)<\/li>/g;
+  let m;
+  while ((m = liRe.exec(slice))) {
+    const liHtml = m[1];
+    const nameM = /<span class="name">([\s\S]*?)<\/span>/.exec(liHtml);
+    if (!nameM) continue;
+    const name = stripHtmlTags(nameM[1]);
+    const numbers = [];
+    const numRe = /<span class="number">([^<]*)<\/span>/g;
+    let nm;
+    while ((nm = numRe.exec(liHtml))) {
+      const num = Number(nm[1].replace(/,/g, '').trim());
+      numbers.push(Number.isNaN(num) ? null : num);
+    }
+    byName[name] = numbers;
+  }
+  const pick = (name) => (byName[name] && byName[name][0] != null) ? byName[name][0] : null;
+  if (pick('Market Cap') == null && pick('Current Price') == null) return null;
+  return {
+    marketCap: pick('Market Cap'),
+    currentPrice: pick('Current Price'),
+    high52w: byName['High / Low'] ? byName['High / Low'][0] : null,
+    low52w: byName['High / Low'] ? byName['High / Low'][1] : null,
+    stockPE: pick('Stock P/E'),
+    bookValue: pick('Book Value'),
+    dividendYield: pick('Dividend Yield'),
+    roce: pick('ROCE'),
+    roe: pick('ROE'),
+    faceValue: pick('Face Value'),
+  };
+}
+
+// The sector/industry breadcrumb from the peer-comparison card. Screener's
+// actual peer-company list loads by a separate client-side request this
+// parser doesn't make, so this breadcrumb is deliberately the only
+// sector-adjacent fact surfaced — absence here means the UI shows nothing
+// rather than guessing at peers.
+function parseSectorBreadcrumb(html) {
+  const secM = /<section[^>]*id="peers"/.exec(html);
+  if (!secM) return null;
+  const chunk = html.slice(secM.index, secM.index + 4000);
+  const pick = (title) => {
+    const re = new RegExp('title="' + title + '"[^>]*>([^<]*)<');
+    const m = re.exec(chunk);
+    return m ? stripHtmlTags(m[1]) : null;
+  };
+  const sector = pick('Sector');
+  const industry = pick('Industry');
+  if (!sector && !industry) return null;
+  return { broadSector: pick('Broad Sector'), sector, broadIndustry: pick('Broad Industry'), industry };
+}
+
 const api = {
   stripHtmlTags,
   screenerSectionSlice,
@@ -159,6 +227,8 @@ const api = {
   parseCellValue,
   screenerParseTable,
   classifySchema,
+  parseTopRatios,
+  parseSectorBreadcrumb,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

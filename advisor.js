@@ -295,31 +295,59 @@ function advisorTrim() {
 
 // Part C — advice guardrail, enforced in code. Best-effort heuristic layered
 // on top of the system-prompt instruction, NOT a guarantee: it rewrites only
-// a sentence that BOTH carries a recommendation verb (or price-target phrase)
-// AND points at something ticker-shaped or price-shaped. Descriptive mentions
-// ("TCS returned 8% last year") carry no verb and are left untouched. On a
-// match only the flagged sentence is replaced with a neutral one (never the
-// whole message), and console.warn surfaces it during development.
+// a sentence that BOTH carries a recommendation verb or valuation/comparative
+// judgement word (or a price-target phrase) AND points at something
+// ticker-shaped or price-shaped. Descriptive mentions ("TCS returned 8% last
+// year") carry no verb and are left untouched. On a match only the flagged
+// sentence is replaced with a neutral one (never the whole message), and
+// console.warn surfaces it during development.
+//
+// Two vocabularies, not one regex fragment: the original `\bget\s+[a-z]{2,10}\b`
+// was simultaneously too broad (matched "get started", "get exposure", "get
+// better returns") and far too narrow (missed avoid, exit, book profits,
+// switch to, accumulate, add on dips, stay away, undervalued, overvalued,
+// safer bet, better pick, worth it, wait for a correction — almost none of
+// which contain "buy"). Read the Company (statements-engine.js divergence
+// rules) surfaces facts, never verdicts, for the same reason this exists.
 const ADVISOR_TICKER_DENY = ['SIP','FD','ETF','NAV','CAGR','NPS','ELSS','PPF','NSE','BSE','REIT','AMC','SEBI','AUM','SWP','USD','INR','GBP','EUR','XIRR','EMI','FV','PV','IIP','GDP','IPO'];
+const ADVISOR_DIRECTIVE_VERBS = /\b(buy|sell|avoid|exit|hold|accumulate|add(?:\s+on\s+dips)?|book(?:\s+profits?)?|switch(?:\s+to)?|pick|choose|invest(?:ed)?\s+in|purchase|subscribe|dump|offload|stay\s+away)\b/;
+const ADVISOR_VALUATION_TERMS = /\b(undervalued|overvalued|fairly\s+valued|attractive(?:ly\s+priced)?|cheap|expensive|safer|riskier|outperform|multibagger|sure\s+shot|no-brainer|worth\s+it|(?:better|best|worse|worst)\s+(?:bet|pick|choice|option))\b/;
 function advisorGuardrail(text) {
   if (typeof text !== 'string' || !text) return text;
   const parts = text.split(/(?<=[.!?\n])/);
   let changed = false;
   const out = parts.map(function (sentence) {
     const lower = sentence.toLowerCase();
-    const hasVerb = /\bbuy\b|\binvest in\b|\binvested in\b|\bpurchase\b|\bget\s+[a-z]{2,10}\b/.test(lower);
+    const hasVerb = ADVISOR_DIRECTIVE_VERBS.test(lower);
+    const hasValuation = ADVISOR_VALUATION_TERMS.test(lower);
     const caps = sentence.match(/[A-Z]{2,10}/g) || [];
     // A recommendation object right after the verb ("buy Reliance") is just as
     // much a specific-instrument call as an ALL-CAPS ticker ("buy RELIANCE") --
     // checking only ALL-CAPS tokens let a title-case company name slip through
     // with no price target attached (agent-evals surfaced this).
-    const objMatch = sentence.match(/\b(?:buy|invest(?:ed)?\s+in|purchase|get)\s+([A-Z][a-zA-Z&.\-]{2,24})\b/);
-    const hasTicker = caps.some(function (t) { return ADVISOR_TICKER_DENY.indexOf(t) === -1; }) || !!objMatch;
-    const hasPrice = /price target|target price|will reach|expected to hit|will hit|going to hit|should hit/i.test(lower);
-    if ((hasVerb || hasPrice) && (hasTicker || hasPrice)) {
+    const OBJ_VERB_RE = /\b(?:buy|sell|avoid|exit|hold|accumulate|add(?:\s+on\s+dips)?|book(?:\s+profits?)?|switch(?:\s+to)?|pick|choose|invest(?:ed)?\s+in|purchase|subscribe|dump|offload)(?:\s+in)?\s+([A-Z][a-zA-Z&.\-]{2,24})\b/;
+    // The verb itself is case-sensitive in this pattern, so a sentence that
+    // OPENS with the verb ("Exit Vedanta...", "Pick HDFC Bank...") never
+    // matches — only a mid-sentence lowercase "exit" does. Every sentence
+    // here is itself the start of a split-on-punctuation segment, so this
+    // isn't an edge case, it's the common case. Retry with the first letter
+    // lowercased before giving up; the company capture still requires real
+    // capitalization, so this can't launder a lowercase company name in.
+    const objMatch = sentence.match(OBJ_VERB_RE)
+      || (sentence && sentence[0] !== sentence[0].toLowerCase() ? (sentence[0].toLowerCase() + sentence.slice(1)).match(OBJ_VERB_RE) : null);
+    // "this company/stock/business" counts as pointing at a specific company
+    // even with no ticker in the same sentence — "Is this company overvalued"
+    // said right after discussing HDFC Bank is exactly the case to catch.
+    const hasCompanyRef = caps.some(function (t) { return ADVISOR_TICKER_DENY.indexOf(t) === -1; }) || !!objMatch || /\bthis\s+(?:company|stock|business)\b/i.test(lower);
+    const hasPrice = /price target|target price|will reach|expect(?:s|ed)?(?:\s+it)?\s+to\s+hit|will hit|going to hit|should hit/i.test(lower);
+    // A directive verb or valuation word only counts as advice when it's
+    // actually pointed at a company — "get better returns" or "that's cheap
+    // for what it offers" carry no ticker and are left alone. A price-target
+    // phrase is unambiguous on its own regardless of ticker proximity.
+    if (((hasVerb || hasValuation) && hasCompanyRef) || hasPrice) {
       changed = true;
       console.warn('[advisor] guardrail rewrote a recommendation-shaped sentence:', sentence.trim());
-      return "I can't recommend specific investments — but I can model any instrument you name.";
+      return "I can't give a view on whether a specific company is worth investing in. What I can do is explain what any of these numbers mean, or show you how a given return assumption would affect your goal.";
     }
     return sentence;
   });

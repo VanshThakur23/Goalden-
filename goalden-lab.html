@@ -599,6 +599,134 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .live-wc-badge.best{background:rgba(37,87,199,.22);color:var(--gold)}
 .live-wc-badge.minvar{background:rgba(143,199,158,.18);color:#8FC79E}
 
+/* --- Read the Company ("statements" tab) -----------------------------
+   Renders once per mount (see the rendering note above initChart() and
+   render()'s statementsShellMounted branch); every interaction below
+   patches a container directly rather than going through render(), and
+   linked highlighting is pure CSS driven by two attributes on #stmtRoot. */
+.stmt-search-row{display:flex;gap:8px}
+.stmt-search-row input{flex:1;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.18);border-radius:3px;padding:9px 11px;font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--paper);outline:none;text-transform:uppercase}
+.stmt-search-row button{background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:0 16px;font-family:'Spline Sans Mono',monospace;font-size:11.5px;cursor:pointer}
+.stmt-recent{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.stmt-recent button{background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.14);border-radius:10px;padding:4px 10px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.65);cursor:pointer}
+.stmt-recent button:hover{border-color:var(--gold);color:var(--gold)}
+.stmt-compare-row{margin-top:14px;padding-top:14px;border-top:1px solid rgba(20,40,63,.1)}
+.stmt-compare-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin-bottom:7px}
+.stmt-controls{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(20,40,63,.1)}
+.stmt-ctrl-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:rgba(20,40,63,.7)}
+.stmt-seg{display:inline-flex;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden}
+.stmt-seg button{background:none;border:none;padding:4px 9px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);cursor:pointer;border-right:1px solid rgba(20,40,63,.12)}
+.stmt-seg button:last-child{border-right:none}
+.stmt-seg button.active{background:rgba(37,87,199,.14);color:var(--gold);font-weight:600}
+.stmt-toggle-pill{background:none;border:1px solid rgba(20,40,63,.18);border-radius:12px;padding:4px 12px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);cursor:pointer}
+.stmt-toggle-pill.active{background:rgba(37,87,199,.14);border-color:var(--gold);color:var(--gold);font-weight:600}
+
+.stmt-header-card{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.stmt-header-name{font-family:'Newsreader',serif;font-weight:600;font-size:19px;color:var(--ink2)}
+.stmt-badge{display:inline-flex;align-items:center;font-family:'Spline Sans Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:9px;background:rgba(20,40,63,.07);color:var(--dim)}
+.stmt-badge.lender{background:rgba(160,58,34,.12);color:var(--red)}
+.stmt-badge.nonlender{background:rgba(46,139,111,.12);color:var(--ok)}
+.stmt-badge.standalone{background:rgba(201,154,69,.16);color:var(--warn)}
+.stmt-source-line{flex-basis:100%;font-size:11px;color:var(--dim)}
+.stmt-source-line a{color:var(--gold)}
+.stmt-sector-line{flex-basis:100%;font-size:11px;color:var(--dim);margin-top:-6px}
+.stmt-market-snapshot{flex-basis:100%;display:flex;flex-wrap:wrap;gap:16px;margin-top:2px}
+.stmt-market-fact{display:flex;flex-direction:column;gap:1px;background:none;border:none;padding:0;font:inherit;text-align:left}
+.stmt-market-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim)}
+.stmt-market-value{font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:var(--ink2)}
+button.stmt-market-fact{cursor:pointer}
+button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
+.stmt-coverage-note{flex-basis:100%;font-size:10.5px;color:var(--warn);margin-top:2px;font-style:italic}
+.stmt-stale-banner,.stmt-refusal-card,.stmt-cyclical-banner{background:rgba(201,154,69,.1);border:1px solid rgba(201,154,69,.35);border-radius:3px 12px 12px 12px;padding:12px 16px;font-size:12.5px;color:rgba(20,40,63,.8);line-height:1.55}
+.stmt-refusal-card{background:rgba(20,40,63,.045);border-color:rgba(20,40,63,.16)}
+.stmt-refusal-card b{display:block;color:var(--ink2);margin-bottom:4px;font-size:13px}
+.stmt-refusal-card .stmt-comparable-list{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+.stmt-refusal-card .stmt-comparable-list span{background:rgba(46,139,111,.12);color:var(--ok);border-radius:8px;padding:3px 9px;font-size:10.5px;font-family:'Spline Sans Mono',monospace}
+.stmt-error-card{background:rgba(160,58,34,.08);border:1px solid rgba(160,58,34,.3);border-radius:3px 12px 12px 12px;padding:14px 16px;font-size:12.5px;color:rgba(20,40,63,.8)}
+
+.stmt-bench-hint{font-size:11.5px;color:var(--dim);margin-bottom:8px}
+.stmt-chips{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:8px;padding-bottom:6px}
+.stmt-chip{display:inline-flex;align-items:center;gap:6px;flex-shrink:0;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:3px 10px 10px 10px;padding:5px 6px 5px 10px;font-size:11px}
+.stmt-chip-swatch{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.stmt-chip-gap{font-family:'Spline Sans Mono',monospace;color:var(--dim);white-space:nowrap}
+.stmt-chip button{background:none;border:none;cursor:pointer;color:rgba(20,40,63,.45);font-size:11px;padding:1px 3px;line-height:1}
+.stmt-chip button:hover{color:var(--red)}
+.stmt-chip-clear{background:none;border:1px dashed rgba(20,40,63,.3);border-radius:10px;color:var(--dim);font-size:10.5px;padding:4px 10px;cursor:pointer;flex-shrink:0}
+.stmt-companion-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.stmt-companion-chip{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.3);border-radius:3px 10px 10px 10px;padding:6px 10px;font-size:11px;color:rgba(20,40,63,.75);cursor:pointer;max-width:340px}
+.stmt-companion-chip b{color:var(--gold)}
+.stmt-companion-chip:hover{border-color:var(--gold)}
+
+.stmt-divergence-strip{margin-top:14px;padding-top:12px;border-top:1px solid rgba(20,40,63,.1)}
+.stmt-tickrow{position:relative;height:22px}
+.stmt-tick{position:absolute;top:0;width:3px;height:14px;border-radius:2px;background:var(--red);cursor:pointer;transform:translateX(-50%)}
+.stmt-tick:hover{height:20px}
+.stmt-checksummary{font-size:11px;color:var(--dim);margin-top:6px;font-family:'Spline Sans Mono',monospace}
+.stmt-flag-detail{margin-top:10px;background:rgba(160,58,34,.07);border-left:3px solid var(--red);border-radius:2px 10px 10px 2px;padding:10px 14px;font-size:12px;color:rgba(20,40,63,.85);line-height:1.55}
+.stmt-flag-detail .stmt-flag-note{display:block;margin-top:6px;color:var(--dim);font-size:11px}
+.stmt-flag-list-toggle{background:none;border:none;color:var(--gold);font-size:11px;cursor:pointer;margin-top:6px;padding:0}
+
+.stmt-caption{font-size:12px;color:rgba(20,40,63,.7);margin-top:8px;line-height:1.55;font-style:italic}
+
+.stmt-density-comfortable .stmt-table td,.stmt-density-comfortable .stmt-table th{padding-top:8px;padding-bottom:8px}
+.stmt-density-compact .stmt-table td,.stmt-density-compact .stmt-table th{padding-top:5px;padding-bottom:5px}
+.stmt-density-dense .stmt-table td,.stmt-density-dense .stmt-table th{padding-top:2.5px;padding-bottom:2.5px;font-size:10.5px}
+.stmt-density-dense .stmt-spark{display:none}
+
+.stmt-table-wrap{overflow-x:auto;margin-top:8px;border-radius:3px 14px 14px 14px;border:1px solid rgba(20,40,63,.1);contain:layout paint}
+.stmt-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11.5px;table-layout:fixed;min-width:900px}
+.stmt-table th{text-align:right;padding:7px 8px;color:var(--dim);font-weight:500;font-size:10px;background:rgba(20,40,63,.04);position:sticky;top:0;vertical-align:bottom}
+.stmt-table th:first-child,.stmt-table td:first-child{text-align:left;width:210px}
+.stmt-table th.stmt-th-ttm{color:var(--warn)}
+.stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.06);width:78px}
+.stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:11px;width:200px;white-space:normal;line-height:1.4}
+.stmt-table td{text-align:right;padding:6px 8px;color:rgba(20,40,63,.78);border-bottom:1px solid rgba(20,40,63,.06);position:relative;cursor:pointer}
+.stmt-table tr.stmt-row:hover td{background:rgba(37,87,199,.05)}
+.stmt-table tr.stmt-row.pinned td{background:rgba(37,87,199,.07)}
+.stmt-table tr.stmt-row.pinned td:first-child{border-left:3px solid var(--gold);font-weight:600}
+.stmt-table .stmt-dash{color:rgba(20,40,63,.28)}
+.stmt-rowlabel-inner{display:flex;align-items:center;gap:6px}
+.stmt-spark{flex-shrink:0;opacity:.7}
+.stmt-def-toggle{width:13px;height:13px;border-radius:50%;border:1px solid rgba(20,40,63,.3);background:none;color:rgba(20,40,63,.5);font-size:8.5px;font-family:'Spline Sans Mono',monospace;cursor:help;flex-shrink:0;line-height:1;padding:0}
+.stmt-def-row td{background:rgba(20,40,63,.03)!important;font-family:'Figtree',sans-serif;font-size:11px;color:rgba(20,40,63,.65);padding:8px 12px!important;cursor:default;text-align:left!important;white-space:normal}
+.stmt-compare-subrow td{background:rgba(20,40,63,.02);color:rgba(20,40,63,.5);font-size:10.5px;padding-top:2px;padding-bottom:4px;border-bottom:1px solid rgba(20,40,63,.06)}
+.stmt-compare-subrow td:first-child{padding-left:20px;font-style:italic}
+.stmt-bar-cell{position:relative}
+.stmt-bar-track{position:absolute;left:2px;right:2px;bottom:1px;height:4px}
+.stmt-bar-fill{position:absolute;bottom:0;height:100%;border-radius:1px}
+.stmt-bar-fill.up{background:rgba(46,139,111,.55)}
+.stmt-bar-fill.down{background:rgba(201,154,69,.55)}
+.stmt-bar-fill.neutral{background:rgba(20,40,63,.3)}
+.stmt-tick-mark{position:absolute;bottom:0;width:1px;height:8px;background:rgba(20,40,63,.55)}
+.stmt-growth-band{height:14px;width:100%;position:relative;margin-top:3px}
+.stmt-growth-band .gb-fill{position:absolute;left:20%;right:20%;background:rgba(37,87,199,.35)}
+.stmt-growth-band.up .gb-fill{bottom:50%}
+.stmt-growth-band.down .gb-fill{top:50%}
+.stmt-growth-band .gb-mid{position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(20,40,63,.15)}
+.stmt-table tfoot td{font-size:10.5px;color:var(--dim);padding:8px;border-top:2px solid rgba(20,40,63,.15);background:rgba(20,40,63,.03);cursor:default;text-align:left}
+.stmt-table tfoot b{color:var(--ink2)}
+.stmt-table-title{font-family:'Newsreader',serif;font-weight:600;font-size:15px;color:var(--ink2);margin-top:18px;display:flex;align-items:center;gap:8px}
+.stmt-table-title:first-child{margin-top:0}
+.stmt-collapse-btn{width:18px;height:18px;flex:0 0 auto;border:1px solid rgba(20,40,63,.18);border-radius:4px;background:var(--card);color:var(--dim);font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.stmt-collapse-btn:hover{color:var(--ink2);border-color:rgba(20,40,63,.32)}
+.stmt-section-block.stmt-collapsed .stmt-table-wrap,.stmt-section-block.stmt-collapsed .stmt-coverage-note{display:none}
+
+/* CSS-only linked highlighting: two attributes on #stmtRoot (data-hl-metric,
+   data-hl-period), written by one delegated mouseover handler inside a rAF
+   (buildStatementsHighlightCSS() / onStmtMouseOver() below) -- costs one
+   attribute write and a style recalc, never a re-render. The actual
+   [data-hl-metric="X"] [data-metric="X"]{...} rules are generated per
+   distinct row label/period once per data load (#stmtHlStyle), since CSS
+   alone can't express "match where two attribute values are equal". */
+[data-metric]{transition:background .1s ease}
+
+.stmt-footer{font-size:10.5px;color:var(--dim);line-height:1.6;padding:14px 4px 4px;border-top:1px solid rgba(20,40,63,.08);margin-top:6px}
+.stmt-empty-state{padding:40px 20px;text-align:center;color:var(--dim)}
+
+@media(max-width:860px){
+  .stmt-table{min-width:700px}
+  .stmt-table td.stmt-reading{display:none}
+}
 </style>
 </head>
 <body>
@@ -621,6 +749,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 <button class="print-btn" id="printBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg><span>Print / Save as PDF</span></button>
 
 <script src="goalden-engine.js"></script>
+<script src="statements-engine.js"></script>
 <script>
 'use strict';
 /* =====================================================================
@@ -1316,6 +1445,24 @@ const L = {
     seed:19,
     overrides:{},        // key -> true once someone explicitly says "use it anyway" past an unusable data-quality flag
   },
+  statements:{
+    // "Read the Company" -- see the stable-shell rendering note above initChart().
+    // This tab owns its own DOM after mount and never routes back through
+    // render()'s main.innerHTML replacement, so nothing here needs render()
+    // to react to it -- updateStatementsUI() (defined further down) does that.
+    primary:'TCS', compare:null,
+    data:{},           // symbol -> {status:'loading'|'ready'|'error', result, error}
+    pins:[],           // [{section, label}], max 4, oldest replaced first past that
+    companionFocus:null, // {section, label} of whichever row (or price fact) the companion strip should key off
+    focusYear:null,
+    indexed:true,       // Bench chart: indexed-to-100 vs actual rupees
+    changeMode:false,   // statement cell: show YoY change annotation instead of the raw number
+    density:'compact',  // comfortable | compact | dense
+    search:'', recent:[],
+    expandedFlags:false,
+    openDefinitions:{}, // "label|section" -> true, which inline definitions are open
+    collapsedSections:{}, // sectionKey -> true, which statement tables are collapsed
+  },
 };
 // A frozen snapshot of L's starting shape, taken before anything mutates
 // it. Every per-tool "reset" button in this overhaul restores from this
@@ -1377,11 +1524,17 @@ const TAB_STATE_KEYS={
   retirement:['ret'], stepup:['step'], swp:['swp'], fx:['fx'], joint:['joint'],
   mc:['mc'], portfolio:['portfolio'], livefrontier:['live'],
   instruments:['instCategory','instSearch'], health:['health'],
+  statements:['statements'],
 };
 function resetTab(tabId){
   const keys=TAB_STATE_KEYS[tabId];
   if(!keys) return;
   keys.forEach(k=>{ L[k]=JSON.parse(JSON.stringify(L_DEFAULTS[k])); });
+  // Statements owns a stable DOM shell that render() normally leaves alone
+  // (see the rendering note above initChart()) -- a reset is exactly the
+  // one case besides mount/add-company/tab-switch where a full rebuild is
+  // warranted, so drop the mounted flag to force render() to rebuild it.
+  if(tabId==='statements') statementsShellMounted=false;
   render();
 }
 // Panel header with a title and a ghost "reset this tool" button, used
@@ -3759,9 +3912,14 @@ function liveChipHTML(it){
     : heldBack ? 'Held back — ' + (d.stats.quality.flags[0]||{}).msg
     : caution ? 'Flagged — ' + (d.stats.quality.flags[0]||{}).msg
     : '';
+  // Only equities plausibly have screener.in financials -- a fund/ETF
+  // ticker would just 404 there, so the deep link is scoped to stocks.
+  const stmtLink = it.type==='equity'
+    ? `<button class="live-chip-stmt" data-stmt-open="${it.symbol}" title="See the statements">&#128196;</button>` : '';
   return `<div class="live-chip${heldBack?' live-chip-held':''}" title="${title.replace(/"/g,'&quot;')}">
     <span class="live-chip-status ${statusCls}"></span>
     <span>${d.label||it.symbol}${heldBack?' (held back)':caution?' (flagged)':''}</span>
+    ${stmtLink}
     <button class="live-chip-x" data-live-remove="${it.key}" title="Remove">&times;</button>
   </div>`;
 }
@@ -4300,6 +4458,7 @@ const ICON_JOINT=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const ICON_MC=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="8.5" cy="8.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.15" fill="currentColor" stroke="none"/></svg>`;
 const ICON_INSTRUMENTS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>`;
 const ICON_HEALTH=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-6 3 12 2-8 1.5 2H21"/></svg>`;
+const ICON_STATEMENTS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M9 12h7"/><path d="M9 16h7"/><path d="M9 8h3"/></svg>`;
 
 const TABS=[
   {id:'retirement', label:'Retirement Lab', primary:true, icon:ICON_RETIREMENT,
@@ -4308,6 +4467,8 @@ const TABS=[
     blurb:'Mix real fund categories with presets or your own sliders, and watch the efficient frontier move live.'},
   {id:'livefrontier', label:'Test Real Investments', primary:true, icon:ICON_LIVEFRONTIER,
     blurb:'Pick real stocks, ETFs or funds and see how mixing them would actually have performed - real risk, real return, real history.'},
+  {id:'statements', label:'Read the Company', primary:true, icon:ICON_STATEMENTS,
+    blurb:"Read one company's real reported numbers, put any part of them beside another company's, and see the things that don't add up."},
   {id:'stepup', label:'Step-Up SIP', icon:ICON_STEPUP,
     blurb:'Model a SIP that grows with your income every year, not a flat amount forever.'},
   {id:'swp', label:'Sustainable Withdrawal', icon:ICON_SWP,
@@ -4436,9 +4597,29 @@ function syncPanelJumpBtn(){
   panelJumpBtn.classList.toggle('show', scrolledPast);
 }
 
+// See the rendering note above initChart() / the plan's "one architectural
+// deviation" section: two companies x six statements x ~440 cells lands
+// around 6-9k DOM nodes, and a full render() there costs 1.5-3s of blocked
+// main thread -- unacceptable for something that would otherwise fire on
+// every hover. statementsShellMounted tracks whether #main already holds
+// the stable shell for this tab; once true, render() skips straight past
+// this tab's innerHTML write on every subsequent call (including the ones
+// fired by an unrelated global change, e.g. the country toggle) and leaves
+// all updates to updateStatementsUI() and its callers instead. Set back to
+// false on tab-away (below) and by resetTab() -- the only legitimate
+// full-rebuild triggers per the plan: mount, add/remove company, tab
+// leave-and-return, explicit reset.
+let statementsShellMounted=false;
+// Regression guard for the stable-shell rule: incremented only on the three
+// legitimate full-rebuild triggers (mount, add/remove company via a fresh
+// mount, tab leave-and-return). Exposed on window and mirrored onto
+// #stmtRoot so a check in DevTools or a test can confirm it stays flat
+// across hover/pin/focus interactions, which must only ever patch DOM.
+window.__statementsRenderCount=0;
 function render(){
   renderTabs();
   const main=document.getElementById('main');
+  if(L.tab!=='statements'){ if(statementsShellMounted) teardownStatements(); statementsShellMounted=false; }
   if(L.tab==='home') main.innerHTML=renderHome();
   else if(L.tab==='retirement') main.innerHTML=renderRetirement();
   else if(L.tab==='stepup') main.innerHTML=renderStepUp();
@@ -4450,6 +4631,16 @@ function render(){
   else if(L.tab==='livefrontier') main.innerHTML=renderLiveFrontier();
   else if(L.tab==='instruments') main.innerHTML=renderInstruments();
   else if(L.tab==='health') main.innerHTML=renderHealth();
+  else if(L.tab==='statements'){
+    if(!statementsShellMounted){
+      main.innerHTML=renderStatementsShell();
+      statementsShellMounted=true;
+      window.__statementsRenderCount++;
+      const rootEl=document.getElementById('stmtRoot'); if(rootEl) rootEl.dataset.renderCount=window.__statementsRenderCount;
+      mountStatements();
+    }
+    // else: intentionally nothing -- see statementsShellMounted comment above.
+  }
   main.classList.remove('enter'); void main.offsetWidth; main.classList.add('enter');
   const tabLabel=L.tab==='home' ? 'Home' : (TABS.find(t=>t.id===L.tab)||{}).label||'';
   document.getElementById('printHeader').innerHTML=
@@ -4908,6 +5099,14 @@ function attach(){
     });
   }
   wireLiveResultButtons(document);
+  document.querySelectorAll('[data-stmt-open]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      L.statements.primary=el.dataset.stmtOpen.toUpperCase();
+      statementsShellMounted=false; // force a fresh mount for the new symbol
+      L.tab='statements';
+      render();
+    });
+  });
   document.querySelectorAll('[data-live-remove]').forEach(el=>{
     el.addEventListener('click',()=>{
       const key=el.dataset.liveRemove;
@@ -4956,6 +5155,1020 @@ function attach(){
       render();
     });
   });
+}
+
+/* =======================================================================
+   "Read the Company" -- statements tab. Everything below owns its own DOM
+   after mountStatements() runs once; nothing here calls render(). See the
+   stable-shell note above initChart() for why.
+   ======================================================================= */
+
+function rowKey(section,label){ return section+'|'+label; }
+function parseRowKey(key){ const i=key.indexOf('|'); return {section:key.slice(0,i), label:key.slice(i+1)}; }
+
+const ROW_DEFINITIONS = {
+  'Sales':'Total revenue from the company\u2019s core business in the period.',
+  'Revenue':'Total income earned by a bank or NBFC, mainly interest and fee income.',
+  'Expenses':'All operating costs incurred to run the business.',
+  'Operating Profit':'Sales minus operating expenses, before interest, tax and depreciation.',
+  'OPM %':'Operating Profit as a percentage of Sales.',
+  'Financing Profit':'A lender\u2019s income minus interest and operating expenses \u2014 the bank equivalent of Operating Profit.',
+  'Financing Margin %':'Financing Profit as a percentage of Revenue.',
+  'Other Income':'Income from outside the core business \u2014 interest earned, gains on investments, asset sales.',
+  'Interest':'Interest paid on borrowings.',
+  'Depreciation':'The accounting charge for wear and tear on fixed assets.',
+  'Profit before tax':'Profit after all expenses and interest, before tax.',
+  'Tax %':'Tax paid as a percentage of profit before tax.',
+  'Net Profit':'Profit after tax \u2014 what is left for shareholders.',
+  'EPS in Rs':'Net Profit divided by the number of shares outstanding.',
+  'Dividend Payout %':'The share of Net Profit paid out to shareholders as dividends.',
+  'Equity Capital':'The face value of all shares issued.',
+  'Reserves':'Accumulated profit retained in the business over the years.',
+  'Borrowings':'Total debt owed by the company.',
+  'Borrowing':'Total debt owed by the company.',
+  'Deposits':'Customer money held by a bank \u2014 its main source of funding.',
+  'Other Liabilities':'Everything the company owes that isn\u2019t borrowings or shareholder capital.',
+  'Total Liabilities':'Everything the company owes plus shareholder capital \u2014 always equal to Total Assets.',
+  'Fixed Assets':'Land, buildings, plant and machinery, net of depreciation.',
+  'CWIP':'Capital Work in Progress \u2014 assets under construction, not yet in use.',
+  'Investments':'Money placed in other companies, funds or securities.',
+  'Other Assets':'Everything the company owns that isn\u2019t fixed assets or investments \u2014 mainly cash and receivables.',
+  'Total Assets':'Everything the company owns.',
+  'Cash from Operating Activity':'Actual cash generated by the core business, as opposed to reported profit.',
+  'Cash from Investing Activity':'Cash spent on or received from buying and selling assets and investments.',
+  'Cash from Financing Activity':'Cash raised from or paid to lenders and shareholders \u2014 borrowing, repaying debt, paying dividends.',
+  'Net Cash Flow':'The sum of all three cash flow activities \u2014 the actual change in the company\u2019s cash balance.',
+  'Free Cash Flow':'Cash from operations minus the cash spent maintaining and growing the business.',
+  'CFO/OP':'Cash from Operating Activity as a share of Operating Profit \u2014 how much of reported profit became cash.',
+  'Debtor Days':'How many days, on average, customers take to pay after a sale.',
+  'Inventory Days':'How many days of inventory the company holds, on average.',
+  'Days Payable':'How many days, on average, the company takes to pay its own suppliers.',
+  'Cash Conversion Cycle':'Debtor Days plus Inventory Days minus Days Payable \u2014 how long cash is tied up before it comes back.',
+  'Working Capital Days':'A broader measure of how long operating cash is tied up in the day-to-day business.',
+  'ROCE %':'Return on Capital Employed \u2014 operating profit as a percentage of all capital invested in the business.',
+  'ROE %':'Return on Equity \u2014 Net Profit as a percentage of shareholder funds.',
+};
+function rowDefinitionText(label){ return ROW_DEFINITIONS[label] || 'As reported by the company on screener.in.'; }
+
+// Which rows a fired divergence rule pins when its tick is clicked -- the
+// plan's "clicking a tick pins both members of the pair" requirement.
+const FLAG_PIN_MAP = {
+  DIVIDEND_NOT_FROM_OPS: [{section:'profitLoss',label:'Dividend Payout %'},{section:'cashFlow',label:'Cash from Investing Activity'}],
+  CFO_DIVERGENCE: [{section:'profitLoss',label:'Net Profit'},{section:'cashFlow',label:'Cash from Operating Activity'}],
+  DEBTOR_BALLOON: [{section:'ratios',label:'Debtor Days'},{section:'profitLoss',label:'Sales'}],
+  ASSET_SALE_GAIN: [{section:'profitLoss',label:'Other Income'},{section:'cashFlow',label:'Cash from Investing Activity'}],
+  TAX_DRIVEN_MARGIN: [{section:'profitLoss',label:'Net Profit'},{section:'profitLoss',label:'Tax %'}],
+  CORRELATED: [{section:'profitLoss',label:'Net Profit'},{section:'profitLoss',label:'Tax %'}],
+};
+
+const STMT_SECTIONS = [
+  {key:'profitLoss', label:'Profit & Loss'},
+  {key:'balanceSheet', label:'Balance Sheet'},
+  {key:'cashFlow', label:'Cash Flow'},
+  {key:'ratios', label:'Ratios'},
+];
+
+function statementsBundle(sym){
+  const d = sym ? L.statements.data[sym] : null;
+  return d && d.status==='ready' ? d.result : null;
+}
+function fySeriesSafe(section, label){ return section ? fySeries(section, label) : []; }
+function statementsMedianAndSpread(section, label){
+  const series = fySeriesSafe(section, label);
+  const values = series.map(p=>p.value);
+  const med = median(values);
+  const clean = values.filter(v=>v!=null);
+  const maxAbsDev = clean.length && med!=null ? Math.max(1, ...clean.map(v=>Math.abs(v-med))) : 1;
+  return {med, maxAbsDev};
+}
+// A value more than 1.5x the row's own inter-quartile range beyond its
+// quartiles gets a one-pixel ledger tick -- exception marking that costs
+// nothing when there's no exception.
+function iqrBounds(values){
+  const clean = values.filter(v=>v!=null).sort((a,b)=>a-b);
+  if(clean.length<4) return null;
+  const q=(p)=>{ const idx=(clean.length-1)*p; const lo=Math.floor(idx), hi=Math.ceil(idx); return lo===hi ? clean[lo] : clean[lo]+(clean[hi]-clean[lo])*(idx-lo); };
+  const q1=q(0.25), q3=q(0.75), iqr=q3-q1;
+  return { lo:q1-1.5*iqr, hi:q3+1.5*iqr };
+}
+function cellBarColorClass(dev, polarity){
+  if(polarity==='neutral') return 'neutral';
+  if(dev===0) return 'neutral';
+  const goodDirection = polarity==='higher-better' ? dev>0 : dev<0;
+  return goodDirection ? 'up' : 'down';
+}
+function formatCroreValue(v){
+  if(v==null) return null;
+  const sign = v<0 ? '-' : '';
+  const abs = Math.abs(v);
+  return sign + abs.toLocaleString('en-IN', {maximumFractionDigits:0});
+}
+function formatCellRaw(label, v){
+  if(v==null) return null;
+  const unit = rowUnit(label);
+  if(unit==='pct') return v.toFixed(1)+'%';
+  if(unit==='days') return Math.round(v)+'d';
+  if(unit==='ratio') return v.toFixed(2)+'x';
+  if(unit==='rupee') return '\u20b9'+v.toFixed(1);
+  return formatCroreValue(v);
+}
+// 15 deterministic templates over the row's own fiscal-year series --
+// arithmetic plus a string, never a model; same data in, same sentence out.
+function readingSentence(label, series){
+  const clean = series.filter(p=>p.value!=null);
+  if(clean.length<3) return '';
+  const last = clean[clean.length-1], prev = clean[clean.length-2], first = clean[0];
+  const polarity = rowPolarity(label);
+  const cagrYears = clean.length-1;
+  const cagr = (first.value>0 && last.value!=null && cagrYears>0) ? (Math.pow(Math.abs(last.value/first.value), 1/cagrYears)-1) : null;
+  const upYears = clean.slice(1).filter((p,i)=>p.value>clean[i].value).length;
+  const downYears = clean.length-1-upYears;
+  const maxP = clean.reduce((a,b)=>b.value>a.value?b:a);
+  const minP = clean.reduce((a,b)=>b.value<a.value?b:a);
+
+  // A sign flip is the single most decision-relevant fact about a row --
+  // checked first so it's never buried under a milder trend template.
+  if(prev.value>=0 && last.value<0) return `Turned negative in FY${last.year}, from FY${prev.year}.`;
+  if(prev.value<0 && last.value>=0) return `Turned positive in FY${last.year}, from FY${prev.year}.`;
+
+  // A monotonic run over the last 3 transitions reads as a streak, which an
+  // averaged CAGR doesn't communicate on its own.
+  const last4 = clean.slice(-4);
+  if(last4.length===4){
+    if(last4.every((p,i)=>i===0 || p.value>last4[i-1].value)) return `A new high in each of the last 3 years.`;
+    if(last4.every((p,i)=>i===0 || p.value<last4[i-1].value)) return `A new low in each of the last 3 years.`;
+  }
+
+  if(last.value===maxP.value && polarity!=='lower-better') return `Highest in ${clean.length} years, at FY${last.year}.`;
+  if(last.value===minP.value && polarity==='lower-better') return `Lowest in ${clean.length} years, at FY${last.year}.`;
+
+  if(first.value>0 && last.value/first.value>=2) return `More than doubled over ${cagrYears} years, from ${formatCellRaw(label,first.value)} to ${formatCellRaw(label,last.value)}.`;
+  if(first.value>0 && last.value>=0 && last.value/first.value<=0.5) return `Cut by more than half over ${cagrYears} years, from ${formatCellRaw(label,first.value)} to ${formatCellRaw(label,last.value)}.`;
+
+  if(cagr!=null && cagr>0.005 && upYears>=Math.ceil((clean.length-1)*0.6)) return `Grew ${(cagr*100).toFixed(0)}% a year on average over ${cagrYears} years.`;
+  if(cagr!=null && cagr<-0.005 && downYears>=Math.ceil((clean.length-1)*0.6)) return `Fell ${(Math.abs(cagr)*100).toFixed(0)}% a year on average over ${cagrYears} years.`;
+
+  if(downYears>=Math.ceil(clean.length*0.5) && downYears>upYears) return `Down in ${downYears} of the last ${clean.length-1} years.`;
+  if(upYears>=Math.ceil(clean.length*0.5) && upYears>downYears) return `Up in ${upYears} of the last ${clean.length-1} years.`;
+
+  const range = maxP.value-minP.value;
+  if(Math.abs(range) < Math.abs(median(clean.map(p=>p.value))||1)*0.1) return `Little changed over ${clean.length} years.`;
+  if(clean.length>=6 && Math.abs(upYears-downYears)<=1) return `No consistent direction over ${clean.length} years — moved up and down roughly equally.`;
+
+  return `Ranged from ${formatCellRaw(label,minP.value)} (FY${minP.year}) to ${formatCellRaw(label,maxP.value)} (FY${maxP.year}).`;
+}
+// 12 bars, not a line -- the cell footers already use bars, and a second
+// shape for the same series would read as a contradiction.
+function sparklineSVG(series){
+  const clean = series.map(p=>p.value);
+  const valid = clean.filter(v=>v!=null);
+  if(valid.length<2) return '<svg class="stmt-spark" width="64" height="18"></svg>';
+  const max=Math.max(...valid), min=Math.min(0,...valid);
+  const range=(max-min)||1;
+  const n=clean.length, bw=64/n;
+  const bars = clean.map((v,i)=>{
+    if(v==null) return '';
+    const h = Math.max(1, ((v-min)/range)*16);
+    return `<rect x="${(i*bw+0.5).toFixed(1)}" y="${(17-h).toFixed(1)}" width="${(bw-1).toFixed(1)}" height="${h.toFixed(1)}" fill="currentColor"/>`;
+  }).join('');
+  return `<svg class="stmt-spark" width="64" height="18" viewBox="0 0 64 18">${bars}</svg>`;
+}
+
+function statementsCanonicalRows(schema){
+  return CANONICAL_ROWS[schema] || CANONICAL_ROWS.nonfinancial;
+}
+
+/* ---- shell (mounted once) ------------------------------------------- */
+function renderStatementsShell(){
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
+  <div class="panel">
+    ${panelHead('Read the Company', 'statements')}
+    ${advisorChipsHTML('statements')}
+    <div class="cap" style="margin-bottom:14px">Read one company's real reported numbers, put any part of them beside another company's, and see the things that don't add up.</div>
+    <div class="section-label">Company</div>
+    <div class="stmt-search-row"><input id="stmtSearchInput" type="text" placeholder="e.g. TCS, HDFCBANK, VEDL" autocomplete="off" spellcheck="false" style="text-transform:uppercase"><button id="stmtSearchBtn">Open</button></div>
+    <div class="stmt-recent" id="stmtRecent"></div>
+    <div class="stmt-compare-row" id="stmtCompareRow"></div>
+    <div class="stmt-controls">
+      <div class="stmt-ctrl-row"><span>Density</span><div class="stmt-seg" id="stmtDensitySeg">
+        <button data-stmt-density="comfortable">Comfortable</button>
+        <button data-stmt-density="compact" class="active">Compact</button>
+        <button data-stmt-density="dense">Dense</button>
+      </div></div>
+      <div class="stmt-ctrl-row"><span>Bench chart</span><div class="stmt-seg" id="stmtIndexedSeg">
+        <button data-stmt-indexed="1" class="active">Indexed</button>
+        <button data-stmt-indexed="0">Actual</button>
+      </div></div>
+      <div class="stmt-ctrl-row"><span>Table cells</span><button class="stmt-toggle-pill" id="stmtChangeToggle">Value</button></div>
+    </div>
+    <div class="cap" style="margin-top:14px">Esc, or the &times; on any pin, clears the Bench.</div>
+  </div>
+  <div class="output" id="stmtRoot">
+    <div class="card" id="stmtHeaderCard"></div>
+    <div id="stmtRefusal"></div>
+    <div class="card">
+      <div class="section-label">The Bench</div>
+      <div class="stmt-bench-hint" id="stmtBenchHint"></div>
+      <div class="stmt-chips" id="stmtBenchChips"></div>
+      <div class="stmt-companion-strip" id="stmtCompanionStrip"></div>
+      <div id="stmtBenchChart" style="height:260px;margin-top:12px"></div>
+      <div class="stmt-divergence-strip">
+        <div class="stmt-tickrow" id="stmtTickRow"></div>
+        <div class="stmt-checksummary" id="stmtCheckSummary"></div>
+        <div id="stmtFlagDetail"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="section-label">Net Profit vs Cash from Operations</div>
+      <div id="stmtProfitCashChart" style="height:280px"></div>
+      <div class="stmt-caption" id="stmtCaption"></div>
+    </div>
+    <div id="stmtTables" class="stmt-density-compact"></div>
+    <div class="card" style="text-align:center">
+      <button class="ns-btn" id="stmtToLiveBtn" style="display:inline-flex">Add to Test Real Investments</button>
+    </div>
+    <div class="stmt-footer">Figures reproduced from screener.in as reported by the company. Not investment advice. Not a recommendation to buy or sell any security. No SEBI registration. Past performance does not indicate future results.</div>
+  </div>
+  <style id="stmtHlStyle"></style>
+</div>`;
+}
+
+function mountStatements(){
+  teardownStatements();
+  statementsEnsureLoaded();
+}
+function teardownStatements(){
+  disposeChart('stmtBenchChart');
+  disposeChart('stmtProfitCashChart');
+}
+
+/* ---- data loading ------------------------------------------------------ */
+async function fetchStatementsCompany(symbol){
+  const sym=String(symbol||'').trim().toUpperCase();
+  if(!sym) return;
+  if(L.statements.data[sym] && L.statements.data[sym].status==='ready'){ updateStatementsUI(); return; }
+  L.statements.data[sym]={status:'loading'};
+  updateStatementsUI();
+  try{
+    const result = await liveApiGet('/api/financials?symbol='+encodeURIComponent(sym));
+    L.statements.data[sym]={status:'ready', result};
+  }catch(e){
+    L.statements.data[sym]={status:'error', error:(e&&e.message)||String(e)};
+  }
+  updateStatementsUI();
+}
+function addRecentTicker(sym){
+  const r=L.statements.recent.filter(t=>t!==sym);
+  r.unshift(sym);
+  L.statements.recent=r.slice(0,6);
+}
+function seedDefaultPinIfEmpty(sym){
+  if(L.statements.pins.length) return;
+  const b=statementsBundle(sym);
+  if(!b || !b.schema) return;
+  const rows=statementsCanonicalRows(b.schema).profitLoss;
+  const headline = rows[0];
+  if(headline) L.statements.pins.push({section:'profitLoss', label:headline});
+}
+function statementsEnsureLoaded(){
+  const sym=L.statements.primary;
+  if(!sym) return;
+  addRecentTicker(sym);
+  fetchStatementsCompany(sym).then(()=>{ seedDefaultPinIfEmpty(sym); updateStatementsUI(); });
+}
+function statementsSetPrimary(symbol){
+  const sym=String(symbol||'').trim().toUpperCase();
+  if(!sym) return;
+  const changed = sym!==L.statements.primary;
+  L.statements.primary=sym;
+  if(changed){ L.statements.pins=[]; L.statements.focusYear=null; L.statements._focusedFlag=null; L.statements.companionFocus=null; }
+  L.statements.search='';
+  addRecentTicker(sym);
+  const input=document.getElementById('stmtSearchInput'); if(input) input.value='';
+  renderCompareRowUI(); renderRecentUI();
+  fetchStatementsCompany(sym).then(()=>{ seedDefaultPinIfEmpty(sym); updateStatementsUI(); });
+}
+function statementsSetCompare(symbol){
+  const sym = symbol ? String(symbol).trim().toUpperCase() : null;
+  L.statements.compare = sym;
+  const input=document.getElementById('stmtCompareInput'); if(input) input.value='';
+  renderCompareRowUI();
+  if(sym) fetchStatementsCompany(sym).then(()=>updateStatementsUI());
+  else updateStatementsUI();
+}
+function statementsSubmitSearch(){
+  const input=document.getElementById('stmtSearchInput');
+  const v = input ? input.value : L.statements.search;
+  if(v && v.trim()) statementsSetPrimary(v);
+}
+function statementsSubmitCompare(){
+  const input=document.getElementById('stmtCompareInput');
+  const v = input ? input.value : '';
+  if(v && v.trim()) statementsSetCompare(v);
+}
+function renderCompareRowHTML(){
+  const s=L.statements;
+  if(s.compare){
+    return `<div class="stmt-compare-label">Comparing against</div>
+      <div class="stmt-chip"><span>${advisorAttr(s.compare)}</span><button data-stmt-remove-compare title="Remove">&times;</button></div>`;
+  }
+  return `<div class="stmt-compare-label">Compare with a second company</div>
+    <div class="stmt-search-row"><input id="stmtCompareInput" placeholder="e.g. HINDALCO" autocomplete="off" spellcheck="false" style="text-transform:uppercase"><button id="stmtCompareBtn">Add</button></div>`;
+}
+function renderCompareRowUI(){ const el=document.getElementById('stmtCompareRow'); if(el) el.innerHTML=renderCompareRowHTML(); }
+function renderRecentUI(){
+  const el=document.getElementById('stmtRecent');
+  if(el) el.innerHTML = L.statements.recent.map(t=>`<button data-stmt-recent="${advisorAttr(t)}">${advisorAttr(t)}</button>`).join('');
+}
+
+/* ---- pins / focus / flags -------------------------------------------- */
+function statementsTogglePin(section,label){
+  const key=rowKey(section,label);
+  const idx=L.statements.pins.findIndex(p=>rowKey(p.section,p.label)===key);
+  if(idx>=0) L.statements.pins.splice(idx,1);
+  else {
+    L.statements.pins.push({section,label});
+    if(L.statements.pins.length>4) L.statements.pins.shift();
+    L.statements.companionFocus = {section,label};
+  }
+  updateStatementsUI();
+}
+function statementsFocusYear(year){
+  L.statements.focusYear = (year===L.statements.focusYear) ? null : year;
+  updateStatementsUI();
+}
+function computeStatementsDivergence(){
+  const primary=statementsBundle(L.statements.primary);
+  return primary ? evaluateDivergenceRules(primary) : null;
+}
+function statementsOpenFlag(flagKey){
+  const sep=flagKey.lastIndexOf('|');
+  const ruleId=flagKey.slice(0,sep), year=parseInt(flagKey.slice(sep+1));
+  const div = computeStatementsDivergence();
+  if(!div) return;
+  const flag = div.flags.find(f=>f.ruleId===ruleId && f.year===year);
+  if(!flag) return;
+  L.statements.focusYear = year;
+  (FLAG_PIN_MAP[ruleId]||[]).forEach(p=>{
+    if(!L.statements.pins.some(x=>x.section===p.section && x.label===p.label)){
+      L.statements.pins.push(p);
+      if(L.statements.pins.length>4) L.statements.pins.shift();
+    }
+  });
+  L.statements._focusedFlag = flag;
+  updateStatementsUI();
+}
+function statementsAddToLive(){
+  const sym=L.statements.primary;
+  if(!sym) return;
+  liveAddInstrument({key:sym, symbol:sym, label:sym, type:'equity'});
+  L.tab='livefrontier';
+  render();
+}
+
+/* ---- rendering: header / refusal / bench / divergence / chart -------- */
+function renderStatementsHeaderHTML(){
+  const s=L.statements;
+  const d = s.data[s.primary];
+  if(!d || d.status==='loading') return `<span class="cap">Loading ${advisorAttr(s.primary||'')}\u2026</span>`;
+  if(d.status==='error') return `<div class="stmt-error-card"><b>Could not load ${advisorAttr(s.primary)}.</b><br>${advisorAttr(d.error||'')}</div>`;
+  const r = d.result;
+  const schema = r.schema;
+  const badges = [];
+  badges.push(`<span class="stmt-badge${schema==='financial'?' lender':schema==='nonfinancial'?' nonlender':''}">${schema==='financial'?'Lender':schema==='nonfinancial'?'Non-lender':'Unclassified'}</span>`);
+  badges.push(`<span class="stmt-badge${r.consolidated?'':' standalone'}">${r.consolidated?'Consolidated':'Standalone'}</span>`);
+  if(r.servedFrom && r.servedFrom!=='live') badges.push(`<span class="stmt-badge">${advisorAttr(r.servedFrom)}</span>`);
+  const periods = r.profitLoss ? r.profitLoss.periods.filter(p=>p.type==='fy') : [];
+  const latestYear = periods.length ? periods[periods.length-1].year : null;
+  const nowYear = new Date().getFullYear();
+  let stale='';
+  if(latestYear && (nowYear-latestYear)>=2){
+    stale = `<div class="stmt-stale-banner">Latest reported period is FY${latestYear}. This company may be delisted, suspended, or not updated at source.</div>`;
+  }
+  const cyc = r.profitLoss ? detectCyclical(r.profitLoss) : {cyclical:false};
+  const cyclicalBanner = cyc.cyclical ? `<div class="stmt-cyclical-banner">This business looks cyclical \u2014 ${advisorAttr(cyc.reason)}</div>` : '';
+  const sectorBanner = schema==='financial' ? `<div class="stmt-cyclical-banner">This is a lender. Borrowing money is the raw material of a bank's business, not a warning sign \u2014 so several of the usual cash-flow checks are switched off here.</div>` : '';
+  // The sector breadcrumb is the one sector-adjacent fact screener's static
+  // page carries -- its actual peer-company list loads via a separate
+  // client-side request this app doesn't make, so a peer list would either
+  // fabricate names or need scraping infra this pass doesn't add. Rendering
+  // nothing when it's absent is the plan's own explicit fallback.
+  const sectorLine = r.sector ? `<div class="stmt-sector-line">${advisorAttr(r.sector.sector||'')}${r.sector.industry?' &middot; '+advisorAttr(r.sector.industry):''}</div>` : '';
+  const tr = r.topRatios;
+  const marketSnapshot = tr ? `<div class="stmt-market-snapshot">
+    <div class="stmt-market-fact"><span class="stmt-market-label">Market Cap</span><span class="stmt-market-value">${tr.marketCap!=null?'\u20b9'+formatCroreValue(tr.marketCap)+' Cr':'\u2014'}</span></div>
+    <div class="stmt-market-fact"><span class="stmt-market-label">Price</span><span class="stmt-market-value">${tr.currentPrice!=null?'\u20b9'+formatCroreValue(tr.currentPrice):'\u2014'}</span></div>
+    <div class="stmt-market-fact"><span class="stmt-market-label">52w range</span><span class="stmt-market-value">${(tr.low52w!=null&&tr.high52w!=null)?'\u20b9'+formatCroreValue(tr.low52w)+'\u2013\u20b9'+formatCroreValue(tr.high52w):'\u2014'}</span></div>
+    <button class="stmt-market-fact" data-stmt-market-companion="Stock P/E" title="Click for what to check alongside this"><span class="stmt-market-label">Stock P/E</span><span class="stmt-market-value">${tr.stockPE!=null?tr.stockPE.toFixed(1)+'x':'\u2014'}</span></button>
+    <button class="stmt-market-fact" data-stmt-market-companion="Dividend Yield" title="Click for what to check alongside this"><span class="stmt-market-label">Dividend Yield</span><span class="stmt-market-value">${tr.dividendYield!=null?tr.dividendYield.toFixed(2)+'%':'\u2014'}</span></button>
+  </div>` : '';
+  return `<div class="stmt-header-card">
+    <span class="stmt-header-name">${advisorAttr(r.symbol)}</span>
+    ${badges.join('')}
+    ${sectorLine}
+    ${marketSnapshot}
+    <div class="stmt-source-line">Source: <a href="${advisorAttr(r.sourceUrl||'#')}" target="_blank" rel="noopener">screener.in</a>, fetched ${r.fetchedAt?new Date(r.fetchedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'\u2014'}${r.fixtureNote?' &middot; '+advisorAttr(r.fixtureNote):''}</div>
+  </div>${stale}${cyclicalBanner}${sectorBanner}`;
+}
+function renderRefusalHTML(){
+  const s=L.statements;
+  if(!s.compare) return '';
+  const primary=statementsBundle(s.primary), compare=statementsBundle(s.compare);
+  if(!primary||!compare) return '';
+  const refusal = compareRefusal(primary, compare);
+  if(!refusal) return '';
+  return `<div class="stmt-refusal-card">
+    <b>${advisorAttr(refusal.title)}</b>
+    ${advisorAttr(refusal.reason)}
+    <div class="stmt-comparable-list">${refusal.comparable.map(c=>`<span>${advisorAttr(c)}</span>`).join('')}</div>
+  </div>`;
+}
+function statementsEffectiveCompare(){
+  const s=L.statements;
+  if(!s.compare) return null;
+  const primary=statementsBundle(s.primary), compare=statementsBundle(s.compare);
+  if(!primary||!compare) return null;
+  return compareRefusal(primary,compare) ? null : compare;
+}
+// Cross-company period pin carries the comparison IN the chip, not in the
+// cells -- "OPM% FY2023 · TCS 18.4% · HDFCBANK 12.1% · gap 6.3pp" is the
+// inference the plan asks for delivered without the reader doing arithmetic.
+// Only renders once both a compare company and a focused year exist; a plain
+// single-company Bench chip stays exactly as before.
+function statementsChipGapHTML(pin){
+  const s=L.statements;
+  if(!s.compare || s.focusYear==null) return '';
+  const primary = statementsBundle(s.primary), compare = statementsBundle(s.compare);
+  if(!primary || !compare) return '';
+  const primPt = fySeriesSafe(primary[pin.section], pin.label).find(p=>p.year===s.focusYear);
+  const compPt = fySeriesSafe(compare[pin.section], pin.label).find(p=>p.year===s.focusYear);
+  if(!primPt || !compPt || primPt.value==null || compPt.value==null) return '';
+  const primText = formatCellRaw(pin.label, primPt.value);
+  const compText = formatCellRaw(pin.label, compPt.value);
+  const gapRaw = Math.abs(compPt.value - primPt.value);
+  const gapText = rowUnit(pin.label)==='pct' ? gapRaw.toFixed(1)+'pp' : (formatCellRaw(pin.label, gapRaw) || '—');
+  return `<span class="stmt-chip-gap">FY${s.focusYear} · ${advisorAttr(s.primary)} ${primText} · ${advisorAttr(s.compare)} ${compText} · gap ${gapText}</span>`;
+}
+function renderBenchChipsHTML(){
+  const s=L.statements;
+  if(!s.pins.length) return '';
+  const chips = s.pins.map((pin,i)=>{
+    const color = SERIES_PALETTE[i%SERIES_PALETTE.length].color;
+    return `<div class="stmt-chip">
+      <span class="stmt-chip-swatch" style="background:${color}"></span>
+      <span>${advisorAttr(pin.label)}</span>
+      ${statementsChipGapHTML(pin)}
+      <button data-stmt-pin-move="${i}" data-dir="-1" title="Move left" ${i===0?'disabled':''}>&larr;</button>
+      <button data-stmt-pin-move="${i}" data-dir="1" title="Move right" ${i===s.pins.length-1?'disabled':''}>&rarr;</button>
+      <button data-stmt-pin-remove="${i}" title="Unpin">&times;</button>
+    </div>`;
+  }).join('');
+  return chips + `<button class="stmt-chip-clear" id="stmtClearPins">Clear all</button>`;
+}
+function renderCompanionStripHTML(){
+  const s=L.statements;
+  // companionFocus tracks whichever the user pinned or clicked most recently
+  // -- a statement row, or a price-dependent market fact (Stock P/E,
+  // Dividend Yield) that can't be pinned itself but still has companions
+  // worth surfacing. Falls back to the last pin so the strip still appears
+  // right after a fresh company load, matching the plan's "surfaces at the
+  // moment of pinning" requirement.
+  const focus = s.companionFocus || (s.pins.length ? s.pins[s.pins.length-1] : null);
+  if(!focus) return '';
+  const companions = COMPANION_MAP[focus.label];
+  if(!companions) return '';
+  return companions.map(c=>`<div class="stmt-companion-chip" data-stmt-companion-pin="${advisorAttr(rowKey(c.section,c.key))}"><b>${advisorAttr(c.key)}</b> \u2014 ${advisorAttr(c.reason)}</div>`).join('');
+}
+function statementsPinSeries(pin){
+  const primary = statementsBundle(L.statements.primary);
+  const compare = statementsEffectiveCompare();
+  const primSeries = primary ? fySeriesSafe(primary[pin.section], pin.label) : [];
+  const compSeries = compare ? fySeriesSafe(compare[pin.section], pin.label) : [];
+  return { label: pin.label, series: primSeries, compareSeries: compSeries.length?compSeries:undefined, compareLabel: L.statements.compare };
+}
+function benchChartOptionAtYear(pins, year){
+  const cats = pins.map(p=>p.label);
+  const primVals = pins.map(p=>{ const pt=p.series.find(s=>s.year===year); return pt?pt.value:null; });
+  const hasCompare = pins.some(p=>p.compareSeries);
+  const series=[{name:'Value', type:'bar', data:primVals, itemStyle:{color:SERIES_PALETTE[0].color}}];
+  if(hasCompare){
+    const compVals = pins.map(p=>{ if(!p.compareSeries) return null; const pt=p.compareSeries.find(s=>s.year===year); return pt?pt.value:null; });
+    series.push({name:L.statements.compare||'Compare', type:'bar', data:compVals, itemStyle:{color:SERIES_PALETTE[0].color, opacity:.45}});
+  }
+  return { legend:{show:false}, xAxis:{type:'category', data:cats}, yAxis:{type:'value'}, series };
+}
+function updateBenchChart(){
+  const s=L.statements;
+  const dom=document.getElementById('stmtBenchChart');
+  if(!dom) return;
+  if(!s.pins.length){ disposeChart('stmtBenchChart'); dom.innerHTML='<div class="cap" style="padding:20px">Pin a row below to chart it here.</div>'; return; }
+  dom.innerHTML='';
+  const pins = s.pins.map(statementsPinSeries);
+  const option = s.focusYear!=null ? benchChartOptionAtYear(pins, s.focusYear) : benchChartOption(pins, s.indexed);
+  initChart('stmtBenchChart', option);
+  // Bar-at-a-year mode re-keys the x-axis to pin labels, not fiscal years,
+  // so a data-period hover value can't address a dataIndex on it the same
+  // way -- cross-highlight only applies to the default over-time view.
+  stmtChartYears.bench = s.focusYear==null ? (option.__years||[]) : [];
+}
+function renderDivergenceParts(){
+  const result = computeStatementsDivergence();
+  if(!result) return {tickRow:'', summary:''};
+  const primary=statementsBundle(L.statements.primary);
+  const periods = (primary.profitLoss ? primary.profitLoss.periods : []).filter(p=>p.type==='fy');
+  if(!periods.length) return {tickRow:'', summary:''};
+  const minYear=periods[0].year, maxYear=periods[periods.length-1].year;
+  const span = Math.max(1, maxYear-minYear);
+  const ticks = result.flags.map(f=>{
+    const pct = ((f.year-minYear)/span)*100;
+    return `<div class="stmt-tick" style="left:${pct}%" data-stmt-flag="${advisorAttr(f.ruleId+'|'+f.year)}" title="${advisorAttr(f.message)}"></div>`;
+  }).join('');
+  const shown = result.flags.length;
+  // result.fired counts every rule-year that actually fired, including a
+  // single-year blip the persistence gate correctly keeps off the visible
+  // strip -- using it here (not the shown/capped count) is what makes
+  // notApplicable + clear + fired sum to checksRun exactly, so the line
+  // never claims a total it can't account for.
+  const moreNote = result.fired>shown ? ` (${shown} shown below${result.flagsTotal>shown?', '+(result.flagsTotal-shown)+' more past the cap':''})` : '';
+  const summary = `${result.checksRun} checks run &middot; ${result.notApplicable} not applicable for this reporting format &middot; ${result.fired} observation${result.fired===1?'':'s'}${moreNote} &middot; ${result.clear} no observation`;
+  return {tickRow:ticks, summary};
+}
+function renderFlagDetailHTML(){
+  const flag = L.statements._focusedFlag;
+  if(!flag) return '';
+  return `<div class="stmt-flag-detail">${advisorAttr(flag.detail||flag.message)}${flag.note?`<span class="stmt-flag-note">${advisorAttr(flag.note)}</span>`:''}</div>`;
+}
+function updateProfitCashChart(){
+  const primary=statementsBundle(L.statements.primary);
+  const dom=document.getElementById('stmtProfitCashChart');
+  const capEl=document.getElementById('stmtCaption');
+  if(!primary || !primary.profitLoss || !primary.cashFlow){ if(dom){ disposeChart('stmtProfitCashChart'); dom.innerHTML=''; } if(capEl) capEl.textContent=''; return; }
+  const np = fySeries(primary.profitLoss,'Net Profit');
+  const cfo = fySeries(primary.cashFlow,'Cash from Operating Activity');
+  if(!np.length || !cfo.length){ if(dom){ disposeChart('stmtProfitCashChart'); dom.innerHTML='<div class="cap" style="padding:20px">Not available for this reporting format.</div>'; } if(capEl) capEl.textContent=''; return; }
+  if(dom) dom.innerHTML='';
+  const pcOption = profitVsCashChartOption(np, cfo);
+  initChart('stmtProfitCashChart', pcOption);
+  stmtChartYears.profitCash = pcOption.__years||[];
+  if(capEl) capEl.textContent = profitVsCashCaption(np, cfo) || '';
+}
+
+/* ---- rendering: the four statement tables ----------------------------- */
+function statementRowHTML(sectionKey, label, primarySection, compareSection, periods, pinnedSet, focusYear, changeMode){
+  const primSeriesAll = fySeriesSafe(primarySection, label);
+  const {med, maxAbsDev} = statementsMedianAndSpread(primarySection, label);
+  const iqr = iqrBounds(primSeriesAll.map(p=>p.value));
+  const polarity = rowPolarity(label);
+  const key = rowKey(sectionKey, label);
+  const isPinned = pinnedSet.has(key);
+  const primRow = primarySection ? findRow(primarySection, label) : null;
+  const cells = periods.map((p,i)=>{
+    const cell = primRow ? primRow.values[i] : null;
+    const val = cell ? cell.value : null;
+    // Computed regardless of changeMode and cached on the cell as data-val /
+    // data-prev -- the Value/YoY toggle patches these spans' textContent
+    // straight from the cached attributes (one rAF, no data walk, no HTML
+    // rebuild) instead of re-rendering the table. The bar/outlier markup
+    // below depends only on val/med/iqr, none of which change with the
+    // toggle, so it never needs to be touched by that patch either.
+    const priorIdx = periods.slice(0,i).map((pp,ix)=>({pp,ix})).filter(o=>o.pp.type==='fy').pop();
+    const prevVal = priorIdx && primRow && primRow.values[priorIdx.ix] ? primRow.values[priorIdx.ix].value : null;
+    let display;
+    if(changeMode && p.type==='fy'){
+      const chg = pctChange(prevVal, val, 1);
+      display = chg==null ? null : (chg>=0?'\u25b2':'\u25bc')+Math.abs(chg*100).toFixed(1)+'%';
+    } else {
+      display = formatCellRaw(label, val);
+    }
+    const dev = (val!=null && med!=null) ? val-med : null;
+    const barCls = dev!=null ? cellBarColorClass(dev, polarity) : null;
+    const isOutlier = iqr && val!=null && (val<iqr.lo || val>iqr.hi);
+    const isFocused = focusYear!=null && p.type==='fy' && p.year===focusYear;
+    const valAttr = val==null?'':val;
+    const prevAttr = (p.type==='fy' && prevVal!=null) ? prevVal : '';
+    return `<td class="stmt-bar-cell"${isFocused?' style="background:rgba(37,87,199,.1)"':''} data-metric="${advisorAttr(key)}" data-period="${p.type==='ttm'?'TTM':p.year}" data-val="${valAttr}" data-prev="${prevAttr}">
+      <span class="stmt-cell-value${display==null?' stmt-dash':''}">${display==null?'\u2014':display}</span>
+      ${barCls?`<div class="stmt-bar-track"><div class="stmt-bar-fill ${barCls}" style="height:${Math.max(4,Math.min(100,Math.abs(dev)/(maxAbsDev||1)*100))}%"></div>${isOutlier?'<div class="stmt-tick-mark"></div>':''}</div>`:''}
+    </td>`;
+  }).join('');
+  const lastVal = primSeriesAll.length ? primSeriesAll[primSeriesAll.length-1].value : null;
+  const vsMedian = (med && lastVal!=null) ? (lastVal/med*100).toFixed(0)+'%' : '\u2014';
+  const reading = readingSentence(label, primSeriesAll);
+  const spark = sparklineSVG(primSeriesAll);
+  const defKey = sectionKey+'::'+label;
+  const asReportedLabel = primRow ? primRow.label : label;
+  let compareRow = '';
+  if(compareSection){
+    const compRow = findRow(compareSection, label);
+    const compCells = periods.map(p=>{
+      if(!compRow) return `<td><span class="stmt-dash">\u2014</span></td>`;
+      const idx = compareSection.periods.findIndex(cp=>cp.type===p.type && (cp.type==='ttm' || cp.year===p.year));
+      const cell = idx>=0 ? compRow.values[idx] : null;
+      const val = cell ? cell.value : null;
+      return `<td>${val==null?'<span class="stmt-dash">\u2014</span>':formatCellRaw(label,val)}</td>`;
+    }).join('');
+    compareRow = `<tr class="stmt-compare-subrow"><td>${advisorAttr(L.statements.compare)}</td>${compCells}<td></td><td></td></tr>`;
+  }
+  return `<tr class="stmt-row${isPinned?' pinned':''}" data-stmt-pin="${advisorAttr(key)}">
+    <td>
+      <div class="stmt-rowlabel-inner">
+        ${spark}
+        <span class="stmt-label">${advisorAttr(asReportedLabel)}</span>
+        <button class="stmt-def-toggle" data-stmt-def="${advisorAttr(defKey)}" title="What is this?">i</button>
+      </div>
+    </td>
+    ${cells}
+    <td class="stmt-vsmedian">${vsMedian}</td>
+    <td class="stmt-reading">${advisorAttr(reading)}</td>
+  </tr>
+  <tr class="stmt-def-row" data-stmt-def-row="${advisorAttr(defKey)}" style="display:none"><td colspan="${periods.length+3}">${advisorAttr(rowDefinitionText(label))}</td></tr>${compareRow}`;
+}
+function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle, compareBundle, compareSymbol){
+  const primSection = primaryBundle ? primaryBundle[sectionKey] : null;
+  if(!primSection || !primSection.periods || !primSection.periods.length) return '';
+  const rows = statementsCanonicalRows(schema)[sectionKey] || [];
+  if(!rows.length) return '';
+  const periods = primSection.periods;
+  const headlineLabel = rows[0];
+  const headlineSeries = fySeries(primSection, headlineLabel);
+  const growthByYear = new Map();
+  for(let i=1;i<headlineSeries.length;i++){
+    growthByYear.set(headlineSeries[i].year, pctChange(headlineSeries[i-1].value, headlineSeries[i].value, 1));
+  }
+  const pinnedSet = new Set(L.statements.pins.map(p=>rowKey(p.section,p.label)));
+  const compareSection = compareBundle ? compareBundle[sectionKey] : null;
+  const theadCols = periods.map(p=>{
+    const g = p.type==='fy' ? growthByYear.get(p.year) : null;
+    const band = g==null ? '' : `<div class="stmt-growth-band ${g>=0?'up':'down'}"><div class="gb-mid"></div><div class="gb-fill" style="height:${Math.min(50,Math.abs(g*100))}%"></div></div>`;
+    const label = p.type==='ttm' ? 'TTM' : 'FY'+String(p.year).slice(2);
+    return `<th class="${p.type==='ttm'?'stmt-th-ttm':''}" data-stmt-year="${p.type==='ttm'?'':p.year}">${label}${band}</th>`;
+  }).join('');
+  const bodyRows = rows.map(label=>statementRowHTML(sectionKey,label,primSection,compareSection,periods,pinnedSet,L.statements.focusYear,L.statements.changeMode)).join('');
+  // Box-score footer: updates with the focused row -- the last row pinned
+  // from *this* table, falling back to the table's headline row so a fresh
+  // load isn't a blank footer. A full row click already re-renders the
+  // tables (it toggles a pin), so this never needs its own hover listener.
+  const sectionPins = L.statements.pins.filter(p=>p.section===sectionKey);
+  const focusLabel = sectionPins.length ? sectionPins[sectionPins.length-1].label : headlineLabel;
+  const focusSeries = focusLabel===headlineLabel ? headlineSeries : fySeries(primSection, focusLabel);
+  const box = rowBoxScore(focusSeries);
+  const footer = box ? `<tfoot><tr><td colspan="${periods.length+3}">
+    <b>${advisorAttr(focusLabel)}</b> FY${box.windowStart}–FY${box.windowEnd} &middot;
+    BEST ${advisorAttr(formatCellRaw(focusLabel,box.best.value))} (FY${box.best.year}) &middot;
+    WORST ${advisorAttr(formatCellRaw(focusLabel,box.worst.value))} (FY${box.worst.year}) &middot;
+    ${box.cagr!=null ? box.years+'Y CAGR '+(box.cagr*100).toFixed(1)+'%' : 'CAGR not shown — the window crosses a loss year'}
+  </td></tr></tfoot>` : '';
+  // Coverage-mismatch note: two companies with different history lengths or
+  // fiscal calendars must never silently compare -- a year present for only
+  // one side is disclosed here, not just left to render as a lone "—".
+  let coverageNote = '';
+  if(compareSection){
+    const primYears = new Set(periods.filter(p=>p.type==='fy').map(p=>p.year));
+    const compYears = new Set(compareSection.periods.filter(p=>p.type==='fy').map(p=>p.year));
+    const onlyPrimary = [...primYears].filter(y=>!compYears.has(y));
+    const onlyCompare = [...compYears].filter(y=>!primYears.has(y));
+    if(onlyPrimary.length || onlyCompare.length){
+      const parts=[];
+      if(onlyPrimary.length) parts.push(`${advisorAttr(primaryBundle.symbol)} only: FY${Math.min(...onlyPrimary)}–FY${Math.max(...onlyPrimary)}`);
+      if(onlyCompare.length) parts.push(`${advisorAttr(compareSymbol)} only: FY${Math.min(...onlyCompare)}–FY${Math.max(...onlyCompare)}`);
+      coverageNote = `<div class="stmt-coverage-note">Years covered don't fully overlap — ${parts.join('; ')}. Those years aren't linked-highlighted across companies.</div>`;
+    }
+  }
+  const collapsed = !!L.statements.collapsedSections[sectionKey];
+  return `<div class="stmt-section-block${collapsed?' stmt-collapsed':''}" data-stmt-section="${sectionKey}">
+  <div class="stmt-table-title"><button class="stmt-collapse-btn" data-stmt-collapse="${sectionKey}" aria-expanded="${collapsed?'false':'true'}" title="Collapse or expand this section">${collapsed?'▸':'▾'}</button>${advisorAttr(sectionLabel)} <span class="cap" style="font-family:'Spline Sans Mono',monospace;font-size:10px">${sectionKey==='ratios'?'':'(Rs Cr unless noted)'}</span></div>
+  ${coverageNote}
+  <div class="stmt-table-wrap"><table class="stmt-table">
+    <thead><tr><th>Line item</th>${theadCols}<th class="stmt-th-median">vs 12y median</th><th></th></tr></thead>
+    <tbody>${bodyRows}</tbody>
+    ${footer}
+  </table></div>
+  </div>`;
+}
+function renderStatementTables(){
+  const container=document.getElementById('stmtTables');
+  if(!container) return;
+  const s=L.statements;
+  const primary = statementsBundle(s.primary);
+  if(!primary){ container.innerHTML=''; return; }
+  const schema = primary.schema || 'unknown';
+  const compare = statementsEffectiveCompare();
+  container.innerHTML = STMT_SECTIONS.map(sec=>renderOneStatementTable(sec.key, sec.label, schema, primary, compare, s.compare)).join('');
+}
+
+/* ---- CSS-only linked highlighting -------------------------------------
+   Every cell carries data-metric/data-period; one rAF-batched write of
+   two attributes on #stmtRoot does the rest -- see the note near the top
+   of the <style> block. */
+function buildStatementsHighlightCSS(){
+  const styleEl=document.getElementById('stmtHlStyle');
+  if(!styleEl) return;
+  const esc=(s)=>String(s).replace(/["\\]/g,'\\$&');
+  const keys=new Set();
+  ['nonfinancial','financial'].forEach(schema=>{
+    Object.keys(CANONICAL_ROWS[schema]).forEach(sectionKey=>{
+      CANONICAL_ROWS[schema][sectionKey].forEach(label=>keys.add(rowKey(sectionKey,label)));
+    });
+  });
+  const years=new Set(['TTM']);
+  [L.statements.primary, L.statements.compare].filter(Boolean).forEach(sym=>{
+    const b=statementsBundle(sym);
+    if(b) STMT_SECTIONS.forEach(sec=>{ const sect=b[sec.key]; if(sect) sect.periods.forEach(p=>{ if(p.type==='fy') years.add(String(p.year)); }); });
+  });
+  let css='';
+  keys.forEach(k=>{ const e=esc(k); css+=`#stmtRoot[data-hl-metric="${e}"] [data-metric="${e}"]{background:rgba(37,87,199,.14)!important}`; });
+  years.forEach(y=>{ const e=esc(y); css+=`#stmtRoot[data-hl-period="${e}"] [data-period="${e}"]{background:rgba(37,87,199,.14)!important}`; });
+  styleEl.textContent=css;
+}
+
+/* ---- the one orchestrator: called after any pin/focus/company/toggle
+   change. Does NOT touch #stmtCompareRow or #stmtRecent -- those own live
+   text inputs and are refreshed only by the specific actions that change
+   their state, so typing in one doesn't get wiped by an unrelated click. */
+function updateStatementsUI(){
+  const headerEl=document.getElementById('stmtHeaderCard'); if(headerEl) headerEl.outerHTML = `<div class="card" id="stmtHeaderCard">${renderStatementsHeaderHTML()}</div>`;
+  const refusalEl=document.getElementById('stmtRefusal'); if(refusalEl) refusalEl.innerHTML = renderRefusalHTML();
+  const hintEl=document.getElementById('stmtBenchHint'); if(hintEl) hintEl.textContent = L.statements.pins.length ? '' : 'Sales is pinned. Click any row below to add it here.';
+  const chipsEl=document.getElementById('stmtBenchChips'); if(chipsEl) chipsEl.innerHTML = renderBenchChipsHTML();
+  const compStripEl=document.getElementById('stmtCompanionStrip'); if(compStripEl) compStripEl.innerHTML = renderCompanionStripHTML();
+  updateBenchChart();
+  const {tickRow, summary} = renderDivergenceParts();
+  const tickEl=document.getElementById('stmtTickRow'); if(tickEl) tickEl.innerHTML=tickRow;
+  const sumEl=document.getElementById('stmtCheckSummary'); if(sumEl) sumEl.innerHTML=summary;
+  const flagEl=document.getElementById('stmtFlagDetail'); if(flagEl) flagEl.innerHTML=renderFlagDetailHTML();
+  updateProfitCashChart();
+  renderStatementTables();
+  buildStatementsHighlightCSS();
+  const toLiveBtn=document.getElementById('stmtToLiveBtn'); if(toLiveBtn) toLiveBtn.textContent = 'Add '+(L.statements.primary||'\u2014')+' to Test Real Investments';
+}
+
+/* ---- delegated interaction handlers, bound once ------------------------
+   Same convention as [data-reset-tab]/[data-panel-toggle]/.explain-toggle
+   above: one document.body listener per concern, none re-bound per render. */
+document.body.addEventListener('click', e=>{
+  const defBtn = e.target.closest('[data-stmt-def]');
+  if(!defBtn) return;
+  const tr = defBtn.closest('tr');
+  const defRow = tr && tr.nextElementSibling;
+  if(defRow && defRow.classList.contains('stmt-def-row')) defRow.style.display = defRow.style.display==='none' ? '' : 'none';
+});
+document.body.addEventListener('click', e=>{
+  if(e.target.closest('[data-stmt-def]')) return; // handled above, and must not also pin the row
+  const tr = e.target.closest('[data-stmt-pin]');
+  if(!tr) return;
+  const {section,label} = parseRowKey(tr.dataset.stmtPin);
+  statementsTogglePin(section,label);
+});
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-companion-pin]');
+  if(!el) return;
+  const {section,label} = parseRowKey(el.dataset.stmtCompanionPin);
+  statementsTogglePin(section,label);
+});
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-market-companion]');
+  if(!el) return;
+  L.statements.companionFocus = {section:null, label:el.dataset.stmtMarketCompanion};
+  const stripEl=document.getElementById('stmtCompanionStrip'); if(stripEl) stripEl.innerHTML=renderCompanionStripHTML();
+});
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-pin-remove]');
+  if(!el) return;
+  L.statements.pins.splice(parseInt(el.dataset.stmtPinRemove),1);
+  updateStatementsUI();
+});
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-pin-move]');
+  if(!el) return;
+  const i=parseInt(el.dataset.stmtPinMove), dir=parseInt(el.dataset.dir), j=i+dir;
+  if(j<0 || j>=L.statements.pins.length) return;
+  const tmp=L.statements.pins[i]; L.statements.pins[i]=L.statements.pins[j]; L.statements.pins[j]=tmp;
+  updateStatementsUI();
+});
+document.body.addEventListener('click', e=>{
+  if(e.target.id!=='stmtClearPins') return;
+  L.statements.pins=[]; L.statements.focusYear=null; L.statements._focusedFlag=null; L.statements.companionFocus=null;
+  updateStatementsUI();
+});
+document.body.addEventListener('click', e=>{
+  const th = e.target.closest('[data-stmt-year]');
+  if(!th || !th.dataset.stmtYear) return;
+  statementsFocusYear(parseInt(th.dataset.stmtYear));
+});
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-flag]');
+  if(!el) return;
+  statementsOpenFlag(el.dataset.stmtFlag);
+});
+document.body.addEventListener('click', e=>{
+  if(e.target.id==='stmtSearchBtn') statementsSubmitSearch();
+});
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-recent]');
+  if(!el) return;
+  statementsSetPrimary(el.dataset.stmtRecent);
+});
+document.body.addEventListener('click', e=>{
+  if(e.target.id==='stmtCompareBtn') statementsSubmitCompare();
+});
+document.body.addEventListener('click', e=>{
+  if(e.target.id==='stmtRemoveCompare' || e.target.closest('[data-stmt-remove-compare]')) statementsSetCompare(null);
+});
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-density]');
+  if(!el) return;
+  L.statements.density = el.dataset.stmtDensity;
+  const tables=document.getElementById('stmtTables');
+  if(tables) tables.className='stmt-density-'+L.statements.density;
+  document.querySelectorAll('#stmtDensitySeg button').forEach(b=>b.classList.toggle('active', b.dataset.stmtDensity===L.statements.density));
+});
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-indexed]');
+  if(!el) return;
+  L.statements.indexed = el.dataset.stmtIndexed==='1';
+  document.querySelectorAll('#stmtIndexedSeg button').forEach(b=>b.classList.toggle('active', (b.dataset.stmtIndexed==='1')===L.statements.indexed));
+  updateBenchChart();
+});
+// Value/YoY is one of the interactions the stable-shell architecture lists
+// as must-never-trigger-a-full-re-render (goalden-lab.html's statements tab
+// otherwise never writes innerHTML outside mount/company-change/tab-return).
+// Every cell already carries its raw value and prior-year value as data
+// attributes (see statementRowHTML) precisely so this can patch textContent
+// in one rAF instead of calling renderStatementTables().
+function statementsApplyChangeMode(){
+  const changeMode = L.statements.changeMode;
+  const cells = document.querySelectorAll('#stmtRoot td.stmt-bar-cell[data-metric]');
+  requestAnimationFrame(()=>{
+    cells.forEach(td=>{
+      if(td.dataset.period==='TTM') return; // TTM never changes with mode
+      const valueEl = td.querySelector('.stmt-cell-value');
+      if(!valueEl) return;
+      const label = parseRowKey(td.dataset.metric).label;
+      const val = td.dataset.val===''?null:Number(td.dataset.val);
+      let text;
+      if(changeMode){
+        const prev = td.dataset.prev===''?null:Number(td.dataset.prev);
+        const chg = pctChange(prev, val, 1);
+        text = chg==null ? null : (chg>=0?'▲':'▼')+Math.abs(chg*100).toFixed(1)+'%';
+      } else {
+        text = formatCellRaw(label, val);
+      }
+      valueEl.classList.toggle('stmt-dash', text==null);
+      valueEl.textContent = text==null ? '—' : text;
+    });
+  });
+}
+document.body.addEventListener('click', e=>{
+  if(e.target.id!=='stmtChangeToggle') return;
+  L.statements.changeMode = !L.statements.changeMode;
+  e.target.classList.toggle('active', L.statements.changeMode);
+  e.target.textContent = L.statements.changeMode ? 'YoY change' : 'Value';
+  statementsApplyChangeMode();
+});
+document.body.addEventListener('click', e=>{
+  if(e.target.id==='stmtToLiveBtn' || e.target.closest('#stmtToLiveBtn')) statementsAddToLive();
+});
+// Collapsing a section is on the stable-shell's explicit never-full-re-render
+// list -- toggle the class on the one section block plus the button's own
+// glyph/aria-state, nothing else touches the DOM.
+document.body.addEventListener('click', e=>{
+  const btn = e.target.closest('[data-stmt-collapse]');
+  if(!btn) return;
+  const key = btn.dataset.stmtCollapse;
+  const collapsed = !L.statements.collapsedSections[key];
+  L.statements.collapsedSections[key] = collapsed;
+  const block = btn.closest('.stmt-section-block');
+  if(block) block.classList.toggle('stmt-collapsed', collapsed);
+  btn.setAttribute('aria-expanded', collapsed?'false':'true');
+  btn.textContent = collapsed?'▸':'▾';
+});
+document.body.addEventListener('keydown', e=>{
+  if(e.target && e.target.id==='stmtSearchInput' && e.key==='Enter'){ statementsSubmitSearch(); return; }
+  if(e.target && e.target.id==='stmtCompareInput' && e.key==='Enter'){ statementsSubmitCompare(); return; }
+  if(e.key==='Escape' && L.tab==='statements' && L.statements.pins.length){
+    if(e.target && e.target.tagName==='INPUT') return;
+    L.statements.pins=[]; L.statements.focusYear=null; L.statements._focusedFlag=null; L.statements.companionFocus=null;
+    updateStatementsUI();
+  }
+});
+document.body.addEventListener('input', e=>{
+  if(e.target && e.target.id==='stmtSearchInput') L.statements.search=e.target.value;
+});
+// Chart cross-highlight (plan: chart.dispatchAction({type:'highlight'}),
+// setOption never called on hover). Keyed by a plain fiscal-year array per
+// chart id, captured when each chart's option is last built, so a hovered
+// data-period ("2023") can be turned into the dataIndex that chart's own
+// category axis uses without recomputing or guessing it here.
+const stmtChartYears = { bench: [], profitCash: [] };
+function statementsClearChartHighlight(){
+  ['stmtBenchChart','stmtProfitCashChart'].forEach(id=>{
+    const entry = chartInstances[id];
+    if(entry) entry.inst.dispatchAction({ type:'downplay' });
+  });
+}
+function statementsCrossHighlight(metric, period){
+  statementsClearChartHighlight();
+  if(!metric || !period || period==='TTM') return;
+  const year = Number(period);
+  if(!Number.isFinite(year)) return;
+  // data-metric carries "section|label" (e.g. "profitLoss|Net Profit") so
+  // the same row label in two different sections never collides; chart
+  // series are keyed on the bare row label, so only the label half matches.
+  metric = metric.indexOf('|')>=0 ? metric.slice(metric.indexOf('|')+1) : metric;
+  [['stmtBenchChart','bench'], ['stmtProfitCashChart','profitCash']].forEach(([id, key])=>{
+    const entry = chartInstances[id];
+    if(!entry) return;
+    const dataIndex = (stmtChartYears[key]||[]).indexOf(year);
+    if(dataIndex<0) return;
+    const series = (entry.inst.getOption().series)||[];
+    series.forEach((s, seriesIndex)=>{
+      const name = s.name||'';
+      // profitVsCashChartOption's CFO series is titled "Cash from
+      // Operations" for chart legibility, not the row's exact canonical
+      // key ("Cash from Operating Activity") -- matched explicitly rather
+      // than relaxing the row-label match everywhere else.
+      const matches = name===metric || name.endsWith(' — '+metric)
+        || (key==='profitCash' && metric==='Cash from Operating Activity' && name==='Cash from Operations');
+      if(matches) entry.inst.dispatchAction({ type:'highlight', seriesIndex, dataIndex });
+    });
+  });
+}
+let stmtHlRaf=null, stmtHlPendingMetric='', stmtHlPendingPeriod='';
+document.body.addEventListener('mouseover', e=>{
+  if(L.tab!=='statements') return;
+  const cell = e.target.closest('#stmtRoot [data-metric]');
+  stmtHlPendingMetric = cell ? cell.dataset.metric : '';
+  stmtHlPendingPeriod = cell ? (cell.dataset.period||'') : '';
+  if(stmtHlRaf) return;
+  stmtHlRaf = requestAnimationFrame(()=>{
+    stmtHlRaf=null;
+    const root=document.getElementById('stmtRoot');
+    if(!root) return;
+    if(root.dataset.hlMetric!==stmtHlPendingMetric) root.dataset.hlMetric=stmtHlPendingMetric;
+    if(root.dataset.hlPeriod!==stmtHlPendingPeriod) root.dataset.hlPeriod=stmtHlPendingPeriod;
+    statementsCrossHighlight(stmtHlPendingMetric, stmtHlPendingPeriod);
+  });
+});
+document.body.addEventListener('mouseout', e=>{
+  if(L.tab!=='statements') return;
+  if(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('#stmtRoot')) return;
+  const root=document.getElementById('stmtRoot');
+  if(root){ root.dataset.hlMetric=''; root.dataset.hlPeriod=''; }
+  statementsClearChartHighlight();
+});
+
+/* ---- advisor wiring: read-and-navigate only, per the plan's AI boundary
+   -- no tool here computes a ratio, ranks anything, or returns a verdict. */
+function advisorStatementsState(){
+  const s=L.statements;
+  const primary=statementsBundle(s.primary);
+  const div = primary ? evaluateDivergenceRules(primary) : null;
+  return {
+    primary:s.primary, compare:s.compare,
+    primaryStatus:(s.data[s.primary]||{}).status,
+    compareStatus:s.compare?(s.data[s.compare]||{}).status:null,
+    schema: primary?primary.schema:null,
+    pins:s.pins, focusYear:s.focusYear,
+    checkSummary: div?{checksRun:div.checksRun,notApplicable:div.notApplicable,observations:div.fired,shownOnBench:div.flags.length,noObservation:div.clear}:null,
+    flags: div?div.flags:[],
+  };
+}
+function advisorStatementsPinRow(section,label){
+  if(!section||!label) return {ok:false,error:'Missing section or label.'};
+  statementsTogglePin(section,label);
+  return {ok:true, pins:L.statements.pins};
+}
+function advisorStatementsUnpinRow(section,label){
+  const idx=L.statements.pins.findIndex(p=>p.section===section&&p.label===label);
+  if(idx<0) return {ok:false,error:'That row is not pinned.'};
+  L.statements.pins.splice(idx,1);
+  updateStatementsUI();
+  return {ok:true, pins:L.statements.pins};
+}
+function advisorStatementsSetCompany(symbol){
+  if(!symbol) return {ok:false,error:'Missing symbol.'};
+  L.tab='statements'; render();
+  statementsSetPrimary(symbol);
+  return {ok:true, symbol:String(symbol).toUpperCase()};
+}
+function advisorStatementsSetCompare(symbol){
+  L.tab='statements'; render();
+  statementsSetCompare(symbol||null);
+  return {ok:true, symbol: symbol?String(symbol).toUpperCase():null};
+}
+function advisorStatementsFocusYear(year){
+  if(year && year!==L.statements.focusYear){ L.statements.focusYear=null; statementsFocusYear(year); }
+  else { L.statements.focusYear=year||null; updateStatementsUI(); }
+  return {ok:true, focusYear:L.statements.focusYear};
+}
+function advisorStatementsOpenDefinition(label){
+  if(!label) return {ok:false,error:'Missing label.'};
+  return {ok:true, label, definition: rowDefinitionText(label)};
+}
+function advisorStatementsExplainBench(){
+  const s=advisorStatementsState();
+  if(!s.primary || s.primaryStatus!=='ready') return {ok:false, error:'No company loaded yet.'};
+  return Object.assign({ok:true}, s);
 }
 
 // One-time handoff from a finished Door 2 plan, if the user arrived here
@@ -5205,6 +6418,7 @@ Tools:
 - Monte Carlo: thousands of random market paths to show plan likelihood, not just the average.
 - Instrument Explorer: return/risk assumptions for all fund categories.
 - Plan Health: a quick 0-100 score on savings, emergency fund and protection.
+- Read the Company: reads one real Indian company's Profit & Loss, Balance Sheet and Cash Flow (scraped from screener.in), lets a second company be pinned alongside for comparison, and surfaces five specific divergence checks (e.g. a dividend larger than operating cash flow, profit growth that never became cash, debtor days stretching out) with a check-summary line showing how many checks ran and how many found nothing, not just the ones that fired. A lender (bank/NBFC) gets a different row set than a manufacturer, and the two are never silently compared.
 
 Data sources:
 - Live Frontier fetches real market data through the app's proxy: Yahoo Finance chart endpoint for equities/ETFs (Indian tickers need .NS/.BO), and MFAPI.in for Indian mutual-fund NAVs. It uses Yahoo's dividend/split-adjusted close (adjclose) so returns include reinvested dividends — a high-dividend stock can have a very different real return from its raw price.
@@ -5247,6 +6461,17 @@ function stateForAdvisor() {
     };
   });
   snapshot.live = live;
+  // L.statements.data[sym].result carries a full parsed six-section
+  // financial statement (~50 rows x ~13 periods) per loaded company --
+  // dropping straight into the generic snapshot the way .live almost did
+  // would balloon every unrelated question's payload toward the Worker's
+  // 100KB body cap. get_statements_state/explain_bench pull the real
+  // detail on demand; this snapshot only needs to know what's loaded.
+  snapshot.statements = {
+    primary: L.statements.primary, compare: L.statements.compare,
+    pins: L.statements.pins, focusYear: L.statements.focusYear,
+    dataStatus: Object.keys(L.statements.data || {}).reduce((acc, k) => { acc[k] = L.statements.data[k].status; return acc; }, {}),
+  };
   // Snapshots carry the whole C config object as `currency` (incl. the full
   // instrument reference) — reduce to just the code so it doesn't re-bloat.
   if (Array.isArray(snapshot.snapshots)) {
@@ -5331,6 +6556,10 @@ function advisorChipsHTML(tab) {
     chips.push("How much does pooling the two kids save?");
   } else if (tab === 'health') {
     chips.push("What's dragging my score down?");
+  } else if (tab === 'statements') {
+    chips.push("Is this company borrowing too much?");
+    chips.push("Explain this bench");
+    chips.push("What does Debtor Days mean?");
   }
   if (!chips.length) return '';
   return '<div class="advisor-chips">' + chips.map(advisorChip).join('') + '</div>';
@@ -5491,6 +6720,14 @@ function advisorTools() {
     { type:'function', function:{ name:'add_instrument', description:'Add a real instrument (ticker or fund code) to Test Real Investments and fetch its history.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'remove_instrument', description:'Remove an instrument from Test Real Investments.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'get_financial_statements', description:'Fetch a real Indian company\'s Profit & Loss, Balance Sheet and Cash Flow statements (scraped from screener.in, not an official filing). Pass the bare NSE/BSE trading code, e.g. "TCS", not "TCS.NS".', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
+    { type:'function', function:{ name:'get_statements_state', description:'Return the current state of the Read the Company tab -- which company/companies are loaded, pinned rows, the focused year, and the divergence check-summary and fired flags. Read-only; computes nothing new.' } },
+    { type:'function', function:{ name:'pin_row', description:'Pin one statement row to the Bench on the Read the Company tab. section is one of profitLoss, balanceSheet, cashFlow, ratios; label is the exact as-reported row label (e.g. "Sales", "Debtor Days").', parameters:{ type:'object', properties:{ section:{ type:'string', enum:['profitLoss','balanceSheet','cashFlow','ratios'] }, label:{ type:'string' } }, required:['section','label'] } } },
+    { type:'function', function:{ name:'unpin_row', description:'Remove a pinned row from the Bench on the Read the Company tab.', parameters:{ type:'object', properties:{ section:{ type:'string' }, label:{ type:'string' } }, required:['section','label'] } } },
+    { type:'function', function:{ name:'set_company', description:'Open a company on the Read the Company tab. Pass the bare NSE/BSE trading code.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
+    { type:'function', function:{ name:'set_compare', description:'Add or remove a second company to compare against on the Read the Company tab. Omit symbol, or pass an empty value, to remove the comparison.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } } } } },
+    { type:'function', function:{ name:'focus_year', description:'Focus one fiscal year on the Read the Company tab\'s Bench chart (it flips to bars at that year), or omit year to clear the focus.', parameters:{ type:'object', properties:{ year:{ type:'number' } } } } },
+    { type:'function', function:{ name:'open_definition', description:'Return the plain-language definition of one statement row label, e.g. "Debtor Days" or "CWIP".', parameters:{ type:'object', properties:{ label:{ type:'string' } }, required:['label'] } } },
+    { type:'function', function:{ name:'explain_bench', description:'Return the Read the Company tab\'s full current state (company, schema, pinned rows, focused year, divergence flags) for narration in plain language. Never computes a ratio, ranks anything, or returns a verdict -- narrate only what this returns.' } },
     { type:'function', function:{ name:'compare_live', description:'Return each held instrument\'s real return and risk, pairwise correlations, the tangency (best-Sharpe) weights, and the current mix\'s Sharpe.' } },
     { type:'function', function:{ name:'run_monte_carlo', description:'Run the Monte Carlo simulator (optionally override sip, years, meanReturn, volatility, regime).', parameters:{ type:'object', properties:{ sip:{ type:'number' }, years:{ type:'number' }, meanReturn:{ type:'number' }, volatility:{ type:'number' }, regime:{ type:'string', enum:Object.keys(REGIME_PRESETS) } } } } },
     { type:'function', function:{ name:'stress_test', description:'Run a historical crash scenario against the retirement plan. Valid scenarios are the episode ids (e.g. 2008, 2013, 2020).', parameters:{ type:'object', properties:{ scenario:{ type:'string' } }, required:['scenario'] } } },
@@ -6301,6 +7538,14 @@ function executeAdvisorTool(name, args) {
   if (name === 'search_instruments') return advisorSearchInstruments(args && args.query);
   if (name === 'add_instrument') return advisorAddInstrument(args && args.symbol);
   if (name === 'get_financial_statements') return advisorGetFinancialStatements(args && args.symbol);
+  if (name === 'get_statements_state') return JSON.stringify(advisorStatementsState());
+  if (name === 'pin_row') return JSON.stringify(advisorStatementsPinRow(args && args.section, args && args.label));
+  if (name === 'unpin_row') return JSON.stringify(advisorStatementsUnpinRow(args && args.section, args && args.label));
+  if (name === 'set_company') return JSON.stringify(advisorStatementsSetCompany(args && args.symbol));
+  if (name === 'set_compare') return JSON.stringify(advisorStatementsSetCompare(args && args.symbol));
+  if (name === 'focus_year') return JSON.stringify(advisorStatementsFocusYear(args && args.year));
+  if (name === 'open_definition') return JSON.stringify(advisorStatementsOpenDefinition(args && args.label));
+  if (name === 'explain_bench') return JSON.stringify(advisorStatementsExplainBench());
   if (name === 'remove_instrument') return JSON.stringify(advisorRemoveInstrument(args && args.symbol));
   if (name === 'compare_live') return JSON.stringify(advisorCompareLive());
   if (name === 'run_monte_carlo') return JSON.stringify(advisorRunMonteCarlo(args || {}));
@@ -6335,6 +7580,14 @@ function advisorDescribeTool(name, args) {
     case 'search_instruments': return 'Searching for ' + args.query;
     case 'add_instrument': return 'Adding ' + args.symbol;
     case 'get_financial_statements': return 'Pulling financial statements for ' + args.symbol;
+    case 'get_statements_state': return 'Reading the statements screen';
+    case 'pin_row': return 'Pinning ' + args.label;
+    case 'unpin_row': return 'Unpinning ' + args.label;
+    case 'set_company': return 'Opening ' + args.symbol;
+    case 'set_compare': return args.symbol ? 'Comparing against ' + args.symbol : 'Removing the comparison';
+    case 'focus_year': return args.year ? 'Focusing FY' + args.year : 'Clearing the year focus';
+    case 'open_definition': return 'Looking up ' + args.label;
+    case 'explain_bench': return 'Reading the Bench';
     case 'remove_instrument': return 'Removing ' + args.symbol;
     case 'compare_live': return 'Comparing the live holdings';
     case 'run_monte_carlo': return 'Running 1,000 simulations';

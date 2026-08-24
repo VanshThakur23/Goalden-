@@ -1776,5 +1776,419 @@
       }
     ]
   },
-  "schema": "nonfinancial"
+  "ratios": {
+    "periods": [
+      {
+        "type": "fy",
+        "year": 2015,
+        "key": "2015-03-31",
+        "label": "Mar 2015"
+      },
+      {
+        "type": "fy",
+        "year": 2016,
+        "key": "2016-03-31",
+        "label": "Mar 2016"
+      },
+      {
+        "type": "fy",
+        "year": 2017,
+        "key": "2017-03-31",
+        "label": "Mar 2017"
+      },
+      {
+        "type": "fy",
+        "year": 2018,
+        "key": "2018-03-31",
+        "label": "Mar 2018"
+      },
+      {
+        "type": "fy",
+        "year": 2019,
+        "key": "2019-03-31",
+        "label": "Mar 2019"
+      },
+      {
+        "type": "fy",
+        "year": 2020,
+        "key": "2020-03-31",
+        "label": "Mar 2020"
+      },
+      {
+        "type": "fy",
+        "year": 2021,
+        "key": "2021-03-31",
+        "label": "Mar 2021"
+      },
+      {
+        "type": "fy",
+        "year": 2022,
+        "key": "2022-03-31",
+        "label": "Mar 2022"
+      },
+      {
+        "type": "fy",
+        "year": 2023,
+        "key": "2023-03-31",
+        "label": "Mar 2023"
+      },
+      {
+        "type": "fy",
+        "year": 2024,
+        "key": "2024-03-31",
+        "label": "Mar 2024"
+      },
+      {
+        "type": "fy",
+        "year": 2025,
+        "key": "2025-03-31",
+        "label": "Mar 2025"
+      },
+      {
+        "type": "fy",
+        "year": 2026,
+        "key": "2026-03-31",
+        "label": "Mar 2026"
+      }
+    ],
+    "rows": [
+      {
+        "label": "Debtor Days",
+        "values": [
+          {
+            "raw": "32",
+            "value": 32
+          },
+          {
+            "raw": "29",
+            "value": 29
+          },
+          {
+            "raw": "30",
+            "value": 30
+          },
+          {
+            "raw": "32",
+            "value": 32
+          },
+          {
+            "raw": "32",
+            "value": 32
+          },
+          {
+            "raw": "29",
+            "value": 29
+          },
+          {
+            "raw": "36",
+            "value": 36
+          },
+          {
+            "raw": "39",
+            "value": 39
+          },
+          {
+            "raw": "27",
+            "value": 27
+          },
+          {
+            "raw": "28",
+            "value": 28
+          },
+          {
+            "raw": "30",
+            "value": 30
+          },
+          {
+            "raw": "36",
+            "value": 36
+          }
+        ]
+      },
+      {
+        "label": "Inventory Days",
+        "values": [
+          {
+            "raw": "104",
+            "value": 104
+          },
+          {
+            "raw": "103",
+            "value": 103
+          },
+          {
+            "raw": "120",
+            "value": 120
+          },
+          {
+            "raw": "115",
+            "value": 115
+          },
+          {
+            "raw": "103",
+            "value": 103
+          },
+          {
+            "raw": "120",
+            "value": 120
+          },
+          {
+            "raw": "146",
+            "value": 146
+          },
+          {
+            "raw": "138",
+            "value": 138
+          },
+          {
+            "raw": "111",
+            "value": 111
+          },
+          {
+            "raw": "111",
+            "value": 111
+          },
+          {
+            "raw": "121",
+            "value": 121
+          },
+          {
+            "raw": "156",
+            "value": 156
+          }
+        ]
+      },
+      {
+        "label": "Days Payable",
+        "values": [
+          {
+            "raw": "87",
+            "value": 87
+          },
+          {
+            "raw": "92",
+            "value": 92
+          },
+          {
+            "raw": "115",
+            "value": 115
+          },
+          {
+            "raw": "108",
+            "value": 108
+          },
+          {
+            "raw": "96",
+            "value": 96
+          },
+          {
+            "raw": "98",
+            "value": 98
+          },
+          {
+            "raw": "135",
+            "value": 135
+          },
+          {
+            "raw": "128",
+            "value": 128
+          },
+          {
+            "raw": "93",
+            "value": 93
+          },
+          {
+            "raw": "94",
+            "value": 94
+          },
+          {
+            "raw": "100",
+            "value": 100
+          },
+          {
+            "raw": "127",
+            "value": 127
+          }
+        ]
+      },
+      {
+        "label": "Cash Conversion Cycle",
+        "values": [
+          {
+            "raw": "49",
+            "value": 49
+          },
+          {
+            "raw": "40",
+            "value": 40
+          },
+          {
+            "raw": "36",
+            "value": 36
+          },
+          {
+            "raw": "38",
+            "value": 38
+          },
+          {
+            "raw": "39",
+            "value": 39
+          },
+          {
+            "raw": "51",
+            "value": 51
+          },
+          {
+            "raw": "47",
+            "value": 47
+          },
+          {
+            "raw": "49",
+            "value": 49
+          },
+          {
+            "raw": "45",
+            "value": 45
+          },
+          {
+            "raw": "45",
+            "value": 45
+          },
+          {
+            "raw": "51",
+            "value": 51
+          },
+          {
+            "raw": "65",
+            "value": 65
+          }
+        ]
+      },
+      {
+        "label": "Working Capital Days",
+        "values": [
+          {
+            "raw": "-6",
+            "value": -6
+          },
+          {
+            "raw": "4",
+            "value": 4
+          },
+          {
+            "raw": "-17",
+            "value": -17
+          },
+          {
+            "raw": "17",
+            "value": 17
+          },
+          {
+            "raw": "18",
+            "value": 18
+          },
+          {
+            "raw": "3",
+            "value": 3
+          },
+          {
+            "raw": "3",
+            "value": 3
+          },
+          {
+            "raw": "-3",
+            "value": -3
+          },
+          {
+            "raw": "13",
+            "value": 13
+          },
+          {
+            "raw": "9",
+            "value": 9
+          },
+          {
+            "raw": "23",
+            "value": 23
+          },
+          {
+            "raw": "2",
+            "value": 2
+          }
+        ]
+      },
+      {
+        "label": "ROCE %",
+        "values": [
+          {
+            "raw": "6%",
+            "value": 6
+          },
+          {
+            "raw": "4%",
+            "value": 4
+          },
+          {
+            "raw": "8%",
+            "value": 8
+          },
+          {
+            "raw": "10%",
+            "value": 10
+          },
+          {
+            "raw": "11%",
+            "value": 11
+          },
+          {
+            "raw": "9%",
+            "value": 9
+          },
+          {
+            "raw": "9%",
+            "value": 9
+          },
+          {
+            "raw": "17%",
+            "value": 17
+          },
+          {
+            "raw": "11%",
+            "value": 11
+          },
+          {
+            "raw": "11%",
+            "value": 11
+          },
+          {
+            "raw": "15%",
+            "value": 15
+          },
+          {
+            "raw": "13%",
+            "value": 13
+          }
+        ]
+      }
+    ]
+  },
+  "schema": "nonfinancial",
+  "topRatios": {
+    "marketCap": 232363,
+    "currentPrice": 1034,
+    "high52w": 1179,
+    "low52w": 697,
+    "stockPE": 11.2,
+    "bookValue": 608,
+    "dividendYield": 0.48,
+    "roce": 13.2,
+    "roe": 13,
+    "faceValue": 1
+  },
+  "sector": {
+    "broadSector": "Commodities",
+    "sector": "Metals & Mining",
+    "broadIndustry": "Non - Ferrous Metals",
+    "industry": "Aluminium"
+  }
 }

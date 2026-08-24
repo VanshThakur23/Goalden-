@@ -40,7 +40,7 @@ check(/flags: crossFieldSanity|flags:crossFieldSanity/.test(g2), 'goalden-door2.
 check(/flags:flags/.test(gl) || /flags: crossFieldSanity/.test(gl), 'goalden-lab.html wires flags');
 
 // Part C — extract the real guardrail and run it on the 3 test strings.
-const m = advisor.match(/const ADVISOR_TICKER_DENY = \[[\s\S]*?\];\s*function advisorGuardrail\(text\) \{[\s\S]*?\n\}/);
+const m = advisor.match(/const ADVISOR_TICKER_DENY = \[[\s\S]*?\];[\s\S]*?function advisorGuardrail\(text\) \{[\s\S]*?\n\}/);
 if (!m) {
   check(false, 'advisorGuardrail extractable from advisor.js');
 } else {
@@ -51,7 +51,7 @@ if (!m) {
   check(advisorGuardrail(s1) === s1, "descriptive mention NOT flagged (TCS returned 8%...)");
 
   const s2 = 'You should buy RELIANCE now, it will reach 3000 soon';
-  check(advisorGuardrail(s2) !== s2 && advisorGuardrail(s2).indexOf("I can't recommend specific investments") !== -1,
+  check(advisorGuardrail(s2) !== s2 && advisorGuardrail(s2).indexOf("I can't give a view on whether a specific company is worth investing in") !== -1,
     "recommendation flagged (buy RELIANCE ... will reach ...)");
 
   const s3 = 'Your mix is 60% equity, 40% debt';
@@ -60,7 +60,7 @@ if (!m) {
   // Title-case recommendation object, no price target and no ALL-CAPS ticker
   // (agent-evals/Phase 6 surfaced this gap in the ALL-CAPS-only check).
   const s4 = 'You should buy Reliance now, it is a great pick';
-  check(advisorGuardrail(s4) !== s4 && advisorGuardrail(s4).indexOf("I can't recommend specific investments") !== -1,
+  check(advisorGuardrail(s4) !== s4 && advisorGuardrail(s4).indexOf("I can't give a view on whether a specific company is worth investing in") !== -1,
     "title-case recommendation flagged (buy Reliance, no price target)");
 }
 

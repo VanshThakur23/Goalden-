@@ -1776,5 +1776,419 @@
       }
     ]
   },
-  "schema": "nonfinancial"
+  "ratios": {
+    "periods": [
+      {
+        "type": "fy",
+        "year": 2015,
+        "key": "2015-03-31",
+        "label": "Mar 2015"
+      },
+      {
+        "type": "fy",
+        "year": 2016,
+        "key": "2016-03-31",
+        "label": "Mar 2016"
+      },
+      {
+        "type": "fy",
+        "year": 2017,
+        "key": "2017-03-31",
+        "label": "Mar 2017"
+      },
+      {
+        "type": "fy",
+        "year": 2018,
+        "key": "2018-03-31",
+        "label": "Mar 2018"
+      },
+      {
+        "type": "fy",
+        "year": 2019,
+        "key": "2019-03-31",
+        "label": "Mar 2019"
+      },
+      {
+        "type": "fy",
+        "year": 2020,
+        "key": "2020-03-31",
+        "label": "Mar 2020"
+      },
+      {
+        "type": "fy",
+        "year": 2021,
+        "key": "2021-03-31",
+        "label": "Mar 2021"
+      },
+      {
+        "type": "fy",
+        "year": 2022,
+        "key": "2022-03-31",
+        "label": "Mar 2022"
+      },
+      {
+        "type": "fy",
+        "year": 2023,
+        "key": "2023-03-31",
+        "label": "Mar 2023"
+      },
+      {
+        "type": "fy",
+        "year": 2024,
+        "key": "2024-03-31",
+        "label": "Mar 2024"
+      },
+      {
+        "type": "fy",
+        "year": 2025,
+        "key": "2025-03-31",
+        "label": "Mar 2025"
+      },
+      {
+        "type": "fy",
+        "year": 2026,
+        "key": "2026-03-31",
+        "label": "Mar 2026"
+      }
+    ],
+    "rows": [
+      {
+        "label": "Debtor Days",
+        "values": [
+          {
+            "raw": "79",
+            "value": 79
+          },
+          {
+            "raw": "81",
+            "value": 81
+          },
+          {
+            "raw": "70",
+            "value": 70
+          },
+          {
+            "raw": "74",
+            "value": 74
+          },
+          {
+            "raw": "68",
+            "value": 68
+          },
+          {
+            "raw": "71",
+            "value": 71
+          },
+          {
+            "raw": "67",
+            "value": 67
+          },
+          {
+            "raw": "80",
+            "value": 80
+          },
+          {
+            "raw": "81",
+            "value": 81
+          },
+          {
+            "raw": "81",
+            "value": 81
+          },
+          {
+            "raw": "84",
+            "value": 84
+          },
+          {
+            "raw": "93",
+            "value": 93
+          }
+        ]
+      },
+      {
+        "label": "Inventory Days",
+        "values": [
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          }
+        ]
+      },
+      {
+        "label": "Days Payable",
+        "values": [
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          },
+          {
+            "raw": "",
+            "value": null
+          }
+        ]
+      },
+      {
+        "label": "Cash Conversion Cycle",
+        "values": [
+          {
+            "raw": "79",
+            "value": 79
+          },
+          {
+            "raw": "81",
+            "value": 81
+          },
+          {
+            "raw": "70",
+            "value": 70
+          },
+          {
+            "raw": "74",
+            "value": 74
+          },
+          {
+            "raw": "68",
+            "value": 68
+          },
+          {
+            "raw": "71",
+            "value": 71
+          },
+          {
+            "raw": "67",
+            "value": 67
+          },
+          {
+            "raw": "80",
+            "value": 80
+          },
+          {
+            "raw": "81",
+            "value": 81
+          },
+          {
+            "raw": "81",
+            "value": 81
+          },
+          {
+            "raw": "84",
+            "value": 84
+          },
+          {
+            "raw": "93",
+            "value": 93
+          }
+        ]
+      },
+      {
+        "label": "Working Capital Days",
+        "values": [
+          {
+            "raw": "33",
+            "value": 33
+          },
+          {
+            "raw": "62",
+            "value": 62
+          },
+          {
+            "raw": "62",
+            "value": 62
+          },
+          {
+            "raw": "61",
+            "value": 61
+          },
+          {
+            "raw": "70",
+            "value": 70
+          },
+          {
+            "raw": "64",
+            "value": 64
+          },
+          {
+            "raw": "59",
+            "value": 59
+          },
+          {
+            "raw": "33",
+            "value": 33
+          },
+          {
+            "raw": "30",
+            "value": 30
+          },
+          {
+            "raw": "34",
+            "value": 34
+          },
+          {
+            "raw": "34",
+            "value": 34
+          },
+          {
+            "raw": "38",
+            "value": 38
+          }
+        ]
+      },
+      {
+        "label": "ROCE %",
+        "values": [
+          {
+            "raw": "50%",
+            "value": 50
+          },
+          {
+            "raw": "51%",
+            "value": 51
+          },
+          {
+            "raw": "44%",
+            "value": 44
+          },
+          {
+            "raw": "39%",
+            "value": 39
+          },
+          {
+            "raw": "47%",
+            "value": 47
+          },
+          {
+            "raw": "47%",
+            "value": 47
+          },
+          {
+            "raw": "49%",
+            "value": 49
+          },
+          {
+            "raw": "54%",
+            "value": 54
+          },
+          {
+            "raw": "59%",
+            "value": 59
+          },
+          {
+            "raw": "64%",
+            "value": 64
+          },
+          {
+            "raw": "65%",
+            "value": 65
+          },
+          {
+            "raw": "63%",
+            "value": 63
+          }
+        ]
+      }
+    ]
+  },
+  "schema": "nonfinancial",
+  "topRatios": {
+    "marketCap": 832884,
+    "currentPrice": 2302,
+    "high52w": 3350,
+    "low52w": 1976,
+    "stockPE": 15.5,
+    "bookValue": 296,
+    "dividendYield": 2.78,
+    "roce": 63,
+    "roe": 51.8,
+    "faceValue": 1
+  },
+  "sector": {
+    "broadSector": "Information Technology",
+    "sector": "Information Technology",
+    "broadIndustry": "IT - Software",
+    "industry": "Computers - Software & Consulting"
+  }
 }

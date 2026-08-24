@@ -154,7 +154,7 @@ function loadPage(page) {
 }
 
 // Extract advisorGuardrail from advisor.js (same technique as smoke-02.js).
-const guardrailMatch = ADVISOR_SRC.match(/const ADVISOR_TICKER_DENY = \[[\s\S]*?\];\s*function advisorGuardrail\(text\) \{[\s\S]*?\n\}/);
+const guardrailMatch = ADVISOR_SRC.match(/const ADVISOR_TICKER_DENY = \[[\s\S]*?\];[\s\S]*?function advisorGuardrail\(text\) \{[\s\S]*?\n\}/);
 const advisorGuardrail = guardrailMatch
   ? new Function('console', guardrailMatch[0] + '\nreturn advisorGuardrail;')({ warn() {} })
   : null;

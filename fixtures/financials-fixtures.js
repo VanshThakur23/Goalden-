@@ -1781,7 +1781,421 @@ export default {
         }
       ]
     },
-    "schema": "nonfinancial"
+    "ratios": {
+      "periods": [
+        {
+          "type": "fy",
+          "year": 2015,
+          "key": "2015-03-31",
+          "label": "Mar 2015"
+        },
+        {
+          "type": "fy",
+          "year": 2016,
+          "key": "2016-03-31",
+          "label": "Mar 2016"
+        },
+        {
+          "type": "fy",
+          "year": 2017,
+          "key": "2017-03-31",
+          "label": "Mar 2017"
+        },
+        {
+          "type": "fy",
+          "year": 2018,
+          "key": "2018-03-31",
+          "label": "Mar 2018"
+        },
+        {
+          "type": "fy",
+          "year": 2019,
+          "key": "2019-03-31",
+          "label": "Mar 2019"
+        },
+        {
+          "type": "fy",
+          "year": 2020,
+          "key": "2020-03-31",
+          "label": "Mar 2020"
+        },
+        {
+          "type": "fy",
+          "year": 2021,
+          "key": "2021-03-31",
+          "label": "Mar 2021"
+        },
+        {
+          "type": "fy",
+          "year": 2022,
+          "key": "2022-03-31",
+          "label": "Mar 2022"
+        },
+        {
+          "type": "fy",
+          "year": 2023,
+          "key": "2023-03-31",
+          "label": "Mar 2023"
+        },
+        {
+          "type": "fy",
+          "year": 2024,
+          "key": "2024-03-31",
+          "label": "Mar 2024"
+        },
+        {
+          "type": "fy",
+          "year": 2025,
+          "key": "2025-03-31",
+          "label": "Mar 2025"
+        },
+        {
+          "type": "fy",
+          "year": 2026,
+          "key": "2026-03-31",
+          "label": "Mar 2026"
+        }
+      ],
+      "rows": [
+        {
+          "label": "Debtor Days",
+          "values": [
+            {
+              "raw": "79",
+              "value": 79
+            },
+            {
+              "raw": "81",
+              "value": 81
+            },
+            {
+              "raw": "70",
+              "value": 70
+            },
+            {
+              "raw": "74",
+              "value": 74
+            },
+            {
+              "raw": "68",
+              "value": 68
+            },
+            {
+              "raw": "71",
+              "value": 71
+            },
+            {
+              "raw": "67",
+              "value": 67
+            },
+            {
+              "raw": "80",
+              "value": 80
+            },
+            {
+              "raw": "81",
+              "value": 81
+            },
+            {
+              "raw": "81",
+              "value": 81
+            },
+            {
+              "raw": "84",
+              "value": 84
+            },
+            {
+              "raw": "93",
+              "value": 93
+            }
+          ]
+        },
+        {
+          "label": "Inventory Days",
+          "values": [
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            }
+          ]
+        },
+        {
+          "label": "Days Payable",
+          "values": [
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            }
+          ]
+        },
+        {
+          "label": "Cash Conversion Cycle",
+          "values": [
+            {
+              "raw": "79",
+              "value": 79
+            },
+            {
+              "raw": "81",
+              "value": 81
+            },
+            {
+              "raw": "70",
+              "value": 70
+            },
+            {
+              "raw": "74",
+              "value": 74
+            },
+            {
+              "raw": "68",
+              "value": 68
+            },
+            {
+              "raw": "71",
+              "value": 71
+            },
+            {
+              "raw": "67",
+              "value": 67
+            },
+            {
+              "raw": "80",
+              "value": 80
+            },
+            {
+              "raw": "81",
+              "value": 81
+            },
+            {
+              "raw": "81",
+              "value": 81
+            },
+            {
+              "raw": "84",
+              "value": 84
+            },
+            {
+              "raw": "93",
+              "value": 93
+            }
+          ]
+        },
+        {
+          "label": "Working Capital Days",
+          "values": [
+            {
+              "raw": "33",
+              "value": 33
+            },
+            {
+              "raw": "62",
+              "value": 62
+            },
+            {
+              "raw": "62",
+              "value": 62
+            },
+            {
+              "raw": "61",
+              "value": 61
+            },
+            {
+              "raw": "70",
+              "value": 70
+            },
+            {
+              "raw": "64",
+              "value": 64
+            },
+            {
+              "raw": "59",
+              "value": 59
+            },
+            {
+              "raw": "33",
+              "value": 33
+            },
+            {
+              "raw": "30",
+              "value": 30
+            },
+            {
+              "raw": "34",
+              "value": 34
+            },
+            {
+              "raw": "34",
+              "value": 34
+            },
+            {
+              "raw": "38",
+              "value": 38
+            }
+          ]
+        },
+        {
+          "label": "ROCE %",
+          "values": [
+            {
+              "raw": "50%",
+              "value": 50
+            },
+            {
+              "raw": "51%",
+              "value": 51
+            },
+            {
+              "raw": "44%",
+              "value": 44
+            },
+            {
+              "raw": "39%",
+              "value": 39
+            },
+            {
+              "raw": "47%",
+              "value": 47
+            },
+            {
+              "raw": "47%",
+              "value": 47
+            },
+            {
+              "raw": "49%",
+              "value": 49
+            },
+            {
+              "raw": "54%",
+              "value": 54
+            },
+            {
+              "raw": "59%",
+              "value": 59
+            },
+            {
+              "raw": "64%",
+              "value": 64
+            },
+            {
+              "raw": "65%",
+              "value": 65
+            },
+            {
+              "raw": "63%",
+              "value": 63
+            }
+          ]
+        }
+      ]
+    },
+    "schema": "nonfinancial",
+    "topRatios": {
+      "marketCap": 832884,
+      "currentPrice": 2302,
+      "high52w": 3350,
+      "low52w": 1976,
+      "stockPE": 15.5,
+      "bookValue": 296,
+      "dividendYield": 2.78,
+      "roce": 63,
+      "roe": 51.8,
+      "faceValue": 1
+    },
+    "sector": {
+      "broadSector": "Information Technology",
+      "sector": "Information Technology",
+      "broadIndustry": "IT - Software",
+      "industry": "Computers - Software & Consulting"
+    }
   },
   "HDFCBANK": {
     "symbol": "HDFCBANK",
@@ -3614,7 +4028,156 @@ export default {
         }
       ]
     },
-    "schema": "financial"
+    "ratios": {
+      "periods": [
+        {
+          "type": "fy",
+          "year": 2015,
+          "key": "2015-03-31",
+          "label": "Mar 2015"
+        },
+        {
+          "type": "fy",
+          "year": 2016,
+          "key": "2016-03-31",
+          "label": "Mar 2016"
+        },
+        {
+          "type": "fy",
+          "year": 2017,
+          "key": "2017-03-31",
+          "label": "Mar 2017"
+        },
+        {
+          "type": "fy",
+          "year": 2018,
+          "key": "2018-03-31",
+          "label": "Mar 2018"
+        },
+        {
+          "type": "fy",
+          "year": 2019,
+          "key": "2019-03-31",
+          "label": "Mar 2019"
+        },
+        {
+          "type": "fy",
+          "year": 2020,
+          "key": "2020-03-31",
+          "label": "Mar 2020"
+        },
+        {
+          "type": "fy",
+          "year": 2021,
+          "key": "2021-03-31",
+          "label": "Mar 2021"
+        },
+        {
+          "type": "fy",
+          "year": 2022,
+          "key": "2022-03-31",
+          "label": "Mar 2022"
+        },
+        {
+          "type": "fy",
+          "year": 2023,
+          "key": "2023-03-31",
+          "label": "Mar 2023"
+        },
+        {
+          "type": "fy",
+          "year": 2024,
+          "key": "2024-03-31",
+          "label": "Mar 2024"
+        },
+        {
+          "type": "fy",
+          "year": 2025,
+          "key": "2025-03-31",
+          "label": "Mar 2025"
+        },
+        {
+          "type": "fy",
+          "year": 2026,
+          "key": "2026-03-31",
+          "label": "Mar 2026"
+        }
+      ],
+      "rows": [
+        {
+          "label": "ROE %",
+          "values": [
+            {
+              "raw": "20%",
+              "value": 20
+            },
+            {
+              "raw": "19%",
+              "value": 19
+            },
+            {
+              "raw": "18%",
+              "value": 18
+            },
+            {
+              "raw": "18%",
+              "value": 18
+            },
+            {
+              "raw": "17%",
+              "value": 17
+            },
+            {
+              "raw": "16%",
+              "value": 16
+            },
+            {
+              "raw": "16%",
+              "value": 16
+            },
+            {
+              "raw": "17%",
+              "value": 17
+            },
+            {
+              "raw": "17%",
+              "value": 17
+            },
+            {
+              "raw": "17%",
+              "value": 17
+            },
+            {
+              "raw": "14%",
+              "value": 14
+            },
+            {
+              "raw": "14%",
+              "value": 14
+            }
+          ]
+        }
+      ]
+    },
+    "schema": "financial",
+    "topRatios": {
+      "marketCap": 1120311,
+      "currentPrice": 727,
+      "high52w": 1020,
+      "low52w": 715,
+      "stockPE": 14.2,
+      "bookValue": 390,
+      "dividendYield": 1.79,
+      "roce": 7.02,
+      "roe": 13.6,
+      "faceValue": 1
+    },
+    "sector": {
+      "broadSector": "Financial Services",
+      "sector": "Financial Services",
+      "broadIndustry": "Banks",
+      "industry": "Private Sector Bank"
+    }
   },
   "VEDL": {
     "symbol": "VEDL",
@@ -5394,7 +5957,421 @@ export default {
         }
       ]
     },
-    "schema": "nonfinancial"
+    "ratios": {
+      "periods": [
+        {
+          "type": "fy",
+          "year": 2015,
+          "key": "2015-03-31",
+          "label": "Mar 2015"
+        },
+        {
+          "type": "fy",
+          "year": 2016,
+          "key": "2016-03-31",
+          "label": "Mar 2016"
+        },
+        {
+          "type": "fy",
+          "year": 2017,
+          "key": "2017-03-31",
+          "label": "Mar 2017"
+        },
+        {
+          "type": "fy",
+          "year": 2018,
+          "key": "2018-03-31",
+          "label": "Mar 2018"
+        },
+        {
+          "type": "fy",
+          "year": 2019,
+          "key": "2019-03-31",
+          "label": "Mar 2019"
+        },
+        {
+          "type": "fy",
+          "year": 2020,
+          "key": "2020-03-31",
+          "label": "Mar 2020"
+        },
+        {
+          "type": "fy",
+          "year": 2021,
+          "key": "2021-03-31",
+          "label": "Mar 2021"
+        },
+        {
+          "type": "fy",
+          "year": 2022,
+          "key": "2022-03-31",
+          "label": "Mar 2022"
+        },
+        {
+          "type": "fy",
+          "year": 2023,
+          "key": "2023-03-31",
+          "label": "Mar 2023"
+        },
+        {
+          "type": "fy",
+          "year": 2024,
+          "key": "2024-03-31",
+          "label": "Mar 2024"
+        },
+        {
+          "type": "fy",
+          "year": 2025,
+          "key": "2025-03-31",
+          "label": "Mar 2025"
+        },
+        {
+          "type": "fy",
+          "year": 2026,
+          "key": "2026-03-31",
+          "label": "Mar 2026"
+        }
+      ],
+      "rows": [
+        {
+          "label": "Debtor Days",
+          "values": [
+            {
+              "raw": "18",
+              "value": 18
+            },
+            {
+              "raw": "14",
+              "value": 14
+            },
+            {
+              "raw": "11",
+              "value": 11
+            },
+            {
+              "raw": "16",
+              "value": 16
+            },
+            {
+              "raw": "16",
+              "value": 16
+            },
+            {
+              "raw": "12",
+              "value": 12
+            },
+            {
+              "raw": "14",
+              "value": 14
+            },
+            {
+              "raw": "14",
+              "value": 14
+            },
+            {
+              "raw": "10",
+              "value": 10
+            },
+            {
+              "raw": "9",
+              "value": 9
+            },
+            {
+              "raw": "21",
+              "value": 21
+            },
+            {
+              "raw": "6",
+              "value": 6
+            }
+          ]
+        },
+        {
+          "label": "Inventory Days",
+          "values": [
+            {
+              "raw": "129",
+              "value": 129
+            },
+            {
+              "raw": "132",
+              "value": 132
+            },
+            {
+              "raw": "161",
+              "value": 161
+            },
+            {
+              "raw": "135",
+              "value": 135
+            },
+            {
+              "raw": "184",
+              "value": 184
+            },
+            {
+              "raw": "184",
+              "value": 184
+            },
+            {
+              "raw": "153",
+              "value": 153
+            },
+            {
+              "raw": "147",
+              "value": 147
+            },
+            {
+              "raw": "124",
+              "value": 124
+            },
+            {
+              "raw": "107",
+              "value": 107
+            },
+            {
+              "raw": "234",
+              "value": 234
+            },
+            {
+              "raw": "66",
+              "value": 66
+            }
+          ]
+        },
+        {
+          "label": "Days Payable",
+          "values": [
+            {
+              "raw": "78",
+              "value": 78
+            },
+            {
+              "raw": "267",
+              "value": 267
+            },
+            {
+              "raw": "308",
+              "value": 308
+            },
+            {
+              "raw": "202",
+              "value": 202
+            },
+            {
+              "raw": "242",
+              "value": 242
+            },
+            {
+              "raw": "275",
+              "value": 275
+            },
+            {
+              "raw": "245",
+              "value": 245
+            },
+            {
+              "raw": "221",
+              "value": 221
+            },
+            {
+              "raw": "91",
+              "value": 91
+            },
+            {
+              "raw": "83",
+              "value": 83
+            },
+            {
+              "raw": "165",
+              "value": 165
+            },
+            {
+              "raw": "88",
+              "value": 88
+            }
+          ]
+        },
+        {
+          "label": "Cash Conversion Cycle",
+          "values": [
+            {
+              "raw": "69",
+              "value": 69
+            },
+            {
+              "raw": "-120",
+              "value": -120
+            },
+            {
+              "raw": "-136",
+              "value": -136
+            },
+            {
+              "raw": "-51",
+              "value": -51
+            },
+            {
+              "raw": "-42",
+              "value": -42
+            },
+            {
+              "raw": "-80",
+              "value": -80
+            },
+            {
+              "raw": "-77",
+              "value": -77
+            },
+            {
+              "raw": "-61",
+              "value": -61
+            },
+            {
+              "raw": "43",
+              "value": 43
+            },
+            {
+              "raw": "33",
+              "value": 33
+            },
+            {
+              "raw": "90",
+              "value": 90
+            },
+            {
+              "raw": "-16",
+              "value": -16
+            }
+          ]
+        },
+        {
+          "label": "Working Capital Days",
+          "values": [
+            {
+              "raw": "-121",
+              "value": -121
+            },
+            {
+              "raw": "-219",
+              "value": -219
+            },
+            {
+              "raw": "-338",
+              "value": -338
+            },
+            {
+              "raw": "-182",
+              "value": -182
+            },
+            {
+              "raw": "-212",
+              "value": -212
+            },
+            {
+              "raw": "-186",
+              "value": -186
+            },
+            {
+              "raw": "-150",
+              "value": -150
+            },
+            {
+              "raw": "-82",
+              "value": -82
+            },
+            {
+              "raw": "-120",
+              "value": -120
+            },
+            {
+              "raw": "-107",
+              "value": -107
+            },
+            {
+              "raw": "-243",
+              "value": -243
+            },
+            {
+              "raw": "-121",
+              "value": -121
+            }
+          ]
+        },
+        {
+          "label": "ROCE %",
+          "values": [
+            {
+              "raw": "9%",
+              "value": 9
+            },
+            {
+              "raw": "-14%",
+              "value": -14
+            },
+            {
+              "raw": "11%",
+              "value": 11
+            },
+            {
+              "raw": "15%",
+              "value": 15
+            },
+            {
+              "raw": "14%",
+              "value": 14
+            },
+            {
+              "raw": "10%",
+              "value": 10
+            },
+            {
+              "raw": "17%",
+              "value": 17
+            },
+            {
+              "raw": "28%",
+              "value": 28
+            },
+            {
+              "raw": "20%",
+              "value": 20
+            },
+            {
+              "raw": "21%",
+              "value": 21
+            },
+            {
+              "raw": "12%",
+              "value": 12
+            },
+            {
+              "raw": "16%",
+              "value": 16
+            }
+          ]
+        }
+      ]
+    },
+    "schema": "nonfinancial",
+    "topRatios": {
+      "marketCap": 109100,
+      "currentPrice": 279,
+      "high52w": 361,
+      "low52w": 152,
+      "stockPE": 9.92,
+      "bookValue": 127,
+      "dividendYield": 12.2,
+      "roce": 16.1,
+      "roe": 38.2,
+      "faceValue": 1
+    },
+    "sector": {
+      "broadSector": "Commodities",
+      "sector": "Metals & Mining",
+      "broadIndustry": "Diversified Metals",
+      "industry": "Diversified Metals"
+    }
   },
   "HINDALCO": {
     "symbol": "HINDALCO",
@@ -7174,7 +8151,421 @@ export default {
         }
       ]
     },
-    "schema": "nonfinancial"
+    "ratios": {
+      "periods": [
+        {
+          "type": "fy",
+          "year": 2015,
+          "key": "2015-03-31",
+          "label": "Mar 2015"
+        },
+        {
+          "type": "fy",
+          "year": 2016,
+          "key": "2016-03-31",
+          "label": "Mar 2016"
+        },
+        {
+          "type": "fy",
+          "year": 2017,
+          "key": "2017-03-31",
+          "label": "Mar 2017"
+        },
+        {
+          "type": "fy",
+          "year": 2018,
+          "key": "2018-03-31",
+          "label": "Mar 2018"
+        },
+        {
+          "type": "fy",
+          "year": 2019,
+          "key": "2019-03-31",
+          "label": "Mar 2019"
+        },
+        {
+          "type": "fy",
+          "year": 2020,
+          "key": "2020-03-31",
+          "label": "Mar 2020"
+        },
+        {
+          "type": "fy",
+          "year": 2021,
+          "key": "2021-03-31",
+          "label": "Mar 2021"
+        },
+        {
+          "type": "fy",
+          "year": 2022,
+          "key": "2022-03-31",
+          "label": "Mar 2022"
+        },
+        {
+          "type": "fy",
+          "year": 2023,
+          "key": "2023-03-31",
+          "label": "Mar 2023"
+        },
+        {
+          "type": "fy",
+          "year": 2024,
+          "key": "2024-03-31",
+          "label": "Mar 2024"
+        },
+        {
+          "type": "fy",
+          "year": 2025,
+          "key": "2025-03-31",
+          "label": "Mar 2025"
+        },
+        {
+          "type": "fy",
+          "year": 2026,
+          "key": "2026-03-31",
+          "label": "Mar 2026"
+        }
+      ],
+      "rows": [
+        {
+          "label": "Debtor Days",
+          "values": [
+            {
+              "raw": "32",
+              "value": 32
+            },
+            {
+              "raw": "29",
+              "value": 29
+            },
+            {
+              "raw": "30",
+              "value": 30
+            },
+            {
+              "raw": "32",
+              "value": 32
+            },
+            {
+              "raw": "32",
+              "value": 32
+            },
+            {
+              "raw": "29",
+              "value": 29
+            },
+            {
+              "raw": "36",
+              "value": 36
+            },
+            {
+              "raw": "39",
+              "value": 39
+            },
+            {
+              "raw": "27",
+              "value": 27
+            },
+            {
+              "raw": "28",
+              "value": 28
+            },
+            {
+              "raw": "30",
+              "value": 30
+            },
+            {
+              "raw": "36",
+              "value": 36
+            }
+          ]
+        },
+        {
+          "label": "Inventory Days",
+          "values": [
+            {
+              "raw": "104",
+              "value": 104
+            },
+            {
+              "raw": "103",
+              "value": 103
+            },
+            {
+              "raw": "120",
+              "value": 120
+            },
+            {
+              "raw": "115",
+              "value": 115
+            },
+            {
+              "raw": "103",
+              "value": 103
+            },
+            {
+              "raw": "120",
+              "value": 120
+            },
+            {
+              "raw": "146",
+              "value": 146
+            },
+            {
+              "raw": "138",
+              "value": 138
+            },
+            {
+              "raw": "111",
+              "value": 111
+            },
+            {
+              "raw": "111",
+              "value": 111
+            },
+            {
+              "raw": "121",
+              "value": 121
+            },
+            {
+              "raw": "156",
+              "value": 156
+            }
+          ]
+        },
+        {
+          "label": "Days Payable",
+          "values": [
+            {
+              "raw": "87",
+              "value": 87
+            },
+            {
+              "raw": "92",
+              "value": 92
+            },
+            {
+              "raw": "115",
+              "value": 115
+            },
+            {
+              "raw": "108",
+              "value": 108
+            },
+            {
+              "raw": "96",
+              "value": 96
+            },
+            {
+              "raw": "98",
+              "value": 98
+            },
+            {
+              "raw": "135",
+              "value": 135
+            },
+            {
+              "raw": "128",
+              "value": 128
+            },
+            {
+              "raw": "93",
+              "value": 93
+            },
+            {
+              "raw": "94",
+              "value": 94
+            },
+            {
+              "raw": "100",
+              "value": 100
+            },
+            {
+              "raw": "127",
+              "value": 127
+            }
+          ]
+        },
+        {
+          "label": "Cash Conversion Cycle",
+          "values": [
+            {
+              "raw": "49",
+              "value": 49
+            },
+            {
+              "raw": "40",
+              "value": 40
+            },
+            {
+              "raw": "36",
+              "value": 36
+            },
+            {
+              "raw": "38",
+              "value": 38
+            },
+            {
+              "raw": "39",
+              "value": 39
+            },
+            {
+              "raw": "51",
+              "value": 51
+            },
+            {
+              "raw": "47",
+              "value": 47
+            },
+            {
+              "raw": "49",
+              "value": 49
+            },
+            {
+              "raw": "45",
+              "value": 45
+            },
+            {
+              "raw": "45",
+              "value": 45
+            },
+            {
+              "raw": "51",
+              "value": 51
+            },
+            {
+              "raw": "65",
+              "value": 65
+            }
+          ]
+        },
+        {
+          "label": "Working Capital Days",
+          "values": [
+            {
+              "raw": "-6",
+              "value": -6
+            },
+            {
+              "raw": "4",
+              "value": 4
+            },
+            {
+              "raw": "-17",
+              "value": -17
+            },
+            {
+              "raw": "17",
+              "value": 17
+            },
+            {
+              "raw": "18",
+              "value": 18
+            },
+            {
+              "raw": "3",
+              "value": 3
+            },
+            {
+              "raw": "3",
+              "value": 3
+            },
+            {
+              "raw": "-3",
+              "value": -3
+            },
+            {
+              "raw": "13",
+              "value": 13
+            },
+            {
+              "raw": "9",
+              "value": 9
+            },
+            {
+              "raw": "23",
+              "value": 23
+            },
+            {
+              "raw": "2",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "label": "ROCE %",
+          "values": [
+            {
+              "raw": "6%",
+              "value": 6
+            },
+            {
+              "raw": "4%",
+              "value": 4
+            },
+            {
+              "raw": "8%",
+              "value": 8
+            },
+            {
+              "raw": "10%",
+              "value": 10
+            },
+            {
+              "raw": "11%",
+              "value": 11
+            },
+            {
+              "raw": "9%",
+              "value": 9
+            },
+            {
+              "raw": "9%",
+              "value": 9
+            },
+            {
+              "raw": "17%",
+              "value": 17
+            },
+            {
+              "raw": "11%",
+              "value": 11
+            },
+            {
+              "raw": "11%",
+              "value": 11
+            },
+            {
+              "raw": "15%",
+              "value": 15
+            },
+            {
+              "raw": "13%",
+              "value": 13
+            }
+          ]
+        }
+      ]
+    },
+    "schema": "nonfinancial",
+    "topRatios": {
+      "marketCap": 232363,
+      "currentPrice": 1034,
+      "high52w": 1179,
+      "low52w": 697,
+      "stockPE": 11.2,
+      "bookValue": 608,
+      "dividendYield": 0.48,
+      "roce": 13.2,
+      "roe": 13,
+      "faceValue": 1
+    },
+    "sector": {
+      "broadSector": "Commodities",
+      "sector": "Metals & Mining",
+      "broadIndustry": "Non - Ferrous Metals",
+      "industry": "Aluminium"
+    }
   },
   "BAJFINANCE": {
     "symbol": "BAJFINANCE",
@@ -8954,7 +10345,156 @@ export default {
         }
       ]
     },
-    "schema": "financial"
+    "ratios": {
+      "periods": [
+        {
+          "type": "fy",
+          "year": 2015,
+          "key": "2015-03-31",
+          "label": "Mar 2015"
+        },
+        {
+          "type": "fy",
+          "year": 2016,
+          "key": "2016-03-31",
+          "label": "Mar 2016"
+        },
+        {
+          "type": "fy",
+          "year": 2017,
+          "key": "2017-03-31",
+          "label": "Mar 2017"
+        },
+        {
+          "type": "fy",
+          "year": 2018,
+          "key": "2018-03-31",
+          "label": "Mar 2018"
+        },
+        {
+          "type": "fy",
+          "year": 2019,
+          "key": "2019-03-31",
+          "label": "Mar 2019"
+        },
+        {
+          "type": "fy",
+          "year": 2020,
+          "key": "2020-03-31",
+          "label": "Mar 2020"
+        },
+        {
+          "type": "fy",
+          "year": 2021,
+          "key": "2021-03-31",
+          "label": "Mar 2021"
+        },
+        {
+          "type": "fy",
+          "year": 2022,
+          "key": "2022-03-31",
+          "label": "Mar 2022"
+        },
+        {
+          "type": "fy",
+          "year": 2023,
+          "key": "2023-03-31",
+          "label": "Mar 2023"
+        },
+        {
+          "type": "fy",
+          "year": 2024,
+          "key": "2024-03-31",
+          "label": "Mar 2024"
+        },
+        {
+          "type": "fy",
+          "year": 2025,
+          "key": "2025-03-31",
+          "label": "Mar 2025"
+        },
+        {
+          "type": "fy",
+          "year": 2026,
+          "key": "2026-03-31",
+          "label": "Mar 2026"
+        }
+      ],
+      "rows": [
+        {
+          "label": "ROE %",
+          "values": [
+            {
+              "raw": "19%",
+              "value": 19
+            },
+            {
+              "raw": "21%",
+              "value": 21
+            },
+            {
+              "raw": "22%",
+              "value": 22
+            },
+            {
+              "raw": "20%",
+              "value": 20
+            },
+            {
+              "raw": "22%",
+              "value": 22
+            },
+            {
+              "raw": "20%",
+              "value": 20
+            },
+            {
+              "raw": "13%",
+              "value": 13
+            },
+            {
+              "raw": "17%",
+              "value": 17
+            },
+            {
+              "raw": "23%",
+              "value": 23
+            },
+            {
+              "raw": "22%",
+              "value": 22
+            },
+            {
+              "raw": "19%",
+              "value": 19
+            },
+            {
+              "raw": "18%",
+              "value": 18
+            }
+          ]
+        }
+      ]
+    },
+    "schema": "financial",
+    "topRatios": {
+      "marketCap": 681742,
+      "currentPrice": 1095,
+      "high52w": 1178,
+      "low52w": 788,
+      "stockPE": 33.3,
+      "bookValue": 183,
+      "dividendYield": 0.49,
+      "roce": 10.9,
+      "roe": 18.2,
+      "faceValue": 1
+    },
+    "sector": {
+      "broadSector": "Financial Services",
+      "sector": "Financial Services",
+      "broadIndustry": "Finance",
+      "industry": "Non Banking Financial Company (NBFC)"
+    }
   },
   "PAYTM": {
     "symbol": "PAYTM",
@@ -10474,6 +12014,360 @@ export default {
         }
       ]
     },
-    "schema": "nonfinancial"
+    "ratios": {
+      "periods": [
+        {
+          "type": "fy",
+          "year": 2015,
+          "key": "2015-03-31",
+          "label": "Mar 2015"
+        },
+        {
+          "type": "fy",
+          "year": 2016,
+          "key": "2016-03-31",
+          "label": "Mar 2016"
+        },
+        {
+          "type": "fy",
+          "year": 2019,
+          "key": "2019-03-31",
+          "label": "Mar 2019"
+        },
+        {
+          "type": "fy",
+          "year": 2020,
+          "key": "2020-03-31",
+          "label": "Mar 2020"
+        },
+        {
+          "type": "fy",
+          "year": 2021,
+          "key": "2021-03-31",
+          "label": "Mar 2021"
+        },
+        {
+          "type": "fy",
+          "year": 2022,
+          "key": "2022-03-31",
+          "label": "Mar 2022"
+        },
+        {
+          "type": "fy",
+          "year": 2023,
+          "key": "2023-03-31",
+          "label": "Mar 2023"
+        },
+        {
+          "type": "fy",
+          "year": 2024,
+          "key": "2024-03-31",
+          "label": "Mar 2024"
+        },
+        {
+          "type": "fy",
+          "year": 2025,
+          "key": "2025-03-31",
+          "label": "Mar 2025"
+        },
+        {
+          "type": "fy",
+          "year": 2026,
+          "key": "2026-03-31",
+          "label": "Mar 2026"
+        }
+      ],
+      "rows": [
+        {
+          "label": "Debtor Days",
+          "values": [
+            {
+              "raw": "100",
+              "value": 100
+            },
+            {
+              "raw": "53",
+              "value": 53
+            },
+            {
+              "raw": "29",
+              "value": 29
+            },
+            {
+              "raw": "34",
+              "value": 34
+            },
+            {
+              "raw": "61",
+              "value": 61
+            },
+            {
+              "raw": "55",
+              "value": 55
+            },
+            {
+              "raw": "57",
+              "value": 57
+            },
+            {
+              "raw": "60",
+              "value": 60
+            },
+            {
+              "raw": "69",
+              "value": 69
+            },
+            {
+              "raw": "51",
+              "value": 51
+            }
+          ]
+        },
+        {
+          "label": "Inventory Days",
+          "values": [
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            }
+          ]
+        },
+        {
+          "label": "Days Payable",
+          "values": [
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "",
+              "value": null
+            }
+          ]
+        },
+        {
+          "label": "Cash Conversion Cycle",
+          "values": [
+            {
+              "raw": "100",
+              "value": 100
+            },
+            {
+              "raw": "53",
+              "value": 53
+            },
+            {
+              "raw": "29",
+              "value": 29
+            },
+            {
+              "raw": "34",
+              "value": 34
+            },
+            {
+              "raw": "61",
+              "value": 61
+            },
+            {
+              "raw": "55",
+              "value": 55
+            },
+            {
+              "raw": "57",
+              "value": 57
+            },
+            {
+              "raw": "60",
+              "value": 60
+            },
+            {
+              "raw": "69",
+              "value": 69
+            },
+            {
+              "raw": "51",
+              "value": 51
+            }
+          ]
+        },
+        {
+          "label": "Working Capital Days",
+          "values": [
+            {
+              "raw": "12",
+              "value": 12
+            },
+            {
+              "raw": "-83",
+              "value": -83
+            },
+            {
+              "raw": "195",
+              "value": 195
+            },
+            {
+              "raw": "116",
+              "value": 116
+            },
+            {
+              "raw": "289",
+              "value": 289
+            },
+            {
+              "raw": "162",
+              "value": 162
+            },
+            {
+              "raw": "61",
+              "value": 61
+            },
+            {
+              "raw": "-18",
+              "value": -18
+            },
+            {
+              "raw": "-119",
+              "value": -119
+            },
+            {
+              "raw": "-55",
+              "value": -55
+            }
+          ]
+        },
+        {
+          "label": "ROCE %",
+          "values": [
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "-101%",
+              "value": -101
+            },
+            {
+              "raw": "",
+              "value": null
+            },
+            {
+              "raw": "-34%",
+              "value": -34
+            },
+            {
+              "raw": "-21%",
+              "value": -21
+            },
+            {
+              "raw": "-22%",
+              "value": -22
+            },
+            {
+              "raw": "-12%",
+              "value": -12
+            },
+            {
+              "raw": "-8%",
+              "value": -8
+            },
+            {
+              "raw": "-10%",
+              "value": -10
+            },
+            {
+              "raw": "5%",
+              "value": 5
+            }
+          ]
+        }
+      ]
+    },
+    "schema": "nonfinancial",
+    "topRatios": {
+      "marketCap": 104633,
+      "currentPrice": 1632,
+      "high52w": 1658,
+      "low52w": 931,
+      "stockPE": 129,
+      "bookValue": 250,
+      "dividendYield": 0,
+      "roce": 5.01,
+      "roe": 4.7,
+      "faceValue": 1
+    },
+    "sector": {
+      "broadSector": "Financial Services",
+      "sector": "Financial Services",
+      "broadIndustry": "Financial Technology (Fintech)",
+      "industry": "Financial Technology (Fintech)"
+    }
   }
 };
