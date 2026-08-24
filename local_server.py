@@ -64,12 +64,20 @@ def fetch_equity_history(symbol):
     label = meta.get('longName') or meta.get('shortName') or symbol
 
     prices = []
-    for ts, c in zip(timestamps, closes):
+    import datetime
+    for i, ts in enumerate(timestamps):
+        c = closes[i] if i < len(closes) else None
         if c is None:
             continue
-        import datetime
         d = datetime.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d')
-        prices.append({'date': d, 'close': c})
+        # rawClose is additive, alongside `close` above (which stays
+        # adjclose-preferred for every existing caller's total-return CAGR
+        # -- mirrors the identical change in src/worker.js). The statements
+        # tab's historical P/E band needs the OPPOSITE preference -- raw
+        # close, never dividend-backward-adjusted -- so it reads this field
+        # specifically. Falls back to `c` if Yahoo omits the raw series.
+        raw = raw_closes[i] if i < len(raw_closes) else None
+        prices.append({'date': d, 'close': c, 'rawClose': c if raw is None else raw})
 
     if len(prices) < 30:
         raise ValueError(f'Only {len(prices)} usable daily bars for {symbol} — too few to compute reliable stats')

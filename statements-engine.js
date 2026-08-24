@@ -605,6 +605,326 @@ function rowBoxScore(series) {
   return { best, worst, cagr, years, windowStart: first.year, windowEnd: last.year };
 }
 
+/* =====================================================================
+   PHASE 2 — DEEPER DERIVED METRICS
+   Screener's condensed statements don't report these directly; this
+   implementation computes them from rows that ARE reported, using
+   standard equity-analysis formulas rather than a external specification.
+   Each function documents the formula and any approximation it makes, and
+   follows the same refusal discipline as the five divergence rules: null
+   on a sign flip, a missing input, or a division too close to zero to be
+   meaningful -- never a fabricated number.
+   ===================================================================== */
+
+// Overlapping-window CAGR (10y/5y/3y/1y are separate windows anchored to
+// the latest year, not sequential periods -- a company that grew 40% in
+// year 1 and 2% a year since has a very different 1y and 5y number, and
+// showing both is the point).
+function windowCagr(series, years) {
+  const clean = series.filter((p) => p.value != null);
+  if (clean.length < 2) return null;
+  const last = clean[clean.length - 1];
+  const startIdx = clean.length - 1 - years;
+  if (startIdx < 0) return null;
+  const start = clean[startIdx];
+  if (start.value <= 0 || last.value <= 0) return null;
+  return Math.pow(last.value / start.value, 1 / years) - 1;
+}
+function growthSummary(series) {
+  return { y10: windowCagr(series, 10), y5: windowCagr(series, 5), y3: windowCagr(series, 3), y1: windowCagr(series, 1) };
+}
+
+// Split-adjusted share count. Equity Capital moves in lockstep with a
+// split (capital unchanged, face value halved), so dividing every year's
+// Equity Capital by *today's* face value expresses every year in today's
+// share units -- this one formula is what makes EPS_FROM_SHRINK and a P/E
+// band comparable across a split without modelling the split itself.
+function sharesSeries(balanceSheet, currentFaceValue) {
+  const capital = fySeries(balanceSheet, 'Equity Capital');
+  return capital.map((p) => ({
+    year: p.year,
+    value: (p.value != null && currentFaceValue > 0) ? (p.value * 1e7) / currentFaceValue : null,
+  }));
+}
+
+// Net Profit / split-adjusted shares -- comparable across a split in a way
+// screener's own reported EPS row is not (that row is as-reported, so a
+// split shows up as a discontinuity in the series).
+function epsFromShrink(profitLoss, balanceSheet, currentFaceValue) {
+  const np = fySeries(profitLoss, 'Net Profit');
+  const shares = sharesSeries(balanceSheet, currentFaceValue);
+  return np.map((p, i) => {
+    const sh = shares[i] && shares[i].value;
+    return { year: p.year, value: (p.value != null && sh) ? (p.value * 1e7) / sh : null };
+  });
+}
+
+// Share-count growth over 5 years -- the "cost" of dilution, expressed the
+// same way DILUTION_DRAG is defined in this implementation: how much more
+// of the company today's shareholder owns a smaller slice of, purely from
+// issuance, independent of whether the business itself grew.
+function dilutionDrag(balanceSheet, currentFaceValue) {
+  const shares = sharesSeries(balanceSheet, currentFaceValue);
+  const out = [];
+  for (let i = 5; i < shares.length; i++) {
+    const t = shares[i].value, t5 = shares[i - 5].value;
+    out.push({ year: shares[i].year, value: (t != null && t5 > 0) ? (t / t5 - 1) : null });
+  }
+  return out;
+}
+
+// Capital employed approximated as Equity Capital + Reserves + Borrowings
+// -- the financing-side equivalent of "Total Assets minus current
+// liabilities" that screener's condensed balance sheet supports, since it
+// doesn't separate current from non-current within "Other Liabilities".
+// Nonfinancial schema only; a lender's balance sheet doesn't support this
+// distinction at all (see compareRefusal's SCHEMA_MISMATCH reasoning).
+function capitalEmployedSeries(balanceSheet) {
+  const eq = fySeries(balanceSheet, 'Equity Capital');
+  const res = fySeries(balanceSheet, 'Reserves');
+  const borRaw = fySeries(balanceSheet, 'Borrowings');
+  const bor = borRaw.length ? borRaw : fySeries(balanceSheet, 'Borrowing');
+  return eq.map((p, i) => {
+    const r = res[i] && res[i].value, b = bor[i] && bor[i].value;
+    const v = (p.value != null && r != null && b != null) ? p.value + r + b : null;
+    return { year: p.year, value: v };
+  });
+}
+
+// Incremental ROCE: change in Operating Profit (EBIT proxy) over change in
+// capital employed, across a 3-year window -- the marginal return on the
+// capital added recently, vs plain ROCE which is diluted by capital
+// deployed decades ago. Refuses when the capital-employed delta is too
+// small to divide by meaningfully (a near-zero denominator manufactures an
+// enormous, meaningless ratio).
+function incrementalRoce(profitLoss, balanceSheet) {
+  const ebit = fySeries(profitLoss, 'Operating Profit');
+  const ce = capitalEmployedSeries(balanceSheet);
+  const out = [];
+  for (let i = 3; i < ebit.length; i++) {
+    const dEbit = (ebit[i].value != null && ebit[i - 3].value != null) ? ebit[i].value - ebit[i - 3].value : null;
+    const dCe = (ce[i].value != null && ce[i - 3].value != null) ? ce[i].value - ce[i - 3].value : null;
+    let value = null;
+    if (dEbit != null && dCe != null && Math.abs(dCe) >= MATERIALITY_FLOOR) value = dEbit / dCe;
+    out.push({ year: ebit[i].year, value });
+  }
+  return out;
+}
+
+// Sales / Total Assets -- how much revenue each rupee of the balance sheet
+// produces. Nonfinancial schema only (a lender's "assets" are loans made,
+// not productive capacity, so the ratio means something different).
+function assetTurnover(profitLoss, balanceSheet) {
+  const salesRaw = fySeries(profitLoss, 'Sales');
+  const sales = salesRaw.length ? salesRaw : fySeries(profitLoss, 'Revenue');
+  const assets = fySeries(balanceSheet, 'Total Assets');
+  return sales.map((p, i) => {
+    const a = assets[i] && assets[i].value;
+    return { year: p.year, value: (p.value != null && a > 0) ? p.value / a : null };
+  });
+}
+
+// (Equity Capital + Reserves) / split-adjusted shares -- book value per
+// share in today's share units, comparable across a split the way
+// screener's as-reported book-value figures are not.
+function bookValuePerShareSeries(balanceSheet, currentFaceValue) {
+  const eq = fySeries(balanceSheet, 'Equity Capital');
+  const res = fySeries(balanceSheet, 'Reserves');
+  const shares = sharesSeries(balanceSheet, currentFaceValue);
+  return eq.map((p, i) => {
+    const r = res[i] && res[i].value, sh = shares[i] && shares[i].value;
+    const v = (p.value != null && r != null && sh) ? ((p.value + r) * 1e7) / sh : null;
+    return { year: p.year, value: v };
+  });
+}
+
+// Current price / latest book value per share -- uses today's snapshot
+// price (already fetched in topRatios) rather than a historical series,
+// so it needs no new price-history plumbing.
+function priceToBookLatest(currentPrice, bookValuePerShareSeriesResult) {
+  const clean = bookValuePerShareSeriesResult.filter((p) => p.value != null);
+  if (!clean.length || currentPrice == null) return null;
+  const latest = clean[clean.length - 1].value;
+  return latest > 0 ? currentPrice / latest : null;
+}
+
+// Stock Price CAGR(years) minus Profit Growth CAGR(years) -- how much of a
+// share-price rise came from the market paying more, versus the company
+// earning more. priceFySeries is one price point per fiscal year (see
+// fyEndPriceSeries below); profitSeries is normally Net Profit.
+function reratingSpread(priceFySeries, profitSeries, years) {
+  const priceCagr = windowCagr(priceFySeries, years);
+  const profitCagr = windowCagr(profitSeries, years);
+  if (priceCagr == null || profitCagr == null) return null;
+  return priceCagr - profitCagr;
+}
+
+// Picks one raw-close price per fiscal year (the last trading day on or
+// before each fiscal year end) from a daily {date, close} series. The plan
+// is explicit that P/E history must use Yahoo's raw `close`, never
+// `adjclose` -- adjclose is dividend-backward-adjusted and manufactures a
+// fake-cheap historical P/E for exactly the high-yield names where a
+// beginner is most likely to be reaching for yield. This is a *different*
+// series from the one /api/quote already returns for Test Real
+// Investments (which deliberately prefers adjclose, for total-return CAGR
+// -- see src/worker.js's fetchEquityHistory) -- callers must pass the
+// dedicated raw-close series, not repurpose that one.
+function fyEndPriceSeries(dailyRawCloseBars, fyYears, fyEndMonth) {
+  const month = fyEndMonth || 3; // Indian fiscal year ends in March by default
+  const sorted = [...dailyRawCloseBars].sort((a, b) => a.date < b.date ? -1 : 1);
+  return fyYears.map((year) => {
+    const cutoff = `${year}-${String(month).padStart(2, '0')}-31`;
+    let best = null;
+    for (const bar of sorted) {
+      if (bar.date <= cutoff) best = bar; else break;
+    }
+    return { year, value: best ? best.close : null };
+  });
+}
+
+// Where the current P/E sits within its own trailing 10-year band, as a
+// percentile (0 = cheapest it's been, 100 = most expensive) -- "cheap vs
+// its own history" is a different question from "cheap vs peers", and this
+// is the former. peSeries is {year, value} built from fyEndPriceSeries and
+// epsFromShrink (price / EPS, refusing on a loss year the same as every
+// other ratio here).
+function peHistoryBand(priceFySeries, epsSeries) {
+  const pe = priceFySeries.map((p, i) => {
+    const eps = epsSeries[i] && epsSeries[i].value;
+    const value = (p.value != null && eps > 0) ? p.value / eps : null;
+    return { year: p.year, value };
+  });
+  const clean = pe.filter((p) => p.value != null);
+  if (clean.length < 2) return { series: pe, percentile: null, min: null, max: null, median: null, current: null };
+  const values = clean.map((p) => p.value);
+  const current = clean[clean.length - 1].value;
+  const below = values.filter((v) => v <= current).length;
+  return {
+    series: pe,
+    current,
+    min: Math.min(...values),
+    max: Math.max(...values),
+    median: median(values),
+    percentile: Math.round((below / values.length) * 100),
+  };
+}
+
+/* =====================================================================
+   PHASE 3 — THE COMPOUNDING CHECKLIST
+   Ten conditions, each independently checkable, using the plan's exact
+   formulas. This function never totals or ranks them -- it returns one
+   entry per condition, in a fixed order, each carrying its own real
+   computed value (never just a boolean) so the caller can render "Sales
+   growth 3y: 7.4% -- below the 10% checkpoint" rather than a bare tick.
+   Condition 8 (promoter holding + pledge trend) needs quarterly
+   shareholding data this app does not scrape -- it reports
+   available:false with a stated reason rather than a fabricated pass,
+   fail, or a defaulted 0% pledge. `meets` is null whenever a condition
+   isn't computable, and must never render as either a pass or a fail.
+   ===================================================================== */
+function yearsMeetingCount(series, lastN, predicate) {
+  const clean = series.filter((p) => p.value != null);
+  const window = clean.slice(-lastN);
+  return { met: window.filter((p) => predicate(p.value)).length, of: window.length };
+}
+
+function compoundingChecklist(bundle, options) {
+  options = options || {};
+  const pl = bundle.profitLoss, bs = bundle.balanceSheet, cf = bundle.cashFlow, ratios = bundle.ratios;
+  const faceValue = options.faceValue;
+  const conditions = [];
+
+  const roce = fySeries(ratios, 'ROCE %');
+  if (roce.length) {
+    const { met, of } = yearsMeetingCount(roce, 10, (v) => v >= 15);
+    conditions.push({ id: 1, label: 'ROCE at least 15% in 8 of the last 10 years', value: `${met} of ${of} years >= 15%`, meets: of > 0 ? met >= 8 : null, available: of > 0 });
+  } else {
+    conditions.push({ id: 1, label: 'ROCE at least 15% in 8 of the last 10 years', value: 'ROCE % is not reported for this schema', meets: null, available: false });
+  }
+
+  const incRoce = incrementalRoce(pl, bs);
+  const incMed = median(incRoce.map((r) => r.value));
+  conditions.push({ id: 2, label: 'Median incremental ROCE (3-year rolling) at least 15%', value: incMed != null ? `${(incMed * 100).toFixed(1)}%` : 'not computable', meets: incMed != null ? incMed >= 0.15 : null, available: incMed != null });
+
+  const salesRaw = fySeries(pl, 'Sales');
+  const sales = salesRaw.length ? salesRaw : fySeries(pl, 'Revenue');
+  const salesGrowth = growthSummary(sales);
+  const cond3ok = (salesGrowth.y10 != null && salesGrowth.y3 != null) ? (salesGrowth.y10 >= 0.12 && salesGrowth.y3 >= 0.10) : null;
+  conditions.push({ id: 3, label: 'Sales growth: 10-year at least 12% AND 3-year at least 10%', value: `10y ${salesGrowth.y10 != null ? (salesGrowth.y10 * 100).toFixed(1) + '%' : '—'}, 3y ${salesGrowth.y3 != null ? (salesGrowth.y3 * 100).toFixed(1) + '%' : '—'}`, meets: cond3ok, available: salesGrowth.y10 != null && salesGrowth.y3 != null });
+
+  const cfo10 = fySeries(cf, 'Cash from Operating Activity').slice(-10);
+  const np10 = fySeries(pl, 'Net Profit').slice(-10);
+  let sumCfo = 0, sumNp = 0, cfoOk = np10.length > 0;
+  for (let i = 0; i < np10.length; i++) {
+    const c = cfo10[i] && cfo10[i].value, n = np10[i] && np10[i].value;
+    if (c == null || n == null) { cfoOk = false; break; }
+    sumCfo += c; sumNp += n;
+  }
+  const cfoRatio = (cfoOk && sumNp > 0) ? sumCfo / sumNp : null;
+  conditions.push({ id: 4, label: 'Cumulative cash from operations at least 75% of cumulative net profit (10 years)', value: cfoRatio != null ? `${(cfoRatio * 100).toFixed(0)}%` : 'not computable', meets: cfoRatio != null ? cfoRatio >= 0.75 : null, available: cfoRatio != null });
+
+  const opRaw = fySeries(pl, 'Operating Profit');
+  const interest = fySeries(pl, 'Interest');
+  const borrowRaw = fySeries(bs, 'Borrowings');
+  const borrow = borrowRaw.length ? borrowRaw : fySeries(bs, 'Borrowing');
+  const latestBorrow = borrow.length ? borrow[borrow.length - 1].value : null;
+  let cond5 = null, cond5Value = 'not computable';
+  if (latestBorrow === 0) {
+    cond5 = true; cond5Value = 'Borrowings are zero — interest cover is moot';
+  } else if (opRaw.length >= 5 && interest.length >= 5) {
+    const last5op = opRaw.slice(-5), last5int = interest.slice(-5);
+    const covers = last5op.map((p, i) => (last5int[i] && last5int[i].value > 0) ? p.value / last5int[i].value : null);
+    const cleanCovers = covers.filter((v) => v != null);
+    cond5 = cleanCovers.length === 5 ? cleanCovers.every((v) => v > 6) : null;
+    cond5Value = cleanCovers.length ? `Interest cover ${cleanCovers.map((v) => v.toFixed(1) + 'x').join(', ')} (last ${cleanCovers.length} years)` : 'not computable';
+  }
+  conditions.push({ id: 5, label: 'Operating profit more than 6x interest every year for 5 years, or no borrowings', value: cond5Value, meets: cond5, available: cond5 !== null });
+
+  const payout = fySeries(pl, 'Dividend Payout %');
+  if (payout.length) {
+    const { met, of } = yearsMeetingCount(payout, 10, (v) => v <= 40);
+    conditions.push({ id: 6, label: 'Dividend payout at most 40% in 8 of the last 10 years', value: `${met} of ${of} years <= 40%`, meets: of > 0 ? met >= 8 : null, available: of > 0 });
+  } else {
+    conditions.push({ id: 6, label: 'Dividend payout at most 40% in 8 of the last 10 years', value: 'not reported', meets: null, available: false });
+  }
+
+  const shares = sharesSeries(bs, faceValue).filter((p) => p.value != null);
+  let dilutionRatio = null;
+  if (shares.length >= 6) {
+    const t = shares[shares.length - 1].value, t5 = shares[shares.length - 6].value;
+    dilutionRatio = t5 > 0 ? t / t5 : null;
+  }
+  conditions.push({ id: 7, label: 'Share count grew at most 10% over the last 5 years', value: dilutionRatio != null ? `${((dilutionRatio - 1) * 100).toFixed(1)}% change` : 'not computable', meets: dilutionRatio != null ? dilutionRatio <= 1.10 : null, available: dilutionRatio != null });
+
+  conditions.push({ id: 8, label: 'Promoter holding fell by at most 5 percentage points over 12 quarters, and pledge is under 10%', value: 'Shareholding pattern is not fetched by this app yet', meets: null, available: false });
+
+  const opmRaw = fySeries(pl, 'OPM %');
+  const opm = (opmRaw.length ? opmRaw : fySeries(pl, 'Financing Margin %')).filter((p) => p.value != null);
+  const opm3 = median(opm.slice(-3).map((p) => p.value));
+  const opm10 = median(opm.slice(-10).map((p) => p.value));
+  conditions.push({ id: 9, label: 'Median operating margin (3-year) at least as high as median operating margin (10-year)', value: (opm3 != null && opm10 != null) ? `3y ${opm3.toFixed(1)}% vs 10y ${opm10.toFixed(1)}%` : 'not computable', meets: (opm3 != null && opm10 != null) ? opm3 >= opm10 : null, available: opm3 != null && opm10 != null });
+
+  const assetsCagr = windowCagr(fySeries(bs, 'Total Assets'), 5);
+  conditions.push({ id: 10, label: 'Total assets grew at least 10% a year over the last 5 years', value: assetsCagr != null ? `${(assetsCagr * 100).toFixed(1)}%` : 'not computable', meets: assetsCagr != null ? assetsCagr >= 0.10 : null, available: assetsCagr != null });
+
+  return conditions;
+}
+
+// The plan requires the checklist to render behind a dismissible overlay
+// whenever "any HIGH-severity rule is open" -- Phase 1 shipped five rules
+// on a single tier, with no severity taxonomy, so this gates on any fired
+// flag at all rather than a HIGH-only subset. Documented here as a
+// deliberate simplification of an unbuilt distinction, not a silent
+// narrowing: growth must never read as clean when the underlying figures
+// are already in question.
+function checklistQualityGate(divergenceResult) {
+  if (!divergenceResult || !divergenceResult.flags.length) return { blocked: false };
+  return {
+    blocked: true,
+    reason: 'This company has open questions about the quality of its reported numbers. The checklist below describes how its growth has looked; it does not check whether those numbers can be trusted.',
+  };
+}
+
 const api = {
   findRow, fySeries, median, pctChange, yearIndex, vsOwnMedian,
   classifySchema, compareRefusal,
@@ -613,6 +933,10 @@ const api = {
   DIVERGENCE_RULES, evaluateDivergenceRules,
   SERIES_PALETTE, benchChartOption, profitVsCashChartOption, profitVsCashCaption,
   CANONICAL_ROWS, ROW_POLARITY, rowPolarity, ROW_UNIT, rowUnit, rowBoxScore,
+  windowCagr, growthSummary, sharesSeries, epsFromShrink, dilutionDrag,
+  capitalEmployedSeries, incrementalRoce, assetTurnover, bookValuePerShareSeries,
+  priceToBookLatest, reratingSpread, fyEndPriceSeries, peHistoryBand,
+  compoundingChecklist, checklistQualityGate,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

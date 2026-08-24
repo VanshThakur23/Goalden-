@@ -698,6 +698,153 @@ test('statements-engine: COMPANION_MAP surfaces pinnable statement rows for the 
   assert.ok(stmt.COMPANION_MAP['Dividend Yield'].some((c) => c.key === 'Dividend Payout %'));
 });
 
+// -----------------------------------------------------------------------
+// Phase 2 derived metrics. TCS's real fixture numbers double as the answer
+// key (face value 1, so SHARES() is just Equity Capital in crore x 1e7),
+// and one cross-check against screener's OWN reported book value (₹296)
+// catches a unit error the formula's own math could not.
+// -----------------------------------------------------------------------
+test('statements-engine: windowCagr computes overlapping 10y/5y/3y/1y windows anchored to the latest year', () => {
+  const tcs = loadFinancials('TCS');
+  const sales = stmt.fySeries(tcs.profitLoss, 'Sales');
+  const g = stmt.growthSummary(sales);
+  approx(g.y10, Math.pow(267021 / 108646, 1 / 10) - 1, 1e-6);
+  approx(g.y1, 267021 / 255324 - 1, 1e-6);
+  assert.strictEqual(stmt.windowCagr([{ year: 1, value: 100 }], 5), null, 'fewer than 2 points refuses');
+  assert.strictEqual(stmt.windowCagr([{ year: 1, value: -50 }, { year: 2, value: 100 }], 1), null, 'a loss-year base refuses, never a fabricated rate');
+});
+
+test('statements-engine: sharesSeries divides Equity Capital by today\'s face value, split-adjusted', () => {
+  const tcs = loadFinancials('TCS');
+  const shares = stmt.sharesSeries(tcs.balanceSheet, tcs.topRatios.faceValue);
+  assert.strictEqual(shares[0].year, 2015);
+  approx(shares[0].value, 196 * 1e7);
+  approx(shares[shares.length - 1].value, 362 * 1e7);
+  const noFaceValue = stmt.sharesSeries(tcs.balanceSheet, null);
+  assert.ok(noFaceValue.every((p) => p.value === null), 'a missing face value must refuse every year, never divide by zero');
+});
+
+test('statements-engine: epsFromShrink matches Net Profit / split-adjusted shares, comparable across a split screener\'s own EPS row is not', () => {
+  const tcs = loadFinancials('TCS');
+  const eps = stmt.epsFromShrink(tcs.profitLoss, tcs.balanceSheet, tcs.topRatios.faceValue);
+  const last = eps[eps.length - 1];
+  approx(last.value, (49454 * 1e7) / (362 * 1e7), 1e-9);
+});
+
+test('statements-engine: dilutionDrag is zero for a flat share count and reflects real issuance for TCS', () => {
+  const tcs = loadFinancials('TCS');
+  const drag = stmt.dilutionDrag(tcs.balanceSheet, tcs.topRatios.faceValue);
+  const last = drag[drag.length - 1];
+  assert.strictEqual(last.year, 2026);
+  approx(last.value, 362 / 370 - 1, 1e-9);
+  const flatBs = {
+    periods: [1, 2, 3, 4, 5, 6].map((y) => ({ type: 'fy', year: y })),
+    rows: [{ label: 'Equity Capital', values: [10, 10, 10, 10, 10, 10].map((value) => ({ value })) }],
+  };
+  const flat = stmt.dilutionDrag(flatBs, 1);
+  assert.strictEqual(flat.length, 1);
+  assert.strictEqual(flat[0].value, 0, 'an unchanged share count over 5 years must report exactly zero dilution');
+});
+
+test('statements-engine: capitalEmployedSeries sums Equity Capital + Reserves + Borrowings, and incrementalRoce refuses a near-zero denominator', () => {
+  const tcs = loadFinancials('TCS');
+  const ce = stmt.capitalEmployedSeries(tcs.balanceSheet);
+  approx(ce[0].value, 196 + 50439 + 358);
+  approx(ce[ce.length - 1].value, 362 + 106878 + 11283);
+  const roce = stmt.incrementalRoce(tcs.profitLoss, tcs.balanceSheet);
+  const fy2018 = roce.find((r) => r.year === 2018);
+  approx(fy2018.value, (32516 - 24482) / (85375 - 50993), 1e-6);
+  const zeroDelta = stmt.incrementalRoce(
+    { periods: [1, 2, 3, 4].map((y) => ({ type: 'fy', year: y })), rows: [{ label: 'Operating Profit', values: [{ value: 100 }, { value: 100 }, { value: 100 }, { value: 200 }] }] },
+    { periods: [1, 2, 3, 4].map((y) => ({ type: 'fy', year: y })), rows: [{ label: 'Equity Capital', values: [{ value: 10 }, { value: 10 }, { value: 10 }, { value: 10 }] }, { label: 'Reserves', values: [{ value: 0 }, { value: 0 }, { value: 0 }, { value: 0.1 }] }, { label: 'Borrowings', values: [{ value: 0 }, { value: 0 }, { value: 0 }, { value: 0 }] }] }
+  );
+  assert.strictEqual(zeroDelta[0].value, null, 'a capital-employed delta below the materiality floor must refuse rather than divide by near-zero');
+});
+
+test('statements-engine: assetTurnover and bookValuePerShareSeries — the latter cross-checked against screener\'s own reported book value', () => {
+  const tcs = loadFinancials('TCS');
+  const turnover = stmt.assetTurnover(tcs.profitLoss, tcs.balanceSheet);
+  approx(turnover[turnover.length - 1].value, 267021 / 181167, 1e-9);
+  const bvps = stmt.bookValuePerShareSeries(tcs.balanceSheet, tcs.topRatios.faceValue);
+  const lastBvps = bvps[bvps.length - 1].value;
+  assert.ok(Math.abs(lastBvps - tcs.topRatios.bookValue) < 1, `computed book value per share (${lastBvps}) should land within ₹1 of screener's own reported ₹${tcs.topRatios.bookValue}`);
+  const ptb = stmt.priceToBookLatest(tcs.topRatios.currentPrice, bvps);
+  approx(ptb, tcs.topRatios.currentPrice / lastBvps, 1e-9);
+  assert.strictEqual(stmt.priceToBookLatest(null, bvps), null);
+});
+
+test('statements-engine: reratingSpread separates price appreciation from profit growth', () => {
+  const priceUp2x = [{ year: 2020, value: 100 }, { year: 2021, value: 200 }];
+  const profitFlat = [{ year: 2020, value: 50 }, { year: 2021, value: 50 }];
+  approx(stmt.reratingSpread(priceUp2x, profitFlat, 1), 1.0, 1e-9); // 100% price rise, 0% profit growth -> the whole move was a re-rating
+  const profitAlsoUp2x = [{ year: 2020, value: 50 }, { year: 2021, value: 100 }];
+  approx(stmt.reratingSpread(priceUp2x, profitAlsoUp2x, 1), 0, 1e-9); // price tracked profit exactly -> zero spread
+  assert.strictEqual(stmt.reratingSpread(priceUp2x, [{ year: 2020, value: -10 }, { year: 2021, value: 50 }], 1), null, 'a loss-year profit base refuses rather than fabricating a spread');
+});
+
+test('statements-engine: fyEndPriceSeries picks the last trading day on or before each fiscal year end from RAW close, never adjclose', () => {
+  const bars = [
+    { date: '2023-03-30', close: 100 },
+    { date: '2023-04-05', close: 110 },
+    { date: '2024-03-29', close: 150 },
+    { date: '2024-04-02', close: 160 },
+  ];
+  const series = stmt.fyEndPriceSeries(bars, [2023, 2024], 3);
+  assert.strictEqual(series[0].value, 100, 'must not pick the post-year-end bar');
+  assert.strictEqual(series[1].value, 150);
+  assert.strictEqual(stmt.fyEndPriceSeries([], [2023], 3)[0].value, null, 'no bars at all must refuse, never return a stale or fabricated price');
+});
+
+test('statements-engine: compoundingChecklist returns exactly 10 fixed-order conditions, each with a real value, never a total', () => {
+  const tcs = loadFinancials('TCS');
+  const list = stmt.compoundingChecklist(tcs, { faceValue: tcs.topRatios.faceValue });
+  assert.strictEqual(list.length, 10, 'exactly ten conditions, per the plan -- never more, never a subset presented as the whole thing');
+  assert.deepStrictEqual(list.map((c) => c.id), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 'fixed order by condition number, never sorted passes-first');
+  list.forEach((c) => {
+    assert.strictEqual(typeof c.value, 'string', `condition ${c.id} must print an actual value, never a bare tick`);
+    assert.ok(!('score' in c) && !('total' in c) && !('fraction' in c), 'no condition may carry a scoring field -- the checklist has no total, ever');
+  });
+  // TCS ground truth: ROCE has stayed far above 15% every year (real reported ROCE ~63%).
+  assert.strictEqual(list[0].meets, true);
+  assert.strictEqual(list[0].value, '10 of 10 years >= 15%');
+  // TCS pays out most of its profit as dividends -- a well-known real fact about
+  // this company -- so the <=40%-payout condition should genuinely fail, not pass.
+  assert.strictEqual(list[5].meets, false);
+  // Condition 8 needs shareholding data this app doesn't scrape: must be null,
+  // never fabricated as a pass (promoters didn't sell) or a fail (pledge default).
+  assert.strictEqual(list[7].meets, null);
+  assert.strictEqual(list[7].available, false);
+});
+
+test('statements-engine: compoundingChecklist refuses cleanly on a lender (no ROCE %, no Sales row) instead of fabricating', () => {
+  const hdfc = loadFinancials('HDFCBANK');
+  const list = stmt.compoundingChecklist(hdfc, { faceValue: hdfc.topRatios.faceValue });
+  const roceCond = list.find((c) => c.id === 1);
+  assert.strictEqual(roceCond.available, false, 'HDFCBANK\'s ratios section has no ROCE % row (financial schema uses ROE %) -- must refuse, not silently score zero');
+  assert.strictEqual(roceCond.meets, null);
+});
+
+test('statements-engine: checklistQualityGate blocks the checklist behind an overlay only when a divergence flag is actually open', () => {
+  assert.strictEqual(stmt.checklistQualityGate({ flags: [] }).blocked, false);
+  assert.strictEqual(stmt.checklistQualityGate(null).blocked, false, 'no divergence result at all must not block -- absence of a check is not evidence of a problem');
+  const gated = stmt.checklistQualityGate({ flags: [{ ruleId: 'CFO_DIVERGENCE', year: 2023 }] });
+  assert.strictEqual(gated.blocked, true);
+  assert.ok(gated.reason.includes('does not check whether those numbers can be trusted'));
+});
+
+test('statements-engine: peHistoryBand computes percentile rank of the current P/E within its own trailing band', () => {
+  const price = [{ year: 2020, value: 100 }, { year: 2021, value: 150 }, { year: 2022, value: 200 }, { year: 2023, value: 90 }];
+  const eps = [{ year: 2020, value: 10 }, { year: 2021, value: 10 }, { year: 2022, value: 10 }, { year: 2023, value: 10 }];
+  // P/E series: 10, 15, 20, 9 -- current (9) is the cheapest of the four, so percentile is the lowest band, not zero-is-invalid
+  const band = stmt.peHistoryBand(price, eps);
+  assert.strictEqual(band.current, 9);
+  assert.strictEqual(band.min, 9);
+  assert.strictEqual(band.max, 20);
+  assert.strictEqual(band.percentile, 25, 'exactly one of four values (itself) is <= current, so it sits at the 25th percentile');
+  const lossYear = stmt.peHistoryBand(price, [{ year: 2020, value: -5 }, { year: 2021, value: 10 }, { year: 2022, value: 10 }, { year: 2023, value: 10 }]);
+  assert.strictEqual(lossYear.series[0].value, null, 'P/E across a loss-year EPS must refuse, never return a negative multiple');
+});
+
 // Guardrail adversarial suite (plan: "≥40 prompts", advisor.js:296-322).
 // advisorGuardrail is a pure text transform with no conversation state, so
 // the deterministic way to exercise it is directly, against sentences shaped

@@ -144,7 +144,21 @@ async function fetchEquityHistory(symbol) {
     // close (confirmed on both SBIN.NS and TITAN.NS) — skip it rather than
     // let a NaN return poison every downstream stat.
     if (c === null || c === undefined) continue;
-    prices.push({ date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10), close: c });
+    // rawClose is additive, alongside `close` above (which stays
+    // adjclose-preferred for every existing caller's total-return CAGR).
+    // The statements tab's historical P/E band needs the OPPOSITE
+    // preference — Yahoo's adjclose is dividend-backward-adjusted and
+    // manufactures a fake-cheap historical P/E for exactly the high-yield
+    // names a beginner is most likely to be reaching for yield on — so it
+    // reads this field specifically, never `close`. rawCloses may be
+    // shorter than closes/timestamps if Yahoo omits a bar; fall back to the
+    // (possibly-adjusted) close rather than emit a hole in the series.
+    const raw = rawCloses[i];
+    prices.push({
+      date: new Date(timestamps[i] * 1000).toISOString().slice(0, 10),
+      close: c,
+      rawClose: (raw === null || raw === undefined) ? c : raw,
+    });
   }
 
   if (prices.length < 30) {

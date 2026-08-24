@@ -604,6 +604,27 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
    render()'s statementsShellMounted branch); every interaction below
    patches a container directly rather than going through render(), and
    linked highlighting is pure CSS driven by two attributes on #stmtRoot. */
+/* This tab breaks out of the app's shared grid-of-sliders shell entirely --
+   no .grid/.panel/.output, no 1180px cap. It's a reading surface for one
+   company's numbers, closer to a research terminal than a settings form, so
+   it gets its own full-width page and its own restrained (not app-blue)
+   surface language. Scoped to body.stmt-page so nothing else changes. */
+body.stmt-page main{max-width:1600px}
+.stmt-shell{display:flex;flex-direction:column;gap:18px}
+.stmt-card{background:#fff;border:1px solid rgba(20,40,63,.12);border-radius:10px;padding:22px}
+
+.stmt-topbar{background:rgba(20,40,63,.03);border:1px solid rgba(20,40,63,.12);border-radius:10px}
+.stmt-topbar-head{display:flex;align-items:center;gap:12px;padding:6px 8px 6px 16px}
+.stmt-topbar-toggle{flex:1;display:flex;align-items:baseline;gap:12px;min-width:0;background:none;border:none;padding:10px 4px;cursor:pointer;text-align:left;font:inherit}
+.stmt-topbar-title{font-family:'Newsreader',serif;font-weight:600;font-size:15px;color:var(--ink2);flex-shrink:0}
+.stmt-topbar-current{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stmt-topbar-chevron{margin-left:auto;color:rgba(20,40,63,.4);font-size:12px;flex-shrink:0}
+.stmt-topbar-head .reset-tab-btn{flex-shrink:0}
+.stmt-topbar-body{padding:0 20px 18px}
+.stmt-topbar-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+@media(max-width:900px){.stmt-topbar-grid{grid-template-columns:1fr}}
+.stmt-topbar-col .section-label:first-child{margin-top:0}
+
 .stmt-search-row{display:flex;gap:8px}
 .stmt-search-row input{flex:1;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.18);border-radius:3px;padding:9px 11px;font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--paper);outline:none;text-transform:uppercase}
 .stmt-search-row button{background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:0 16px;font-family:'Spline Sans Mono',monospace;font-size:11.5px;cursor:pointer}
@@ -612,28 +633,34 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stmt-recent button:hover{border-color:var(--gold);color:var(--gold)}
 .stmt-compare-row{margin-top:14px;padding-top:14px;border-top:1px solid rgba(20,40,63,.1)}
 .stmt-compare-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin-bottom:7px}
-.stmt-controls{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(20,40,63,.1)}
-.stmt-ctrl-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;color:rgba(20,40,63,.7)}
-.stmt-seg{display:inline-flex;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden}
-.stmt-seg button{background:none;border:none;padding:4px 9px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);cursor:pointer;border-right:1px solid rgba(20,40,63,.12)}
+.stmt-controls{display:flex;flex-direction:column}
+.stmt-ctrl-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px dashed rgba(20,40,63,.12)}
+.stmt-ctrl-row:last-child{border-bottom:none;padding-bottom:0}
+.stmt-ctrl-label{display:flex;flex-direction:column;gap:2px;font-size:12.5px;font-weight:600;color:var(--ink2)}
+.stmt-ctrl-hint{font-weight:400;font-size:10.5px;color:var(--dim);line-height:1.4;max-width:280px}
+.stmt-seg{display:inline-flex;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden;flex-shrink:0}
+.stmt-seg button{background:none;border:none;padding:5px 10px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);cursor:pointer;border-right:1px solid rgba(20,40,63,.12)}
 .stmt-seg button:last-child{border-right:none}
 .stmt-seg button.active{background:rgba(37,87,199,.14);color:var(--gold);font-weight:600}
-.stmt-toggle-pill{background:none;border:1px solid rgba(20,40,63,.18);border-radius:12px;padding:4px 12px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);cursor:pointer}
+.stmt-toggle-pill{background:none;border:1px solid rgba(20,40,63,.18);border-radius:12px;padding:5px 13px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);cursor:pointer;flex-shrink:0}
 .stmt-toggle-pill.active{background:rgba(37,87,199,.14);border-color:var(--gold);color:var(--gold);font-weight:600}
 
-.stmt-header-card{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
-.stmt-header-name{font-family:'Newsreader',serif;font-weight:600;font-size:19px;color:var(--ink2)}
+.stmt-header-card{display:flex;flex-direction:column;gap:10px}
+.stmt-header-top{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 14px}
+.stmt-header-name{font-family:'Newsreader',serif;font-weight:700;font-size:34px;letter-spacing:-.01em;color:var(--ink2)}
+.stmt-header-badges{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .stmt-badge{display:inline-flex;align-items:center;font-family:'Spline Sans Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:9px;background:rgba(20,40,63,.07);color:var(--dim)}
 .stmt-badge.lender{background:rgba(160,58,34,.12);color:var(--red)}
 .stmt-badge.nonlender{background:rgba(46,139,111,.12);color:var(--ok)}
 .stmt-badge.standalone{background:rgba(201,154,69,.16);color:var(--warn)}
-.stmt-source-line{flex-basis:100%;font-size:11px;color:var(--dim)}
+.stmt-source-line{font-size:11px;color:var(--dim);margin-top:2px}
 .stmt-source-line a{color:var(--gold)}
-.stmt-sector-line{flex-basis:100%;font-size:11px;color:var(--dim);margin-top:-6px}
-.stmt-market-snapshot{flex-basis:100%;display:flex;flex-wrap:wrap;gap:16px;margin-top:2px}
-.stmt-market-fact{display:flex;flex-direction:column;gap:1px;background:none;border:none;padding:0;font:inherit;text-align:left}
-.stmt-market-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim)}
-.stmt-market-value{font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:var(--ink2)}
+.stmt-sector-line{font-size:12.5px;color:rgba(20,40,63,.65)}
+.stmt-market-snapshot{display:flex;flex-wrap:wrap;gap:0;margin-top:6px;border-top:1px solid rgba(20,40,63,.09);padding-top:14px}
+.stmt-market-fact{display:flex;flex-direction:column;gap:3px;background:none;border:none;padding:0 22px 0 0;margin-right:22px;font:inherit;text-align:left;border-right:1px solid rgba(20,40,63,.09)}
+.stmt-market-fact:last-child{border-right:none;margin-right:0;padding-right:0}
+.stmt-market-label{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.stmt-market-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;font-size:16px;font-weight:600;color:var(--ink2)}
 button.stmt-market-fact{cursor:pointer}
 button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-coverage-note{flex-basis:100%;font-size:10.5px;color:var(--warn);margin-top:2px;font-style:italic}
@@ -643,6 +670,33 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-refusal-card .stmt-comparable-list{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
 .stmt-refusal-card .stmt-comparable-list span{background:rgba(46,139,111,.12);color:var(--ok);border-radius:8px;padding:3px 9px;font-size:10.5px;font-family:'Spline Sans Mono',monospace}
 .stmt-error-card{background:rgba(160,58,34,.08);border:1px solid rgba(160,58,34,.3);border-radius:3px 12px 12px 12px;padding:14px 16px;font-size:12.5px;color:rgba(20,40,63,.8)}
+
+.stmt-checklist-framing{max-width:760px;margin:6px 0 16px}
+.stmt-checklist-framing p{font-size:12.5px;line-height:1.6;color:rgba(20,40,63,.78);margin:0 0 10px}
+.stmt-checklist-gate{background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:3px 12px 12px 12px;padding:14px 16px;font-size:12.5px;color:rgba(20,40,63,.8);line-height:1.55;margin-bottom:14px}
+.stmt-checklist-gate .ns-btn{margin-top:10px}
+.stmt-checklist-list{display:flex;flex-direction:column;border-top:1px solid rgba(20,40,63,.09)}
+.stmt-checklist-row{display:grid;grid-template-columns:26px 1fr auto 92px;gap:14px;align-items:baseline;padding:11px 4px;border-bottom:1px solid rgba(20,40,63,.09);font-size:12.5px}
+.stmt-checklist-row.unavailable{color:rgba(20,40,63,.45)}
+.stmt-checklist-id{font-family:'Spline Sans Mono',monospace;color:var(--dim);font-size:11px}
+.stmt-checklist-label{color:var(--ink2)}
+.stmt-checklist-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;color:rgba(20,40,63,.7);white-space:nowrap}
+.stmt-checklist-state{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);text-align:right}
+
+.stmt-depth-table{width:100%;border-collapse:collapse;margin-bottom:10px}
+.stmt-depth-table th,.stmt-depth-table td{padding:7px 10px;text-align:right;font-size:12.5px;border-bottom:1px solid rgba(20,40,63,.09)}
+.stmt-depth-table th:first-child,.stmt-depth-table td:first-child{text-align:left;color:var(--ink2);font-weight:600}
+.stmt-depth-table th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:600}
+.stmt-depth-cagr{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums}
+.stmt-depth-dash{color:rgba(20,40,63,.35)}
+.stmt-depth-note{font-size:11px;color:var(--dim);line-height:1.5;margin-bottom:4px}
+.stmt-depth-refusal{background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.16);border-radius:3px 12px 12px 12px;padding:12px 16px;font-size:12.5px;color:rgba(20,40,63,.8);line-height:1.55;margin-top:14px}
+.stmt-depth-refusal b{display:block;color:var(--ink2);margin-bottom:4px;font-size:13px}
+.stmt-depth-stats{display:flex;flex-wrap:wrap;gap:22px;margin-top:14px}
+.stmt-depth-stat{flex:1;min-width:220px}
+.stmt-depth-stat-label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--dim);margin-bottom:5px}
+.stmt-depth-stat-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;font-size:18px;font-weight:600;color:var(--ink2)}
+.stmt-depth-stat-sub{font-family:inherit;font-weight:400;font-size:11px;color:var(--dim);margin-left:8px}
 
 .stmt-bench-hint{font-size:11.5px;color:var(--dim);margin-bottom:8px}
 .stmt-chips{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:8px;padding-bottom:6px}
@@ -673,17 +727,27 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-density-dense .stmt-table td,.stmt-density-dense .stmt-table th{padding-top:2.5px;padding-bottom:2.5px;font-size:10.5px}
 .stmt-density-dense .stmt-spark{display:none}
 
-.stmt-table-wrap{overflow-x:auto;margin-top:8px;border-radius:3px 14px 14px 14px;border:1px solid rgba(20,40,63,.1);contain:layout paint}
-.stmt-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11.5px;table-layout:fixed;min-width:900px}
-.stmt-table th{text-align:right;padding:7px 8px;color:var(--dim);font-weight:500;font-size:10px;background:rgba(20,40,63,.04);position:sticky;top:0;vertical-align:bottom}
-.stmt-table th:first-child,.stmt-table td:first-child{text-align:left;width:210px}
+.stmt-table-wrap{overflow-x:auto;margin-top:0;border-radius:0 0 10px 10px;border:1px solid rgba(20,40,63,.12);border-top:none;contain:layout paint}
+.stmt-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:12.5px;table-layout:fixed;min-width:900px;font-variant-numeric:tabular-nums}
+.stmt-table th{text-align:right;padding:8px 8px;color:var(--dim);font-weight:600;font-size:10.5px;background:#fbfcfe;position:sticky;top:0;z-index:2;vertical-align:bottom;border-bottom:2px solid rgba(20,40,63,.14)}
+/* Frozen line-item column: on a 12-year-wide table the row label is the one
+   thing that must never scroll out of view, or every number loses its
+   meaning the moment you scroll right. A shadow at the freeze seam (not a
+   hard border) reads as a layer sitting above the scrolling content rather
+   than a rendering glitch. */
+.stmt-table th:first-child,.stmt-table td:first-child{text-align:left;width:220px;position:sticky;left:0;box-shadow:2px 0 4px -2px rgba(20,40,63,.18)}
+.stmt-table th:first-child{z-index:3;background:#fbfcfe}
+.stmt-table td:first-child{z-index:1;background:#fff}
 .stmt-table th.stmt-th-ttm{color:var(--warn)}
-.stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.06);width:78px}
-.stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:11px;width:200px;white-space:normal;line-height:1.4}
-.stmt-table td{text-align:right;padding:6px 8px;color:rgba(20,40,63,.78);border-bottom:1px solid rgba(20,40,63,.06);position:relative;cursor:pointer}
-.stmt-table tr.stmt-row:hover td{background:rgba(37,87,199,.05)}
+.stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.055);width:82px}
+.stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:11.5px;width:210px;white-space:normal;line-height:1.4}
+.stmt-table td{text-align:right;padding:7px 8px;color:rgba(20,40,63,.82);border-bottom:1px solid rgba(20,40,63,.07);position:relative;cursor:pointer}
+.stmt-table tr.stmt-row.stmt-alt td{background:rgba(20,40,63,.022)}
+.stmt-table tr.stmt-row.stmt-alt td:first-child{background:#fbfcfd}
+.stmt-table tr.stmt-row:hover td{background:rgba(37,87,199,.06)}
+.stmt-table tr.stmt-row:hover td:first-child{background:#eef3fb}
 .stmt-table tr.stmt-row.pinned td{background:rgba(37,87,199,.07)}
-.stmt-table tr.stmt-row.pinned td:first-child{border-left:3px solid var(--gold);font-weight:600}
+.stmt-table tr.stmt-row.pinned td:first-child{background:#ecf2fb;border-left:3px solid var(--gold);font-weight:600}
 .stmt-table .stmt-dash{color:rgba(20,40,63,.28)}
 .stmt-rowlabel-inner{display:flex;align-items:center;gap:6px}
 .stmt-spark{flex-shrink:0;opacity:.7}
@@ -705,10 +769,18 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-growth-band .gb-mid{position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(20,40,63,.15)}
 .stmt-table tfoot td{font-size:10.5px;color:var(--dim);padding:8px;border-top:2px solid rgba(20,40,63,.15);background:rgba(20,40,63,.03);cursor:default;text-align:left}
 .stmt-table tfoot b{color:var(--ink2)}
-.stmt-table-title{font-family:'Newsreader',serif;font-weight:600;font-size:15px;color:var(--ink2);margin-top:18px;display:flex;align-items:center;gap:8px}
-.stmt-table-title:first-child{margin-top:0}
-.stmt-collapse-btn{width:18px;height:18px;flex:0 0 auto;border:1px solid rgba(20,40,63,.18);border-radius:4px;background:var(--card);color:var(--dim);font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
-.stmt-collapse-btn:hover{color:var(--ink2);border-color:rgba(20,40,63,.32)}
+.stmt-section-block{margin-top:22px}
+.stmt-section-block:first-child{margin-top:0}
+/* The whole bar is the click target, not a small icon inside it -- the
+   original 18px button read as decoration, not a control, which is why
+   collapsing a section was reported as not working at all. */
+.stmt-table-title{font-family:'Newsreader',serif;font-weight:700;font-size:16px;color:var(--ink2);display:flex;align-items:baseline;gap:10px;background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.12);border-radius:10px 10px 0 0;padding:13px 16px;cursor:pointer;user-select:none;transition:background .12s ease}
+.stmt-table-title:hover{background:rgba(37,87,199,.07)}
+.stmt-table-title:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+.stmt-collapse-chevron{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:rgba(20,40,63,.09);color:var(--ink2);font-size:12px;flex-shrink:0}
+.stmt-table-title:hover .stmt-collapse-chevron{background:var(--gold);color:#fff}
+.stmt-table-title-label{flex:1}
+.stmt-section-block.stmt-collapsed .stmt-table-title{border-radius:10px}
 .stmt-section-block.stmt-collapsed .stmt-table-wrap,.stmt-section-block.stmt-collapsed .stmt-coverage-note{display:none}
 
 /* CSS-only linked highlighting: two attributes on #stmtRoot (data-hl-metric,
@@ -1462,6 +1534,9 @@ const L = {
     expandedFlags:false,
     openDefinitions:{}, // "label|section" -> true, which inline definitions are open
     collapsedSections:{}, // sectionKey -> true, which statement tables are collapsed
+    topbarOpen:true,    // the collapsible company-search/controls strip at the top of the page
+    checklistDismissed:false, // Compounding Checklist quality-gate overlay, cleared on company change
+    priceHistory:{},    // symbol -> {status, prices:[{date,close,rawClose}]} -- raw-close daily bars for the P/E-history band and re-rating spread, fetched separately from /api/financials
   },
 };
 // A frozen snapshot of L's starting shape, taken before anything mutates
@@ -4619,6 +4694,13 @@ window.__statementsRenderCount=0;
 function render(){
   renderTabs();
   const main=document.getElementById('main');
+  // "Read the Company" is a dedicated full-width reading surface, not one of
+  // the app's grid-of-sliders tools -- it gets its own body class so it can
+  // break out of main's shared max-width and the country toggle (India-only
+  // data; the toggle has no meaning here) without touching any other tab.
+  document.body.classList.toggle('stmt-page', L.tab==='statements');
+  const countryToggleEl=document.getElementById('countryToggle');
+  if(countryToggleEl) countryToggleEl.style.display = L.tab==='statements' ? 'none' : '';
   if(L.tab!=='statements'){ if(statementsShellMounted) teardownStatements(); statementsShellMounted=false; }
   if(L.tab==='home') main.innerHTML=renderHome();
   else if(L.tab==='retirement') main.innerHTML=renderRetirement();
@@ -5340,51 +5422,80 @@ function statementsCanonicalRows(schema){
 
 /* ---- shell (mounted once) ------------------------------------------- */
 function renderStatementsShell(){
-  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
-  <div class="panel">
-    ${panelHead('Read the Company', 'statements')}
-    ${advisorChipsHTML('statements')}
-    <div class="cap" style="margin-bottom:14px">Read one company's real reported numbers, put any part of them beside another company's, and see the things that don't add up.</div>
-    <div class="section-label">Company</div>
-    <div class="stmt-search-row"><input id="stmtSearchInput" type="text" placeholder="e.g. TCS, HDFCBANK, VEDL" autocomplete="off" spellcheck="false" style="text-transform:uppercase"><button id="stmtSearchBtn">Open</button></div>
-    <div class="stmt-recent" id="stmtRecent"></div>
-    <div class="stmt-compare-row" id="stmtCompareRow"></div>
-    <div class="stmt-controls">
-      <div class="stmt-ctrl-row"><span>Density</span><div class="stmt-seg" id="stmtDensitySeg">
-        <button data-stmt-density="comfortable">Comfortable</button>
-        <button data-stmt-density="compact" class="active">Compact</button>
-        <button data-stmt-density="dense">Dense</button>
-      </div></div>
-      <div class="stmt-ctrl-row"><span>Bench chart</span><div class="stmt-seg" id="stmtIndexedSeg">
-        <button data-stmt-indexed="1" class="active">Indexed</button>
-        <button data-stmt-indexed="0">Actual</button>
-      </div></div>
-      <div class="stmt-ctrl-row"><span>Table cells</span><button class="stmt-toggle-pill" id="stmtChangeToggle">Value</button></div>
+  const s=L.statements;
+  return `<div class="stmt-shell">
+  <div class="stmt-topbar${s.topbarOpen?' open':''}" id="stmtTopbar">
+    <div class="stmt-topbar-head">
+      <button class="stmt-topbar-toggle" id="stmtTopbarToggle" aria-expanded="${s.topbarOpen?'true':'false'}">
+        <span class="stmt-topbar-title">Read the Company</span>
+        <span class="stmt-topbar-current" id="stmtTopbarCurrent">${advisorAttr(s.primary||'No company open')}${s.compare?' vs '+advisorAttr(s.compare):''}</span>
+        <span class="stmt-topbar-chevron">${s.topbarOpen?'▾':'▸'}</span>
+      </button>
+      <button class="reset-tab-btn" data-reset-tab="statements" title="Reset this tool's inputs back to their defaults">Reset</button>
     </div>
-    <div class="cap" style="margin-top:14px">Esc, or the &times; on any pin, clears the Bench.</div>
+    <div class="stmt-topbar-body" id="stmtTopbarBody" style="display:${s.topbarOpen?'':'none'}">
+      <div class="cap" style="margin-bottom:14px">Read one company's real reported numbers, put any part of them beside another company's, and see the things that don't add up.</div>
+      <div class="stmt-topbar-grid">
+        <div class="stmt-topbar-col">
+          <div class="section-label">Company</div>
+          <div class="stmt-search-row"><input id="stmtSearchInput" type="text" placeholder="e.g. TCS, HDFCBANK, VEDL" autocomplete="off" spellcheck="false" style="text-transform:uppercase"><button id="stmtSearchBtn">Open</button></div>
+          <div class="stmt-recent" id="stmtRecent"></div>
+          <div class="stmt-compare-row" id="stmtCompareRow"></div>
+        </div>
+        <div class="stmt-topbar-col">
+          <div class="section-label">How it's shown</div>
+          <div class="stmt-controls">
+            <div class="stmt-ctrl-row">
+              <div class="stmt-ctrl-label">Row spacing<span class="stmt-ctrl-hint">How tall each row is — tighter fits more years on screen at once</span></div>
+              <div class="stmt-seg" id="stmtDensitySeg">
+                <button data-stmt-density="comfortable">Comfortable</button>
+                <button data-stmt-density="compact" class="active">Compact</button>
+                <button data-stmt-density="dense">Dense</button>
+              </div>
+            </div>
+            <div class="stmt-ctrl-row">
+              <div class="stmt-ctrl-label">Bench chart scale<span class="stmt-ctrl-hint">Indexed starts every pinned line at 100, so you compare growth shape, not size — Actual shows real rupee/ratio values</span></div>
+              <div class="stmt-seg" id="stmtIndexedSeg">
+                <button data-stmt-indexed="1" class="active">Indexed</button>
+                <button data-stmt-indexed="0">Actual</button>
+              </div>
+            </div>
+            <div class="stmt-ctrl-row">
+              <div class="stmt-ctrl-label">Statement table cells<span class="stmt-ctrl-hint">Switch every number in the tables below between its reported value and its year-on-year change</span></div>
+              <button class="stmt-toggle-pill" id="stmtChangeToggle">Value</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap" style="margin-top:14px">Esc, or the &times; on any pin, clears the Bench.</div>
+      ${advisorChipsHTML('statements')}
+    </div>
   </div>
-  <div class="output" id="stmtRoot">
-    <div class="card" id="stmtHeaderCard"></div>
+  <div class="stmt-main" id="stmtRoot">
+    <div class="stmt-card" id="stmtHeaderCard"></div>
     <div id="stmtRefusal"></div>
-    <div class="card">
+    <div class="stmt-card">
       <div class="section-label">The Bench</div>
       <div class="stmt-bench-hint" id="stmtBenchHint"></div>
       <div class="stmt-chips" id="stmtBenchChips"></div>
       <div class="stmt-companion-strip" id="stmtCompanionStrip"></div>
       <div id="stmtBenchChart" style="height:260px;margin-top:12px"></div>
+      <div class="stmt-caption" id="stmtBenchCaption"></div>
       <div class="stmt-divergence-strip">
         <div class="stmt-tickrow" id="stmtTickRow"></div>
         <div class="stmt-checksummary" id="stmtCheckSummary"></div>
         <div id="stmtFlagDetail"></div>
       </div>
     </div>
-    <div class="card">
+    <div class="stmt-card">
       <div class="section-label">Net Profit vs Cash from Operations</div>
       <div id="stmtProfitCashChart" style="height:280px"></div>
       <div class="stmt-caption" id="stmtCaption"></div>
     </div>
     <div id="stmtTables" class="stmt-density-compact"></div>
-    <div class="card" style="text-align:center">
+    <div class="stmt-card" id="stmtDepth"></div>
+    <div class="stmt-card" id="stmtChecklist"></div>
+    <div class="stmt-card" style="text-align:center">
       <button class="ns-btn" id="stmtToLiveBtn" style="display:inline-flex">Add to Test Real Investments</button>
     </div>
     <div class="stmt-footer">Figures reproduced from screener.in as reported by the company. Not investment advice. Not a recommendation to buy or sell any security. No SEBI registration. Past performance does not indicate future results.</div>
@@ -5417,6 +5528,26 @@ async function fetchStatementsCompany(symbol){
   }
   updateStatementsUI();
 }
+// Raw-close daily bars, fetched separately from /api/financials -- the
+// re-rating spread and P/E-history band need Yahoo's un-adjusted `close`
+// (see statements-engine.js's fyEndPriceSeries), never the adjclose series
+// /api/history normally prefers for Test Real Investments' total-return
+// CAGR. Runs alongside fetchStatementsCompany, not blocking it -- the
+// tables and checklist render with what they have; these two metrics fill
+// in once the price history lands.
+async function fetchStatementsPriceHistory(symbol){
+  const sym=String(symbol||'').trim().toUpperCase();
+  if(!sym) return;
+  if(L.statements.priceHistory[sym] && L.statements.priceHistory[sym].status==='ready') return;
+  L.statements.priceHistory[sym]={status:'loading'};
+  try{
+    const result = await liveApiGet('/api/history?type=equity&symbol='+encodeURIComponent(sym+'.NS'));
+    L.statements.priceHistory[sym]={status:'ready', prices:result.prices};
+  }catch(e){
+    L.statements.priceHistory[sym]={status:'error', error:(e&&e.message)||String(e)};
+  }
+  updateStatementsUI();
+}
 function addRecentTicker(sym){
   const r=L.statements.recent.filter(t=>t!==sym);
   r.unshift(sym);
@@ -5435,18 +5566,20 @@ function statementsEnsureLoaded(){
   if(!sym) return;
   addRecentTicker(sym);
   fetchStatementsCompany(sym).then(()=>{ seedDefaultPinIfEmpty(sym); updateStatementsUI(); });
+  fetchStatementsPriceHistory(sym);
 }
 function statementsSetPrimary(symbol){
   const sym=String(symbol||'').trim().toUpperCase();
   if(!sym) return;
   const changed = sym!==L.statements.primary;
   L.statements.primary=sym;
-  if(changed){ L.statements.pins=[]; L.statements.focusYear=null; L.statements._focusedFlag=null; L.statements.companionFocus=null; }
+  if(changed){ L.statements.pins=[]; L.statements.focusYear=null; L.statements._focusedFlag=null; L.statements.companionFocus=null; L.statements.checklistDismissed=false; }
   L.statements.search='';
   addRecentTicker(sym);
   const input=document.getElementById('stmtSearchInput'); if(input) input.value='';
   renderCompareRowUI(); renderRecentUI();
   fetchStatementsCompany(sym).then(()=>{ seedDefaultPinIfEmpty(sym); updateStatementsUI(); });
+  fetchStatementsPriceHistory(sym);
 }
 function statementsSetCompare(symbol){
   const sym = symbol ? String(symbol).trim().toUpperCase() : null;
@@ -5563,8 +5696,10 @@ function renderStatementsHeaderHTML(){
     <button class="stmt-market-fact" data-stmt-market-companion="Dividend Yield" title="Click for what to check alongside this"><span class="stmt-market-label">Dividend Yield</span><span class="stmt-market-value">${tr.dividendYield!=null?tr.dividendYield.toFixed(2)+'%':'\u2014'}</span></button>
   </div>` : '';
   return `<div class="stmt-header-card">
-    <span class="stmt-header-name">${advisorAttr(r.symbol)}</span>
-    ${badges.join('')}
+    <div class="stmt-header-top">
+      <span class="stmt-header-name">${advisorAttr(r.symbol)}</span>
+      <div class="stmt-header-badges">${badges.join('')}</div>
+    </div>
     ${sectorLine}
     ${marketSnapshot}
     <div class="stmt-source-line">Source: <a href="${advisorAttr(r.sourceUrl||'#')}" target="_blank" rel="noopener">screener.in</a>, fetched ${r.fetchedAt?new Date(r.fetchedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'\u2014'}${r.fixtureNote?' &middot; '+advisorAttr(r.fixtureNote):''}</div>
@@ -5582,6 +5717,203 @@ function renderRefusalHTML(){
     ${advisorAttr(refusal.reason)}
     <div class="stmt-comparable-list">${refusal.comparable.map(c=>`<span>${advisorAttr(c)}</span>`).join('')}</div>
   </div>`;
+}
+/* ---- Phase 2: growth-window detail and the Growth & Returns card -----
+   growthSummary()/windowCagr() (statements-engine.js) return a bare CAGR
+   per window. The plan bans showing a bare CAGR -- "entirely determined
+   by two endpoints" -- so every window here is paired with the count of
+   years that were actually positive inside it and the single worst year,
+   computed here from the same fiscal-year series, never from the CAGR
+   number itself. */
+function stmtWindowDetail(series, years){
+  const clean = series.filter(p=>p.value!=null);
+  if(clean.length < years+1) return null;
+  const slice = clean.slice(-(years+1));
+  let positives=0, total=0, worst=null;
+  for(let i=1;i<slice.length;i++){
+    const a=slice[i-1].value, b=slice[i].value;
+    if(a==null||b==null||a===0||(a<0)!==(b<0)) continue;
+    const yoy=(b-a)/Math.abs(a);
+    total++;
+    if(yoy>0) positives++;
+    if(worst==null || yoy<worst.value) worst={year:slice[i].year, value:yoy};
+  }
+  return { windowStart:slice[0].year, windowEnd:slice[slice.length-1].year, positives, total, worst };
+}
+// Fiscal year-end month, read from the latest fy period's ISO date key
+// ("2025-03-31" -> 3) rather than assumed -- the plan is explicit that
+// fiscal year-end months differ across Indian companies (Mar vs Dec).
+function statementsFyEndMonth(pl){
+  const periods = pl ? pl.periods.filter(p=>p.type==='fy' && p.key) : [];
+  if(!periods.length) return 3;
+  const m = Number(String(periods[periods.length-1].key).slice(5,7));
+  return (m>=1 && m<=12) ? m : 3;
+}
+// Single source of truth for the price-dependent Phase 2 metrics --
+// re-rating spread and the P/E-history band -- shared by the Growth &
+// Returns card and the Compounding Checklist's adjacent P/E line so both
+// read the same computation. Returns null only when the statement bundle
+// itself isn't ready; otherwise returns a status so callers can render a
+// loading/error state rather than silently showing nothing.
+function statementsPeBand(sym){
+  const d = L.statements.data[sym];
+  if(!d || d.status!=='ready') return null;
+  const priceHist = L.statements.priceHistory[sym];
+  if(!priceHist || priceHist.status!=='ready') return { status: priceHist ? priceHist.status : 'loading' };
+  const bundle = d.result;
+  const faceValue = bundle.topRatios && bundle.topRatios.faceValue;
+  if(!faceValue) return { status:'error', error:'Face value is not reported for this company, so shares cannot be split-adjusted.' };
+  const pl = bundle.profitLoss, bs = bundle.balanceSheet;
+  const npSeries = fySeries(pl, 'Net Profit');
+  const fyYears = npSeries.map(p=>p.year);
+  const fyEndMonth = statementsFyEndMonth(pl);
+  const priceFy = fyEndPriceSeries(priceHist.prices.map(p=>({date:p.date, close:p.rawClose})), fyYears, fyEndMonth);
+  const epsSeries = epsFromShrink(pl, bs, faceValue);
+  const band = peHistoryBand(priceFy, epsSeries);
+  return { status:'ready', band, spread10: reratingSpread(priceFy, npSeries, 10), spread5: reratingSpread(priceFy, npSeries, 5) };
+}
+function stmtGrowthRowHTML(label, series){
+  const g = growthSummary(series);
+  const cell = v => v!=null ? `<span class="stmt-depth-cagr">${(v*100).toFixed(1)}%</span>` : '<span class="stmt-depth-dash">—</span>';
+  const d10 = stmtWindowDetail(series, 10);
+  const note = d10 ? `${advisorAttr(label)}: 10-year window FY${d10.windowStart}–FY${d10.windowEnd}, ${d10.positives} of ${d10.total} years grew, worst year ${d10.worst?('FY'+d10.worst.year+' at '+(d10.worst.value*100).toFixed(1)+'%'):'—'}.` : '';
+  return { row: `<tr><td>${advisorAttr(label)}</td><td>${cell(g.y10)}</td><td>${cell(g.y5)}</td><td>${cell(g.y3)}</td><td>${cell(g.y1)}</td></tr>`, note };
+}
+function renderDepthMetricsHTML(){
+  const s=L.statements;
+  const d = s.data[s.primary];
+  if(!d || d.status!=='ready') return '';
+  const bundle = d.result;
+  const pl = bundle.profitLoss, bs = bundle.balanceSheet;
+  const schema = bundle.schema;
+  const salesRaw = fySeries(pl, 'Sales');
+  const salesLabel = salesRaw.length ? 'Sales' : 'Revenue';
+  const salesSeries = salesRaw.length ? salesRaw : fySeries(pl, 'Revenue');
+  const npSeries = fySeries(pl, 'Net Profit');
+  const salesRowData = stmtGrowthRowHTML(salesLabel, salesSeries);
+  const npRowData = stmtGrowthRowHTML('Net Profit', npSeries);
+  const growthTable = `<table class="stmt-depth-table"><thead><tr><th></th><th>10y</th><th>5y</th><th>3y</th><th>1y</th></tr></thead>
+    <tbody>${salesRowData.row}${npRowData.row}</tbody></table>
+    <div class="stmt-depth-note">${salesRowData.note}</div>
+    <div class="stmt-depth-note">${npRowData.note}</div>`;
+
+  let returnsBlock;
+  if(schema!=='nonfinancial'){
+    returnsBlock = `<div class="stmt-depth-refusal"><b>Incremental ROCE and asset turnover aren't shown here.</b> Both formulas depend on capital-employed and total-assets figures that mean something different for a lender than for a manufacturer, so this app doesn't compute them outside the non-lender schema.</div>`;
+  } else {
+    const incRoce = incrementalRoce(pl, bs).filter(p=>p.value!=null);
+    const incLatest = incRoce.length ? incRoce[incRoce.length-1] : null;
+    const incMed = median(incRoce.map(p=>p.value));
+    const atSeries = assetTurnover(pl, bs).filter(p=>p.value!=null);
+    const atLatest = atSeries.length ? atSeries[atSeries.length-1] : null;
+    returnsBlock = `<div class="stmt-depth-stats">
+      <div class="stmt-depth-stat">
+        <div class="stmt-depth-stat-label">Incremental ROCE<span class="stmt-ctrl-hint">Change in operating profit over change in capital employed, across 3-year windows — the return on capital added recently, not diluted by capital deployed decades ago</span></div>
+        <div class="stmt-depth-stat-value">${incLatest ? (incLatest.value*100).toFixed(1)+'% (FY'+incLatest.year+')' : '—'}<span class="stmt-depth-stat-sub">${incMed!=null ? 'median '+(incMed*100).toFixed(1)+'%' : ''}</span></div>
+      </div>
+      <div class="stmt-depth-stat">
+        <div class="stmt-depth-stat-label">Asset Turnover<span class="stmt-ctrl-hint">${salesLabel} divided by Total Assets — how much revenue each rupee on the balance sheet produces</span></div>
+        <div class="stmt-depth-stat-value">${atLatest ? atLatest.value.toFixed(2)+'x (FY'+atLatest.year+')' : '—'}</div>
+      </div>
+    </div>`;
+  }
+
+  const faceValue = bundle.topRatios && bundle.topRatios.faceValue;
+  const bvSeries = faceValue ? bookValuePerShareSeries(bs, faceValue).filter(p=>p.value!=null) : [];
+  const bvLatest = bvSeries.length ? bvSeries[bvSeries.length-1] : null;
+  const currentPrice = bundle.topRatios && bundle.topRatios.currentPrice;
+  const pb = (faceValue && currentPrice!=null) ? priceToBookLatest(currentPrice, bookValuePerShareSeries(bs, faceValue)) : null;
+  const bvBlock = `<div class="stmt-depth-stats">
+    <div class="stmt-depth-stat">
+      <div class="stmt-depth-stat-label">Book Value per Share<span class="stmt-ctrl-hint">(Equity Capital + Reserves) ÷ split-adjusted shares, in today's share units — comparable across a stock split in a way the as-reported figure isn't</span></div>
+      <div class="stmt-depth-stat-value">${bvLatest ? '₹'+formatCroreValue(bvLatest.value)+' (FY'+bvLatest.year+')' : '—'}</div>
+    </div>
+    <div class="stmt-depth-stat">
+      <div class="stmt-depth-stat-label">Price to Book<span class="stmt-ctrl-hint">Today's share price divided by the latest book value per share</span></div>
+      <div class="stmt-depth-stat-value">${pb!=null ? pb.toFixed(2)+'x' : '—'}</div>
+    </div>
+  </div>`;
+
+  const peResult = statementsPeBand(s.primary);
+  let reratingBlock = '';
+  if(peResult && peResult.status==='loading'){
+    reratingBlock = `<div class="cap" style="margin-top:14px">Loading daily price history for the re-rating spread and P/E-history band…</div>`;
+  } else if(peResult && peResult.status==='error'){
+    reratingBlock = `<div class="stmt-depth-refusal" style="margin-top:14px"><b>Re-rating spread and P/E history aren't shown.</b> ${advisorAttr(peResult.error)}</div>`;
+  } else if(peResult && peResult.status==='ready'){
+    const band = peResult.band;
+    const spreadTxt = v => v!=null ? `${v>=0?'+':''}${(v*100).toFixed(1)}pp` : '—';
+    const bandTxt = (band.percentile!=null) ? `${band.current.toFixed(1)}x now, ${band.percentile}th percentile of its own last ${band.series.filter(p=>p.value!=null).length}-year range (${band.min.toFixed(1)}x–${band.max.toFixed(1)}x, median ${band.median.toFixed(1)}x)` : '—';
+    // Yahoo's chart endpoint caps daily history at 10 years, so a 10-year
+    // spread needs 11 fiscal year-end prices and often has only 10 -- fall
+    // back to the 5-year window rather than show a blank, and relabel the
+    // heading with the window actually used, per the plan's truncated-
+    // window rule.
+    const spreadYears = peResult.spread10!=null ? 10 : 5;
+    const spreadValue = peResult.spread10!=null ? peResult.spread10 : peResult.spread5;
+    reratingBlock = `<div class="stmt-depth-stats" style="margin-top:14px">
+      <div class="stmt-depth-stat">
+        <div class="stmt-depth-stat-label">Re-rating Spread (${spreadYears}y)<span class="stmt-ctrl-hint">Stock price CAGR minus profit CAGR over the common ${spreadYears}-year window — how much of the price rise came from the market paying more, versus the company earning more</span></div>
+        <div class="stmt-depth-stat-value">${spreadTxt(spreadValue)}</div>
+      </div>
+      <div class="stmt-depth-stat">
+        <div class="stmt-depth-stat-label">P/E vs Its Own History<span class="stmt-ctrl-hint">Where today's P/E sits within its own trailing band, computed from split-adjusted EPS and raw (non-dividend-adjusted) year-end prices — cheap vs its own history is a different question from cheap vs peers</span></div>
+        <div class="stmt-depth-stat-value" style="font-size:14px">${bandTxt}</div>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="section-label">Growth & Returns</div>
+  <div class="cap" style="margin-bottom:10px">Derived from the same reported rows in the tables above — standard formulas, no new data.</div>
+  ${growthTable}
+  ${returnsBlock}
+  ${bvBlock}
+  ${reratingBlock}`;
+}
+/* ---- Phase 3: the Compounding Checklist ------------------------------
+   Per-company only, never a total, never a rank -- see the plan's hard
+   constraints. compoundingChecklist() already returns all ten conditions
+   in fixed order with a real printed value each; this function only adds
+   the framing text, the quality-gate overlay, and identical styling for
+   met/not-met rows (state is a word, never a colour). */
+function renderCompoundingChecklistHTML(){
+  const s=L.statements;
+  const d = s.data[s.primary];
+  if(!d || d.status!=='ready') return '';
+  const bundle = d.result;
+  const faceValue = bundle.topRatios && bundle.topRatios.faceValue;
+  const conditions = compoundingChecklist(bundle, {faceValue});
+  const gate = checklistQualityGate(computeStatementsDivergence());
+  const blocked = gate.blocked && !s.checklistDismissed;
+  const stateLabel = c => c.available ? (c.meets===true ? 'Met' : c.meets===false ? 'Not met' : 'Unclear') : 'Not available';
+  const rows = conditions.map(c=>`<div class="stmt-checklist-row${c.available?'':' unavailable'}">
+    <span class="stmt-checklist-id">${c.id}</span>
+    <span class="stmt-checklist-label">${advisorAttr(c.label)}</span>
+    <span class="stmt-checklist-value">${advisorAttr(c.value)}</span>
+    <span class="stmt-checklist-state">${stateLabel(c)}</span>
+  </div>`).join('');
+  const tr = bundle.topRatios;
+  const peResult = statementsPeBand(s.primary);
+  const peBand = (peResult && peResult.status==='ready') ? peResult.band : null;
+  let peHistoryClause = '';
+  if(peBand && peBand.percentile!=null){
+    const clean = peBand.series.filter(p=>p.value!=null);
+    const below = clean.filter(p=>p.value<=peBand.current).length;
+    peHistoryClause = `, higher than in ${below} of the last ${clean.length} years`;
+  }
+  const peLine = (tr && tr.stockPE!=null) ? `<div class="cap" style="margin-top:12px">This company currently trades at a P/E of ${tr.stockPE.toFixed(1)}${peHistoryClause}. This checklist describes the past ten years of the business. It says nothing about what you would pay today.</div>` : '';
+  const overlay = gate.blocked ? `<div class="stmt-checklist-gate">
+    <div>${advisorAttr(gate.reason)}</div>
+    ${blocked ? `<button class="ns-btn" data-stmt-checklist-dismiss>Show the checklist anyway</button>` : ''}
+  </div>` : '';
+  return `<div class="section-label">Compounding Checklist</div>
+  <div class="stmt-checklist-framing">
+    <p>Companies that grew steadily over decades tended to share certain patterns in their past accounts. This page checks how many of those patterns are present in ${advisorAttr(s.primary)}'s last ten years.</p>
+    <p>This is a description of what already happened. It is not a forecast, not a rating, and not advice to buy or sell anything.</p>
+    <p>Two things worth knowing before you read it. Many companies that showed every one of these patterns still went nowhere afterwards. And we can only see the companies that survived to be looked at — the ones that failed aren't in any of this data. What a company did for ten years does not determine what it does next.</p>
+  </div>
+  ${overlay}
+  ${blocked ? '' : `<div class="stmt-checklist-list">${rows}</div>${peLine}`}`;
 }
 function statementsEffectiveCompare(){
   const s=L.statements;
@@ -5657,11 +5989,30 @@ function benchChartOptionAtYear(pins, year){
   }
   return { legend:{show:false}, xAxis:{type:'category', data:cats}, yAxis:{type:'value'}, series };
 }
+// A chart with no caption asks the reader to infer units, window and mode
+// from axis labels alone -- fine for someone who already knows what an
+// indexed line means, useless for the beginner this whole tab is for.
+// Computed from the pins actually on screen, so it can never drift from
+// what the chart is showing.
+function benchCaptionText(pins, indexed, focusYear){
+  if(!pins.length) return '';
+  const names = pins.map(p=>p.label);
+  const list = names.length<=2 ? names.join(' and ') : names.slice(0,-1).join(', ')+' and '+names[names.length-1];
+  const hasCompare = pins.some(p=>p.compareSeries);
+  if(focusYear!=null) return `FY${focusYear} only — one bar per pinned row${hasCompare?' per company':''}: ${list}.`;
+  const years = pins.flatMap(p=>p.series.map(s=>s.year));
+  const minY = years.length?Math.min(...years):null, maxY=years.length?Math.max(...years):null;
+  const rangeTxt = (minY!=null && maxY!=null) ? `FY${minY}–FY${maxY}` : '';
+  return indexed
+    ? `Indexed to 100 at ${minY!=null?'FY'+minY:'the earliest common year'} so lines are comparable regardless of scale, ${rangeTxt}: ${list}.`
+    : `Actual reported values, ${rangeTxt}: ${list}.`;
+}
 function updateBenchChart(){
   const s=L.statements;
   const dom=document.getElementById('stmtBenchChart');
+  const capEl=document.getElementById('stmtBenchCaption');
   if(!dom) return;
-  if(!s.pins.length){ disposeChart('stmtBenchChart'); dom.innerHTML='<div class="cap" style="padding:20px">Pin a row below to chart it here.</div>'; return; }
+  if(!s.pins.length){ disposeChart('stmtBenchChart'); dom.innerHTML='<div class="cap" style="padding:20px">Pin a row below to chart it here.</div>'; if(capEl) capEl.textContent=''; return; }
   dom.innerHTML='';
   const pins = s.pins.map(statementsPinSeries);
   const option = s.focusYear!=null ? benchChartOptionAtYear(pins, s.focusYear) : benchChartOption(pins, s.indexed);
@@ -5670,6 +6021,7 @@ function updateBenchChart(){
   // so a data-period hover value can't address a dataIndex on it the same
   // way -- cross-highlight only applies to the default over-time view.
   stmtChartYears.bench = s.focusYear==null ? (option.__years||[]) : [];
+  if(capEl) capEl.textContent = benchCaptionText(pins, s.indexed, s.focusYear);
 }
 function renderDivergenceParts(){
   const result = computeStatementsDivergence();
@@ -5714,7 +6066,7 @@ function updateProfitCashChart(){
 }
 
 /* ---- rendering: the four statement tables ----------------------------- */
-function statementRowHTML(sectionKey, label, primarySection, compareSection, periods, pinnedSet, focusYear, changeMode){
+function statementRowHTML(sectionKey, label, primarySection, compareSection, periods, pinnedSet, focusYear, changeMode, rowIndex){
   const primSeriesAll = fySeriesSafe(primarySection, label);
   const {med, maxAbsDev} = statementsMedianAndSpread(primarySection, label);
   const iqr = iqrBounds(primSeriesAll.map(p=>p.value));
@@ -5769,7 +6121,7 @@ function statementRowHTML(sectionKey, label, primarySection, compareSection, per
     }).join('');
     compareRow = `<tr class="stmt-compare-subrow"><td>${advisorAttr(L.statements.compare)}</td>${compCells}<td></td><td></td></tr>`;
   }
-  return `<tr class="stmt-row${isPinned?' pinned':''}" data-stmt-pin="${advisorAttr(key)}">
+  return `<tr class="stmt-row${isPinned?' pinned':''}${(rowIndex%2)?' stmt-alt':''}" data-stmt-pin="${advisorAttr(key)}">
     <td>
       <div class="stmt-rowlabel-inner">
         ${spark}
@@ -5803,7 +6155,7 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
     const label = p.type==='ttm' ? 'TTM' : 'FY'+String(p.year).slice(2);
     return `<th class="${p.type==='ttm'?'stmt-th-ttm':''}" data-stmt-year="${p.type==='ttm'?'':p.year}">${label}${band}</th>`;
   }).join('');
-  const bodyRows = rows.map(label=>statementRowHTML(sectionKey,label,primSection,compareSection,periods,pinnedSet,L.statements.focusYear,L.statements.changeMode)).join('');
+  const bodyRows = rows.map((label,i)=>statementRowHTML(sectionKey,label,primSection,compareSection,periods,pinnedSet,L.statements.focusYear,L.statements.changeMode,i)).join('');
   // Box-score footer: updates with the focused row -- the last row pinned
   // from *this* table, falling back to the table's headline row so a fresh
   // load isn't a blank footer. A full row click already re-renders the
@@ -5836,7 +6188,11 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
   }
   const collapsed = !!L.statements.collapsedSections[sectionKey];
   return `<div class="stmt-section-block${collapsed?' stmt-collapsed':''}" data-stmt-section="${sectionKey}">
-  <div class="stmt-table-title"><button class="stmt-collapse-btn" data-stmt-collapse="${sectionKey}" aria-expanded="${collapsed?'false':'true'}" title="Collapse or expand this section">${collapsed?'▸':'▾'}</button>${advisorAttr(sectionLabel)} <span class="cap" style="font-family:'Spline Sans Mono',monospace;font-size:10px">${sectionKey==='ratios'?'':'(Rs Cr unless noted)'}</span></div>
+  <div class="stmt-table-title" data-stmt-collapse="${sectionKey}" role="button" tabindex="0" aria-expanded="${collapsed?'false':'true'}" title="Click to collapse or expand this section">
+    <span class="stmt-collapse-chevron">${collapsed?'▸':'▾'}</span>
+    <span class="stmt-table-title-label">${advisorAttr(sectionLabel)}</span>
+    <span class="cap" style="font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:400">${sectionKey==='ratios'?'':'Rs Cr unless noted'}</span>
+  </div>
   ${coverageNote}
   <div class="stmt-table-wrap"><table class="stmt-table">
     <thead><tr><th>Line item</th>${theadCols}<th class="stmt-th-median">vs 12y median</th><th></th></tr></thead>
@@ -5886,7 +6242,9 @@ function buildStatementsHighlightCSS(){
    text inputs and are refreshed only by the specific actions that change
    their state, so typing in one doesn't get wiped by an unrelated click. */
 function updateStatementsUI(){
-  const headerEl=document.getElementById('stmtHeaderCard'); if(headerEl) headerEl.outerHTML = `<div class="card" id="stmtHeaderCard">${renderStatementsHeaderHTML()}</div>`;
+  const headerEl=document.getElementById('stmtHeaderCard'); if(headerEl) headerEl.outerHTML = `<div class="stmt-card" id="stmtHeaderCard">${renderStatementsHeaderHTML()}</div>`;
+  const topbarCurrentEl=document.getElementById('stmtTopbarCurrent');
+  if(topbarCurrentEl) topbarCurrentEl.textContent = (L.statements.primary||'No company open')+(L.statements.compare?' vs '+L.statements.compare:'');
   const refusalEl=document.getElementById('stmtRefusal'); if(refusalEl) refusalEl.innerHTML = renderRefusalHTML();
   const hintEl=document.getElementById('stmtBenchHint'); if(hintEl) hintEl.textContent = L.statements.pins.length ? '' : 'Sales is pinned. Click any row below to add it here.';
   const chipsEl=document.getElementById('stmtBenchChips'); if(chipsEl) chipsEl.innerHTML = renderBenchChipsHTML();
@@ -5898,6 +6256,8 @@ function updateStatementsUI(){
   const flagEl=document.getElementById('stmtFlagDetail'); if(flagEl) flagEl.innerHTML=renderFlagDetailHTML();
   updateProfitCashChart();
   renderStatementTables();
+  const depthEl=document.getElementById('stmtDepth'); if(depthEl) depthEl.innerHTML = renderDepthMetricsHTML();
+  const checklistEl=document.getElementById('stmtChecklist'); if(checklistEl) checklistEl.innerHTML = renderCompoundingChecklistHTML();
   buildStatementsHighlightCSS();
   const toLiveBtn=document.getElementById('stmtToLiveBtn'); if(toLiveBtn) toLiveBtn.textContent = 'Add '+(L.statements.primary||'\u2014')+' to Test Real Investments';
 }
@@ -5959,6 +6319,23 @@ document.body.addEventListener('click', e=>{
   const el = e.target.closest('[data-stmt-flag]');
   if(!el) return;
   statementsOpenFlag(el.dataset.stmtFlag);
+});
+document.body.addEventListener('click', e=>{
+  if(!e.target.closest('#stmtTopbarToggle')) return;
+  L.statements.topbarOpen = !L.statements.topbarOpen;
+  const topbar=document.getElementById('stmtTopbar');
+  const body=document.getElementById('stmtTopbarBody');
+  const btn=document.getElementById('stmtTopbarToggle');
+  const chevron=btn && btn.querySelector('.stmt-topbar-chevron');
+  if(topbar) topbar.classList.toggle('open', L.statements.topbarOpen);
+  if(body) body.style.display = L.statements.topbarOpen ? '' : 'none';
+  if(btn) btn.setAttribute('aria-expanded', L.statements.topbarOpen?'true':'false');
+  if(chevron) chevron.textContent = L.statements.topbarOpen ? '▾' : '▸';
+});
+document.body.addEventListener('click', e=>{
+  if(!e.target.closest('[data-stmt-checklist-dismiss]')) return;
+  L.statements.checklistDismissed = true;
+  const checklistEl=document.getElementById('stmtChecklist'); if(checklistEl) checklistEl.innerHTML = renderCompoundingChecklistHTML();
 });
 document.body.addEventListener('click', e=>{
   if(e.target.id==='stmtSearchBtn') statementsSubmitSearch();
@@ -6031,16 +6408,26 @@ document.body.addEventListener('click', e=>{
 // Collapsing a section is on the stable-shell's explicit never-full-re-render
 // list -- toggle the class on the one section block plus the button's own
 // glyph/aria-state, nothing else touches the DOM.
-document.body.addEventListener('click', e=>{
-  const btn = e.target.closest('[data-stmt-collapse]');
-  if(!btn) return;
-  const key = btn.dataset.stmtCollapse;
+function toggleStmtSection(titleEl){
+  if(!titleEl) return;
+  const key = titleEl.dataset.stmtCollapse;
   const collapsed = !L.statements.collapsedSections[key];
   L.statements.collapsedSections[key] = collapsed;
-  const block = btn.closest('.stmt-section-block');
+  const block = titleEl.closest('.stmt-section-block');
   if(block) block.classList.toggle('stmt-collapsed', collapsed);
-  btn.setAttribute('aria-expanded', collapsed?'false':'true');
-  btn.textContent = collapsed?'▸':'▾';
+  titleEl.setAttribute('aria-expanded', collapsed?'false':'true');
+  const chevron = titleEl.querySelector('.stmt-collapse-chevron');
+  if(chevron) chevron.textContent = collapsed?'▸':'▾';
+}
+document.body.addEventListener('click', e=>{
+  toggleStmtSection(e.target.closest('[data-stmt-collapse]'));
+});
+document.body.addEventListener('keydown', e=>{
+  if(e.key!=='Enter' && e.key!==' ') return;
+  const titleEl = e.target.closest && e.target.closest('[data-stmt-collapse]');
+  if(!titleEl) return;
+  e.preventDefault();
+  toggleStmtSection(titleEl);
 });
 document.body.addEventListener('keydown', e=>{
   if(e.target && e.target.id==='stmtSearchInput' && e.key==='Enter'){ statementsSubmitSearch(); return; }
