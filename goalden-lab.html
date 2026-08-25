@@ -6982,7 +6982,13 @@ function stmtExploreUpdateChart(){
   if(!xDef||!yDef){ clearAll('Pick an X metric and a Y metric.'); return; }
   const pairsRaw=alignFyPairs(xDef.data,yDef.data).filter(function(p){ return inWindow(p.year); });
   if(pairsRaw.length<2){ clearAll('Fewer than two common years between those two metrics'+((st.yFrom!=null||st.yTo!=null)?' inside the chosen year window':'')+'. Widen the window or pick different rows.'); return; }
-  if(dom.innerHTML) dom.innerHTML='';
+  // Only clear stray markup (e.g. a leftover .sx-empty message) when there's
+  // no live chart instance for this container -- initChart() reuses the same
+  // dom node across renders, so wiping its innerHTML while an instance is
+  // still attached rips out ECharts' own SVG root from under it, leaving the
+  // instance alive but painting into a detached node (a permanently blank
+  // chart on every axis change after the first render).
+  if(!chartInstances[STMT_EXPLORE_CHART_ID] && dom.innerHTML) dom.innerHTML='';
 
   // Pearson r over the aligned pairs — pure arithmetic, deterministic.
   const n=pairsRaw.length;

@@ -2156,3 +2156,33 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
   design decision that should be made explicitly â€” not something to
   sneak in as a default.
 
+## 2026-08-25 (3) - Claude Code
+
+- **User reported the X vs Y scatter chart rendering blank** after
+  picking a second axis combination (e.g. Other Income vs Equity
+  Capital), even though the fact chips above it (points count, Pearson r)
+  computed correctly. Root cause in `stmtExploreUpdateChart()`'s scatter
+  branch: `if(dom.innerHTML) dom.innerHTML='';` wiped the chart
+  container's DOM directly, every time. `initChart()` reuses the same
+  DOM node across renders once an instance exists (it only re-inits on
+  node-identity change), so on the *second* scatter render this line
+  ripped ECharts' own SVG root out from under a still-live instance --
+  the instance object survived and `setOption` ran without error, but
+  painted into a now-detached node, leaving the visible container
+  permanently empty from that point on. Fixed by only clearing when no
+  live chart instance is registered for that container
+  (`!chartInstances[STMT_EXPLORE_CHART_ID]`), which still clears a
+  leftover ".sx-empty" message before a fresh `echarts.init()`, but
+  leaves an existing instance's rendering root alone -- `initChart`'s own
+  `setOption(option, true)` already fully replaces the previous chart.
+- Verified live (browser, local server): first scatter render works
+  (SVG present), then reproduced the exact bug (SVG still present but
+  0 real content after wipe) against the fix, then confirmed correct
+  after the fix across three consecutive axis changes (Sales/Net
+  Profit -> Other Income/Equity Capital -> Sales/Other Income ->
+  Reserves/Cash from Operating Activity), each producing real SVG
+  paths and the expected 12-point series.
+- node --test engine.test.js: 102/102 PASS. Inline-script syntax check:
+  OK.
+- Last commit pushed: (see next commit)
+
