@@ -6619,19 +6619,27 @@ function updateProfitCashChart(){
    arithmetic over the loaded bundles via statements-engine helpers
    (stmtExploreCatalog / alignFyPairs / pctOfSalesSeries). */
 const STMT_EXPLORE_CHART_ID = 'stmtExploreChart';
+var stmtExploreCompareLoading = false;
 
 function stmtExploreState(){
   if(!L.statements.explore){
     L.statements.explore = {
-      mode:'lines',            // 'lines' (over time) | 'scatter' (X vs Y)
-      slots:[null,null,null],  // row keys for lines mode (up to 3 series)
-      xKey:null, yKey:null,    // row keys for scatter mode
-      company:'primary',       // whose rows: 'primary' | 'compare'
-      scale:'indexed',         // 'indexed' | 'level' | 'pctSales'
-      yFrom:null, yTo:null     // fiscal-year window (nulls = full range)
+      mode:'lines',
+      slots:[null,null,null],
+      slotCompanies:['primary','primary','primary'],
+      xKey:null, yKey:null,
+      xCompany:'primary', yCompany:'compare',
+      company:'primary',
+      scale:'indexed',
+      yFrom:null, yTo:null
     };
   }
-  return L.statements.explore;
+  // Backward compatibility: ensure per-slot companies exist
+  var st=L.statements.explore;
+  if(!st.slotCompanies) st.slotCompanies=['primary','primary','primary'];
+  if(!st.xCompany) st.xCompany='primary';
+  if(!st.yCompany) st.yCompany=st.company||'primary';
+  return st;
 }
 function stmtExploreCompanySym(which){
   if(which==='compare'){
@@ -6734,38 +6742,46 @@ function stmtExploreOptionHTML(cat, selected){
 function stmtExploreRenderControls(){
   const st=stmtExploreState();
   const box=document.getElementById('sxControls'); if(!box) return;
-  // The picker list must reflect whichever company is actually selected --
-  // a bank and a manufacturer report different rows, and offering the
-  // wrong company's row list would let a pick silently plot nothing.
-  const activeCat=stmtExploreCatalogFor(stmtExploreCompanySym(st.company));
   const hasCompare=!!(L.statements.compare && statementsBundle(L.statements.compare));
-  let html='';
-  const companySel=function(){
-    let opts='<option value="primary"'+(st.company!=='compare'?' selected':'')+'>'+advisorAttr(L.statements.primary||'\u2014')+'</option>';
-    if(hasCompare) opts+='<option value="compare"'+(st.company==='compare'?' selected':'')+'>'+advisorAttr(L.statements.compare)+'</option>';
-    return '<div class="sx-field"><label>Company</label><select data-sx-company>'+opts+'</select></div>';
+  var compareLoading=false;
+  const companySel=function(id,current){
+    var opts='<option value="primary"'+(current!=='compare'?' selected':'')+'>'+advisorAttr(L.statements.primary||'\u2014')+'</option>';
+    if(hasCompare) opts+='<option value="compare"'+(current==='compare'?' selected':'')+'>'+advisorAttr(L.statements.compare)+'</option>';
+    else opts+='<option value="" disabled>+ Load a company to compare</option>';
+    return '<div class="sx-field"><label>Company</label><select data-sx-company="'+id+'"'+(!hasCompare?' data-sx-needs-compare="1"':'')+'>'+opts+'</select></div>';
   };
+  var catFor=function(w){ return stmtExploreCatalogFor(stmtExploreCompanySym(w)); };
+  var compareCta='';
+  if(!hasCompare && stmtExploreCompareLoading){
+    compareCta='<div class="sx-field"><label>&nbsp;</label><div style="display:flex;gap:6px;align-items:center">'
+      +'<input data-sx-compare-input type="text" placeholder="e.g. HDFCBANK" style="width:160px;padding:7px 9px;border:1px solid rgba(20,40,63,.2);border-radius:8px;font-size:12.5px;text-transform:uppercase" autofocus>'
+      +'<button class="ns-btn" data-sx-compare-go style="padding:7px 12px">Load</button></div></div>';
+  } else if(!hasCompare){
+    compareCta='<div class="sx-field" style="justify-content:flex-end"><label>&nbsp;</label>'
+      +'<button class="ns-btn" data-sx-add-compare style="display:inline-flex;white-space:nowrap;padding:7px 14px">+ Compare with another company</button></div>';
+  }
+  let html='';
   if(st.mode==='lines'){
-    html+=companySel();
     for(let i=0;i<3;i++){
-      html+='<div class="sx-field"><label>Metric '+(i+1)+'</label><select data-sx-slot="'+i+'"><option value="">\u2014 none \u2014</option>'+stmtExploreOptionHTML(activeCat,st.slots[i])+'</select></div>';
+      var comp=st.slotCompanies[i]||'primary';
+      var cat=catFor(comp);
+      html+='<div class="sx-field" style="min-width:260px"><label>'+(i+1)+(hasCompare?' \u00b7 '+companySel('slot'+i):'')+'</label>';
+      html+='<select data-sx-slot="'+i+'"><option value="">\u2014 none \u2014</option>'+stmtExploreOptionHTML(catFor(comp),st.slots[i])+'</select></div>';
     }
+    html+=compareCta;
     html+='<div class="sx-field"><label>Scale</label><div class="sx-seg">'+
       '<button data-sx-scale="indexed"'+(st.scale==='indexed'?' class="active"':'')+'>Indexed</button>'+
       '<button data-sx-scale="level"'+(st.scale==='level'?' class="active"':'')+'>Rupees</button>'+
       '<button data-sx-scale="pctSales"'+(st.scale==='pctSales'?' class="active"':'')+'>% of sales</button></div></div>';
   } else {
-    html+=companySel();
-    html+='<div class="sx-field"><label>X axis</label><select data-sx-axis="x">'+stmtExploreOptionHTML(activeCat,st.xKey)+'</select></div>';
-    html+='<div class="sx-field"><label>Y axis</label><select data-sx-axis="y">'+stmtExploreOptionHTML(activeCat,st.yKey)+'</select></div>';
+    html+=companySel('x');
+    html+='<div class="sx-field"><label>X axis</label><select data-sx-axis="x">'+stmtExploreOptionHTML(catFor(st.xCompany||'primary'),st.xKey)+'</select></div>';
+    html+=compareCta;
+    html+=companySel('y');
+    html+='<div class="sx-field"><label>Y axis</label><select data-sx-axis="y">'+stmtExploreOptionHTML(catFor(st.yCompany||'primary'),st.yKey)+'</select></div>';
   }
   const years=stmtExploreYearUnion();
   if(years.length>2){
-    // fallbackYear differs per select -- reusing one "default to the latest
-    // year" rule for both used to mark FY2026 selected in the From-year
-    // dropdown too, which visually implied the window started at the same
-    // year it ended even though st.yFrom was still null underneath (the
-    // chart itself plotted the full range; only the shown selection lied).
     const yrOpts=function(sel, fallbackYear){ return years.map(function(y){ return '<option value="'+y+'"'+((st.mode==='lines'&&sel==null&&y===fallbackYear)||(sel===y)?' selected':'')+'>'+'FY'+y+'</option>'; }).join(''); };
     html+='<div class="sx-field"><label>From year</label><select data-sx-year="from"><option value="">earliest</option>'+yrOpts(st.yFrom, years[0])+'</select></div>';
     html+='<div class="sx-field"><label>To year</label><select data-sx-year="to"><option value="">latest</option>'+yrOpts(st.yTo, years[years.length-1])+'</select></div>';
@@ -6814,10 +6830,19 @@ function stmtExploreUpdateChart(){
   const inWindow=function(yr){ return (lo==null || yr>=lo) && (hi==null || yr<=hi); };
 
   if(st.mode==='lines'){
-    const defs=st.slots.filter(Boolean)
-      .map(k=>{ const s=stmtExploreSeriesFor(k,st.company,st.scale==='pctSales'?'pctSales':'level'); return s?{ s:s, unit:s.unit, label:s.label }:null; })
+    const defs=st.slots.map(function(k,i){
+      if(!k) return null;
+      var comp=st.slotCompanies[i]||'primary';
+      var s=stmtExploreSeriesFor(k,comp,st.scale==='pctSales'?'pctSales':'level');
+      if(!s) return null;
+      // When two companies are in play, tag the series name with the symbol
+      // so the viewer knows whose number they're looking at.
+      var displayName=s.name;
+      if(s.sym!==L.statements.primary) displayName=s.name+' ('+s.sym+')';
+      return { s:{ name:displayName, label:s.label, unit:s.unit, sym:s.sym, data:s.data }, key:k };
+    })
       .filter(Boolean)
-      .map(o=>({ s:o.s, unit:o.unit, label:o.label, data:o.s.data.filter(p=>inWindow(p.year)) }))
+      .map(o=>({ s:o.s, key:o.key, unit:o.s.unit, label:o.s.label, data:o.s.data.filter(p=>inWindow(p.year)) }))
       .filter(o=>o.data.length>0);
     if(!defs.length){ clearAll('Pick at least one metric with values inside the chosen year window.'); return; }
     // No manual dom.innerHTML clear here -- initChart() already reuses the
@@ -6977,8 +7002,8 @@ function stmtExploreUpdateChart(){
   // scatter: X vs Y over common fiscal years, with a trajectory path showing
   // the direction of travel through metric space, plus a live Pearson
   // correlation coefficient — the arithmetic answer to "do these move together?"
-  const xDef=st.xKey?stmtExploreSeriesFor(st.xKey,st.company,'level'):null;
-  const yDef=st.yKey?stmtExploreSeriesFor(st.yKey,st.company,'level'):null;
+  const xDef=st.xKey?stmtExploreSeriesFor(st.xKey,st.xCompany||'primary','level'):null;
+  const yDef=st.yKey?stmtExploreSeriesFor(st.yKey,st.yCompany||st.company||'primary','level'):null;
   if(!xDef||!yDef){ clearAll('Pick an X metric and a Y metric.'); return; }
   const pairsRaw=alignFyPairs(xDef.data,yDef.data).filter(function(p){ return inWindow(p.year); });
   if(pairsRaw.length<2){ clearAll('Fewer than two common years between those two metrics'+((st.yFrom!=null||st.yTo!=null)?' inside the chosen year window':'')+'. Widen the window or pick different rows.'); return; }
@@ -7044,6 +7069,32 @@ function stmtExploreUpdateChart(){
     cap+=' Y: '+yDef.label+stmtExploreUnitSuffix(yDef.label)+' ('+yDef.sym+').';
     if(pearsonR!=null && Math.abs(pearsonR)>=0.7) cap+=' These two metrics have moved '+(pearsonR>0?'together':'in opposite directions')+' across this window.';
     capEl.textContent=cap;
+    // Pearson r explanation — always visible below the caption in scatter
+    // mode when a correlation value exists. Deterministic text, same every
+    // time, no model.
+    var pearsonEl=document.getElementById('sxPearsonExplain');
+    if(!pearsonEl){
+      pearsonEl=document.createElement('div');
+      pearsonEl.id='sxPearsonExplain';
+      pearsonEl.style.cssText='margin-top:10px;padding:12px 16px;background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.12);border-radius:10px;font-size:12.5px;color:rgba(20,40,63,.7);line-height:1.65;max-width:820px';
+      capEl.parentNode.insertBefore(pearsonEl,capEl.nextSibling);
+    }
+    if(pearsonR!=null){
+      var direction=pearsonR>0?'above':pearsonR<0?'below':'near';
+      var strengthTxt=Math.abs(pearsonR)>=0.7?'strongly':Math.abs(pearsonR)>=0.4?'moderately':'weakly';
+      pearsonEl.innerHTML='<b>What Pearson r means.</b> '
+        +'Pearson r measures how closely two sets of numbers move together, on a scale from \u22121 to +1. '
+        +'A value near +1 means both tend to rise and fall in the same direction. '
+        +'A value near \u22121 means one tends to rise while the other falls. '
+        +'A value near 0 means no consistent linear pattern between them. '
+        +'Here, r = '+pearsonR.toFixed(2)+' sits '+direction+' '+(pearsonR>0?'+1':pearsonR<0?'\u22121':'0')
+        +' \u2014 the two metrics '+(Math.abs(pearsonR)>=0.4?'are':'appear')+' '+strengthTxt+' '
+        +(pearsonR>0?'aligned':pearsonR<0?'opposed':'related')+' across these '+n+' years. '
+        +'This describes what already happened in this window; it does not predict what happens next, and it does not mean one metric causes the other.';
+      pearsonEl.style.display='';
+    } else {
+      pearsonEl.style.display='none';
+    }
   }
 
   // Double-click any scatter point or line-mode element to drill down into
@@ -7073,7 +7124,26 @@ function stmtExploreUpdateChart(){
 document.body.addEventListener('click', function(e){
   if(e.target.closest('[data-sx-open]')){ stmtExploreOpen(); return; }
   if(e.target.closest('[data-sx-close]')){ stmtExploreClose(); return; }
-  const modeBtn=e.target.closest('[data-sx-mode]');
+  // "+ Compare with another company" → swap the button for an inline search
+  if(e.target.closest('[data-sx-add-compare]')){
+    stmtExploreCompareLoading=true;
+    stmtExploreRenderControls();
+    var inp=document.querySelector('[data-sx-compare-input]');
+    if(inp) inp.focus();
+    return;
+  }
+  // "Load" button in the inline compare search
+  if(e.target.closest('[data-sx-compare-go]')){
+    var inp=document.querySelector('[data-sx-compare-input]');
+    var sym=inp?inp.value.trim().toUpperCase():'';
+    if(!sym) return;
+    stmtExploreCompareLoading=false;
+    statementsSetCompare(sym);
+    // fetchStatementsCompany is async — re-render controls after it settles
+    setTimeout(function(){ stmtExploreRenderControls(); stmtExploreUpdateChart(); },600);
+    return;
+  }
+  var modeBtn=e.target.closest('[data-sx-mode]');
   if(modeBtn){
     const st=stmtExploreState(); st.mode=modeBtn.dataset.sxMode;
     document.querySelectorAll('#stmtExploreOverlay [data-sx-mode]').forEach(function(b){ b.classList.toggle('active',b.dataset.sxMode===st.mode); });
@@ -7086,6 +7156,15 @@ document.body.addEventListener('click', function(e){
     stmtExploreUpdateChart(); return;
   }
 });
+// Enter key in the inline compare search triggers the load
+document.body.addEventListener('keydown', function(e){
+  if(e.key!=='Enter' || !e.target.matches('[data-sx-compare-input]')) return;
+  var sym=e.target.value.trim().toUpperCase();
+  if(!sym) return;
+  stmtExploreCompareLoading=false;
+  statementsSetCompare(sym);
+  setTimeout(function(){ stmtExploreRenderControls(); stmtExploreUpdateChart(); },600);
+});
 document.body.addEventListener('change', function(e){
   const ov=document.getElementById('stmtExploreOverlay');
   if(!ov || !ov.contains(e.target)) return;
@@ -7095,15 +7174,24 @@ document.body.addEventListener('change', function(e){
   } else if(e.target.matches('[data-sx-axis]')){
     if(e.target.dataset.sxAxis==='x') st.xKey=e.target.value||null; else st.yKey=e.target.value||null;
   } else if(e.target.matches('[data-sx-company]')){
-    st.company=e.target.value;
-    // Keys from the previous company may not exist in this one's rows —
-    // drop dead selections rather than chart an empty series silently.
-    const cat=stmtExploreCatalogFor(stmtExploreCompanySym(st.company));
-    const live=function(k){ return !k || cat.some(function(c){ return c.key===k; }); };
-    st.slots=st.slots.map(function(k){ return live(k)?k:null; });
-    if(!live(st.xKey)) st.xKey=null;
-    if(!live(st.yKey)) st.yKey=null;
-    stmtExploreSeed(st); stmtExploreRenderControls();
+    var which=e.target.dataset.sxCompany;
+    if(which.indexOf('slot')===0){
+      var si=parseInt(which.replace('slot',''),10)||0;
+      st.slotCompanies[si]=e.target.value;
+      // Drop dead selections from the other company's row list
+      var cat=stmtExploreCatalogFor(stmtExploreCompanySym(e.target.value));
+      if(st.slots[si] && !cat.some(function(c){ return c.key===st.slots[si]; })) st.slots[si]=null;
+    } else {
+      st.company=e.target.value;
+      if(which==='x') st.xCompany=e.target.value;
+      if(which==='y') st.yCompany=e.target.value;
+      var cat2=stmtExploreCatalogFor(stmtExploreCompanySym(e.target.value));
+      var live=function(k){ return !k || cat2.some(function(c){ return c.key===k; }); };
+      st.slots=st.slots.map(function(k){ return live(k)?k:null; });
+      if(!live(st.xKey)) st.xKey=null;
+      if(!live(st.yKey)) st.yKey=null;
+      stmtExploreSeed(st); stmtExploreRenderControls();
+    }
   } else if(e.target.matches('[data-sx-year]')){
     const v=e.target.value?parseInt(e.target.value,10):null;
     if(e.target.dataset.sxYear==='from') st.yFrom=v; else st.yTo=v;

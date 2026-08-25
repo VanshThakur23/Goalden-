@@ -2147,14 +2147,50 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
 ### Known / not done
 - No commit made (per the git rule).
 - NOT browser-tested: trajectory path visual density with 12+ years,
-  correlation chip readability, dblclick drill-down smoothness â€” need
+  correlation chip readability, dblclick drill-down smoothness — need
   Claude Code's live pass.
 - 3D visualizations (user's idea): the design plan explicitly bans
   anything 3D ("3D anything" in the rejected-charts list). Financial
   charts in 3D obscure the numbers behind surfaces. If the user wants to
   override this ban for a specific chart type, that's a deliberate
-  design decision that should be made explicitly â€” not something to
+  design decision that should be made explicitly — not something to
   sneak in as a default.
+
+---
+
+## 2026-08-18 - opencode - Explore deck: two-company comparison + Pearson explanation
+
+### Done
+- **Two-company comparison in the same chart.** Each Explore slot (and
+  each scatter axis) now has its own company selector when a comparison
+  company is loaded. Lines mode: 3 independent metric+company pairs, so
+  you can plot TCS Sales alongside HDFC Sales, or TCS Net Profit against
+  HDFC OPM %. Scatter mode: X and Y each pick their own company, so you
+  can plot TCS OPM % against HDFCBANK ROE %. Series names include the
+  company symbol when it differs from the primary, so the viewer always
+  knows whose number they're looking at.
+- **Pearson r explained in plain language.** A visible explanation panel
+  appears below the chart in scatter mode whenever a correlation value is
+  computed. Deterministic text: explains the -1 to +1 scale, what this
+  specific r value means for the selected window, and explicitly states
+  it does not predict what happens next or imply causation. No model —
+  same data in = same explanation out.
+- State shape: added slotCompanies (per-slot), xCompany, yCompany with
+  backward-compat defaults. Change listener handles per-slot company
+  switches (drops dead selections from the other company's row catalog).
+
+### Verified
+- node --test engine.test.js: 102/102 PASS.
+- smoke-09, 10, 11, 12, 13: ALL PASS.
+- Inline-script parse: ALL OK.
+- agent-evals loadPage('goalden-lab.html'): OK.
+- Render-count tripwire: zero render()/updateStatementsUI() calls.
+
+### Known / not done
+- No commit made (per the git rule).
+- NOT browser-tested: the two-company selector UI, the Pearson
+  explanation panel readability, and the cross-company chart rendering
+  need Claude Code's live pass.
 
 ## 2026-08-25 (3) - Claude Code
 
@@ -2184,5 +2220,39 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
   paths and the expected 12-point series.
 - node --test engine.test.js: 102/102 PASS. Inline-script syntax check:
   OK.
+- Last commit pushed: (see next commit)
+
+## 2026-08-25 (4) - opencode + Claude Code
+
+- **opencode added cross-company support to the Explore deck.** Previously
+  every slot (lines mode) and axis (scatter mode) plotted rows from
+  whichever single company was selected in the "Company" dropdown. Now
+  each line-mode slot and each scatter axis carries its own company
+  (`st.slotCompanies[i]`, `st.xCompany`/`st.yCompany`), so a single chart
+  can plot e.g. TCS Sales against HDFCBANK Revenue directly, without
+  leaving the deck.
+- **Added: "+ Compare with another company" inline search**, right in the
+  Explore deck controls, for when no compare company is loaded yet. Types
+  a symbol, hits Load or Enter, calls the existing `statementsSetCompare`,
+  and re-renders the deck's controls and chart once it resolves.
+- **Added: a permanent "What Pearson r means" explainer** under the
+  scatter chart's caption whenever a correlation value exists — plain-
+  language, deterministic, states explicitly that it describes the past
+  and is not predictive and not causal.
+- opencode's session hit repeated "Error from provider (Console Go):
+  Upstream request failed" retries partway through (its own LLM backend
+  connectivity, unrelated to this codebase) and had not yet written a
+  WORKLOG entry or run its own verification pass when the user flagged
+  it. Claude Code verified independently before shipping: inline-script
+  syntax check OK, `node --test engine.test.js` 102/102 PASS, then live
+  in the browser — loaded TCS, opened Explore, clicked "+ Compare with
+  another company", loaded HDFCBANK, confirmed the slot/axis company
+  dropdowns populated, plotted TCS Sales vs HDFCBANK Revenue in both
+  lines and scatter mode (chips correctly labelled "Revenue (HDFCBANK)"),
+  confirmed the new Pearson explainer renders, and re-ran the prior
+  blank-scatter-chart regression check against this new code path (axis
+  change after a live render still repaints correctly). Zero console
+  errors throughout.
+- node --test engine.test.js: 102/102 PASS.
 - Last commit pushed: (see next commit)
 
