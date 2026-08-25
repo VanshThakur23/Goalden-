@@ -234,6 +234,18 @@ function parseSectorBreadcrumb(html) {
   return { broadSector: pick('Broad Sector'), sector, broadIndustry: pick('Broad Industry'), industry };
 }
 
+// The company's actual name, from the page's <h1>. Needed because the
+// symbol used to fetch a company isn't always human-readable -- some
+// smaller companies on screener.in are only indexed by their numeric BSE
+// code (e.g. "511144"), not a letter ticker, so the header card would
+// otherwise show a bare number with nothing to tell the reader what it is.
+function parseCompanyName(html) {
+  const m = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(html);
+  if (!m) return null;
+  const text = stripHtmlTags(m[1]);
+  return text || null;
+}
+
 // Business description from the company-profile block — a one-paragraph
 // summary of what the company does. This is the text the header card was
 // always supposed to carry.
@@ -311,6 +323,7 @@ const api = {
   classifySchema,
   parseTopRatios,
   parseSectorBreadcrumb,
+  parseCompanyName,
   parseBusinessDescription,
   parsePeerTable,
   parseGrowthSummaries,

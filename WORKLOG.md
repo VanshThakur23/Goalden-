@@ -2070,3 +2070,40 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
   computation to unit-test against the engine).
 - Last commit pushed: (see next commit)
 
+## 2026-08-25 (2) - Claude Code
+
+- **User found a real gap:** typed "AXISOL" for Axis Solutions Ltd and got
+  "screener.in has no page for AXISOL" - correct behavior, but unhelpful.
+  screener.in identifies some smaller companies (Axis Solutions among them)
+  only by their numeric BSE code, not a letter ticker - confirmed via
+  screener's own /api/company/search/?q= endpoint, which returns
+  "/company/511144/" for "Axis Solutions", and by curling that URL directly
+  (200 OK). Updated the not_found error message in both worker.js and
+  local_server.py to mention this and give the concrete example.
+- **Added: company name resolution.** New parseCompanyName() in
+  screener-parser.js (reads the page's <h1>), mirrored as
+  _parse_company_name() in local_server.py, wired into result.companyName
+  in both backends. The header card now shows the real company name under
+  the symbol whenever it differs from what was typed (covers both normal
+  tickers like "TCS" and numeric BSE codes like "511144") - the avatar
+  initial now comes from the company name too, so a numeric-code company
+  doesn't show a bare digit. Verified live: 511144 -> header now reads
+  "511144" / "Axis Solutions Ltd" instead of just "511144".
+- **Found and fixed a real concurrent-edit bug, not mine:** while verifying
+  the above, node --check started failing on goalden-lab.html with
+  "Unexpected end of input". git diff showed a large unrelated change
+  already in the working tree - a new Pearson-correlation / trajectory-path
+  feature for the Explore scatter chart (stmtExploreUpdateChart), presumably
+  opencode's in-progress work in the shared directory. The diff had dropped
+  the function's own closing brace when inserting the new dblclick-drilldown
+  block at the end, leaving stmtExploreUpdateChart unclosed and every
+  following top-level statement swallowed inside it. Added the missing `}`
+  immediately after the dblclick handler registration (before the "One
+  delegated click listener..." comment, which is a separate top-level
+  listener and was clearly meant to stay outside the function). Verified
+  the feature itself works as intended after the fix: scatter mode on
+  TCS Sales vs Net Profit renders, computes Pearson r = 1.00 correctly,
+  shows the trajectory chip and dashed path, no console errors.
+- node --test engine.test.js: 102/102 PASS.
+- Last commit pushed: (see next commit)
+

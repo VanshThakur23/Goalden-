@@ -380,6 +380,14 @@ def _parse_sector_breadcrumb(html):
     return {'broadSector': pick('Broad Sector'), 'sector': sector, 'broadIndustry': pick('Broad Industry'), 'industry': industry}
 
 
+def _parse_company_name(html):
+    m = re.search(r'<h1[^>]*>([\s\S]*?)</h1>', html)
+    if not m:
+        return None
+    text = _strip_html_tags(m.group(1))
+    return text or None
+
+
 def _parse_business_description(html):
     m = re.search(r'class="company-profile"[\s\S]*?<p[^>]*>([\s\S]*?)</p>', html)
     if not m:
@@ -469,7 +477,10 @@ def _fetch_screener_page(symbol):
     raise ScreenerPageError(
         'not_found',
         f'screener.in has no page for "{symbol}" — check it\'s the bare '
-        f'NSE/BSE trading code (e.g. "TCS"), not a Yahoo-style symbol with .NS/.BO'
+        f'NSE/BSE trading code (e.g. "TCS"), not a Yahoo-style symbol with .NS/.BO. '
+        f'Some smaller companies aren\'t indexed by a letter ticker at all and only '
+        f'resolve by their numeric BSE code (e.g. "511144" for Axis Solutions Ltd) — '
+        f'try that if you have it.'
     )
 
 
@@ -494,6 +505,7 @@ def _build_financials_result(symbol, html, url, consolidated):
             f'tables on it — the page layout may have changed'
         )
     result['schema'] = _classify_schema(result['profitLoss']['rows'] if result['profitLoss'] else [])
+    result['companyName'] = _parse_company_name(html)
     result['topRatios'] = _parse_top_ratios(html)
     result['sector'] = _parse_sector_breadcrumb(html)
     result['businessDescription'] = _parse_business_description(html)

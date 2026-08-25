@@ -772,6 +772,7 @@ body.stmt-page main{max-width:1600px}
 .stmt-source-line{font-size:12px;color:var(--dim);margin-top:2px}
 .stmt-source-line a{color:var(--gold)}
 .stmt-sector-line{font-size:12.5px;color:rgba(20,40,63,.65)}
+.stmt-company-name-line{font-size:14px;color:var(--ink2);font-weight:600;margin-top:-2px}
 .stmt-desc-line{font-size:12.5px;color:rgba(20,40,63,.65);line-height:1.4;max-width:60ch}
 /* Stat tiles instead of divider-separated columns -- each one is its own
    small card, so the two that are actually clickable (they pin a
@@ -856,6 +857,10 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
    registers even if the eye was on the table row that was clicked. */
 .stmt-chip-flash{animation:stmtChipFlash 1.2s ease}
 @keyframes stmtChipFlash{0%{box-shadow:0 0 0 4px rgba(37,87,199,.5);border-color:var(--gold)}100%{box-shadow:0 0 0 0 rgba(37,87,199,0);border-color:rgba(20,40,63,.16)}}
+/* Row flash on drill-down from Explore deck — the row pulses once so the
+   user can find it after being scrolled there from the fullscreen view. */
+.stmt-row-flash td{animation:stmtRowFlash 1.5s ease!important}
+@keyframes stmtRowFlash{0%{background:rgba(37,87,199,.2)!important}100%{background:transparent!important}}
 .stmt-companion-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .stmt-companion-chip{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.3);border-radius:3px 12px 12px 12px;padding:7px 11px;font-size:11.5px;color:rgba(20,40,63,.75);cursor:pointer;max-width:340px;transition:background .12s,border-color .12s,transform .1s}
 .stmt-companion-chip b{color:var(--gold)}
@@ -6057,12 +6062,20 @@ function renderStatementsHeaderHTML(){
     <button class="stmt-market-fact" data-stmt-market-companion="Stock P/E" title="Click for what to check alongside this"><span class="stmt-market-label">Stock P/E <span class="stmt-market-clickhint">&#9656;</span></span><span class="stmt-market-value">${tr.stockPE!=null?tr.stockPE.toFixed(1)+'x':'\u2014'}</span></button>
     <button class="stmt-market-fact" data-stmt-market-companion="Dividend Yield" title="Click for what to check alongside this"><span class="stmt-market-label">Dividend Yield <span class="stmt-market-clickhint">&#9656;</span></span><span class="stmt-market-value">${tr.dividendYield!=null?tr.dividendYield.toFixed(2)+'%':'\u2014'}</span></button>
   </div>` : '';
+  // The symbol used to fetch a company isn't always human-readable -- some
+  // smaller companies on screener.in are only indexed by a numeric BSE
+  // code (e.g. "511144"), not a letter ticker -- so the header shows the
+  // actual company name as soon as it's known, not just the code someone
+  // typed to find it.
+  const companyNameLine = (r.companyName && r.companyName.trim().toUpperCase()!==String(r.symbol||'').toUpperCase()) ? `<div class="stmt-company-name-line">${advisorAttr(r.companyName)}</div>` : '';
+  const avatarChar = ((r.companyName || r.symbol || '?').trim().slice(0,1)) || '?';
   return `<div class="stmt-header-card">
     <div class="stmt-header-top">
-      <span class="stmt-header-avatar">${advisorAttr((r.symbol||'?').slice(0,1))}</span>
+      <span class="stmt-header-avatar">${advisorAttr(avatarChar)}</span>
       <span class="stmt-header-name">${advisorAttr(r.symbol)}</span>
       <div class="stmt-header-badges">${badges.join('')}</div>
     </div>
+    ${companyNameLine}
     ${sectorLine}
     ${descLine}
     ${marketSnapshot}
@@ -6930,18 +6943,64 @@ function stmtExploreUpdateChart(){
     // looks like it means, so say so rather than let it pass as comparable.
     if(mixed && ratioUnits.length>1) cap+=' The lower band mixes different units ('+ratioUnits.join(', ')+') on one shared scale \u2014 read each line\u2019s value from its tooltip, not its height against the others.';
     if(st.scale==='pctSales' && ratios.length) cap+=' Ratio rows are shown at face value \u2014 a percentage of sales is not a meaningful transform for them.';
-    if(capEl) capEl.textContent=cap;
+    // Factual observation strip: deterministic comparison of the first and
+    // last values of each series. Pure arithmetic, no judgement, same data
+    // in = same sentence out.
+    if(defs.length>=2){
+      const observations=[];
+      defs.forEach(function(o,i){
+        const first=o.data.find(function(p){ return p.value!=null; });
+        const lastPt=o.data[o.data.length-1];
+        if(!first || !lastPt || lastPt.value==null) return;
+        const chg=pctChange(first.value,lastPt.value,1);
+        if(chg==null) return;
+        observations.push(o.s.name+' '+(chg>=0?'\u25b2':'\u25bc')+' '+Math.abs(chg*100).toFixed(0)+'% over this window');
+      });
+      if(observations.length>=2){
+        const allUp=defs.every(function(o){
+          const f=o.data.find(function(p){return p.value!=null;}); const l=o.data[o.data.length-1];
+          return f && l && l.value!=null && l.value>=f.value;
+        });
+        const allDown=defs.every(function(o){
+          const f=o.data.find(function(p){return p.value!=null;}); const l=o.data[o.data.length-1];
+          return f && l && l.value!=null && l.value<f.value;
+        });
+        if(allUp) observations.unshift('Every metric moved up in this window');
+        else if(allDown) observations.unshift('Every metric moved down in this window');
+      }
+      if(observations.length) cap+='\n'+observations.join('. ')+'.'; 
+    }
+    if(capEl) { capEl.textContent=cap; capEl.style.whiteSpace='pre-line'; }
     return;
   }
 
-  // scatter: X vs Y over common fiscal years
+  // scatter: X vs Y over common fiscal years, with a trajectory path showing
+  // the direction of travel through metric space, plus a live Pearson
+  // correlation coefficient — the arithmetic answer to "do these move together?"
   const xDef=st.xKey?stmtExploreSeriesFor(st.xKey,st.company,'level'):null;
   const yDef=st.yKey?stmtExploreSeriesFor(st.yKey,st.company,'level'):null;
   if(!xDef||!yDef){ clearAll('Pick an X metric and a Y metric.'); return; }
   const pairsRaw=alignFyPairs(xDef.data,yDef.data).filter(function(p){ return inWindow(p.year); });
   if(pairsRaw.length<2){ clearAll('Fewer than two common years between those two metrics'+((st.yFrom!=null||st.yTo!=null)?' inside the chosen year window':'')+'. Widen the window or pick different rows.'); return; }
-  // Same reasoning as the lines branch above -- initChart() reuses the
-  // existing instance in place; a manual clear here orphans it.
+  if(dom.innerHTML) dom.innerHTML='';
+
+  // Pearson r over the aligned pairs — pure arithmetic, deterministic.
+  const n=pairsRaw.length;
+  const sumX=pairsRaw.reduce(function(s,p){return s+p.x;},0);
+  const sumY=pairsRaw.reduce(function(s,p){return s+p.y;},0);
+  const sumXY=pairsRaw.reduce(function(s,p){return s+p.x*p.y;},0);
+  const sumXX=pairsRaw.reduce(function(s,p){return s+p.x*p.x;},0);
+  const sumYY=pairsRaw.reduce(function(s,p){return s+p.y*p.y;},0);
+  const corrDen=Math.sqrt((n*sumXX-sumX*sumX)*(n*sumYY-sumY*sumY));
+  const pearsonR=corrDen===0?null:(n*sumXY-sumX*sumY)/corrDen;
+
+  const points=pairsRaw.map(function(p){ return [p.x,p.y]; });
+  const showLabels=pairsRaw.length<=14;
+  // Trajectory path: connect consecutive years so the viewer sees the
+  // direction of travel through metric space — is margin improving while
+  // sales growth slows? That pattern is invisible in disconnected dots.
+  const trajectory={ type:'line', data:points.map(function(p,i){ return { value:p, label:{show:i===pairsRaw.length-1,formatter:'FY'+pairsRaw[i].year,position:'right',fontSize:9.5,color:'rgba(20,40,63,.45)',fontFamily:"'Spline Sans Mono',monospace"} }; }), showSymbol:false, lineStyle:{color:'rgba(37,87,199,.35)',width:1.5,type:'dashed'}, z:1, tooltip:{show:false}, silent:true };
+
   initChart(STMT_EXPLORE_CHART_ID, {
     grid:{left:78,right:34,top:32,bottom:58,containLabel:true},
     xAxis:{type:'value',name:xDef.label+stmtExploreUnitSuffix(xDef.label),nameLocation:'middle',nameGap:36,
@@ -6956,13 +7015,51 @@ function stmtExploreUpdateChart(){
       const d=pairsRaw[p.dataIndex]; if(!d) return '';
       return '<b>FY'+d.year+'</b><br/>'+advisorAttr(xDef.label)+': <b>'+advisorAttr(formatCellRaw(xDef.label,d.x))+'</b><br/>'+advisorAttr(yDef.label)+': <b>'+advisorAttr(formatCellRaw(yDef.label,d.y))+'</b>';
     }},
-    series:[{ type:'scatter', data:pairsRaw.map(function(p){ return [p.x,p.y]; }), symbolSize:12,
-      itemStyle:{color:'#2557C7',opacity:.85,borderColor:'#fff',borderWidth:1},
-      label:{show:pairsRaw.length<=14, formatter:function(p){ const d=pairsRaw[p.dataIndex]; return d?('FY'+d.year):''; },
-        position:'top', fontSize:9.5, color:'rgba(20,40,63,.62)', fontFamily:"'Spline Sans Mono',monospace"} }]
+    series:[
+      trajectory,
+      { type:'scatter', data:points, symbolSize:12, z:10,
+        itemStyle:function(p){ return {color:p.dataIndex===pairsRaw.length-1?'#A03A22':'#2557C7',opacity:.85,borderColor:'#fff',borderWidth:1}; },
+        label:{show:showLabels, formatter:function(p){ const d=pairsRaw[p.dataIndex]; return d?('FY'+d.year):''; },
+          position:'top', fontSize:9.5, color:'rgba(20,40,63,.62)', fontFamily:"'Spline Sans Mono',monospace"} }
+    ]
   });
-  if(chipsEl) chipsEl.innerHTML='<div class="sx-series-chip"><span class="sw" style="background:#2557C7"></span>Each point is one fiscal year ('+pairsRaw.length+' years, labeled)</div>';
-  if(capEl) capEl.textContent='FY'+pairsRaw[0].year+'\u2013FY'+pairsRaw[pairsRaw.length-1].year+', '+pairsRaw.length+' common years. X: '+xDef.label+stmtExploreUnitSuffix(xDef.label)+' ('+xDef.sym+'). Y: '+yDef.label+stmtExploreUnitSuffix(yDef.label)+' ('+yDef.sym+').';
+  if(chipsEl){
+    let chips='<div class="sx-series-chip"><span class="sw" style="background:#2557C7"></span>Each point is one fiscal year ('+pairsRaw.length+' years)</div>';
+    chips+='<div class="sx-series-chip"><span class="sw" style="background:#A03A22"></span>Dashed line traces the year-by-year path \u2014 read it as direction of travel</div>';
+    if(pearsonR!=null){
+      const strength=Math.abs(pearsonR)>=0.7?'strong':Math.abs(pearsonR)>=0.4?'moderate':'no clear';
+      chips+='<div class="sx-series-chip"><span class="sw" style="background:var(--gold)"></span><b>Pearson r = '+pearsonR.toFixed(2)+'</b> ('+strength+' linear relationship)</div>';
+    }
+    chipsEl.innerHTML=chips;
+  }
+  if(capEl){
+    let cap='FY'+pairsRaw[0].year+'\u2013FY'+pairsRaw[pairsRaw.length-1].year+', '+pairsRaw.length+' common years.';
+    cap+=' X: '+xDef.label+stmtExploreUnitSuffix(xDef.label)+' ('+xDef.sym+').';
+    cap+=' Y: '+yDef.label+stmtExploreUnitSuffix(yDef.label)+' ('+yDef.sym+').';
+    if(pearsonR!=null && Math.abs(pearsonR)>=0.7) cap+=' These two metrics have moved '+(pearsonR>0?'together':'in opposite directions')+' across this window.';
+    capEl.textContent=cap;
+  }
+
+  // Double-click any scatter point or line-mode element to drill down into
+  // the source statement row. Closes the deck, scrolls to the row, pulses it.
+  var chartInst=chartInstances[STMT_EXPLORE_CHART_ID];
+  if(chartInst){
+    chartInst.inst.off('dblclick');
+    chartInst.inst.on('dblclick', function(params){
+      stmtExploreClose();
+      var key=null;
+      if(st.mode==='lines' && defs && defs[params.seriesIndex]) key=defs[params.seriesIndex].key || defs[params.seriesIndex].s.label;
+      else if(st.mode==='scatter'){ key=st.xKey||st.yKey; }
+      if(!key) return;
+      var rowEl=document.querySelector('#stmtRoot [data-stmt-pin="'+advisorAttr(key).replace(/&quot;/g,'"').replace(/&amp;/g,'&')+'"]');
+      if(rowEl){
+        rowEl.scrollIntoView({behavior:'smooth',block:'center'});
+        rowEl.style.transition='background .8s ease';
+        rowEl.style.background='rgba(37,87,199,.15)';
+        setTimeout(function(){ rowEl.style.background=''; },1200);
+      }
+    });
+  }
 }
 
 // One delegated click listener for every overlay button (open/mode/scale/

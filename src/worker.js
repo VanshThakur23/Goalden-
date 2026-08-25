@@ -369,7 +369,7 @@ async function fetchScreenerPage(symbol) {
   }
   throw new ScreenerPageError(
     'not_found',
-    `screener.in has no page for "${symbol}" — check it's the bare NSE/BSE trading code (e.g. "TCS"), not a Yahoo-style symbol with .NS/.BO`
+    `screener.in has no page for "${symbol}" — check it's the bare NSE/BSE trading code (e.g. "TCS"), not a Yahoo-style symbol with .NS/.BO. Some smaller companies aren't indexed by a letter ticker at all and only resolve by their numeric BSE code (e.g. "511144" for Axis Solutions Ltd) — try that if you have it.`
   );
 }
 
@@ -390,6 +390,7 @@ function buildFinancialsResult(symbol, html, url, consolidated) {
     );
   }
   result.schema = ScreenerParser.classifySchema(result.profitLoss ? result.profitLoss.rows : []);
+  result.companyName = ScreenerParser.parseCompanyName(html);
   result.topRatios = ScreenerParser.parseTopRatios(html);
   result.sector = ScreenerParser.parseSectorBreadcrumb(html);
   result.businessDescription = ScreenerParser.parseBusinessDescription(html);
