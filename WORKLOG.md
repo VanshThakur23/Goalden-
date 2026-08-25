@@ -2256,3 +2256,34 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
 - node --test engine.test.js: 102/102 PASS.
 - Last commit pushed: (see next commit)
 
+## 2026-08-26 - Claude Code
+
+- **User flagged "Axis Solutions Limited (held back)" in Test Real
+  Investments, expecting a bug.** Traced it: not a bug. AXISOL.BO's real
+  price history (both raw and split-adjusted) sat flat at Rs3.61 for
+  several sessions, then jumped to Rs72.20 -- exactly 20x -- on
+  2024-09-04 and sat flat there too. That single day distorts the
+  arithmetic-mean-based annualised return to 655%/yr, which the existing
+  data-quality gate (auditPriceSeries) correctly flags 'unusable' and
+  holds back, per this project's standing rule that a flagged series is
+  labelled, never silently repaired. Verified live: hovering the chip
+  already shows the reason, and the "Instrument stats" card further down
+  the live-frontier page (below the risk-free slider, outside the
+  screenshot the user sent) already shows all three flags plus a working
+  "Use it anyway" override -- clicking it correctly adds the instrument
+  to `liveReadyItems()`.
+- **Fixed a real, narrower gap found in the process:** the unadjusted-
+  split signature check in `auditPriceSeries` only tested k in
+  [2,3,4,5,10], so this exact 20:1 case fell through and only got the
+  generic "most likely a corporate action" JUMP message instead of a
+  precise one. Added 20, 25, 50 to the checked ratios (common Indian
+  face-value-consolidation ratios for micro-caps). AXISOL.BO now
+  correctly reads "Looks like an unadjusted 20:1 split or bonus issue on
+  2024-09-04, not a genuine one-day move." This doesn't change which
+  instruments get held back -- IMPLAUSIBLE (unusable) fires independently
+  of SPLITSIG (caution) -- it only makes the caution flag's message
+  accurate for this ratio.
+- node --test engine.test.js: 102/102 PASS. Inline-script syntax check:
+  OK.
+- Last commit pushed: (see next commit)
+

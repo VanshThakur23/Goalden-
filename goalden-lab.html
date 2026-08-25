@@ -3948,7 +3948,7 @@ function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoA
     // Does that jump look like an unadjusted split or bonus issue? A
     // ~(1/k - 1) or ~(k - 1) move for a small integer k is the classic
     // signature of a k:1 split/bonus the price history wasn't rebased for.
-    for(const k of [2,3,4,5,10]){
+    for(const k of [2,3,4,5,10,20,25,50]){
       const splitDown=1/k-1, splitUp=k-1;
       if(Math.abs(worstJump.r-splitDown)<0.03*Math.abs(splitDown) || Math.abs(worstJump.r-splitUp)<0.03*splitUp){
         bump('caution','SPLITSIG',`Looks like an unadjusted ${k}:1 split or bonus issue on ${worstJump.date}, not a genuine one-day move.`);
@@ -6634,12 +6634,15 @@ function stmtExploreState(){
       yFrom:null, yTo:null
     };
   }
-  // Backward compatibility: ensure per-slot companies exist
   var st=L.statements.explore;
   if(!st.slotCompanies) st.slotCompanies=['primary','primary','primary'];
   if(!st.xCompany) st.xCompany='primary';
   if(!st.yCompany) st.yCompany=st.company||'primary';
   return st;
+}
+function stmtExploreAddSlot(){
+  var st=stmtExploreState();
+  if(st.slots.length<8){ st.slots.push(null); st.slotCompanies.push(st.slotCompanies[0]||'primary'); }
 }
 function stmtExploreCompanySym(which){
   if(which==='compare'){
@@ -6762,12 +6765,13 @@ function stmtExploreRenderControls(){
   }
   let html='';
   if(st.mode==='lines'){
-    for(let i=0;i<3;i++){
+    for(let i=0;i<st.slots.length;i++){
       var comp=st.slotCompanies[i]||'primary';
       var cat=catFor(comp);
       html+='<div class="sx-field" style="min-width:260px"><label>'+(i+1)+(hasCompare?' \u00b7 '+companySel('slot'+i):'')+'</label>';
       html+='<select data-sx-slot="'+i+'"><option value="">\u2014 none \u2014</option>'+stmtExploreOptionHTML(catFor(comp),st.slots[i])+'</select></div>';
     }
+    if(st.slots.length<8) html+='<div class="sx-field"><label>&nbsp;</label><button class="ns-btn" data-sx-add-slot style="display:inline-flex;white-space:nowrap;padding:7px 14px">+ Add metric</button></div>';
     html+=compareCta;
     html+='<div class="sx-field"><label>Scale</label><div class="sx-seg">'+
       '<button data-sx-scale="indexed"'+(st.scale==='indexed'?' class="active"':'')+'>Indexed</button>'+
@@ -6830,20 +6834,18 @@ function stmtExploreUpdateChart(){
   const inWindow=function(yr){ return (lo==null || yr>=lo) && (hi==null || yr<=hi); };
 
   if(st.mode==='lines'){
-    const defs=st.slots.map(function(k,i){
-      if(!k) return null;
-      var comp=st.slotCompanies[i]||'primary';
+    const defs=[];
+    for(let si=0; si<st.slots.length; si++){
+      var k=st.slots[si]; if(!k) continue;
+      var comp=st.slotCompanies[si]||'primary';
       var s=stmtExploreSeriesFor(k,comp,st.scale==='pctSales'?'pctSales':'level');
-      if(!s) return null;
-      // When two companies are in play, tag the series name with the symbol
-      // so the viewer knows whose number they're looking at.
+      if(!s) continue;
       var displayName=s.name;
       if(s.sym!==L.statements.primary) displayName=s.name+' ('+s.sym+')';
-      return { s:{ name:displayName, label:s.label, unit:s.unit, sym:s.sym, data:s.data }, key:k };
-    })
-      .filter(Boolean)
-      .map(o=>({ s:o.s, key:o.key, unit:o.s.unit, label:o.s.label, data:o.s.data.filter(p=>inWindow(p.year)) }))
-      .filter(o=>o.data.length>0);
+      var filtered=s.data.filter(function(p){ return inWindow(p.year); });
+      if(!filtered.length) continue;
+      defs.push({ s:{name:displayName,label:s.label,unit:s.unit,sym:s.sym,data:filtered}, key:k, unit:s.unit, label:s.label, data:filtered });
+    }
     if(!defs.length){ clearAll('Pick at least one metric with values inside the chosen year window.'); return; }
     // No manual dom.innerHTML clear here -- initChart() already reuses the
     // existing echarts instance in place via setOption(...,true) when one
@@ -7122,6 +7124,7 @@ function stmtExploreUpdateChart(){
 // One delegated click listener for every overlay button (open/mode/scale/
 // close), bound once at load like the tab's other body-level handlers.
 document.body.addEventListener('click', function(e){
+  if(e.target.closest('[data-sx-add-slot]')){ stmtExploreAddSlot(); stmtExploreRenderControls(); return; }
   if(e.target.closest('[data-sx-open]')){ stmtExploreOpen(); return; }
   if(e.target.closest('[data-sx-close]')){ stmtExploreClose(); return; }
   // "+ Compare with another company" → swap the button for an inline search
@@ -7227,6 +7230,53 @@ document.getElementById('main').addEventListener('scroll', function(){
     stmtNavLastY=y;
   });
 },{passive:true});
+
+// Statement table row hover popup — a floating card showing the row's
+// sparkline, best/worst/CAGR, and a "pin" button. Appears near the cursor,
+// disappears on mouseout. Pure DOM patch, no re-render.
+var stmtHoverPopup=null, stmtHoverTimeout=null;
+document.getElementById('main').addEventListener('mouseover', function(e){
+  if(L.tab!=='statements') return;
+  var tr=e.target.closest('[data-stmt-pin]');
+  if(!tr){ if(stmtHoverPopup) stmtHoverPopup.style.display='none'; return; }
+  var key=tr.dataset.stmtPin;
+  if(stmtHoverPopup && stmtHoverPopup.dataset.forKey===key){ stmtHoverPopup.style.display=''; return; }
+  if(stmtHoverTimeout) clearTimeout(stmtHoverTimeout);
+  stmtHoverTimeout=setTimeout(function(){
+    var parsed=parseRowKey(key);
+    var primary=statementsBundle(L.statements.primary);
+    if(!primary) return;
+    var section=primary[parsed.section]; if(!section) return;
+    var series=fySeriesSafe(section,parsed.label); if(!series.length) return;
+    var box=rowBoxScore(series);
+    var spark=sparklineSVG(series);
+    if(!stmtHoverPopup){
+      stmtHoverPopup=document.createElement('div');
+      stmtHoverPopup.style.cssText='position:fixed;z-index:2000;background:#fff;border:1px solid rgba(20,40,63,.15);border-radius:12px;box-shadow:0 8px 30px rgba(20,40,63,.18);padding:14px 16px;font-size:12px;pointer-events:none;max-width:280px';
+      document.body.appendChild(stmtHoverPopup);
+    }
+    stmtHoverPopup.dataset.forKey=key;
+    var label=tr.querySelector('.stmt-label');
+    var labelTxt=label?label.textContent:key.split('|')[1];
+    stmtHoverPopup.innerHTML='<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:14px;color:#14283F;margin-bottom:6px">'+advisorAttr(labelTxt)+'</div>'
+      +'<div style="margin-bottom:8px">'+spark+'</div>'
+      +(box?'<div style="font-family:\'Spline Sans Mono\',monospace;font-size:10.5px;color:rgba(20,40,63,.6);line-height:1.5">'
+        +'Best '+advisorAttr(formatCellRaw(parsed.label,box.best.value))+' (FY'+box.best.year+')<br/>'
+        +'Worst '+advisorAttr(formatCellRaw(parsed.label,box.worst.value))+' (FY'+box.worst.year+')<br/>'
+        +(box.cagr!=null?box.years+'Y CAGR '+(box.cagr*100).toFixed(1)+'%':'CAGR crosses a loss year')
+        +'</div>':'');
+    var rect=tr.getBoundingClientRect();
+    stmtHoverPopup.style.display='';
+    stmtHoverPopup.style.left=Math.min(rect.right+12, window.innerWidth-300)+'px';
+    stmtHoverPopup.style.top=Math.max(10, rect.top-10)+'px';
+  }, 300);
+});
+document.getElementById('main').addEventListener('mouseout', function(e){
+  if(L.tab!=='statements') return;
+  if(!e.target.closest('[data-stmt-pin]')) return;
+  if(stmtHoverTimeout) clearTimeout(stmtHoverTimeout);
+  stmtHoverTimeout=setTimeout(function(){ if(stmtHoverPopup) stmtHoverPopup.style.display='none'; }, 200);
+});
 
 /* ---- rendering: the four statement tables ----------------------------- */
 function statementRowHTML(sectionKey, label, primarySection, compareSection, periods, pinnedSet, focusYear, changeMode, rowIndex){

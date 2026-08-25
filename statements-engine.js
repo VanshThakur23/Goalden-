@@ -1533,6 +1533,16 @@ function advisorEscapeSafe(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
 }
 
+// Pearson correlation coefficient over aligned {x,y} pairs. Pure arithmetic.
+function pearsonR(pairs) {
+  const n = pairs.length;
+  if (n < 3) return null;
+  let sx = 0, sy = 0, sxy = 0, sxx = 0, syy = 0;
+  pairs.forEach(p => { sx += p.x; sy += p.y; sxy += p.x * p.y; sxx += p.x * p.x; syy += p.y * p.y; });
+  const denom = Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy));
+  return denom === 0 ? null : (n * sxy - sx * sy) / denom;
+}
+
 const api = {
   findRow, fySeries, allPeriodSeries, median, pctChange, yearIndex, vsOwnMedian,
   classifySchema, compareRefusal,
@@ -1545,7 +1555,7 @@ const api = {
   capitalEmployedSeries, incrementalRoce, assetTurnover, bookValuePerShareSeries,
   priceToBookLatest, reratingSpread, fyEndPriceSeries, peHistoryBand,
   compoundingChecklist, checklistQualityGate,
-  stmtExploreCatalog, alignFyPairs, pctOfSalesSeries,
+  stmtExploreCatalog, alignFyPairs, pctOfSalesSeries, pearsonR,
   growthChartOption, cashFlowWaterfallOption, companionMapFor,
   peBandChartOption,
 };
