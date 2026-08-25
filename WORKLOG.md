@@ -1508,3 +1508,61 @@ zero new hallucination surface.
 
 ### Known / not done
 - No further browser-testing gaps flagged this pass.
+
+---
+
+## 2026-08-25 - Claude Code - Explore tooltip NaN, jump-nav no longer floats over content
+
+### Done
+- **Explore ("Build a comparison") tooltip showed NaN for every value.**
+  The Over-time chart's tooltip formatter read `p.value` from ECharts'
+  axis-trigger params, but series data is stored as `['FY2020', 156.6]`
+  pairs on a category axis — `p.value` is the whole pair, not the number,
+  so `formatCellRaw(label, p.value)` ran unit formatting on an array and
+  every row printed "NaN". User-reported as "hovering system is not
+  working" and "the third metric is not showing up" (it was there in the
+  data and in the tooltip's series list — every line just read NaN, which
+  reads as broken/absent). Fixed by reading the real value back out of
+  `dd[seriesIndex].data[dataIndex]` — the same array the series data was
+  mapped from, so indices line up — which also means the tooltip now shows
+  the real reported number rather than the indexed-to-100 plotted value,
+  matching the choice the Bench tooltip already makes.
+- **Year-window dropdown always showed the same year in both boxes.** The
+  "From year" and "To year" selects shared one `yrOpts()` helper whose
+  default-selected fallback was hardcoded to the latest year for both, so
+  with nothing chosen (both null) the From-year box visually showed the
+  same FY as To-year (e.g. both "FY2026") even though the underlying state
+  was null and the chart was actually plotting the full range. From now
+  defaults to the earliest year, To to the latest, independently.
+- **Jump-nav (Overview/Bench/Compare/Profit & Loss/...) no longer sticky.**
+  It was `position:sticky;top:10px` at every width, so as a reader scrolled
+  a table section, the opaque pill bar slid over and covered whichever row
+  was passing underneath it — reported directly: "it is hovering over the
+  detailed items from the statements below... there's no point of making
+  it float when it is covering all the other information." Now sits in
+  normal document flow, same treatment as the Bench fix earlier this same
+  day. Its fade-band pseudo-elements (which existed only to soften content
+  sliding under the sticky bar) are removed with it. The pinned Bench's
+  sticky `top` offset, previously 86px to clear the floating nav, is back
+  down to 10px since there's nothing left above it to clear.
+
+### Verified
+- node --test engine.test.js: 89/89 PASS.
+- Live browser: forced the Explore tooltip open via
+  `chart.dispatchAction({type:'showTip',...})` before and after — before:
+  "Cash from Financing Activity: NaN Net Profit: NaN Other Income: NaN";
+  after: real values ("-39,915", "32,447", "4,592"), all three series
+  present. From/To year dropdowns confirmed independently defaulting to
+  FY2015/FY2026 rather than both to FY2026.
+- `#stmtJumpNav` computed position: static. Bench pin button still docks
+  the card (`position:sticky;top:10px`) with `__statementsRenderCount`
+  unmoved at 1.
+
+### Known / not done
+- User also asked about auto-collapsing the outer app header and left
+  tools sidebar specifically on this tab to reclaim vertical space —
+  existing manual toggles (header-collapse button, Full width button)
+  already do this on request; did not wire an automatic default since that
+  touches shared cross-tab chrome state and the immediate complaint (nav
+  covering content) is resolved by the jump-nav fix above. Revisit if asked
+  again specifically.

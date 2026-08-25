@@ -646,24 +646,21 @@ body.stmt-page main{max-width:1600px}
 .stmt-section-title{display:flex;align-items:center;gap:10px;font-family:'Newsreader',serif;font-weight:700;font-size:17px;color:var(--ink2);margin-bottom:16px}
 .stmt-section-title svg{width:19px;height:19px;flex-shrink:0;color:var(--gold);stroke-width:2}
 
-/* Section jump-nav: sticks to the top of the scrolling column so a reader
-   can go straight to Balance Sheet or Compounding from wherever they are,
-   the way screener.in's own page tabs work, instead of only being able to
-   scroll. Pure anchor-jump (scrollIntoView), no active-section tracking --
-   simple and correct beats a scroll-spy that can drift out of sync. */
-/* Floating wayfinding toolbar. Two non-negotiables: (1) it sticks BELOW the
-   viewport top edge (top:10px) as a fully-rounded card, so content never
-   appears to slice through a square bar edge; (2) fade bands on BOTH sides
-   (::before above, ::after below) dissolve content as it passes underneath —
-   a half-clipped number at the bar's edge read as a rendering bug, a fade
-   reads as depth. z-index sits above the sticky Bench card (20) and the
-   tables' sticky headers (2/3). */
-.stmt-jumpnav{position:sticky;top:10px;z-index:30;display:flex;flex-wrap:wrap;gap:6px;background:#fff;border:1px solid rgba(20,40,63,.16);border-radius:14px;padding:10px 12px;box-shadow:0 12px 30px -10px rgba(20,40,63,.35);margin-bottom:16px}
-.stmt-jumpnav::before{content:'';position:absolute;left:-2px;right:-2px;bottom:100%;height:20px;background:linear-gradient(rgba(245,248,252,0),rgba(245,248,252,.92));pointer-events:none}
-.stmt-jumpnav::after{content:'';position:absolute;left:-2px;right:-2px;top:100%;height:20px;background:linear-gradient(rgba(245,248,252,.92),rgba(245,248,252,0));pointer-events:none}
+/* Section jump-nav: lets a reader go straight to Balance Sheet or
+   Compounding from wherever they are, the way screener.in's own page tabs
+   work, instead of only being able to scroll. Pure anchor-jump
+   (scrollIntoView), no active-section tracking -- simple and correct beats
+   a scroll-spy that can drift out of sync.
+   Sits in normal document flow, not sticky. An earlier version stuck it to
+   the viewport top at all widths; a floating bar with an opaque background
+   sitting mid-page necessarily paints over whatever table row is scrolling
+   past underneath it, which is exactly the row a reader is trying to read.
+   The fade bands that used to soften that overlap are gone with it -- there
+   is nothing left for them to soften. */
+.stmt-jumpnav{display:flex;flex-wrap:wrap;gap:6px;background:#fff;border:1px solid rgba(20,40,63,.16);border-radius:14px;padding:10px 12px;box-shadow:0 1px 2px rgba(20,40,63,.04),0 10px 28px -18px rgba(20,40,63,.22);margin-bottom:16px}
 .stmt-jumpnav button{font-family:'Spline Sans Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.01em;color:rgba(20,40,63,.65);background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.14);border-radius:16px;padding:7px 14px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s,border-color .12s}
 .stmt-jumpnav button:hover{background:rgba(37,87,199,.12);color:var(--gold);border-color:rgba(37,87,199,.4)}
-@media(max-width:860px){.stmt-jumpnav{overflow-x:auto;flex-wrap:nowrap;position:static}}
+@media(max-width:860px){.stmt-jumpnav{overflow-x:auto;flex-wrap:nowrap}}
 
 .stmt-topbar{background:#fff;border:1px solid rgba(20,40,63,.07);border-radius:14px;box-shadow:0 1px 2px rgba(20,40,63,.04),0 10px 28px -18px rgba(20,40,63,.22)}
 .stmt-topbar-head{display:flex;align-items:center;gap:12px;padding:6px 8px 6px 16px}
@@ -792,7 +789,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
    pin button in the Bench header (#stmtBenchPinBtn) to dock it in a small
    fixed-height window; unpinned it scrolls away with the page like any
    other card. */
-#stmtBenchCard.stmt-bench-pinned{position:sticky;top:86px;z-index:20;max-height:min(260px,38vh);overflow-y:auto}
+#stmtBenchCard.stmt-bench-pinned{position:sticky;top:10px;z-index:20;max-height:min(260px,38vh);overflow-y:auto}
 #stmtBenchCard.stmt-bench-pinned::-webkit-scrollbar{width:8px}
 #stmtBenchCard.stmt-bench-pinned::-webkit-scrollbar-thumb{background:rgba(20,40,63,.16);border-radius:4px}
 #stmtBenchCard.stmt-bench-pinned::-webkit-scrollbar-track{background:transparent}
@@ -6531,9 +6528,14 @@ function stmtExploreRenderControls(){
   }
   const years=stmtExploreYearUnion();
   if(years.length>2){
-    const yrOpts=function(sel){ return years.map(function(y){ return '<option value="'+y+'"'+((st.mode==='lines'&&sel==null&&y===years[years.length-1])||(sel===y)?' selected':'')+'>'+'FY'+y+'</option>'; }).join(''); };
-    html+='<div class="sx-field"><label>From year</label><select data-sx-year="from"><option value="">earliest</option>'+yrOpts(st.yFrom)+'</select></div>';
-    html+='<div class="sx-field"><label>To year</label><select data-sx-year="to"><option value="">latest</option>'+yrOpts(st.yTo)+'</select></div>';
+    // fallbackYear differs per select -- reusing one "default to the latest
+    // year" rule for both used to mark FY2026 selected in the From-year
+    // dropdown too, which visually implied the window started at the same
+    // year it ended even though st.yFrom was still null underneath (the
+    // chart itself plotted the full range; only the shown selection lied).
+    const yrOpts=function(sel, fallbackYear){ return years.map(function(y){ return '<option value="'+y+'"'+((st.mode==='lines'&&sel==null&&y===fallbackYear)||(sel===y)?' selected':'')+'>'+'FY'+y+'</option>'; }).join(''); };
+    html+='<div class="sx-field"><label>From year</label><select data-sx-year="from"><option value="">earliest</option>'+yrOpts(st.yFrom, years[0])+'</select></div>';
+    html+='<div class="sx-field"><label>To year</label><select data-sx-year="to"><option value="">latest</option>'+yrOpts(st.yTo, years[years.length-1])+'</select></div>';
   }
   box.innerHTML=html;
   const cur=document.getElementById('sxCur');
@@ -6644,14 +6646,26 @@ function stmtExploreUpdateChart(){
     // Tooltip carries each series' real unit (₹278.9 Cr, 128.2 %, 14d, 0.9x)
     // via the same formatCellRaw the tables use — a bare number taught
     // nothing about what it measured.
+    // p.value here is the raw ['FY2020', 156.6] pair echarts stores for
+    // [category,value] data on a category axis, not the number alone --
+    // formatCellRaw() choked on the array and every row read "NaN". Reading
+    // the point straight back out of dd[seriesIndex].data by dataIndex (the
+    // exact same array the series data was mapped from, so the indices
+    // line up) also means the tooltip always shows the real reported
+    // number, never the indexed-to-100 value the chart may be plotting --
+    // the same real-value-over-indexed-value choice the Bench tooltip
+    // already makes, for the same reason.
     const lineTooltip=(function(dd){
       return function(params){
         const arr=Array.isArray(params)?params:[params];
         const year=arr.length?arr[0].axisValue:'';
-        const rows=arr.filter(p=>p.value!=null).map(function(p){
+        const rows=arr.map(function(p){
           const d=dd[p.seriesIndex]; if(!d) return '';
-          return '<div>'+p.marker+' '+advisorAttr(d.s.name)+': <b>'+advisorAttr(formatCellRaw(d.label,p.value))+'</b></div>';
-        }).join('');
+          const pt=d.data[p.dataIndex];
+          const val=pt?pt.value:null;
+          if(val==null) return '';
+          return '<div>'+p.marker+' '+advisorAttr(d.s.name)+': <b>'+advisorAttr(formatCellRaw(d.label,val))+'</b></div>';
+        }).filter(Boolean).join('');
         return '<b>'+year+'</b>'+rows;
       };
     })(defs);
