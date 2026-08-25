@@ -110,29 +110,130 @@ function compareRefusal(companyA, companyB) {
    in, which this pass doesn't wire up yet — see the session notes).
    ===================================================================== */
 const COMPANION_MAP = {
-  'ROCE %': [
-    { key: 'Borrowings', section: 'balanceSheet', reason: 'a high return can just mean the capital behind it was borrowed' },
-    { key: 'Working Capital Days', section: 'ratios', reason: "a return trapped in unpaid bills isn't spendable" },
+  // --- Profit & Loss ---
+  'Sales': [
+    { key: 'Debtor Days', section: 'ratios', reason: 'sales you haven\u2019t been paid for still count as sales' },
+    { key: 'OPM %', section: 'profitLoss', reason: 'growth alongside flat sales is a margin story, not a volume story' },
+    { key: 'EPS in Rs', section: 'profitLoss', reason: 'growth alongside flat EPS means the share count is growing too' },
+  ],
+  'Revenue': [
+    { key: 'Net Profit', section: 'profitLoss', reason: 'revenue and profit moving together is operating leverage; revenue alone is a scale story' },
+  ],
+  'Expenses': [
+    { key: 'Sales', section: 'profitLoss', reason: 'expenses growing faster than sales compresses the operating margin below' },
+  ],
+  'Operating Profit': [
+    { key: 'Sales', section: 'profitLoss', reason: 'operating profit moving with sales is operating leverage; moving alone is a margin story' },
+    { key: 'Depreciation', section: 'profitLoss', reason: 'rising depreciation absorbs operating profit before it reaches the bottom line' },
   ],
   'OPM %': [
     { key: 'Sales', section: 'profitLoss', reason: 'rising margin with rising sales is operating leverage; with flat sales it is cost-cutting, which runs out' },
     { key: 'Tax %', section: 'profitLoss', reason: 'margin is pre-tax; a profit jump can be tax, not the business' },
     { key: 'Other Income', section: 'profitLoss', reason: 'operating margin excludes other income, but headline profit does not' },
   ],
-  'Sales': [
-    { key: 'Debtor Days', section: 'ratios', reason: "sales you haven't been paid for still count as sales" },
-    { key: 'OPM %', section: 'profitLoss', reason: 'growth bought by cutting price shows up here' },
+  'Financing Margin %': [
+    { key: 'Interest', section: 'profitLoss', reason: 'the margin is after interest — a narrowing margin with rising interest means funding costs are rising faster than lending income' },
   ],
+  'Other Income': [
+    { key: 'Net Profit', section: 'profitLoss', reason: 'a large other-income share of profit means the ongoing business is a smaller contributor than the headline suggests' },
+    { key: 'Cash from Investing Activity', section: 'cashFlow', reason: 'other income alongside positive investing cash flow can mean one-time asset sales rather than recurring earnings' },
+  ],
+  'Interest': [
+    { key: 'Borrowings', section: 'balanceSheet', reason: 'interest against the borrowings balance gives the effective cost of debt' },
+    { key: 'Profit before tax', section: 'profitLoss', reason: 'interest as a share of PBT shows how much of the operating result goes to lenders before shareholders' },
+  ],
+  'Depreciation': [
+    { key: 'Fixed Assets', section: 'balanceSheet', reason: 'depreciation against the fixed-asset base gives a read on the age and reinvestment cycle of the asset base' },
+    { key: 'Cash from Operating Activity', section: 'cashFlow', reason: 'depreciation is added back to operating cash — a large depreciation figure means the cash-to-profit gap is partly non-cash cost, not a collection problem' },
+  ],
+  'Profit before tax': [
+    { key: 'Tax %', section: 'profitLoss', reason: 'the same PBT can produce very different net profit at different tax rates' },
+    { key: 'Interest', section: 'profitLoss', reason: 'interest as a share of PBT shows the lender\u2019s share of the operating result' },
+  ],
+  'Tax %': [
+    { key: 'Profit before tax', section: 'profitLoss', reason: 'a falling tax rate on rising PBT amplifies net profit growth beyond what the business earned' },
+  ],
+  'Net Profit': [
+    { key: 'Cash from Operating Activity', section: 'cashFlow', reason: 'profit that never arrives as cash is a paper number' },
+    { key: 'EPS in Rs', section: 'profitLoss', reason: 'net profit growing while EPS stays flat means the share count is growing too' },
+    { key: 'Dividend Payout %', section: 'profitLoss', reason: 'the share of profit paid out — the rest stays in the business as reserves' },
+  ],
+  'EPS in Rs': [
+    { key: 'Net Profit', section: 'profitLoss', reason: 'EPS growing slower than net profit means dilution is absorbing the difference' },
+  ],
+  'Dividend Payout %': [
+    { key: 'Cash from Operating Activity', section: 'cashFlow', reason: 'a high payout on weak operating cash means the dividend is funded from somewhere other than the business' },
+    { key: 'Free Cash Flow', section: 'cashFlow', reason: 'payout above free cash flow leaves nothing for reinvestment or debt reduction' },
+  ],
+  // --- Balance Sheet ---
+  'Equity Capital': [
+    { key: 'EPS in Rs', section: 'profitLoss', reason: 'equity capital changes signal bonus issues or splits, which change EPS without changing the business' },
+  ],
+  'Reserves': [
+    { key: 'Net Profit', section: 'profitLoss', reason: 'reserves growing slower than cumulative profit means dividends are taking the difference' },
+  ],
+  'Borrowings': [
+    { key: 'ROCE %', section: 'ratios', reason: 'borrowings against the return on capital \u2014 the return on borrowed capital is a different claim from the return on owned capital' },
+    { key: 'Interest', section: 'profitLoss', reason: 'rising borrowings with flat interest means lower borrowing costs; rising both is a compounding obligation' },
+  ],
+  'Fixed Assets': [
+    { key: 'Depreciation', section: 'profitLoss', reason: 'depreciation against the fixed-asset base gives a read on the age of the asset base' },
+    { key: 'Sales', section: 'profitLoss', reason: 'sales divided by fixed assets shows how much revenue each rupee of plant produces' },
+  ],
+  'CWIP': [
+    { key: 'Fixed Assets', section: 'balanceSheet', reason: 'CWIP converting to fixed assets means capex is completing; CWIP growing year after year means projects are stalling' },
+    { key: 'Sales', section: 'profitLoss', reason: 'rising CWIP without rising sales means spending on capacity that hasn\u2019t started earning yet' },
+  ],
+  'Investments': [
+    { key: 'Other Income', section: 'profitLoss', reason: 'a large investment book against other income gives the yield earned on non-operating assets' },
+  ],
+  // --- Cash Flow ---
   'Cash from Operating Activity': [
-    { key: 'Net Profit', section: 'profitLoss', reason: 'the whole point of the comparison — profit that never becomes cash is a paper number' },
+    { key: 'Net Profit', section: 'profitLoss', reason: 'profit that never arrives as cash is a paper number' },
     { key: 'Working Capital Days', section: 'ratios', reason: 'the usual explanation for a gap between the two' },
+    { key: 'Free Cash Flow', section: 'cashFlow', reason: 'operating cash less capex is what\u2019s available for dividends and debt reduction' },
   ],
-  // Stock P/E and Dividend Yield are today's-value facts from screener's
-  // top-ratios snapshot, not statement rows — they can't be pinned to the
-  // Bench themselves (no time series), but they still point at rows that
-  // can be, which is what the companion strip actually surfaces.
+  'Cash from Investing Activity': [
+    { key: 'Cash from Operating Activity', section: 'cashFlow', reason: 'investing outflow against operating inflow shows whether the business funds its own growth' },
+  ],
+  'Cash from Financing Activity': [
+    { key: 'Borrowings', section: 'balanceSheet', reason: 'financing cash flow against the borrowings balance shows whether debt is being raised or repaid' },
+    { key: 'Dividend Payout %', section: 'profitLoss', reason: 'dividend payments appear here \u2014 the payout ratio alongside the cash outflow shows whether the dividend is funded from earnings or from the balance sheet' },
+  ],
+  'Net Cash Flow': [
+    { key: 'Cash from Operating Activity', section: 'cashFlow', reason: 'a negative net cash flow funded by strong operations is a different situation from one funded by borrowing' },
+  ],
+  'Free Cash Flow': [
+    { key: 'Dividend Payout %', section: 'profitLoss', reason: 'free cash flow against the dividend shows whether the business generates enough after reinvestment to fund its own payout' },
+    { key: 'Borrowings', section: 'balanceSheet', reason: 'persistent negative free cash flow with rising borrowings means debt is funding the gap' },
+  ],
+  'CFO/OP': [
+    { key: 'Working Capital Days', section: 'ratios', reason: 'the most common explanation for cash conversion below 1.0' },
+    { key: 'Net Profit', section: 'profitLoss', reason: 'the denominator \u2014 a ratio below 0.75 on growing profit is the finding, not the ratio itself' },
+  ],
+  // --- Ratios ---
+  'Debtor Days': [
+    { key: 'Sales', section: 'profitLoss', reason: 'debtor days rising alongside flat sales means the character of the sales is changing, not the volume' },
+  ],
+  'Inventory Days': [
+    { key: 'Sales', section: 'profitLoss', reason: 'inventory days rising against flat sales carries obsolescence and write-down exposure' },
+  ],
+  'Working Capital Days': [
+    { key: 'Cash from Operating Activity', section: 'cashFlow', reason: 'the bridge between reported profit and actual cash' },
+  ],
+  'Cash Conversion Cycle': [
+    { key: 'Cash from Operating Activity', section: 'cashFlow', reason: 'a lengthening cycle pulls cash out of operations even when profit is stable' },
+  ],
+  'ROCE %': [
+    { key: 'Borrowings', section: 'balanceSheet', reason: 'a high return can just mean the capital behind it was borrowed' },
+    { key: 'Working Capital Days', section: 'ratios', reason: 'a return trapped in unpaid bills isn\u2019t spendable' },
+  ],
+  'ROE %': [
+    { key: 'Borrowings', section: 'balanceSheet', reason: 'ROE above ROCE means leverage is amplifying the return \u2014 the cost of that amplification is in the interest line' },
+  ],
+  // --- Market facts (today's-value, not pinnable themselves) ---
   'Stock P/E': [
-    { key: 'Net Profit', section: 'profitLoss', reason: "you're paying a multiple for the company's earnings — pin Net Profit to check the growth is actually there" },
+    { key: 'Net Profit', section: 'profitLoss', reason: 'you\u2019re paying a multiple for the company\u2019s earnings \u2014 pin Net Profit to check the growth is actually there' },
     { key: 'CFO/OP', section: 'cashFlow', reason: 'a low multiple on profit that never becomes cash is not cheap' },
   ],
   'Dividend Yield': [
@@ -140,6 +241,23 @@ const COMPANION_MAP = {
     { key: 'Cash from Investing Activity', section: 'cashFlow', reason: 'a positive investing cash flow in the same year can mean the dividend was funded by selling assets, not earning them' },
   ],
 };
+
+// Context-sensitive companion lookup. For a company flagged cyclical
+// (detectCyclical), Stock P/E's companions change: the earnings multiple is
+// least meaningful at a cyclical's profit peak, so the book-value side of the
+// balance sheet (reserves) replaces the growth-check companion — reserves
+// don't swing with the cycle the way profit does.
+function companionMapFor(label, isCyclical) {
+  let list = COMPANION_MAP[label];
+  if (!list) return null;
+  if (isCyclical && label === 'Stock P/E') {
+    return [
+      { key: 'Net Profit', section: 'profitLoss', reason: 'you\u2019re paying a multiple for the company\u2019s earnings \u2014 pin Net Profit to check the level and trend' },
+      { key: 'Reserves', section: 'balanceSheet', reason: 'for a cyclical, reserves (the accumulated retained earnings) are a steadier comparison than the earnings multiple \u2014 book value moves less with the cycle than profit does' },
+    ];
+  }
+  return list;
+}
 
 /* =====================================================================
    FIVE DIVERGENCE RULES
@@ -1213,10 +1331,122 @@ function pctOfSalesSeries(series, salesSeries) {
   });
 }
 
+// Grouped-bar chart for the growth summary across overlapping windows
+// (10y/5y/3y/1y — these are window lengths, not sequential periods, so the
+// x-axis is categorical and a line would imply progression that doesn't
+// exist). salesG and npG are growthSummary() outputs.
+function growthChartOption(salesG, npG) {
+  const cats = ['10y', '5y', '3y', '1y'];
+  const fmt = v => v == null ? null : +(v * 100).toFixed(1);
+  return {
+    grid: { left: 60, right: 20, top: 30, bottom: 36, containLabel: true },
+    xAxis: { type: 'category', data: cats, axisLabel: { fontSize: 11, color: 'rgba(20,40,63,.55)' }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
+    yAxis: { type: 'value', name: '% CAGR', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => v + '%', fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
+    tooltip: { trigger: 'axis', confine: true, formatter: function (params) {
+      const arr = Array.isArray(params) ? params : [params];
+      const win = arr.length ? arr[0].axisValue : '';
+      return '<b>' + win + '</b>' + arr.map(function (p) { return '<br/>' + p.marker + ' ' + advisorEscapeSafe(p.seriesName) + ': ' + (p.value != null ? p.value + '%' : '\u2014'); }).join('');
+    } },
+    series: [
+      { name: 'Sales CAGR', type: 'bar', barMaxWidth: 32, data: cats.map((c, i) => fmt([salesG.y10, salesG.y5, salesG.y3, salesG.y1][i])), itemStyle: { color: '#2557C7', borderRadius: [3, 3, 0, 0] } },
+      { name: 'Net Profit CAGR', type: 'bar', barMaxWidth: 32, data: cats.map((c, i) => fmt([npG.y10, npG.y5, npG.y3, npG.y1][i])), itemStyle: { color: '#A03A22', borderRadius: [3, 3, 0, 0] } },
+    ],
+  };
+}
+
+// Cash-flow waterfall: CFO, CFI, CFF as bars, Net Cash Flow as a separate
+// bar, with a transparent placeholder series carrying the running total to
+// produce the floating-bar waterfall effect. Preserves the arithmetic —
+// the bars visually add up to the total — unlike a Sankey.
+function cashFlowWaterfallOption(cfoSeries, cfiSeries, cffSeries, ncfSeries) {
+  const years = cfoSeries.map(p => 'FY' + p.year);
+  const cfo = cfoSeries.map(p => p.value);
+  const cfi = cfiSeries.map(p => p.value);
+  const cff = cffSeries.map(p => p.value);
+  const ncf = ncfSeries.map(p => p.value);
+  // Running total for the waterfall placeholder
+  const running = [];
+  let total = 0;
+  for (let i = 0; i < cfo.length; i++) {
+    running.push(total);
+    total = cfo[i] + cfi[i] + cff[i];
+    running.push(total);
+  }
+  // Placeholder: even indices are the start-of-year total, odd are end-of-year
+  // (which equals the next start). The invisible bars lift the visible ones
+  // to the right position.
+  const placeholder = [];
+  const cfoBar = [], cfiBar = [], cffBar = [], ncfBar = [];
+  for (let i = 0; i < cfo.length; i++) {
+    const start = cfo[i], inv = cfi[i], fin = cff[i], net = start + inv + fin;
+    placeholder.push(null); // not used per-bar; the waterfall is per-component
+    // For each component bar: base is where it starts, value is the change
+    cfoBar.push(start >= 0 ? null : start); // simplified — full waterfall below
+  }
+  // Simpler approach: stacked invisible + visible bars per component
+  // CFO bar: base = 0 (starts from 0)
+  // CFI bar: base = CFO, value = CFI (can be negative)
+  // CFF bar: base = CFO + CFI, value = CFF
+  // Net bar: total
+  const baseCfi = cfo.map((v, i) => v);
+  const baseCff = cfo.map((v, i) => v + cfi[i]);
+  // For negative values, the invisible bar needs to go below
+  const invCfi = cfi.map((v, i) => {
+    const base = baseCfi[i];
+    if (v >= 0) return base;
+    return base + v; // negative: shift down
+  });
+  const visCfi = cfi.map((v, i) => Math.abs(v));
+  const invCff = cff.map((v, i) => {
+    const base = baseCff[i];
+    if (v >= 0) return base;
+    return base + v;
+  });
+  const visCff = cff.map(v => Math.abs(v));
+  return {
+    grid: { left: 70, right: 20, top: 30, bottom: 46, containLabel: true },
+    xAxis: { type: 'category', data: years, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
+    yAxis: { type: 'value', name: '\u20b9 Cr', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => formatCroreSafe(v), fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
+    tooltip: { trigger: 'axis', confine: true, formatter: function (params) {
+      const arr = Array.isArray(params) ? params : [params];
+      const year = arr.length ? arr[0].axisValue : '';
+      const i = arr.length ? arr[0].dataIndex : 0;
+      const lines = [
+        '<b>CFO: ' + formatCroreSafe(cfo[i]) + '</b>',
+        '<b>CFI: ' + formatCroreSafe(cfi[i]) + '</b>',
+        '<b>CFF: ' + formatCroreSafe(cff[i]) + '</b>',
+        '<b>Net: ' + formatCroreSafe(ncf[i]) + '</b>',
+      ];
+      return '<b>' + year + '</b><br/>' + lines.join('<br/>');
+    } },
+    series: [
+      { name: 'CFO', type: 'bar', stack: 'flow', data: cfo, itemStyle: { color: '#2E8B6F' }, barMaxWidth: 30 },
+      { name: 'CFI base', type: 'bar', stack: 'flow', data: invCfi, itemStyle: { color: 'transparent' }, tooltip: { show: false }, silent: true, barMaxWidth: 30 },
+      { name: 'CFI', type: 'bar', stack: 'flow', data: visCfi, itemStyle: { color: '#A03A22' }, barMaxWidth: 30 },
+      { name: 'CFF base', type: 'bar', stack: 'flow', data: invCff, itemStyle: { color: 'transparent' }, tooltip: { show: false }, silent: true, barMaxWidth: 30 },
+      { name: 'CFF', type: 'bar', stack: 'flow', data: visCff, itemStyle: { color: '#14283F' }, barMaxWidth: 30 },
+      { name: 'Net Cash Flow', type: 'line', data: ncf, symbolSize: 7, lineStyle: { width: 0 }, itemStyle: { color: '#2557C7', borderWidth: 2, borderColor: '#2557C7' }, symbol: 'circle', z: 10 },
+    ],
+  };
+}
+
+// Safe format for use inside engine-level chart builders (no dependency on
+// the page's formatCroreValue, which lives in goalden-lab.html).
+function formatCroreSafe(v) {
+  if (v == null || !isFinite(v)) return '\u2014';
+  const abs = Math.abs(v);
+  if (abs >= 1e7) return (v / 1e7).toFixed(1) + 'L Cr';
+  if (abs >= 1e3) return (v / 1e3).toFixed(1) + 'k Cr';
+  return v.toFixed(0) + ' Cr';
+}
+function advisorEscapeSafe(s) {
+  return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+}
+
 const api = {
   findRow, fySeries, median, pctChange, yearIndex, vsOwnMedian,
   classifySchema, compareRefusal,
-  COMPANION_MAP,
+  COMPANION_MAP, companionMapFor,
   KNOWN_DISCONTINUITIES, discontinuityNote, detectCyclical,
   DIVERGENCE_RULES, evaluateDivergenceRules,
   SERIES_PALETTE, benchChartOption, profitVsCashChartOption, profitVsCashCaption,
@@ -1226,6 +1456,7 @@ const api = {
   priceToBookLatest, reratingSpread, fyEndPriceSeries, peHistoryBand,
   compoundingChecklist, checklistQualityGate,
   stmtExploreCatalog, alignFyPairs, pctOfSalesSeries,
+  growthChartOption, cashFlowWaterfallOption, companionMapFor,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

@@ -1117,3 +1117,64 @@ test('pctOfSalesSeries refuses non-positive or missing sales with null, never ze
   assert.strictEqual(out[1].value, null);
   assert.strictEqual(out[2].value, null);
 });
+
+// ---------------------------------------------------------------------------
+// Phase: companion map expansion + growth/waterfall chart builders
+// ---------------------------------------------------------------------------
+
+test('companion map: every companion key resolves to a real canonical row', () => {
+  const schemas = ['nonfinancial', 'financial'];
+  const orphans = [];
+  for (const [label, companions] of Object.entries(stmt.COMPANION_MAP)) {
+    for (const c of companions) {
+      // The companion's section must contain its key as a canonical row in at
+      // least one schema (the row might be schema-specific).
+      const found = schemas.some(s => stmt.CANONICAL_ROWS[s] && stmt.CANONICAL_ROWS[s][c.section] && stmt.CANONICAL_ROWS[s][c.section].includes(c.key));
+      if (!found) orphans.push(label + ' -> ' + c.key + ' (' + c.section + ')');
+    }
+  }
+  assert.strictEqual(orphans.length, 0, 'orphaned companion keys: ' + orphans.join('; '));
+});
+
+test('companion map: covers the core P&L and cash-flow rows', () => {
+  const required = ['Sales', 'OPM %', 'Net Profit', 'Cash from Operating Activity',
+    'Borrowings', 'ROCE %', 'Dividend Payout %', 'Free Cash Flow', 'Working Capital Days'];
+  for (const label of required) {
+    assert.ok(stmt.COMPANION_MAP[label], `missing companion entry for "${label}"`);
+    assert.ok(stmt.COMPANION_MAP[label].length >= 1, `"${label}" has no companions`);
+  }
+});
+
+test('companionMapFor: cyclical swap changes Stock P/E companions', () => {
+  const normal = stmt.companionMapFor('Stock P/E', false);
+  const cyclical = stmt.companionMapFor('Stock P/E', true);
+  assert.notDeepStrictEqual(normal, cyclical, 'cyclical swap should change the companion list');
+  assert.ok(cyclical.some(c => c.key === 'Reserves'), 'cyclical swap includes Reserves');
+});
+
+test('companionMapFor: non-cyclical lookup is unchanged', () => {
+  const list = stmt.companionMapFor('Sales', false);
+  assert.ok(list && list.length >= 2, 'Sales companions present');
+});
+
+test('growthChartOption: returns valid ECharts config with two bar series', () => {
+  const sg = { y10: 0.12, y5: 0.10, y3: 0.08, y1: 0.05 };
+  const ng = { y10: 0.15, y5: 0.12, y3: 0.09, y1: 0.03 };
+  const opt = stmt.growthChartOption(sg, ng);
+  assert.strictEqual(opt.series.length, 2);
+  assert.strictEqual(opt.xAxis.type, 'category');
+  assert.deepStrictEqual(opt.xAxis.data, ['10y', '5y', '3y', '1y']);
+  approx(opt.series[0].data[0], 12.0, 0.01);
+  approx(opt.series[1].data[3], 3.0, 0.01);
+});
+
+test('cashFlowWaterfallOption: produces stacked bars + net line', () => {
+  const cfo = [{ year: 2023, value: 100 }, { year: 2024, value: 120 }];
+  const cfi = [{ year: 2023, value: -50 }, { year: 2024, value: -60 }];
+  const cff = [{ year: 2023, value: 30 }, { year: 2024, value: -20 }];
+  const ncf = [{ year: 2023, value: 80 }, { year: 2024, value: 40 }];
+  const opt = stmt.cashFlowWaterfallOption(cfo, cfi, cff, ncf);
+  assert.ok(opt.series.length >= 6, 'waterfall needs placeholder + visible series + net line');
+  assert.ok(opt.series.some(s => s.name === 'CFO'), 'has CFO series');
+  assert.ok(opt.series.some(s => s.name === 'Net Cash Flow'), 'has Net Cash Flow line');
+});

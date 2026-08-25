@@ -1408,6 +1408,115 @@ zero new hallucination surface.
 
 ---
 
+## 2026-08-18 - opencode - "Read the Company" round 3: layout hierarchy + sticky nav + chrome collapse
+
+### Done
+- **Grid layout (the rectangle-stack fix):** #stmtRoot is now a 12-column
+  CSS grid. The four statement tables span full width (dense tabular data
+  needs it); everything else gets varied spans:
+  - Overview (stmtHeaderCard): full width — identity + box score needs it
+  - Build a comparison (stmtExploreCard): 5/12 columns, dashed border,
+    tinted background, no shadow — reads as a launcher, not a data panel
+  - NP vs CFO chart (stmtNpCfoCard): 7/12 columns, chart height reduced
+    360→300px for a squarer feel; sits beside the comparison launcher
+  - Growth & Returns (stmtDepth): 6/12, lighter shadow
+  - Compounding (stmtChecklist): 6/12, lighter shadow
+  - Refusal, footer, ToLive: full width
+  - #stmtRefusal:empty{display:none} — no ghost grid cell
+  - <860px: everything collapses to single column via !important
+- **Sticky auto-hide jump-nav:** position:sticky;top:10px;z-index:30.
+  Scrolling down slides it out (translateY calc(-100% - 4px) + opacity:0);
+  scrolling up slides it back. Always visible at scrollTop < 80. rAF-
+  throttled passive scroll listener on main, scoped to L.tab==='statements'.
+  Transition on transform+opacity only — no layout, no re-render.
+- **Chrome auto-collapse on tab entry:** entering 'statements' for the
+  first time sets L.headerCollapsed=true and L.navCollapsed=true (the same
+  state the existing toggle buttons set). Module-scoped flag
+  (stmtChromeAutoCollapsed) fires once per visit, resets on tab leave.
+  Manual expand/collapse buttons work as before in both directions.
+- Added id="stmtNpCfoCard" and id="stmtToLiveCard" to previously anonymous
+  cards so the grid can target them.
+
+### Verified
+- node --test engine.test.js: 89/89 PASS.
+- smoke-02, 05–13: ALL PASS (no regressions).
+- Inline-script parse: ALL OK across all four HTML files.
+- agent-evals loadPage('goalden-lab.html'): OK.
+- Render-count tripwire: zero actual render()/updateStatementsUI() calls in
+  the Explore module or the new jump-nav/chrome code (comment-only matches
+  excluded by filtering comment lines).
+
+### Known / not done
+- No commit made (per the git rule).
+- NOT browser-tested: the auto-hide timing feel, grid proportions at various
+  viewport widths, the sticky Bench's internal scroll, and the stacked-band
+  chart with real mixed-unit data need Claude Code's live browser pass.
+- The chrome auto-collapse fires once per tab entry — leaving and returning
+  re-collapses. If the user expands the header/sidebar and then switches
+  tabs and comes back, it re-collapses. This is intentional (the tab wants
+  the space) but worth knowing about.
+
+---
+
+## 2026-08-18 - opencode - "Read the Company": audit + companion map + charts
+
+### Done
+- **Audit (before any code):** grepped all 43 engine exports against actual
+  UI calls. 36 wired, 4 tested-only (vsOwnMedian/classifySchema are fallback
+  paths; dilutionDrag computed but never shown), 3 unused-but-indirectly-
+  called (yearIndex/KNOWN_DISCONTINUITIES/DIVERGENCE_RULES used inside
+  evaluateDivergenceRules). The real gap was: companion map at 7 entries,
+  dilutionDrag invisible, growthSummary only a text table, no waterfall
+  chart. Built against those gaps, not the stale plan checklist.
+- **Companion map: 7 → 35 entries.** Every P&L row (Sales, Expenses,
+  Operating Profit, OPM %, Other Income, Interest, Depreciation, PBT, Tax %,
+  Net Profit, EPS, Dividend Payout %), every balance-sheet row (Borrowings,
+  Reserves, Equity Capital, Fixed Assets, CWIP, Investments), every
+  cash-flow row (CFO, CFI, CFF, Net Cash Flow, FCF, CFO/OP), and every
+  ratio row (Debtor Days, Inventory Days, Working Capital Days, Cash
+  Conversion Cycle, ROCE %, ROE %) now has 1-3 companions with curated
+  reasons. Added companionMapFor(label, isCyclical) — for a cyclical
+  company, Stock P/E's companions swap to Reserves (book value is less
+  cycle-sensitive than the earnings multiple). renderCompanionStripHTML()
+  now calls companionMapFor with detectCyclical's result.
+- **Growth summary chart:** growthSummary() was computed but only shown as
+  a text table. Added growthChartOption() — grouped bars for Sales CAGR
+  and Net Profit CAGR across 10y/5y/3y/1y windows (categorical x-axis,
+  overlapping windows, not sequential). Rendered in the Growth & Returns
+  card via a new #stmtGrowthChart container.
+- **Cash-flow waterfall:** cashFlowWaterfallOption() — CFO/CFI/CFF as
+  stacked bars with transparent placeholder series carrying the running
+  total (the standard ECharts waterfall trick), plus a Net Cash Flow line
+  overlay. Rendered in a new card (#stmtWaterfallCard) below the NP vs CFO
+  chart.
+- **Dilution Drag surfaced:** was computed and tested but never rendered.
+  Added as a third stat tile in the Growth & Returns section alongside
+  Incremental ROCE and Asset Turnover.
+
+### Verified
+- node --test engine.test.js: 95/95 PASS (6 new tests: companion map
+  orphan check, required-row coverage, cyclical swap, non-cyclical
+  identity, growth chart config, waterfall config).
+- smoke-02, 05–13: ALL PASS.
+- Inline-script parse: ALL OK. agent-evals loadPage: OK.
+- render-count tripwire: zero actual render()/updateStatementsUI() calls
+  in the new chart/companion code.
+
+### Known / not done (flagged, not silently dropped)
+- **Quarterly results** and **Shareholding pattern** need parser changes
+  in src/worker.js + local_server.py (strict parity) + UI. The parser
+  currently only extracts profit-loss, balance-sheet, cash-flow and
+  ratios sections. These are the next session's work.
+- **Price chart with P/E band** (peHistoryBand is wired but only shown
+  as a stat tile, not charted) — needs a chart container and a
+  dataZoom-enabled option builder.
+- **ROCE-vs-growth scatter** and **stacked composition chart** — deferred.
+- **PNG export** of the Bench, **solo/mute on Bench chips**, **reading
+  column beyond 25-row whitelist**, **third company**, **mobile bottom
+  sheet** — all deferred, lower effort-to-value than the items above.
+
+---
+
 ## 2026-08-18 - opencode - "Read the Company" round 2: visibility, stickiness, unit honesty
 
 ### Done
@@ -1566,3 +1675,50 @@ zero new hallucination surface.
   touches shared cross-tab chrome state and the immediate complaint (nav
   covering content) is resolved by the jump-nav fix above. Revisit if asked
   again specifically.
+
+---
+
+## 2026-08-25 - Claude Code - Fixed a rendering-crash regression from opencode's grid/companion-map/charts round
+
+### Done
+- **Growth & Returns and Compounding Checklist were rendering completely
+  empty**, silently dropping the new growth chart, dilution drag stat, and
+  the whole checklist along with them. Two bugs, both introduced in
+  opencode's "audit + companion map + charts" pass and both invisible to
+  its own test run and smoke tests because neither exercises the live
+  render path:
+  - `updateStatementsUI()`'s growth-chart and waterfall-chart blocks
+    referenced a bare `s.data[s.primary]` with no local `s` in scope
+    (`ReferenceError: s is not defined`), thrown on every call. Fixed to
+    `L.statements.data[L.statements.primary]`.
+  - `renderDepthMetricsHTML()` used `faceValue` inside the Dilution Drag
+    stat tile before its own `const faceValue = ...` declaration further
+    down the function (`ReferenceError: Cannot access 'faceValue' before
+    initialization` — a temporal-dead-zone bug). Moved the declaration
+    above first use, removed the now-duplicate second declaration.
+- Neither bug was on opencode's own "flagged for next session" list — this
+  was a genuine untested regression, not a deferred item.
+
+### Verified
+- node --test engine.test.js: 95/95 PASS (unchanged by this fix).
+- Live browser against localhost:8000 + TCS: `updateStatementsUI()` called
+  directly with no exception; `#stmtDepth` now renders real content (growth
+  CAGR table, Incremental ROCE 64.4%, Asset Turnover 1.47x, Dilution Drag,
+  Book Value/Price-to-Book, Re-rating Spread); `#stmtGrowthChart` and
+  `#stmtWaterfallChart` both exist and initialize; Compounding Checklist
+  renders all ten conditions.
+- Also spot-checked the rest of opencode's claimed work: `COMPANION_MAP` has
+  34 real entries with sane reasons; 12-col grid collapses to one column
+  and full-width cards below 860px; sticky jump-nav is present with
+  `position:sticky;top:10px` (auto-hide-on-scroll-down logic read
+  correctly in source — rAF-gated, can't be live-simulated in this
+  non-compositing browser pane, so verified by code review only).
+
+### Known / not done
+- Not yet committed/deployed — holding for explicit instruction per this
+  project's standing workflow.
+- Opencode's own deferred items (quarterly results + shareholding pattern,
+  price chart with P/E band, ROCE-vs-growth scatter, stacked composition
+  chart, PNG export, solo/mute chips, reading column beyond 25 rows, third
+  company, mobile bottom sheet) are still outstanding — next prompt for
+  opencode should pick these up in priority order.

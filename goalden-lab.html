@@ -651,16 +651,45 @@ body.stmt-page main{max-width:1600px}
    work, instead of only being able to scroll. Pure anchor-jump
    (scrollIntoView), no active-section tracking -- simple and correct beats
    a scroll-spy that can drift out of sync.
-   Sits in normal document flow, not sticky. An earlier version stuck it to
-   the viewport top at all widths; a floating bar with an opaque background
-   sitting mid-page necessarily paints over whatever table row is scrolling
-   past underneath it, which is exactly the row a reader is trying to read.
-   The fade bands that used to soften that overlap are gone with it -- there
-   is nothing left for them to soften. */
-.stmt-jumpnav{display:flex;flex-wrap:wrap;gap:6px;background:#fff;border:1px solid rgba(20,40,63,.16);border-radius:14px;padding:10px 12px;box-shadow:0 1px 2px rgba(20,40,63,.04),0 10px 28px -18px rgba(20,40,63,.22);margin-bottom:16px}
+   Sticky with auto-hide: scrolling DOWN (reading direction) slides the bar
+   out of the way so table content is never occluded; scrolling UP (navigation
+   intent) slides it back. At the top of the page it's always visible. The
+   transition is on transform only — no layout, no re-render, no repaint of
+   the content underneath. */
+.stmt-jumpnav{position:sticky;top:10px;z-index:30;display:flex;flex-wrap:wrap;gap:6px;background:#fff;border:1px solid rgba(20,40,63,.16);border-radius:14px;padding:10px 12px;box-shadow:0 2px 6px rgba(20,40,63,.06),0 10px 28px -18px rgba(20,40,63,.22);margin-bottom:0;transition:transform .22s ease,opacity .18s ease,box-shadow .18s ease}
+.stmt-jumpnav.sx-nav-hidden{transform:translateY(calc(-100% - 4px));opacity:0;pointer-events:none}
 .stmt-jumpnav button{font-family:'Spline Sans Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.01em;color:rgba(20,40,63,.65);background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.14);border-radius:16px;padding:7px 14px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s,border-color .12s}
 .stmt-jumpnav button:hover{background:rgba(37,87,199,.12);color:var(--gold);border-color:rgba(37,87,199,.4)}
-@media(max-width:860px){.stmt-jumpnav{overflow-x:auto;flex-wrap:nowrap}}
+@media(max-width:860px){.stmt-jumpnav{overflow-x:auto;flex-wrap:nowrap;position:static}}
+
+/* ---- Grid layout: breaking up the rectangle stack ----------------------
+   The four statement tables need full width — dense tabular data. Everything
+   else sits in a 12-column grid with varied spans so the page reads as
+   organized sections (Stripe/Mercury pattern) rather than a uniform column
+   of identical white boxes. Degrades to single column < 860px. */
+.stmt-main{display:grid;grid-template-columns:repeat(12,1fr);gap:20px;align-items:start}
+.stmt-main>.stmt-jumpnav{grid-column:1/-1;margin-bottom:0}
+#stmtHeaderCard{grid-column:1/-1}
+#stmtRefusal{grid-column:1/-1}
+#stmtRefusal:empty{display:none}
+#stmtBenchCard{grid-column:1/-1}
+#stmtExploreCard{grid-column:1/6;background:rgba(37,87,199,.03);border:1px dashed rgba(37,87,199,.35);box-shadow:none;padding:20px 22px}
+#stmtExploreCard:hover{background:rgba(37,87,199,.06);box-shadow:0 2px 10px rgba(20,40,63,.06)}
+#stmtExploreCard .stmt-section-title{margin-bottom:10px}
+#stmtNpCfoCard{grid-column:6/-1}
+#stmtNpCfoCard #stmtProfitCashChart{height:300px}
+#stmtWaterfallCard{grid-column:6/-1}
+#stmtWaterfallCard #stmtWaterfallChart{height:300px}
+#stmtTables{grid-column:1/-1}
+#stmtDepth{grid-column:1/7;box-shadow:0 1px 2px rgba(20,40,63,.03)}
+#stmtChecklist{grid-column:7/-1;box-shadow:0 1px 2px rgba(20,40,63,.03)}
+#stmtToLiveCard{grid-column:1/-1}
+.stmt-footer{grid-column:1/-1}
+@media(max-width:860px){
+  .stmt-main{grid-template-columns:1fr}
+  .stmt-main>*{grid-column:1/-1!important}
+  #stmtNpCfoCard #stmtProfitCashChart{height:260px}
+}
 
 .stmt-topbar{background:#fff;border:1px solid rgba(20,40,63,.07);border-radius:14px;box-shadow:0 1px 2px rgba(20,40,63,.04),0 10px 28px -18px rgba(20,40,63,.22)}
 .stmt-topbar-head{display:flex;align-items:center;gap:12px;padding:6px 8px 6px 16px}
@@ -4845,6 +4874,9 @@ function syncPanelJumpBtn(){
 // full-rebuild triggers per the plan: mount, add/remove company, tab
 // leave-and-return, explicit reset.
 let statementsShellMounted=false;
+// Chrome auto-collapse flag for the statements tab — module-scoped so it
+// survives resetTab() and L.statements wipes, resets on tab leave.
+let stmtChromeAutoCollapsed=false;
 // Regression guard for the stable-shell rule: incremented only on the three
 // legitimate full-rebuild triggers (mount, add/remove company via a fresh
 // mount, tab leave-and-return). Exposed on window and mirrored onto
@@ -4861,6 +4893,17 @@ function render(){
   document.body.classList.toggle('stmt-page', L.tab==='statements');
   const countryToggleEl=document.getElementById('countryToggle');
   if(countryToggleEl) countryToggleEl.style.display = L.tab==='statements' ? 'none' : '';
+  // "Read the Company" needs all the vertical space it can get — the
+  // statement tables are the main content. Auto-collapse the header brand
+  // and the tools sidebar on first entry to this tab (once per visit);
+  // the existing toggle buttons override in both directions.
+  if(L.tab==='statements' && !stmtChromeAutoCollapsed){
+    stmtChromeAutoCollapsed=true;
+    if(!L.headerCollapsed){ L.headerCollapsed=true; document.body.classList.add('header-collapsed'); }
+    if(!L.navCollapsed){ L.navCollapsed=true; document.getElementById('tabbar').classList.add('nav-collapsed'); }
+  } else if(L.tab!=='statements'){
+    stmtChromeAutoCollapsed=false;
+  }
   if(L.tab!=='statements'){ if(statementsShellMounted) teardownStatements(); statementsShellMounted=false; }
   if(L.tab==='home') main.innerHTML=renderHome();
   else if(L.tab==='retirement') main.innerHTML=renderRetirement();
@@ -5674,15 +5717,20 @@ function renderStatementsShell(){
         <span class="cap" style="margin:0">Fullscreen \u00b7 Esc closes it \u00b7 nothing here is saved or scored</span>
       </div>
     </div>
-    <div class="stmt-card">
+    <div class="stmt-card" id="stmtNpCfoCard">
       <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Net Profit vs Cash from Operations</div>
-      <div id="stmtProfitCashChart" style="height:360px"></div>
+      <div id="stmtProfitCashChart" style="height:300px"></div>
       <div class="stmt-caption" id="stmtCaption"></div>
+    </div>
+    <div class="stmt-card" id="stmtWaterfallCard">
+      <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6H4zM14 4h6v6h-6z"/><path d="M10 14l4-4M14 10l4 4"/></svg>Cash Flow Waterfall</div>
+      <div class="cap" style="margin-bottom:10px">Each year\u2019s operating, investing and financing flows stacked to show how they build to the net cash figure \u2014 the arithmetic is preserved visually.</div>
+      <div id="stmtWaterfallChart" style="height:320px"></div>
     </div>
     <div id="stmtTables" class="stmt-density-compact"></div>
     <div class="stmt-card" id="stmtDepth"></div>
     <div class="stmt-card" id="stmtChecklist"></div>
-    <div class="stmt-card" style="text-align:center">
+    <div class="stmt-card" id="stmtToLiveCard" style="text-align:center">
       <button class="ns-btn" id="stmtToLiveBtn" style="display:inline-flex">Add to Test Real Investments</button>
     </div>
     <div class="stmt-footer">Figures reproduced from screener.in as reported by the company. Not investment advice. Not a recommendation to buy or sell any security. No SEBI registration. Past performance does not indicate future results.</div>
@@ -5700,7 +5748,12 @@ function teardownStatements(){
   disposeChart('stmtBenchChart');
   disposeChart('stmtProfitCashChart');
   disposeChart('stmtExploreChart');
+  disposeChart('stmtGrowthChart');
+  disposeChart('stmtWaterfallChart');
   stmtExploreClose();
+}
+function salesLabelFor(bundle){
+  return fySeries(bundle.profitLoss,'Sales').length ? 'Sales' : 'Revenue';
 }
 
 /* ---- data loading ------------------------------------------------------ */
@@ -6032,6 +6085,7 @@ function renderDepthMetricsHTML(){
     <div class="stmt-depth-note">${salesRowData.note}</div>
     <div class="stmt-depth-note">${npRowData.note}</div>`;
 
+  const faceValue = bundle.topRatios && bundle.topRatios.faceValue;
   let returnsBlock;
   if(schema!=='nonfinancial'){
     returnsBlock = `<div class="stmt-depth-refusal"><b>Incremental ROCE and asset turnover aren't shown here.</b> Both formulas depend on capital-employed and total-assets figures that mean something different for a lender than for a manufacturer, so this app doesn't compute them outside the non-lender schema.</div>`;
@@ -6050,10 +6104,13 @@ function renderDepthMetricsHTML(){
         <div class="stmt-depth-stat-label">Asset Turnover<span class="stmt-ctrl-hint">${salesLabel} divided by Total Assets — how much revenue each rupee on the balance sheet produces</span></div>
         <div class="stmt-depth-stat-value">${atLatest ? atLatest.value.toFixed(2)+'x (FY'+atLatest.year+')' : '—'}</div>
       </div>
+      <div class="stmt-depth-stat">
+        <div class="stmt-depth-stat-label">Dilution Drag (5y)<span class="stmt-ctrl-hint">Share-count change over 5 years, split-adjusted — positive means the company issued shares, so each existing shareholder owns a smaller fraction regardless of whether the business grew</span></div>
+        <div class="stmt-depth-stat-value">${(() => { const dd = dilutionDrag(bs, faceValue); const latest = dd.length ? dd[dd.length-1] : null; return latest && latest.value != null ? (latest.value>=0?'+':'')+(latest.value*100).toFixed(1)+'% (FY'+latest.year+')' : '\u2014'; })()}</div>
+      </div>
     </div>`;
   }
 
-  const faceValue = bundle.topRatios && bundle.topRatios.faceValue;
   const bvSeries = faceValue ? bookValuePerShareSeries(bs, faceValue).filter(p=>p.value!=null) : [];
   const bvLatest = bvSeries.length ? bvSeries[bvSeries.length-1] : null;
   const currentPrice = bundle.topRatios && bundle.topRatios.currentPrice;
@@ -6111,6 +6168,7 @@ function renderDepthMetricsHTML(){
 
   return `<div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>Growth & Returns</div>
   <div class="cap" style="margin-bottom:10px">Derived from the same reported rows in the tables above — standard formulas, no new data.</div>
+  <div id="stmtGrowthChart" style="height:260px;margin-bottom:14px"></div>
   ${growthTable}
   ${returnsBlock}
   ${bvBlock}
@@ -6228,7 +6286,9 @@ function renderCompanionStripHTML(){
   // moment of pinning" requirement.
   const focus = s.companionFocus || (s.pins.length ? s.pins[s.pins.length-1] : null);
   if(!focus) return '';
-  const companions = COMPANION_MAP[focus.label];
+  const primary=statementsBundle(L.statements.primary);
+  const isCyclical=primary?detectCyclical(primary.profitLoss):false;
+  const companions=companionMapFor(focus.label,isCyclical);
   if(!companions) return '';
   return companions.map(c=>`<div class="stmt-companion-chip" data-stmt-companion-pin="${advisorAttr(rowKey(c.section,c.key))}"><b>${advisorAttr(c.key)}</b> \u2014 ${advisorAttr(c.reason)}</div>`).join('');
 }
@@ -6797,6 +6857,26 @@ document.addEventListener('keydown', function(e){
   stmtExploreClose();
 }, true);
 
+// Jump-nav auto-hide: scrolling down slides the bar out of the way so table
+// content is never occluded; scrolling up (navigation intent) slides it back.
+// At the top of the page it's always visible. rAF-throttled, passive, scoped
+// to the statements tab — no re-render, no layout thrash.
+let stmtNavLastY=0, stmtNavRaf=null;
+document.getElementById('main').addEventListener('scroll', function(){
+  if(L.tab!=='statements') return;
+  if(stmtNavRaf) return;
+  stmtNavRaf=requestAnimationFrame(function(){
+    stmtNavRaf=null;
+    const nav=document.getElementById('stmtJumpNav');
+    if(!nav) return;
+    const y=document.getElementById('main').scrollTop;
+    if(y<80){ nav.classList.remove('sx-nav-hidden'); stmtNavLastY=y; return; }
+    if(y>stmtNavLastY+4) nav.classList.add('sx-nav-hidden');
+    else if(y<stmtNavLastY-4) nav.classList.remove('sx-nav-hidden');
+    stmtNavLastY=y;
+  });
+},{passive:true});
+
 /* ---- rendering: the four statement tables ----------------------------- */
 function statementRowHTML(sectionKey, label, primarySection, compareSection, periods, pinnedSet, focusYear, changeMode, rowIndex){
 
@@ -7012,6 +7092,33 @@ function updateStatementsUI(){
   renderStatementTables();
   const depthEl=document.getElementById('stmtDepth'); if(depthEl) depthEl.innerHTML = renderDepthMetricsHTML();
   const checklistEl=document.getElementById('stmtChecklist'); if(checklistEl) checklistEl.innerHTML = renderCompoundingChecklistHTML();
+  // Growth summary chart: growthSummary() computes the CAGRs; this renders
+  // them as grouped bars so the overlapping windows are visually comparable.
+  const growthChartEl=document.getElementById('stmtGrowthChart');
+  if(growthChartEl){
+    const d=L.statements.data[L.statements.primary];
+    if(d && d.status==='ready' && d.result.profitLoss){
+      const sl=fySeries(d.result.profitLoss,salesLabelFor(d.result));
+      const np=fySeries(d.result.profitLoss,'Net Profit');
+      if(sl.length>=3 && np.length>=3){
+        initChart('stmtGrowthChart', growthChartOption(growthSummary(sl),growthSummary(np)));
+      } else { growthChartEl.innerHTML='<div class="cap" style="padding:14px">Not enough years for a growth window.</div>'; }
+    } else { growthChartEl.innerHTML=''; }
+  }
+  // Cash-flow waterfall: CFO/CFI/CFF stacked to preserve the arithmetic.
+  const wfEl=document.getElementById('stmtWaterfallChart');
+  if(wfEl){
+    const d=L.statements.data[L.statements.primary];
+    if(d && d.status==='ready' && d.result.cashFlow && d.result.profitLoss){
+      const cfo=fySeries(d.result.cashFlow,'Cash from Operating Activity');
+      const cfi=fySeries(d.result.cashFlow,'Cash from Investing Activity');
+      const cff=fySeries(d.result.cashFlow,'Cash from Financing Activity');
+      const ncf=fySeries(d.result.cashFlow,'Net Cash Flow');
+      if(cfo.length>=2 && cfi.length>=2){
+        initChart('stmtWaterfallChart', cashFlowWaterfallOption(cfo,cfi,cff,ncf));
+      } else { wfEl.innerHTML='<div class="cap" style="padding:14px">Not available for this reporting format.</div>'; }
+    } else { disposeChart('stmtWaterfallChart'); wfEl.innerHTML=''; }
+  }
   buildStatementsHighlightCSS();
   const toLiveBtn=document.getElementById('stmtToLiveBtn'); if(toLiveBtn) toLiveBtn.textContent = 'Add '+(L.statements.primary||'\u2014')+' to Test Real Investments';
 }
