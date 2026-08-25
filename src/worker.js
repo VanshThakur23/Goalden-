@@ -378,7 +378,7 @@ function buildFinancialsResult(symbol, html, url, consolidated) {
   // Debtor Days / Inventory Days / Cash Conversion Cycle / ROCE % (or ROE %
   // for lenders) live in their own section, not on the P&L/balance sheet —
   // needed for the debtor-balloon check and the ROCE companion metrics.
-  const sections = { profitLoss: 'profit-loss', balanceSheet: 'balance-sheet', cashFlow: 'cash-flow', ratios: 'ratios' };
+  const sections = { profitLoss: 'profit-loss', balanceSheet: 'balance-sheet', cashFlow: 'cash-flow', ratios: 'ratios', quarterly: 'quarters', shareholding: 'shareholding' };
   for (const key of Object.keys(sections)) {
     const slice = ScreenerParser.screenerSectionSlice(html, sections[key]);
     result[key] = slice ? ScreenerParser.screenerParseTable(slice) : null;

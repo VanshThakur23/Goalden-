@@ -891,12 +891,16 @@ const CANONICAL_ROWS = {
     balanceSheet: ['Equity Capital', 'Reserves', 'Borrowings', 'Other Liabilities', 'Total Liabilities', 'Fixed Assets', 'CWIP', 'Investments', 'Other Assets', 'Total Assets'],
     cashFlow: ['Cash from Operating Activity', 'Cash from Investing Activity', 'Cash from Financing Activity', 'Net Cash Flow', 'Free Cash Flow', 'CFO/OP'],
     ratios: ['Debtor Days', 'Inventory Days', 'Days Payable', 'Cash Conversion Cycle', 'Working Capital Days', 'ROCE %'],
+    quarterly: ['Sales', 'Expenses', 'Operating Profit', 'OPM %', 'Other Income', 'Interest', 'Depreciation', 'Profit before tax', 'Tax %', 'Net Profit', 'EPS in Rs'],
+    shareholding: ['Promoters', 'FIIs', 'DIIs', 'Government', 'Public'],
   },
   financial: {
     profitLoss: ['Revenue', 'Interest', 'Expenses', 'Financing Profit', 'Financing Margin %', 'Other Income', 'Depreciation', 'Profit before tax', 'Tax %', 'Net Profit', 'EPS in Rs', 'Dividend Payout %'],
     balanceSheet: ['Equity Capital', 'Reserves', 'Deposits', 'Borrowing', 'Other Liabilities', 'Total Liabilities', 'Fixed Assets', 'CWIP', 'Investments', 'Other Assets', 'Total Assets'],
     cashFlow: ['Cash from Operating Activity', 'Cash from Investing Activity', 'Cash from Financing Activity', 'Net Cash Flow', 'Free Cash Flow', 'CFO/OP'],
     ratios: ['ROE %'],
+    quarterly: ['Revenue', 'Interest', 'Expenses', 'Financing Profit', 'Financing Margin %', 'Other Income', 'Depreciation', 'Profit before tax', 'Tax %', 'Net Profit', 'EPS in Rs'],
+    shareholding: ['Promoters', 'FIIs', 'DIIs', 'Government', 'Public'],
   },
 };
 
@@ -928,6 +932,7 @@ const ROW_UNIT = {
   'EPS in Rs': 'rupee',
   'Debtor Days': 'days', 'Inventory Days': 'days', 'Days Payable': 'days', 'Cash Conversion Cycle': 'days', 'Working Capital Days': 'days',
   'CFO/OP': 'ratio',
+  'Promoters': 'pct', 'FIIs': 'pct', 'DIIs': 'pct', 'Government': 'pct', 'Public': 'pct', 'Pledged %': 'pct',
 };
 function rowUnit(label) { return ROW_UNIT[label] || 'cr'; }
 

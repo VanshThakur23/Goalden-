@@ -417,7 +417,7 @@ def _build_financials_result(symbol, html, url, consolidated):
     }
     # Debtor Days / Inventory Days / Cash Conversion Cycle / ROCE % (or ROE %
     # for lenders) live in their own section, not on the P&L/balance sheet.
-    for key, section_id in (('profitLoss', 'profit-loss'), ('balanceSheet', 'balance-sheet'), ('cashFlow', 'cash-flow'), ('ratios', 'ratios')):
+    for key, section_id in (('profitLoss', 'profit-loss'), ('balanceSheet', 'balance-sheet'), ('cashFlow', 'cash-flow'), ('ratios', 'ratios'), ('quarterly', 'quarters'), ('shareholding', 'shareholding')):
         slice_html = _screener_section_slice(html, section_id)
         result[key] = _screener_parse_table(slice_html) if slice_html else None
 

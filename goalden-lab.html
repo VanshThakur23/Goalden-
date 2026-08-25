@@ -662,33 +662,47 @@ body.stmt-page main{max-width:1600px}
 .stmt-jumpnav button:hover{background:rgba(37,87,199,.12);color:var(--gold);border-color:rgba(37,87,199,.4)}
 @media(max-width:860px){.stmt-jumpnav{overflow-x:auto;flex-wrap:nowrap;position:static}}
 
-/* ---- Grid layout: breaking up the rectangle stack ----------------------
-   The four statement tables need full width — dense tabular data. Everything
-   else sits in a 12-column grid with varied spans so the page reads as
-   organized sections (Stripe/Mercury pattern) rather than a uniform column
-   of identical white boxes. Degrades to single column < 860px. */
+/* ---- Grid layout: three named zones, not a rectangle stack -------------
+   The page reads as three distinct, labelled zones (.stmt-zone-header)
+   rather than a uniform stream of cards someone has to parse one at a
+   time: Statements & Benchmarks (Bench + the four tables) -> Charts
+   (comparison builder + the two visualisations, paired the way two charts
+   should be, not a chart against a plain CTA banner) -> Analysis (Growth &
+   Returns, Compounding Checklist, each its own full-width rectangle since
+   both are dense enough on their own that splitting them in half just
+   cramped the stat tiles and wrapped the checklist rows). Everything
+   inside a zone still sits in a 12-column grid for the cards that benefit
+   from sharing a row; the four statement tables stay full width regardless
+   -- dense tabular data doesn't shrink well. Degrades to single column
+   < 860px, zone headers included. */
 .stmt-main{display:grid;grid-template-columns:repeat(12,1fr);gap:20px;align-items:start}
 .stmt-main>.stmt-jumpnav{grid-column:1/-1;margin-bottom:0}
 #stmtHeaderCard{grid-column:1/-1}
 #stmtRefusal{grid-column:1/-1}
 #stmtRefusal:empty{display:none}
+.stmt-zone-header{grid-column:1/-1;display:flex;align-items:center;gap:12px;font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin:10px 0 -6px}
+.stmt-zone-header::after{content:'';flex:1;height:1px;background:rgba(20,40,63,.13)}
 #stmtBenchCard{grid-column:1/-1}
-#stmtExploreCard{grid-column:1/6;background:rgba(37,87,199,.03);border:1px dashed rgba(37,87,199,.35);box-shadow:none;padding:20px 22px}
+#stmtExploreCard{grid-column:1/-1;background:rgba(37,87,199,.03);border:1px dashed rgba(37,87,199,.35);box-shadow:none;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
 #stmtExploreCard:hover{background:rgba(37,87,199,.06);box-shadow:0 2px 10px rgba(20,40,63,.06)}
-#stmtExploreCard .stmt-section-title{margin-bottom:10px}
-#stmtNpCfoCard{grid-column:6/-1}
+#stmtExploreCard .stmt-section-title{margin-bottom:0}
+#stmtExploreCard .stmt-explore-copy{flex:1;min-width:280px}
+#stmtExploreCard .cap{margin-top:4px}
+#stmtNpCfoCard{grid-column:1/7}
 #stmtNpCfoCard #stmtProfitCashChart{height:300px}
-#stmtWaterfallCard{grid-column:6/-1}
+#stmtWaterfallCard{grid-column:7/-1}
 #stmtWaterfallCard #stmtWaterfallChart{height:300px}
 #stmtTables{grid-column:1/-1}
-#stmtDepth{grid-column:1/7;box-shadow:0 1px 2px rgba(20,40,63,.03)}
-#stmtChecklist{grid-column:7/-1;box-shadow:0 1px 2px rgba(20,40,63,.03)}
+#stmtDepth{grid-column:1/-1;box-shadow:0 1px 2px rgba(20,40,63,.03)}
+#stmtChecklist{grid-column:1/-1;box-shadow:0 1px 2px rgba(20,40,63,.03)}
 #stmtToLiveCard{grid-column:1/-1}
 .stmt-footer{grid-column:1/-1}
 @media(max-width:860px){
   .stmt-main{grid-template-columns:1fr}
   .stmt-main>*{grid-column:1/-1!important}
   #stmtNpCfoCard #stmtProfitCashChart{height:260px}
+  #stmtWaterfallCard #stmtWaterfallChart{height:260px}
+  #stmtExploreCard{flex-direction:column;align-items:flex-start}
 }
 
 .stmt-topbar{background:#fff;border:1px solid rgba(20,40,63,.07);border-radius:14px;box-shadow:0 1px 2px rgba(20,40,63,.04),0 10px 28px -18px rgba(20,40,63,.22)}
@@ -5513,9 +5527,11 @@ const FLAG_PIN_MAP = {
 
 const STMT_SECTIONS = [
   {key:'profitLoss', label:'Profit & Loss'},
+  {key:'quarterly', label:'Quarterly Results'},
   {key:'balanceSheet', label:'Balance Sheet'},
   {key:'cashFlow', label:'Cash Flow'},
   {key:'ratios', label:'Ratios'},
+  {key:'shareholding', label:'Shareholding Pattern'},
 ];
 
 function statementsBundle(sym){
@@ -5685,19 +5701,20 @@ function renderStatementsShell(){
     <nav class="stmt-jumpnav" id="stmtJumpNav">
       <button data-stmt-jump="stmtHeaderCard">Overview</button>
       <button data-stmt-jump="stmtBenchCard">The Bench</button>
-      <button data-stmt-jump="stmtExploreCard">Compare</button>
       <button data-stmt-jump-section="profitLoss">Profit &amp; Loss</button>
       <button data-stmt-jump-section="balanceSheet">Balance Sheet</button>
       <button data-stmt-jump-section="cashFlow">Cash Flow</button>
       <button data-stmt-jump-section="ratios">Ratios</button>
+      <button data-stmt-jump="stmtExploreCard">Charts</button>
       <button data-stmt-jump="stmtDepth">Growth &amp; Returns</button>
       <button data-stmt-jump="stmtChecklist">Compounding</button>
     </nav>
     <div class="stmt-card" id="stmtHeaderCard"></div>
     <div id="stmtRefusal"></div>
+    <div class="stmt-zone-header">Statements &amp; Benchmarks</div>
     <div class="stmt-card" id="stmtBenchCard">
       <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>The Bench<button class="stmt-bench-pin-btn" id="stmtBenchPinBtn" type="button" title="Dock the Bench in a small fixed window so it stays visible while you scroll">📌 Pin</button></div>
-      <div class="stmt-section-title" style="margin-top:0"><span style="font-size:12px;font-family:'Spline Sans Mono',monospace;color:var(--dim);font-weight:400">Pin rows below &#8595; and they chart here instantly. For bigger, deliberate comparisons use <b style="color:var(--gold)">Build a comparison</b> below.</span></div>
+      <div class="stmt-section-title" style="margin-top:0"><span style="font-size:12px;font-family:'Spline Sans Mono',monospace;color:var(--dim);font-weight:400">Pin rows below &#8595; and they chart here instantly. For bigger, deliberate comparisons use <b style="color:var(--gold)">Build a comparison</b> in the Charts section below.</span></div>
       <div class="stmt-bench-hint" id="stmtBenchHint"></div>
       <div class="stmt-chips" id="stmtBenchChips"></div>
       <div class="stmt-companion-strip" id="stmtCompanionStrip"></div>
@@ -5709,12 +5726,16 @@ function renderStatementsShell(){
         <div id="stmtFlagDetail"></div>
       </div>
     </div>
+    <div id="stmtTables" class="stmt-density-compact"></div>
+    <div class="stmt-zone-header">Charts</div>
     <div class="stmt-card" id="stmtExploreCard">
-      <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Build a comparison</div>
-      <div class="cap" style="max-width:820px;line-height:1.6">Pull any reported rows into one fullscreen chart: overlay them over time to compare growth shapes, or plot any two against each other year by year to see which one leads. Every line item screener reports is reachable here \u2014 including rows the tables above group differently \u2014 for this company and its comparison, side by side.</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px">
+      <div class="stmt-explore-copy">
+        <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Build a comparison</div>
+        <div class="cap" style="max-width:640px;line-height:1.6">Pull any reported rows into one fullscreen chart: overlay them over time to compare growth shapes, or plot any two against each other year by year to see which one leads. Every line item screener reports is reachable here \u2014 including rows the tables above group differently.</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
         <button class="ns-btn" data-sx-open style="display:inline-flex">Open the comparison builder</button>
-        <span class="cap" style="margin:0">Fullscreen \u00b7 Esc closes it \u00b7 nothing here is saved or scored</span>
+        <span class="cap" style="margin:0">Fullscreen \u00b7 Esc closes it</span>
       </div>
     </div>
     <div class="stmt-card" id="stmtNpCfoCard">
@@ -5725,9 +5746,9 @@ function renderStatementsShell(){
     <div class="stmt-card" id="stmtWaterfallCard">
       <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6H4zM14 4h6v6h-6z"/><path d="M10 14l4-4M14 10l4 4"/></svg>Cash Flow Waterfall</div>
       <div class="cap" style="margin-bottom:10px">Each year\u2019s operating, investing and financing flows stacked to show how they build to the net cash figure \u2014 the arithmetic is preserved visually.</div>
-      <div id="stmtWaterfallChart" style="height:320px"></div>
+      <div id="stmtWaterfallChart" style="height:300px"></div>
     </div>
-    <div id="stmtTables" class="stmt-density-compact"></div>
+    <div class="stmt-zone-header">Analysis</div>
     <div class="stmt-card" id="stmtDepth"></div>
     <div class="stmt-card" id="stmtChecklist"></div>
     <div class="stmt-card" id="stmtToLiveCard" style="text-align:center">

@@ -1715,10 +1715,70 @@ zero new hallucination surface.
   non-compositing browser pane, so verified by code review only).
 
 ### Known / not done
-- Not yet committed/deployed — holding for explicit instruction per this
-  project's standing workflow.
+- Committed b21992a and deployed once the user confirmed. Also fixed an
+  unrelated deploy hygiene issue found in the same push: a scratch prompt
+  file dropped in a repo-local `scratchpad/` got uploaded as a public
+  static asset (this repo's wrangler.toml serves the whole repo root) —
+  added `scratchpad/` to `.assetsignore`, committed ea21a2c, redeployed.
 - Opencode's own deferred items (quarterly results + shareholding pattern,
   price chart with P/E band, ROCE-vs-growth scatter, stacked composition
   chart, PNG export, solo/mute chips, reading column beyond 25 rows, third
-  company, mobile bottom sheet) are still outstanding — next prompt for
-  opencode should pick these up in priority order.
+  company, mobile bottom sheet) were handed to opencode in a follow-up
+  prompt and were in progress concurrently with the layout work below.
+
+---
+
+## 2026-08-25 - Claude Code - Grouped Read the Company into three labelled zones, fixed the grid's own layout bugs
+
+### Done
+- **User feedback on opencode's grid layout, verbatim gist:** Growth & Returns
+  and Compounding Checklist looked bad split into two half-width squares
+  (stat tiles cramped, checklist rows wrapped); "Build a comparison" sat as
+  an awkward small square next to a much taller Net Profit vs CFO chart,
+  and the Cash Flow Waterfall — grid-placed at columns 6/-1 same as the
+  chart above it — left columns 1-5 visibly empty beneath Explore on its
+  own row. Root cause of the empty-space complaint: two different card
+  pairs both anchored to the same column boundary (6) without anything
+  ever placed in 1-5 on the waterfall's row, since CSS grid doesn't
+  backfill gaps without `grid-auto-flow:dense`.
+- **Follow-up ask, same message thread:** stop just varying rectangle
+  sizes and instead give the page real zones people can navigate by,
+  matching a mental model of "read the numbers" -> "see it charted" ->
+  "what it means" — not just a size-varied stream of cards.
+- Restructured into three zones, each opened by a new `.stmt-zone-header`
+  (small-caps label + rule, full width, matches the existing minimal
+  aesthetic rather than adding heavy chrome):
+  - **Statements & Benchmarks** — The Bench, then the four statement
+    tables (moved up from below the charts, since Bench pins rows *from*
+    these tables — they belong next to each other).
+  - **Charts** — Build a comparison (now a compact full-width banner, not
+    a squeezed card — it's a launcher button + two lines of copy, not a
+    chart, so it no longer competes with real charts for grid space), Net
+    Profit vs CFO and the Cash Flow Waterfall now paired 50/50 on one row
+    (`1/7` and `7/-1`) — two charts of the same kind sit together instead
+    of a chart paired against a CTA banner of a different height.
+  - **Analysis** — Growth & Returns and Compounding Checklist, both full
+    width per the user's explicit ask, stacked instead of split in half.
+- Reordered `#stmtJumpNav` to match: Overview -> Bench -> the four
+  statement sections -> Charts -> Growth & Returns -> Compounding.
+- Waterfall chart height set to 300px (matches NpCfo now that they're the
+  same width) instead of the mismatched 320px from the previous round.
+
+### Verified
+- node --test engine.test.js: 95/95 PASS (layout-only change, unaffected).
+- Live browser against localhost:8000 + TCS: confirmed computed
+  `grid-column` for every card matches the new zone plan (`stmtNpCfoCard`
+  1/7, `stmtWaterfallCard` 7/-1, `stmtDepth`/`stmtChecklist` both 1/-1,
+  `stmtExploreCard` 1/-1); confirmed all three zone headers render with
+  the right text and correct DOM order; confirmed `#stmtDepth` and
+  `#stmtChecklist` still render full content (9437 and 4929 chars) and
+  the growth/waterfall chart containers still exist post-reorder; resized
+  to 700px and confirmed both charts collapse to full width and the
+  Explore banner switches to a stacked column, same as before.
+
+### Known / not done
+- Not yet committed/deployed — holding for explicit instruction. Opencode
+  is working on the Phase 3 prompt (quarterly/shareholding, price+P/E
+  chart, etc.) against the same file concurrently with this change; the
+  next commit should pull opencode's latest work first and reconcile
+  before pushing, since both sessions are editing goalden-lab.html.
