@@ -620,6 +620,18 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .live-wc-badge.best{background:rgba(37,87,199,.22);color:var(--gold)}
 .live-wc-badge.minvar{background:rgba(143,199,158,.18);color:#8FC79E}
 
+/* --- Chart fullscreen toggle (all tabs) --------------------------------
+   Applied automatically by initChart() to every chart container in the
+   app, not authored per-template -- see ensureChartFsWrap(). */
+.chart-fs-wrap{position:relative}
+.chart-fs-btn{position:absolute;top:6px;right:6px;z-index:6;width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.16);background:rgba(255,255,255,.92);color:var(--ink2);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .15s,background .15s;padding:0}
+.chart-fs-wrap:hover .chart-fs-btn,.chart-fs-wrap.chart-fs-active .chart-fs-btn{opacity:1}
+.chart-fs-btn:hover{background:#fff;border-color:rgba(20,40,63,.32)}
+.chart-fs-btn svg{width:14px;height:14px}
+.chart-fs-wrap.chart-fs-active{position:fixed;inset:24px;z-index:10000;background:var(--card);border:1px solid rgba(20,40,63,.13);border-radius:4px 4px 20px 20px;box-shadow:0 24px 60px rgba(10,16,26,.4);padding:18px;display:flex;flex-direction:column}
+.chart-fs-wrap.chart-fs-active>div{flex:1;height:auto !important;width:100% !important}
+body.chart-fs-open::before{content:'';position:fixed;inset:0;background:rgba(10,16,26,.55);z-index:9999}
+
 /* --- Read the Company ("statements" tab) -----------------------------
    Renders once per mount (see the rendering note above initChart() and
    render()'s statementsShellMounted branch); every interaction below
@@ -1063,12 +1075,65 @@ echarts.registerTheme('goalden', {
 // so ECharts animates the transition between old and new values for
 // free, the same way the old hand-rolled fast-path patching did.
 const chartInstances = {};
+const CHART_FS_EXPAND_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+const CHART_FS_COLLAPSE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M9 21v-4a2 2 0 0 0-2-2H3M15 21v-4a2 2 0 0 1 2-2h4"/></svg>';
+// Wraps a chart's container in a plain sibling <div> the first time
+// initChart() sees it, and adds one expand/collapse button as a sibling
+// of the container -- never a child, since ECharts owns and periodically
+// clears the container's own children. Idempotent: re-running initChart
+// on the same id (the setOption fast path) is a no-op here because the
+// parent already carries chart-fs-wrap.
+function ensureChartFsWrap(dom){
+  const parent = dom.parentElement;
+  if(!parent || parent.classList.contains('chart-fs-wrap')) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-fs-wrap';
+  parent.insertBefore(wrap, dom);
+  wrap.appendChild(dom);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chart-fs-btn';
+  btn.title = 'Expand to full screen';
+  btn.setAttribute('aria-label', 'Expand chart to full screen');
+  btn.innerHTML = CHART_FS_EXPAND_ICON;
+  btn.addEventListener('click', (e)=>{ e.stopPropagation(); toggleChartFullscreen(wrap, dom.id); });
+  wrap.appendChild(btn);
+}
+function toggleChartFullscreen(wrap, chartId){
+  const goingFs = !wrap.classList.contains('chart-fs-active');
+  document.querySelectorAll('.chart-fs-wrap.chart-fs-active').forEach(w=>{ if(w!==wrap) exitChartFullscreen(w); });
+  if(goingFs){
+    document.body.classList.add('chart-fs-open');
+    wrap.classList.add('chart-fs-active');
+    const btn = wrap.querySelector('.chart-fs-btn');
+    if(btn){ btn.title='Exit full screen'; btn.setAttribute('aria-label','Exit full screen'); btn.innerHTML=CHART_FS_COLLAPSE_ICON; }
+  } else {
+    exitChartFullscreen(wrap);
+  }
+  const entry = chartInstances[chartId];
+  requestAnimationFrame(()=>{ if(entry && entry.inst && !entry.inst.isDisposed()) entry.inst.resize(); });
+}
+function exitChartFullscreen(wrap){
+  wrap.classList.remove('chart-fs-active');
+  if(!document.querySelector('.chart-fs-wrap.chart-fs-active')) document.body.classList.remove('chart-fs-open');
+  const btn = wrap.querySelector('.chart-fs-btn');
+  if(btn){ btn.title='Expand to full screen'; btn.setAttribute('aria-label','Expand chart to full screen'); btn.innerHTML=CHART_FS_EXPAND_ICON; }
+}
+document.addEventListener('keydown', (e)=>{
+  if(e.key!=='Escape') return;
+  const open = document.querySelector('.chart-fs-wrap.chart-fs-active');
+  if(!open) return;
+  const chartId = open.querySelector('[id]');
+  exitChartFullscreen(open);
+  if(chartId){ const entry = chartInstances[chartId.id]; requestAnimationFrame(()=>{ if(entry && entry.inst && !entry.inst.isDisposed()) entry.inst.resize(); }); }
+});
 function initChart(id, option, optsOverride){
   const dom = document.getElementById(id);
   if(!dom) return null;
   let entry = chartInstances[id];
   if(entry && entry.dom !== dom){ entry.inst.dispose(); entry = null; }
   if(!entry){
+    ensureChartFsWrap(dom);
     const inst = echarts.init(dom, 'goalden', Object.assign({renderer:'svg'}, optsOverride));
     entry = chartInstances[id] = { inst, dom };
   }
@@ -6104,6 +6169,53 @@ function stmtGrowthRowHTML(label, series){
   const note = d10 ? `${advisorAttr(label)}: 10-year window FY${d10.windowStart}–FY${d10.windowEnd}, ${d10.positives} of ${d10.total} years grew, worst year ${d10.worst?('FY'+d10.worst.year+' at '+(d10.worst.value*100).toFixed(1)+'%'):'—'}.` : '';
   return { row: `<tr><td>${advisorAttr(label)}</td><td>${cell(g.y10)}</td><td>${cell(g.y5)}</td><td>${cell(g.y3)}</td><td>${cell(g.y1)}</td></tr>`, note };
 }
+// Screener's own published growth-rate cards (parseGrowthSummaries) are a
+// different source and formula than the CAGR this app computes from the
+// raw statement rows above -- shown side by side, per the parser's own
+// comment, with any gap over 5 percentage points marked (never explained
+// away, since either source could be the restated one).
+function stmtGrowthSummaryLookup(rows, yearsWanted){
+  if(!rows) return null;
+  const row = rows.find(r=>{ const m = String(r.label||'').match(/(\d+)\s*Year/i); return m && Number(m[1])===yearsWanted; });
+  return (row && row.values && row.values[0]!=null) ? row.values[0]/100 : null;
+}
+// The trailing column's own label varies by card on the real site --
+// growth cards call it "TTM:", the price-CAGR card calls it "1 Year:",
+// the ROE card calls it "Last Year:" -- so it's read positionally (the
+// last row) rather than by another label match, and the table header
+// says "Trailing" rather than claiming a single shared window.
+function stmtGrowthSummaryTrailing(rows){
+  if(!rows || !rows.length) return null;
+  const row = rows[rows.length-1];
+  return (row && row.values && row.values[0]!=null) ? row.values[0]/100 : null;
+}
+function stmtGrowthSummaryBlock(bundle, computedSales, computedProfit){
+  const gs = bundle.growthSummaries;
+  if(!gs) return '';
+  const rows = [];
+  const addRow = (title, key, computed) => {
+    const pub = gs[key];
+    if(!pub) return;
+    const cells = [10,5,3].map(y=>{
+      const p = stmtGrowthSummaryLookup(pub, y);
+      const c = computed ? computed['y'+y] : null;
+      const pubTxt = p!=null ? (p*100).toFixed(1)+'%' : '—';
+      const diverges = (p!=null && c!=null && Math.abs(p-c) > 0.05);
+      return `<td${diverges?' style="color:#a03a22" title="This app\'s own calculation from the same statement rows gives '+(c*100).toFixed(1)+'% -- the two differ by more than 5 percentage points, which can happen with restated figures or a different growth-rate formula"':''}>${pubTxt}</td>`;
+    });
+    const trailing = stmtGrowthSummaryTrailing(pub);
+    cells.push(`<td>${trailing!=null ? (trailing*100).toFixed(1)+'%' : '—'}</td>`);
+    rows.push(`<tr><td>${advisorAttr(title)}</td>${cells.join('')}</tr>`);
+  };
+  addRow('Sales Growth', 'compoundedSalesGrowth', computedSales);
+  addRow('Profit Growth', 'compoundedProfitGrowth', computedProfit);
+  addRow('Stock Price CAGR', 'stockPriceCAGR', null);
+  addRow('Return on Equity', 'returnOnEquity', null);
+  if(!rows.length) return '';
+  return `<div class="stmt-depth-note" style="font-weight:700;color:var(--ink2);font-size:13px;margin-top:16px;margin-bottom:6px">As Published by Screener.in</div>
+  <div class="cap" style="margin-bottom:10px">Screener's own headline figures, shown as reported. A gap from this app's own calculation above is not necessarily an error in either one -- restated figures and different growth-rate formulas both produce real differences.</div>
+  <table class="stmt-depth-table"><thead><tr><th></th><th>10y</th><th>5y</th><th>3y</th><th>Trailing</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+}
 function renderDepthMetricsHTML(){
   const s=L.statements;
   const d = s.data[s.primary];
@@ -6120,7 +6232,8 @@ function renderDepthMetricsHTML(){
   const growthTable = `<table class="stmt-depth-table"><thead><tr><th></th><th>10y</th><th>5y</th><th>3y</th><th>1y</th></tr></thead>
     <tbody>${salesRowData.row}${npRowData.row}</tbody></table>
     <div class="stmt-depth-note">${salesRowData.note}</div>
-    <div class="stmt-depth-note">${npRowData.note}</div>`;
+    <div class="stmt-depth-note">${npRowData.note}</div>
+    ${stmtGrowthSummaryBlock(bundle, growthSummary(salesSeries), growthSummary(npSeries))}`;
 
   const faceValue = bundle.topRatios && bundle.topRatios.faceValue;
   let returnsBlock;
@@ -6202,11 +6315,14 @@ function renderDepthMetricsHTML(){
     if(statementYears.length && priceYears.length && Math.min(...statementYears) < Math.min(...priceYears)){
       reratingBlock += `<div class="cap" style="margin-top:8px">Statement history above goes back to FY${Math.min(...statementYears)} (source: screener.in). Daily price history only reaches back to FY${Math.min(...priceYears)} (source: Yahoo Finance, capped at 10 years) — the two metrics above use the shorter, price-limited window, not the full statement history.</div>`;
     }
-    // P/E band chart: price on top, P/E below, sharing the x-axis
-    const peChartEl = document.getElementById('stmtPeBandChart');
-    if(peChartEl){
-      initChart('stmtPeBandChart', peBandChartOption(peResult.priceFy || [], peResult));
-    }
+    // The P/E band chart itself is initialized from updateStatementsUI(),
+    // after this function's returned HTML has actually been assigned to
+    // the DOM -- calling initChart() on #stmtPeBandChart here would run
+    // before that assignment (this string is still just a return value at
+    // this point), so echarts would mount onto a node the very next line
+    // of the caller then discards via innerHTML replacement. Same reason
+    // the growth and waterfall charts are wired from updateStatementsUI
+    // rather than from inside their own HTML-building functions.
   }
 
   return `<div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg>Growth & Returns</div>
@@ -6340,7 +6456,8 @@ function statementsPinSeries(pin){
   const compare = statementsEffectiveCompare();
   const primSeries = primary ? fySeriesSafe(primary[pin.section], pin.label) : [];
   const compSeries = compare ? fySeriesSafe(compare[pin.section], pin.label) : [];
-  return { label: pin.label, series: primSeries, compareSeries: compSeries.length?compSeries:undefined, compareLabel: L.statements.compare };
+  const isSubYear = pin.section==='quarterly' || pin.section==='shareholding';
+  return { label: pin.label, series: primSeries, compareSeries: compSeries.length?compSeries:undefined, compareLabel: L.statements.compare, isSubYear };
 }
 function benchChartOptionAtYear(pins, year){
   const cats = pins.map(p=>p.label);
@@ -6379,7 +6496,7 @@ function benchCaptionText(pins, indexed, focusYear){
 // in the table, so "why does this matter" is answered with the one fact
 // this app already computed for it, not a fresh model-written explanation.
 function benchTooltipOverTime(pins){
-  const reasonByLabel={}; pins.forEach(p=>{ reasonByLabel[p.label]=readingSentence(p.label,p.series); });
+  const reasonByLabel={}; pins.forEach(p=>{ reasonByLabel[p.label]=readingSentence(p.label,p.series,p.isSubYear); });
   return { trigger:'axis', axisPointer:{type:'shadow'}, confine:true, formatter:(params)=>{
     if(!params||!params.length) return '';
     const yearLabel = params[0].axisValueLabel||'';
@@ -6401,7 +6518,7 @@ function benchTooltipOverTime(pins){
 // one reading sentence for the whole tooltip (about that row's history)
 // rather than one per bar.
 function benchTooltipAtYear(pins){
-  const reasonByLabel={}; pins.forEach(p=>{ reasonByLabel[p.label]=readingSentence(p.label,p.series); });
+  const reasonByLabel={}; pins.forEach(p=>{ reasonByLabel[p.label]=readingSentence(p.label,p.series,p.isSubYear); });
   return { trigger:'axis', axisPointer:{type:'shadow'}, confine:true, formatter:(params)=>{
     if(!params||!params.length) return '';
     const pinLabel = params[0].axisValueLabel||params[0].name||'';
@@ -7138,6 +7255,17 @@ function updateStatementsUI(){
   updateProfitCashChart();
   renderStatementTables();
   const depthEl=document.getElementById('stmtDepth'); if(depthEl) depthEl.innerHTML = renderDepthMetricsHTML();
+  // P/E band chart: price on top, P/E below, sharing the x-axis. Run only
+  // after the innerHTML assignment just above has actually put
+  // #stmtPeBandChart into the DOM -- see the comment in
+  // renderDepthMetricsHTML() for why it can't init from in there.
+  const peChartEl=document.getElementById('stmtPeBandChart');
+  if(peChartEl){
+    const peResult = statementsPeBand(L.statements.primary);
+    if(peResult && peResult.status==='ready'){
+      initChart('stmtPeBandChart', peBandChartOption(peResult.priceFy || [], peResult.band));
+    }
+  }
   const checklistEl=document.getElementById('stmtChecklist'); if(checklistEl) checklistEl.innerHTML = renderCompoundingChecklistHTML();
   // Growth summary chart: growthSummary() computes the CAGRs; this renders
   // them as grouped bars so the overlapping windows are visually comparable.

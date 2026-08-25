@@ -2003,3 +2003,70 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
   the above).
 - Last commit pushed: (see next commit)
 
+## 2026-08-25 - Claude Code
+
+- **Closed: Bench chart tooltip reading-column text.** statementsPinSeries
+  now carries an isSubYear flag (section==='quarterly'||'shareholding'),
+  threaded into readingSentence from both benchTooltipOverTime and
+  benchTooltipAtYear - pinning a quarterly/shareholding row and hovering
+  the Bench chart now says "quarters" and uses the period's own label,
+  matching the fix already applied to the main table.
+- **Built: growthSummaries UI card.** New "As Published by Screener.in"
+  table inside Growth & Returns, showing screener's own headline Sales
+  Growth / Profit Growth / Stock Price CAGR / Return on Equity figures
+  (10y/5y/3y/Trailing) next to this app's own computed CAGR. Any gap over
+  5pp between the two sources is marked, with a hover note explaining a
+  gap isn't necessarily an error in either one. The trailing column reads
+  positionally (last row) rather than by label match, since screener calls
+  it "TTM:" on the growth cards, "1 Year:" on the price-CAGR card, and
+  "Last Year:" on the ROE card - matched against real TCS HTML from
+  screener.in, values line up exactly.
+- **Fixed a real bug found during this pass: the P/E band chart never
+  rendered.** Two stacked defects: (1) the call site passed the whole
+  statementsPeBand() wrapper object into peBandChartOption() instead of
+  its .band field, so peResult.series was undefined and the function threw
+  on every company; (2) even with that fixed, the initChart() call lived
+  inside renderDepthMetricsHTML() itself - which only returns an HTML
+  string, assigned to the DOM by its *caller* one line later - so
+  echarts was mounting onto a node that was about to be discarded by the
+  next line's innerHTML replacement. Moved the init call into
+  updateStatementsUI(), after the innerHTML assignment, matching the
+  existing (correct) pattern already used for the growth and waterfall
+  charts. Verified live on TCS: chart now renders an actual SVG with 12
+  years of P/E band data.
+- **Added: fullscreen toggle on every chart in the app**, not just
+  Read the Company - implemented once inside initChart() itself
+  (ensureChartFsWrap/toggleChartFullscreen in goalden-lab.html), so every
+  existing and future chart gets it automatically without touching each
+  template. Wraps the chart's container in a sibling <div class="chart-fs-wrap">
+  the first time initChart() sees it (idempotent - a full re-render's
+  fresh DOM node just gets rewrapped), adds one expand/collapse button as
+  a *sibling* of the container (never a child, since ECharts owns and
+  periodically clears the container's own children), and resizes the
+  instance via chart.resize() after the CSS transition. Escape key exits
+  whichever chart is fullscreen. Verified via dispatched keydown (the
+  computer-tool key press doesn't reach an unfocused/hidden Browser pane,
+  so tested with a real KeyboardEvent instead) - open/close/resize all
+  correct, no console errors on a fresh tab.
+- **Investigated but could not close: live pledge-percentage verification.**
+  Set out to verify condition 8's pledge half against a real company with
+  nonzero pledge (open item from last session). Checked VEDL, ZEEL,
+  SUZLON, RAIN, JPASSOCIAT, MANAPPURAM, DISHTV, SREINFRA, RPOWER - all
+  companies with real pledge history - both through the app and by
+  curling screener.in's raw HTML directly. Zero "pledge" mentions
+  anywhere in any of these pages' current HTML, not just missing from our
+  parsed rows. screener.in's shareholding table appears to no longer
+  surface a Pledged % row in the public static page for any company
+  sampled (possibly moved behind login, or dropped from that view
+  entirely) - this isn't a gap in our parser, it's an absence in the
+  source. Confirmed the refusal path itself is correct on real data:
+  VEDL's condition 8 reports "Promoter holding fell 9.0pp over 12
+  quarters - pledge % not reported by the source, so this condition can't
+  be fully evaluated" with meets:null, available:false - matches the
+  actual 63.71%->54.72% promoter decline visible in the raw HTML, and
+  never claims 0% pledge.
+- node --test engine.test.js: 102/102 PASS (no new tests needed - all
+  three fixes are DOM-timing/wiring bugs and a display feature, not new
+  computation to unit-test against the engine).
+- Last commit pushed: (see next commit)
+
