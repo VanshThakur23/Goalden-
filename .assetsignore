@@ -11,3 +11,5 @@ node_modules/**
 *.pyc
 .env
 .env.*
+scratchpad
+scratchpad/**
