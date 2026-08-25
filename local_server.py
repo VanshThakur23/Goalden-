@@ -231,7 +231,14 @@ def _classify_periods(raw_periods):
             out.append({'type': 'ttm', 'key': 'TTM', 'label': p.get('label') or 'TTM'})
             continue
         year_m = re.match(r'^(\d{4})-\d{2}-\d{2}$', p.get('key') or '')
-        out.append({'type': 'fy', 'year': int(year_m.group(1)) if year_m else None, 'key': p['key'], 'label': p['label']})
+        if year_m:
+            out.append({'type': 'fy', 'year': int(year_m.group(1)), 'key': p['key'], 'label': p['label']})
+        else:
+            # Fallback: sections without data-date-key (shareholding) use
+            # plain-text headers like "Sep 2023" — extract the year for
+            # sorting but mark as 'period' so fySeries doesn't match them.
+            label_year = re.search(r'(\d{4})', p.get('key') or p.get('label') or '')
+            out.append({'type': 'period', 'year': int(label_year.group(1)) if label_year else None, 'key': p['key'], 'label': p['label']})
     return out
 
 
@@ -264,6 +271,13 @@ def _screener_parse_table(section_html):
     if thead_m:
         for m in re.finditer(r'<th[^>]*data-date-key="([^"]*)"[^>]*>([\s\S]*?)</th>', thead_m.group(1)):
             raw_periods.append({'key': m.group(1), 'label': _strip_html_tags(m.group(2)) or m.group(1)})
+    # Fallback: sections without data-date-key (shareholding) use plain-text
+    # headers like "Sep 2023" — extract the header text as the period label.
+    if not raw_periods and thead_m:
+        for m in re.finditer(r'<th[^>]*>([\s\S]*?)</th>', thead_m.group(1)):
+            label = _strip_html_tags(m.group(1))
+            if label and not re.search(r'line item|particulars', label, re.I):
+                raw_periods.append({'key': label, 'label': label})
     periods = _classify_periods(raw_periods)
 
     rows = []
@@ -366,6 +380,58 @@ def _parse_sector_breadcrumb(html):
     return {'broadSector': pick('Broad Sector'), 'sector': sector, 'broadIndustry': pick('Broad Industry'), 'industry': industry}
 
 
+def _parse_business_description(html):
+    m = re.search(r'class="company-profile"[\s\S]*?<p[^>]*>([\s\S]*?)</p>', html)
+    if not m:
+        return None
+    text = _strip_html_tags(m.group(1))
+    return text or None
+
+
+def _parse_peer_table(html):
+    sec_m = re.search(r'<section[^>]*id="peers"', html)
+    if not sec_m:
+        return None
+    chunk = html[sec_m.start():sec_m.start() + 20000]
+    table_html = _pick_data_table(chunk)
+    if not table_html:
+        return None
+    parsed = _screener_parse_table(chunk)
+    if not parsed or not parsed.get('rows'):
+        return None
+    return parsed
+
+
+def _parse_growth_summaries(html):
+    out = {}
+    for name, pattern in [
+        ('compoundedSalesGrowth', r'Compounded Sales Growth'),
+        ('compoundedProfitGrowth', r'Compounded Profit Growth'),
+        ('stockPriceCAGR', r'Stock Price CAGR'),
+        ('returnOnEquity', r'Return on Equity'),
+    ]:
+        m = re.search(pattern, html)
+        if not m:
+            continue
+        # The label is a <th> inside its own small table (screener's
+        # "ranges-table" cards), not a heading before the table — so the
+        # enclosing table starts *before* the label match, not after it.
+        table_start = html.rfind('<table', 0, m.start())
+        table_end = html.find('</table>', m.start())
+        if table_start < 0 or table_end < 0:
+            continue
+        table_body = html[table_start:table_end]
+        rows = []
+        for tr_m in re.finditer(r'<tr[^>]*>([\s\S]*?)</tr>', table_body):
+            tds = [_strip_html_tags(td_m.group(1)) for td_m in re.finditer(r'<td[^>]*>([\s\S]*?)</td>', tr_m.group(1))]
+            if len(tds) >= 2:
+                vals = [_parse_cell_value(v)['value'] for v in tds[1:]]
+                rows.append({'label': tds[0], 'values': vals})
+        if rows:
+            out[name] = rows
+    return out or None
+
+
 def _is_transient_status(status):
     return status == 429 or status >= 500
 
@@ -430,6 +496,9 @@ def _build_financials_result(symbol, html, url, consolidated):
     result['schema'] = _classify_schema(result['profitLoss']['rows'] if result['profitLoss'] else [])
     result['topRatios'] = _parse_top_ratios(html)
     result['sector'] = _parse_sector_breadcrumb(html)
+    result['businessDescription'] = _parse_business_description(html)
+    result['peerTable'] = _parse_peer_table(html)
+    result['growthSummaries'] = _parse_growth_summaries(html)
     return result
 
 

@@ -73,8 +73,13 @@ function classifyPeriods(rawPeriods) {
   return rawPeriods.map((p) => {
     if (p.key === 'TTM') return { type: 'ttm', key: 'TTM', label: p.label || 'TTM' };
     const yearMatch = /^(\d{4})-\d{2}-\d{2}$/.exec(p.key || '');
-    const year = yearMatch ? Number(yearMatch[1]) : null;
-    return { type: 'fy', year, key: p.key, label: p.label };
+    if (yearMatch) return { type: 'fy', year: Number(yearMatch[1]), key: p.key, label: p.label };
+    // Fallback: sections without data-date-key (shareholding) use plain-text
+    // headers like "Sep 2023" — extract the year for sorting but mark the
+    // type as 'period' so fySeries (which filters for type==='fy') doesn't
+    // accidentally include quarterly shareholding data in yearly computations.
+    const labelYear = /(\d{4})/.exec(p.key || p.label || '');
+    return { type: 'period', year: labelYear ? Number(labelYear[1]) : null, key: p.key, label: p.label };
   });
 }
 
@@ -113,6 +118,17 @@ function screenerParseTable(sectionHtml) {
     const thRe = /<th[^>]*data-date-key="([^"]*)"[^>]*>([\s\S]*?)<\/th>/g;
     let m;
     while ((m = thRe.exec(theadMatch[1]))) rawPeriods.push({ key: m[1], label: stripHtmlTags(m[2]) || m[1] });
+  }
+  // Fallback: some sections (shareholding) use plain-text headers like
+  // "Sep 2023" without data-date-key attributes. Extract the header text
+  // as the period label so the table still renders with real columns.
+  if (rawPeriods.length === 0 && theadMatch) {
+    const thRe = /<th[^>]*>([\s\S]*?)<\/th>/g;
+    let m;
+    while ((m = thRe.exec(theadMatch[1]))) {
+      const label = stripHtmlTags(m[1]);
+      if (label && !/line item|particulars/i.test(label)) rawPeriods.push({ key: label, label });
+    }
   }
   const periods = classifyPeriods(rawPeriods);
 
@@ -218,6 +234,72 @@ function parseSectorBreadcrumb(html) {
   return { broadSector: pick('Broad Sector'), sector, broadIndustry: pick('Broad Industry'), industry };
 }
 
+// Business description from the company-profile block — a one-paragraph
+// summary of what the company does. This is the text the header card was
+// always supposed to carry.
+function parseBusinessDescription(html) {
+  const m = /class="company-profile"[\s\S]*?<p[^>]*>([\s\S]*?)<\/p>/.exec(html);
+  if (!m) return null;
+  const text = stripHtmlTags(m[1]);
+  return text || null;
+}
+
+// Peer comparison table from the peers section. NOTE: screener.in loads
+// the peer table rows via a separate client-side request, so the raw HTML
+// response may not contain the <table> — in that case this returns null
+// and the UI shows nothing rather than guessing at peers. When the table
+// IS present (some pages serve it server-side), it's a snapshot of
+// current ratios across ~10 sector peers.
+function parsePeerTable(html) {
+  const secM = /<section[^>]*id="peers"/.exec(html);
+  if (!secM) return null;
+  const chunk = html.slice(secM.index, secM.index + 20000);
+  const tableHtml = pickDataTable(chunk);
+  if (!tableHtml) return null;
+  const parsed = screenerParseTable(chunk);
+  if (!parsed || !parsed.rows || !parsed.rows.length) return null;
+  return parsed;
+}
+
+// Screener publishes small growth-rate summary tables under the P&L
+// section: Compounded Sales Growth, Compounded Profit Growth, Stock Price
+// CAGR, and Return on Equity — each with 10y/5y/3y values. These are
+// screener's own published numbers, distinct from what this app computes
+// from raw statement data. When both exist, the UI can show them side by
+// side and flag any meaningful divergence.
+function parseGrowthSummaries(html) {
+  const out = {};
+  const tables = [
+    { name: 'compoundedSalesGrowth', pattern: /Compounded Sales Growth/ },
+    { name: 'compoundedProfitGrowth', pattern: /Compounded Profit Growth/ },
+    { name: 'stockPriceCAGR', pattern: /Stock Price CAGR/ },
+    { name: 'returnOnEquity', pattern: /Return on Equity/ },
+  ];
+  tables.forEach((t) => {
+    const idx = html.search(t.pattern);
+    if (idx < 0) return;
+    // The label is a <th> inside its own small table (screener's
+    // "ranges-table" cards), not a heading before the table — so the
+    // enclosing table starts *before* the label match, not after it.
+    const tableStart = html.lastIndexOf('<table', idx);
+    const tableEnd = html.indexOf('</table>', idx);
+    if (tableStart < 0 || tableEnd < 0) return;
+    const tableBody = html.slice(tableStart, tableEnd);
+    const rows = [];
+    const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
+    let trM;
+    while ((trM = trRe.exec(tableBody))) {
+      const tds = [];
+      const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/g;
+      let tdM;
+      while ((tdM = tdRe.exec(trM[1]))) tds.push(stripHtmlTags(tdM[1]));
+      if (tds.length >= 2) rows.push({ label: tds[0], values: tds.slice(1).map(v => parseCellValue(v).value) });
+    }
+    if (rows.length) out[t.name] = rows;
+  });
+  return Object.keys(out).length ? out : null;
+}
+
 const api = {
   stripHtmlTags,
   screenerSectionSlice,
@@ -229,6 +311,9 @@ const api = {
   classifySchema,
   parseTopRatios,
   parseSectorBreadcrumb,
+  parseBusinessDescription,
+  parsePeerTable,
+  parseGrowthSummaries,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

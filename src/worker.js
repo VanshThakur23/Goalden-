@@ -392,6 +392,9 @@ function buildFinancialsResult(symbol, html, url, consolidated) {
   result.schema = ScreenerParser.classifySchema(result.profitLoss ? result.profitLoss.rows : []);
   result.topRatios = ScreenerParser.parseTopRatios(html);
   result.sector = ScreenerParser.parseSectorBreadcrumb(html);
+  result.businessDescription = ScreenerParser.parseBusinessDescription(html);
+  result.peerTable = ScreenerParser.parsePeerTable(html);
+  result.growthSummaries = ScreenerParser.parseGrowthSummaries(html);
   return result;
 }
 

@@ -30,6 +30,20 @@ function fySeries(section, label) {
   return out;
 }
 
+// Generic series that includes ALL period types (fy, period, quarter) —
+// used by the shareholding and quarterly tables, whose periods don't carry
+// type:'fy'. Filters out nulls so downstream computations see clean data.
+function allPeriodSeries(section, label) {
+  const row = findRow(section, label);
+  if (!row || !section) return [];
+  const out = [];
+  section.periods.forEach((p, i) => {
+    const cell = row.values[i];
+    out.push({ year: p.year, label: p.label || p.key, value: cell ? cell.value : null });
+  });
+  return out;
+}
+
 function median(values) {
   const clean = values.filter((v) => v != null).sort((a, b) => a - b);
   if (!clean.length) return null;
@@ -946,7 +960,11 @@ function rowBoxScore(series) {
   const best = clean.reduce((a, b) => (b.value > a.value ? b : a));
   const worst = clean.reduce((a, b) => (b.value < a.value ? b : a));
   const first = clean[0], last = clean[clean.length - 1];
-  const years = clean.length - 1;
+  // Elapsed calendar years between endpoints, not point count minus one --
+  // a quarterly series has ~4x the points of an annual one covering the
+  // same span, and compounding over point-count would silently relabel a
+  // 3-year quarterly window as a fabricated "12Y CAGR".
+  const years = (last.year != null && first.year != null) ? last.year - first.year : clean.length - 1;
   let cagr = null;
   if (years > 0 && first.value > 0 && (last.value > 0)) {
     cagr = Math.pow(last.value / first.value, 1 / years) - 1;
@@ -1158,6 +1176,44 @@ function peHistoryBand(priceFySeries, epsSeries) {
   };
 }
 
+// Two-grid chart: price line on top, P/E ratio below, sharing the same
+// fiscal-year x-axis. No dual y-axes — each band has its own scale and its
+// own y-axis, linked by position. dataZoom enables scrolling through the
+// full history. priceFySeries is fyEndPriceSeries output; peResult is
+// peHistoryBand output.
+function peBandChartOption(priceFySeries, peResult) {
+  const years = priceFySeries.filter(p => p.value != null).map(p => 'FY' + p.year);
+  const prices = priceFySeries.filter(p => p.value != null).map(p => p.value);
+  const pe = peResult.series.filter(p => p.value != null).map(p => +(p.value.toFixed(1)));
+  const peYears = peResult.series.filter(p => p.value != null).map(p => 'FY' + p.year);
+  return {
+    axisPointer: { link: [{ xAxisIndex: 'all' }] },
+    dataZoom: [
+      { type: 'inside', xAxisIndex: [0, 1] },
+      { type: 'slider', xAxisIndex: [0, 1], bottom: 2, height: 18 },
+    ],
+    grid: [
+      { left: 70, right: 26, top: 20, height: '42%', containLabel: true },
+      { left: 70, right: 26, top: '64%', bottom: 56, containLabel: true },
+    ],
+    xAxis: [
+      { type: 'category', gridIndex: 0, data: years, axisLabel: { show: false }, axisTick: { show: false }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
+      { type: 'category', gridIndex: 1, data: peYears.length ? peYears : years, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
+    ],
+    yAxis: [
+      { gridIndex: 0, type: 'value', name: '\u20b9 / share', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => '\u20b9' + formatCroreSafe(v), fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
+      { gridIndex: 1, type: 'value', name: 'P/E (x)', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
+    ],
+    tooltip: { trigger: 'axis', confine: true },
+    series: [
+      { name: 'Price (FY end)', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: prices, showSymbol: true, symbolSize: 5, lineStyle: { color: '#2557C7', width: 2 }, itemStyle: { color: '#2557C7' } },
+      { name: 'P/E', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: pe, showSymbol: true, symbolSize: 5, lineStyle: { color: '#A03A22', width: 1.5 }, itemStyle: { color: '#A03A22' },
+        markLine: peResult.median != null ? { silent: true, symbol: 'none', lineStyle: { type: 'dashed', color: 'rgba(20,40,63,.35)', width: 1 }, data: [{ yAxis: peResult.median, label: { formatter: 'median ' + peResult.median.toFixed(1) + 'x', fontSize: 9.5, color: 'rgba(20,40,63,.5)' } }] } : undefined,
+      },
+    ],
+  };
+}
+
 /* =====================================================================
    PHASE 3 — THE COMPOUNDING CHECKLIST
    Ten conditions, each independently checkable, using the plan's exact
@@ -1245,7 +1301,36 @@ function compoundingChecklist(bundle, options) {
   }
   conditions.push({ id: 7, label: 'Share count grew at most 10% over the last 5 years', value: dilutionRatio != null ? `${((dilutionRatio - 1) * 100).toFixed(1)}% change` : 'not computable', meets: dilutionRatio != null ? dilutionRatio <= 1.10 : null, available: dilutionRatio != null });
 
-  conditions.push({ id: 8, label: 'Promoter holding fell by at most 5 percentage points over 12 quarters, and pledge is under 10%', value: 'Shareholding pattern is not fetched by this app yet', meets: null, available: false });
+  {
+    const label8 = 'Promoter holding fell by at most 5 percentage points over 12 quarters, and pledge is under 10%';
+    const promoterHist = allPeriodSeries(bundle.shareholding, 'Promoters').filter((p) => p.value != null);
+    if (!bundle.shareholding || promoterHist.length < 2) {
+      conditions.push({ id: 8, label: label8, value: 'Shareholding pattern is not fetched by this app yet', meets: null, available: false });
+    } else {
+      const window8 = promoterHist.slice(-12);
+      const change = window8[window8.length - 1].value - window8[0].value;
+      const promoterOk = change >= -5;
+      const pledgeHist = allPeriodSeries(bundle.shareholding, 'Pledged %').filter((p) => p.value != null);
+      if (pledgeHist.length) {
+        const latestPledge = pledgeHist[pledgeHist.length - 1].value;
+        const pledgeOk = latestPledge < 10;
+        conditions.push({
+          id: 8, label: label8,
+          value: `Promoter holding ${change >= 0 ? 'rose' : 'fell'} ${Math.abs(change).toFixed(1)}pp over ${window8.length} quarters, pledge ${latestPledge.toFixed(1)}%`,
+          meets: promoterOk && pledgeOk, available: true,
+        });
+      } else {
+        // Screener has no Pledged % row for this company here — per the
+        // house rule, that absence must never be read as "0% pledged", so
+        // the pledge half of this condition can't be asserted either way.
+        conditions.push({
+          id: 8, label: label8,
+          value: `Promoter holding ${change >= 0 ? 'rose' : 'fell'} ${Math.abs(change).toFixed(1)}pp over ${window8.length} quarters — pledge % not reported by the source, so this condition can't be fully evaluated`,
+          meets: null, available: false,
+        });
+      }
+    }
+  }
 
   const opmRaw = fySeries(pl, 'OPM %');
   const opm = (opmRaw.length ? opmRaw : fySeries(pl, 'Financing Margin %')).filter((p) => p.value != null);
@@ -1449,7 +1534,7 @@ function advisorEscapeSafe(s) {
 }
 
 const api = {
-  findRow, fySeries, median, pctChange, yearIndex, vsOwnMedian,
+  findRow, fySeries, allPeriodSeries, median, pctChange, yearIndex, vsOwnMedian,
   classifySchema, compareRefusal,
   COMPANION_MAP, companionMapFor,
   KNOWN_DISCONTINUITIES, discontinuityNote, detectCyclical,
@@ -1462,6 +1547,7 @@ const api = {
   compoundingChecklist, checklistQualityGate,
   stmtExploreCatalog, alignFyPairs, pctOfSalesSeries,
   growthChartOption, cashFlowWaterfallOption, companionMapFor,
+  peBandChartOption,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

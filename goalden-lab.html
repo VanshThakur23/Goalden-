@@ -760,6 +760,7 @@ body.stmt-page main{max-width:1600px}
 .stmt-source-line{font-size:12px;color:var(--dim);margin-top:2px}
 .stmt-source-line a{color:var(--gold)}
 .stmt-sector-line{font-size:12.5px;color:rgba(20,40,63,.65)}
+.stmt-desc-line{font-size:12.5px;color:rgba(20,40,63,.65);line-height:1.4;max-width:60ch}
 /* Stat tiles instead of divider-separated columns -- each one is its own
    small card, so the two that are actually clickable (they pin a
    companion-chip suggestion) read as buttons before you ever hover them,
@@ -5538,7 +5539,13 @@ function statementsBundle(sym){
   const d = sym ? L.statements.data[sym] : null;
   return d && d.status==='ready' ? d.result : null;
 }
-function fySeriesSafe(section, label){ return section ? fySeries(section, label) : []; }
+function fySeriesSafe(section, label){
+  if(!section) return [];
+  // Shareholding and quarterly sections use type:'period' (not 'fy') —
+  // fall back to allPeriodSeries so those tables still get series data.
+  const hasFy = section.periods && section.periods.some(p=>p.type==='fy');
+  return hasFy ? fySeries(section,label) : allPeriodSeries(section,label);
+}
 function statementsMedianAndSpread(section, label){
   const series = fySeriesSafe(section, label);
   const values = series.map(p=>p.value);
@@ -5578,9 +5585,13 @@ function formatCellRaw(label, v){
   if(unit==='rupee') return '\u20b9'+v.toFixed(1);
   return formatCroreValue(v);
 }
-// 15 deterministic templates over the row's own fiscal-year series --
+// 15 deterministic templates over the row's own period series --
 // arithmetic plus a string, never a model; same data in, same sentence out.
-function readingSentence(label, series){
+// `isSubYear` marks a quarterly-cadence section (quarterly results,
+// shareholding) so the wording says "quarters", not a fabricated "years" --
+// and points to the period's own label ("Jun 2026") instead of the shared
+// fiscal year every other quarter in that year would also match.
+function readingSentence(label, series, isSubYear){
   const clean = series.filter(p=>p.value!=null);
   if(clean.length<3) return '';
   const last = clean[clean.length-1], prev = clean[clean.length-2], first = clean[0];
@@ -5591,37 +5602,39 @@ function readingSentence(label, series){
   const downYears = clean.length-1-upYears;
   const maxP = clean.reduce((a,b)=>b.value>a.value?b:a);
   const minP = clean.reduce((a,b)=>b.value<a.value?b:a);
+  const unit = isSubYear ? 'quarters' : 'years';
+  const pointLabel = (p) => isSubYear ? p.label : ('FY'+p.year);
 
   // A sign flip is the single most decision-relevant fact about a row --
   // checked first so it's never buried under a milder trend template.
-  if(prev.value>=0 && last.value<0) return `Turned negative in FY${last.year}, from FY${prev.year}.`;
-  if(prev.value<0 && last.value>=0) return `Turned positive in FY${last.year}, from FY${prev.year}.`;
+  if(prev.value>=0 && last.value<0) return `Turned negative in ${pointLabel(last)}, from ${pointLabel(prev)}.`;
+  if(prev.value<0 && last.value>=0) return `Turned positive in ${pointLabel(last)}, from ${pointLabel(prev)}.`;
 
   // A monotonic run over the last 3 transitions reads as a streak, which an
   // averaged CAGR doesn't communicate on its own.
   const last4 = clean.slice(-4);
   if(last4.length===4){
-    if(last4.every((p,i)=>i===0 || p.value>last4[i-1].value)) return `A new high in each of the last 3 years.`;
-    if(last4.every((p,i)=>i===0 || p.value<last4[i-1].value)) return `A new low in each of the last 3 years.`;
+    if(last4.every((p,i)=>i===0 || p.value>last4[i-1].value)) return `A new high in each of the last 3 ${unit}.`;
+    if(last4.every((p,i)=>i===0 || p.value<last4[i-1].value)) return `A new low in each of the last 3 ${unit}.`;
   }
 
-  if(last.value===maxP.value && polarity!=='lower-better') return `Highest in ${clean.length} years, at FY${last.year}.`;
-  if(last.value===minP.value && polarity==='lower-better') return `Lowest in ${clean.length} years, at FY${last.year}.`;
+  if(last.value===maxP.value && polarity!=='lower-better') return `Highest in ${clean.length} ${unit}, at ${pointLabel(last)}.`;
+  if(last.value===minP.value && polarity==='lower-better') return `Lowest in ${clean.length} ${unit}, at ${pointLabel(last)}.`;
 
-  if(first.value>0 && last.value/first.value>=2) return `More than doubled over ${cagrYears} years, from ${formatCellRaw(label,first.value)} to ${formatCellRaw(label,last.value)}.`;
-  if(first.value>0 && last.value>=0 && last.value/first.value<=0.5) return `Cut by more than half over ${cagrYears} years, from ${formatCellRaw(label,first.value)} to ${formatCellRaw(label,last.value)}.`;
+  if(first.value>0 && last.value/first.value>=2) return `More than doubled over ${cagrYears} ${unit}, from ${formatCellRaw(label,first.value)} to ${formatCellRaw(label,last.value)}.`;
+  if(first.value>0 && last.value>=0 && last.value/first.value<=0.5) return `Cut by more than half over ${cagrYears} ${unit}, from ${formatCellRaw(label,first.value)} to ${formatCellRaw(label,last.value)}.`;
 
-  if(cagr!=null && cagr>0.005 && upYears>=Math.ceil((clean.length-1)*0.6)) return `Grew ${(cagr*100).toFixed(0)}% a year on average over ${cagrYears} years.`;
-  if(cagr!=null && cagr<-0.005 && downYears>=Math.ceil((clean.length-1)*0.6)) return `Fell ${(Math.abs(cagr)*100).toFixed(0)}% a year on average over ${cagrYears} years.`;
+  if(!isSubYear && cagr!=null && cagr>0.005 && upYears>=Math.ceil((clean.length-1)*0.6)) return `Grew ${(cagr*100).toFixed(0)}% a year on average over ${cagrYears} years.`;
+  if(!isSubYear && cagr!=null && cagr<-0.005 && downYears>=Math.ceil((clean.length-1)*0.6)) return `Fell ${(Math.abs(cagr)*100).toFixed(0)}% a year on average over ${cagrYears} years.`;
 
-  if(downYears>=Math.ceil(clean.length*0.5) && downYears>upYears) return `Down in ${downYears} of the last ${clean.length-1} years.`;
-  if(upYears>=Math.ceil(clean.length*0.5) && upYears>downYears) return `Up in ${upYears} of the last ${clean.length-1} years.`;
+  if(downYears>=Math.ceil(clean.length*0.5) && downYears>upYears) return `Down in ${downYears} of the last ${clean.length-1} ${unit}.`;
+  if(upYears>=Math.ceil(clean.length*0.5) && upYears>downYears) return `Up in ${upYears} of the last ${clean.length-1} ${unit}.`;
 
   const range = maxP.value-minP.value;
-  if(Math.abs(range) < Math.abs(median(clean.map(p=>p.value))||1)*0.1) return `Little changed over ${clean.length} years.`;
-  if(clean.length>=6 && Math.abs(upYears-downYears)<=1) return `No consistent direction over ${clean.length} years — moved up and down roughly equally.`;
+  if(Math.abs(range) < Math.abs(median(clean.map(p=>p.value))||1)*0.1) return `Little changed over ${clean.length} ${unit}.`;
+  if(clean.length>=6 && Math.abs(upYears-downYears)<=1) return `No consistent direction over ${clean.length} ${unit} — moved up and down roughly equally.`;
 
-  return `Ranged from ${formatCellRaw(label,minP.value)} (FY${minP.year}) to ${formatCellRaw(label,maxP.value)} (FY${maxP.year}).`;
+  return `Ranged from ${formatCellRaw(label,minP.value)} (${pointLabel(minP)}) to ${formatCellRaw(label,maxP.value)} (${pointLabel(maxP)}).`;
 }
 // 12 bars, not a line -- the cell footers already use bars, and a second
 // shape for the same series would read as a contradiction.
@@ -5771,6 +5784,7 @@ function teardownStatements(){
   disposeChart('stmtExploreChart');
   disposeChart('stmtGrowthChart');
   disposeChart('stmtWaterfallChart');
+  disposeChart('stmtPeBandChart');
   stmtExploreClose();
 }
 function salesLabelFor(bundle){
@@ -5969,6 +5983,7 @@ function renderStatementsHeaderHTML(){
   // fabricate names or need scraping infra this pass doesn't add. Rendering
   // nothing when it's absent is the plan's own explicit fallback.
   const sectorLine = r.sector ? `<div class="stmt-sector-line">${advisorAttr(r.sector.sector||'')}${r.sector.industry?' &middot; '+advisorAttr(r.sector.industry):''}</div>` : '';
+  const descLine = r.businessDescription ? `<div class="stmt-desc-line">${advisorAttr(r.businessDescription)}</div>` : '';
   const tr = r.topRatios;
   const marketSnapshot = tr ? `<div class="stmt-market-snapshot">
     <div class="stmt-market-fact"><span class="stmt-market-label">Market Cap</span><span class="stmt-market-value">${tr.marketCap!=null?'\u20b9'+formatCroreValue(tr.marketCap)+' Cr':'\u2014'}</span></div>
@@ -5984,6 +5999,7 @@ function renderStatementsHeaderHTML(){
       <div class="stmt-header-badges">${badges.join('')}</div>
     </div>
     ${sectorLine}
+    ${descLine}
     ${marketSnapshot}
     <div class="stmt-source-line">Source: <a href="${advisorAttr(r.sourceUrl||'#')}" target="_blank" rel="noopener">screener.in</a>, fetched ${r.fetchedAt?new Date(r.fetchedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'\u2014'}${r.fixtureNote?' &middot; '+advisorAttr(r.fixtureNote):''}</div>
   </div>${stale}${cyclicalBanner}${sectorBanner}`;
@@ -6079,7 +6095,7 @@ function statementsPeBand(sym){
   const epsSeries = epsFromShrink(pl, bs, faceValue);
   const band = peHistoryBand(priceFy, epsSeries);
   const nameCheck = stmtTickerIdentityCheck(sym, priceHist.label);
-  return { status:'ready', band, spread10: reratingSpread(priceFy, npSeries, 10), spread5: reratingSpread(priceFy, npSeries, 5), nameCheck };
+  return { status:'ready', band, priceFy, spread10: reratingSpread(priceFy, npSeries, 10), spread5: reratingSpread(priceFy, npSeries, 5), nameCheck };
 }
 function stmtGrowthRowHTML(label, series){
   const g = growthSummary(series);
@@ -6173,7 +6189,8 @@ function renderDepthMetricsHTML(){
         <div class="stmt-depth-stat-label">P/E vs Its Own History<span class="stmt-ctrl-hint">Where today's P/E sits within its own trailing band, computed from split-adjusted EPS and raw (non-dividend-adjusted) year-end prices — cheap vs its own history is a different question from cheap vs peers</span></div>
         <div class="stmt-depth-stat-value" style="font-size:14px">${bandTxt}</div>
       </div>
-    </div>`;
+    </div>
+    <div id="stmtPeBandChart" style="height:340px;margin-top:14px"></div>`;
     // These two metrics blend two sources with different reach: the
     // statement tables above come from screener.in, which typically carries
     // ~12 years; the price series comes from Yahoo's daily chart endpoint,
@@ -6184,6 +6201,11 @@ function renderDepthMetricsHTML(){
     const priceYears = band.series.filter(p=>p.value!=null).map(p=>p.year);
     if(statementYears.length && priceYears.length && Math.min(...statementYears) < Math.min(...priceYears)){
       reratingBlock += `<div class="cap" style="margin-top:8px">Statement history above goes back to FY${Math.min(...statementYears)} (source: screener.in). Daily price history only reaches back to FY${Math.min(...priceYears)} (source: Yahoo Finance, capped at 10 years) — the two metrics above use the shorter, price-limited window, not the full statement history.</div>`;
+    }
+    // P/E band chart: price on top, P/E below, sharing the x-axis
+    const peChartEl = document.getElementById('stmtPeBandChart');
+    if(peChartEl){
+      initChart('stmtPeBandChart', peBandChartOption(peResult.priceFy || [], peResult));
     }
   }
 
@@ -6939,7 +6961,7 @@ function statementRowHTML(sectionKey, label, primarySection, compareSection, per
   }).join('');
   const lastVal = primSeriesAll.length ? primSeriesAll[primSeriesAll.length-1].value : null;
   const vsMedian = (med && lastVal!=null) ? (lastVal/med*100).toFixed(0)+'%' : '\u2014';
-  const reading = readingSentence(label, primSeriesAll);
+  const reading = readingSentence(label, primSeriesAll, sectionKey==='quarterly'||sectionKey==='shareholding');
   const spark = sparklineSVG(primSeriesAll);
   const defKey = sectionKey+'::'+label;
   const asReportedLabel = primRow ? primRow.label : label;
@@ -6999,7 +7021,8 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
   const theadCols = periods.map(p=>{
     const g = p.type==='fy' ? growthByYear.get(p.year) : null;
     const band = g==null ? '' : `<div class="stmt-growth-band ${g>=0?'up':'down'}"><div class="gb-mid"></div><div class="gb-fill" style="height:${Math.min(50,Math.abs(g*100))}%"></div></div>`;
-    const label = p.type==='ttm' ? 'TTM' : 'FY'+String(p.year).slice(2);
+    const usesPeriodLabel = sectionKey==='quarterly' || sectionKey==='shareholding';
+    const label = p.type==='ttm' ? 'TTM' : (usesPeriodLabel ? p.label : 'FY'+String(p.year).slice(2));
     return `<th class="${p.type==='ttm'?'stmt-th-ttm':''}" data-stmt-year="${p.type==='ttm'?'':p.year}">${label}${band}</th>`;
   }).join('');
   const bodyRows = rows.map((label,i)=>statementRowHTML(sectionKey,label,primSection,compareSection,periods,pinnedSet,L.statements.focusYear,L.statements.changeMode,i)).join('');
@@ -7037,16 +7060,19 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
   // so a stack of collapsed sections reads as a table of contents rather
   // than N identical-looking bars.
   const fyPeriods = periods.filter(p=>p.type==='fy');
-  const spanTxt = fyPeriods.length
-    ? rows.length+' rows \u00b7 FY'+fyPeriods[0].year+'\u2013FY'+fyPeriods[fyPeriods.length-1].year
-    : rows.length+' rows';
+  const usesPeriodLabelForSpan = sectionKey==='quarterly' || sectionKey==='shareholding';
+  const spanTxt = usesPeriodLabelForSpan
+    ? (periods.length ? rows.length+' rows \u00b7 '+periods[0].label+'\u2013'+periods[periods.length-1].label : rows.length+' rows')
+    : (fyPeriods.length
+      ? rows.length+' rows \u00b7 FY'+fyPeriods[0].year+'\u2013FY'+fyPeriods[fyPeriods.length-1].year
+      : rows.length+' rows');
   const collapsed = !!L.statements.collapsedSections[sectionKey];
   return `<div class="stmt-section-block${collapsed?' stmt-collapsed':''}" data-stmt-section="${sectionKey}">
   <div class="stmt-table-title" data-stmt-collapse="${sectionKey}" role="button" tabindex="0" aria-expanded="${collapsed?'false':'true'}" title="Click to collapse or expand this section">
     ${stmtSectionIcon(sectionKey)}
     <span class="stmt-collapse-chevron">${collapsed?'▸':'▾'}</span>
     <span class="stmt-table-title-label">${advisorAttr(sectionLabel)}</span>
-    <span class="cap" style="font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:400">${spanTxt}${sectionKey==='ratios'?'':' \u00b7 Rs Cr unless noted'}</span>
+    <span class="cap" style="font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:400">${spanTxt}${(sectionKey==='ratios'||sectionKey==='shareholding')?'':' \u00b7 Rs Cr unless noted'}</span>
   </div>
   ${coverageNote}
   <div class="stmt-table-wrap"><table class="stmt-table">

@@ -811,6 +811,18 @@ test('statements-engine: rowBoxScore finds best/worst years and refuses a CAGR a
   assert.strictEqual(stmt.rowBoxScore([{ year: 2020, value: 10 }]), null, 'fewer than two clean points is not enough to score');
 });
 
+test('statements-engine: rowBoxScore annualizes over elapsed calendar years, not point count, so a 13-point quarterly series isn\'t mislabeled a "12Y CAGR"', () => {
+  const quarterly = [
+    { year: 2023, value: 59381 }, { year: 2023, value: 59692 }, { year: 2023, value: 60583 },
+    { year: 2024, value: 61237 }, { year: 2024, value: 62613 }, { year: 2024, value: 64259 }, { year: 2024, value: 63973 },
+    { year: 2025, value: 64479 }, { year: 2025, value: 63437 }, { year: 2025, value: 65799 }, { year: 2025, value: 67087 },
+    { year: 2026, value: 70698 }, { year: 2026, value: 72275 },
+  ];
+  const score = stmt.rowBoxScore(quarterly);
+  assert.strictEqual(score.years, 3, 'span is FY2023-FY2026, three elapsed years, not twelve datapoint-steps');
+  assert.ok(Math.abs(score.cagr - (Math.pow(72275 / 59381, 1 / 3) - 1)) < 1e-9);
+});
+
 test('statements-engine: COMPANION_MAP surfaces pinnable statement rows for the price-dependent metrics', () => {
   assert.ok(stmt.COMPANION_MAP['Stock P/E'].every((c) => c.section && c.key && c.reason));
   assert.ok(stmt.COMPANION_MAP['Dividend Yield'].some((c) => c.key === 'Dividend Payout %'));
@@ -934,6 +946,40 @@ test('statements-engine: compoundingChecklist returns exactly 10 fixed-order con
   assert.strictEqual(list[7].available, false);
 });
 
+test('statements-engine: compoundingChecklist condition 8 reads real shareholding data when present, and still refuses the pledge half when no Pledged % row exists', () => {
+  const tcs = loadFinancials('TCS');
+  const withShareholding = {
+    ...tcs,
+    shareholding: {
+      periods: [
+        { type: 'period', year: 2023, key: 'Sep 2023', label: 'Sep 2023' },
+        { type: 'period', year: 2025, key: 'Sep 2025', label: 'Sep 2025' },
+        { type: 'period', year: 2026, key: 'Jun 2026', label: 'Jun 2026' },
+      ],
+      rows: [
+        { label: 'Promoters', values: [{ raw: '72.30%', value: 72.3 }, { raw: '71.77%', value: 71.77 }, { raw: '71.77%', value: 71.77 }] },
+      ],
+    },
+  };
+  const list = stmt.compoundingChecklist(withShareholding, { faceValue: tcs.topRatios.faceValue });
+  const cond8 = list.find((c) => c.id === 8);
+  assert.strictEqual(cond8.available, false, 'no Pledged % row was reported, so the compound condition cannot be asserted true or false');
+  assert.strictEqual(cond8.meets, null, 'must not fabricate a pass by assuming 0% pledge');
+  assert.ok(cond8.value.includes('fell 0.5pp'), `promoter-holding change should read from the real data: ${cond8.value}`);
+  assert.ok(cond8.value.includes('not reported by the source'), 'must say why, not just NOT AVAILABLE');
+
+  const withPledge = {
+    ...withShareholding,
+    shareholding: {
+      ...withShareholding.shareholding,
+      rows: [...withShareholding.shareholding.rows, { label: 'Pledged %', values: [{ raw: '0.00%', value: 0 }, { raw: '0.00%', value: 0 }, { raw: '0.00%', value: 0 }] }],
+    },
+  };
+  const cond8b = stmt.compoundingChecklist(withPledge, { faceValue: tcs.topRatios.faceValue }).find((c) => c.id === 8);
+  assert.strictEqual(cond8b.available, true);
+  assert.strictEqual(cond8b.meets, true, 'promoter change within 5pp and pledge under 10% should meet the condition');
+});
+
 test('statements-engine: compoundingChecklist refuses cleanly on a lender (no ROCE %, no Sales row) instead of fabricating', () => {
   const hdfc = loadFinancials('HDFCBANK');
   const list = stmt.compoundingChecklist(hdfc, { faceValue: hdfc.topRatios.faceValue });
@@ -1051,7 +1097,7 @@ test('advisor guardrail: an adversarial suite of recommendation-shaped sentences
 
 
 // ---------------------------------------------------------------------------
-// Phase: the Explore deck — pure helpers behind the fullscreen comparison
+// Phase: the Explore deck ï¿½ pure helpers behind the fullscreen comparison
 // space on "Read the Company". Synthetic fixtures, hand-checked values.
 // ---------------------------------------------------------------------------
 
@@ -1177,4 +1223,75 @@ test('cashFlowWaterfallOption: produces stacked bars + net line', () => {
   assert.ok(opt.series.length >= 6, 'waterfall needs placeholder + visible series + net line');
   assert.ok(opt.series.some(s => s.name === 'CFO'), 'has CFO series');
   assert.ok(opt.series.some(s => s.name === 'Net Cash Flow'), 'has Net Cash Flow line');
+});
+
+test('peBandChartOption: two-grid layout with price + P/E series', () => {
+  const prices = [{ year: 2020, value: 100 }, { year: 2021, value: 120 }, { year: 2022, value: 90 }];
+  const peResult = stmt.peHistoryBand(prices, [{ year: 2020, value: 10 }, { year: 2021, value: 12 }, { year: 2022, value: 9 }]);
+  const opt = stmt.peBandChartOption(prices, peResult);
+  assert.strictEqual(opt.xAxis.length, 2, 'two x-axes for two grids');
+  assert.strictEqual(opt.yAxis.length, 2, 'two y-axes (price + P/E)');
+  assert.ok(opt.series.length >= 2, 'at least price + P/E series');
+  assert.ok(opt.dataZoom, 'dataZoom present');
+  assert.ok(opt.series[0].data.length === 3, 'price data points');
+});
+
+// ---------------------------------------------------------------------------
+// Phase: quarterly + shareholding parser + business description
+// ---------------------------------------------------------------------------
+
+test('screenerParseTable handles shareholding tables without data-date-key', () => {
+  const html = `<table class="data-table"><thead><tr>
+    <th class="text"></th><th>Sep 2023</th><th>Dec 2023</th><th>Mar 2024</th>
+  </tr></thead><tbody>
+    <tr><td class="text">Promoters</td><td>72.19</td><td>72.12</td><td>71.80</td></tr>
+    <tr><td class="text">FIIs</td><td>13.52</td><td>13.89</td><td>14.21</td></tr>
+    <tr><td class="text">Public</td><td>14.29</td><td>13.99</td><td>13.99</td></tr>
+  </tbody></table>`;
+  const parsed = parser.screenerParseTable(html);
+  assert.ok(parsed, 'parse succeeds');
+  assert.strictEqual(parsed.periods.length, 3, 'three periods from header text');
+  assert.strictEqual(parsed.periods[0].type, 'period', 'type is period, not fy');
+  assert.strictEqual(parsed.rows.length, 3, 'three data rows');
+  assert.strictEqual(parsed.rows[0].label, 'Promoters');
+  assert.strictEqual(parsed.rows[0].values[0].value, 72.19);
+});
+
+test('parseBusinessDescription extracts the company-profile paragraph', () => {
+  const html = '<div class="company-profile"><p>Tata Consultancy Services is the flagship company.</p></div>';
+  const desc = parser.parseBusinessDescription(html);
+  assert.strictEqual(desc, 'Tata Consultancy Services is the flagship company.');
+});
+
+test('parseBusinessDescription returns null when no profile block exists', () => {
+  assert.strictEqual(parser.parseBusinessDescription('<div>no profile</div>'), null);
+});
+
+test('parseGrowthSummaries reads each card\'s own table, not the next card\'s (screener nests the label <th> inside its own table)', () => {
+  // Real screener.in markup: several <table class="ranges-table"> sit back
+  // to back, each with its metric name as a <th> inside itself â€” not as a
+  // heading before the table. Slicing forward from the label match used to
+  // grab the *next* table in the sequence instead of its own.
+  const html = `<div style="display:grid">
+    <table class="ranges-table">
+      <tr><th colspan="2">Compounded Sales Growth</th></tr>
+      <tr><td>10 Years:</td><td>9%</td></tr>
+      <tr><td>5 Years:</td><td>10%</td></tr>
+    </table>
+    <table class="ranges-table">
+      <tr><th colspan="2">Compounded Profit Growth</th></tr>
+      <tr><td>10 Years:</td><td>8%</td></tr>
+      <tr><td>5 Years:</td><td>9%</td></tr>
+    </table>
+    <table class="ranges-table">
+      <tr><th colspan="2">Stock Price CAGR</th></tr>
+      <tr><td>10 Years:</td><td>6%</td></tr>
+      <tr><td>5 Years:</td><td>-9%</td></tr>
+    </table>
+  </div>`;
+  const out = parser.parseGrowthSummaries(html);
+  assert.ok(out, 'parses successfully');
+  assert.strictEqual(out.compoundedSalesGrowth[0].values[0], 9, 'sales growth reads its own 9%, not profit growth\'s 8%');
+  assert.strictEqual(out.compoundedProfitGrowth[0].values[0], 8, 'profit growth reads its own 8%, not stock CAGR\'s 6%');
+  assert.strictEqual(out.stockPriceCAGR[1].values[0], -9, 'negative percentages parse correctly, not dropped to null');
 });
