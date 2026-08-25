@@ -651,8 +651,16 @@ body.stmt-page main{max-width:1600px}
    the way screener.in's own page tabs work, instead of only being able to
    scroll. Pure anchor-jump (scrollIntoView), no active-section tracking --
    simple and correct beats a scroll-spy that can drift out of sync. */
-.stmt-jumpnav{position:sticky;top:0;z-index:6;display:flex;flex-wrap:wrap;gap:6px;background:#fff;border:1px solid rgba(20,40,63,.12);border-radius:10px 10px 0 0;padding:9px;box-shadow:0 4px 10px -3px rgba(20,40,63,.22);margin-bottom:14px}
-.stmt-jumpnav::after{content:'';position:absolute;left:0;right:0;top:100%;height:14px;background:linear-gradient(rgba(245,248,252,.95),rgba(245,248,252,0));pointer-events:none}
+/* Floating wayfinding toolbar. Two non-negotiables: (1) it sticks BELOW the
+   viewport top edge (top:10px) as a fully-rounded card, so content never
+   appears to slice through a square bar edge; (2) fade bands on BOTH sides
+   (::before above, ::after below) dissolve content as it passes underneath —
+   a half-clipped number at the bar's edge read as a rendering bug, a fade
+   reads as depth. z-index sits above the sticky Bench card (20) and the
+   tables' sticky headers (2/3). */
+.stmt-jumpnav{position:sticky;top:10px;z-index:30;display:flex;flex-wrap:wrap;gap:6px;background:#fff;border:1px solid rgba(20,40,63,.16);border-radius:14px;padding:10px 12px;box-shadow:0 12px 30px -10px rgba(20,40,63,.35);margin-bottom:16px}
+.stmt-jumpnav::before{content:'';position:absolute;left:-2px;right:-2px;bottom:100%;height:20px;background:linear-gradient(rgba(245,248,252,0),rgba(245,248,252,.92));pointer-events:none}
+.stmt-jumpnav::after{content:'';position:absolute;left:-2px;right:-2px;top:100%;height:20px;background:linear-gradient(rgba(245,248,252,.92),rgba(245,248,252,0));pointer-events:none}
 .stmt-jumpnav button{font-family:'Spline Sans Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.01em;color:rgba(20,40,63,.65);background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.14);border-radius:16px;padding:7px 14px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s,border-color .12s}
 .stmt-jumpnav button:hover{background:rgba(37,87,199,.12);color:var(--gold);border-color:rgba(37,87,199,.4)}
 @media(max-width:860px){.stmt-jumpnav{overflow-x:auto;flex-wrap:nowrap;position:static}}
@@ -776,6 +784,25 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-chip button:hover{color:var(--red)}
 .stmt-chip-clear{background:none;border:1px dashed rgba(20,40,63,.32);border-radius:10px;color:var(--dim);font-size:11px;padding:5px 11px;cursor:pointer;flex-shrink:0;transition:border-color .12s,color .12s}
 .stmt-chip-clear:hover{border-color:var(--red);color:var(--red)}
+/* The Bench sits in normal document flow by default -- sticky positioning
+   previously locked it to the screen at any width wide enough, and a full
+   Bench (chart + chips + companion strip + divergence detail) is tall
+   enough on its own to cover every table underneath it while stuck, which
+   made the statement tables unreachable. Sticky is now opt-in: click the
+   pin button in the Bench header (#stmtBenchPinBtn) to dock it in a small
+   fixed-height window; unpinned it scrolls away with the page like any
+   other card. */
+#stmtBenchCard.stmt-bench-pinned{position:sticky;top:86px;z-index:20;max-height:min(260px,38vh);overflow-y:auto}
+#stmtBenchCard.stmt-bench-pinned::-webkit-scrollbar{width:8px}
+#stmtBenchCard.stmt-bench-pinned::-webkit-scrollbar-thumb{background:rgba(20,40,63,.16);border-radius:4px}
+#stmtBenchCard.stmt-bench-pinned::-webkit-scrollbar-track{background:transparent}
+.stmt-bench-pin-btn{background:none;border:1px solid rgba(20,40,63,.2);border-radius:14px;padding:4px 11px;font-size:11.5px;font-family:'Spline Sans Mono',monospace;font-weight:600;color:rgba(20,40,63,.6);cursor:pointer;display:inline-flex;align-items:center;gap:5px;margin-left:auto;transition:border-color .12s,color .12s,background .12s}
+.stmt-bench-pin-btn:hover{border-color:var(--gold);color:var(--gold)}
+.stmt-bench-pin-btn.active{background:rgba(37,87,199,.12);border-color:var(--gold);color:var(--gold)}
+/* Pin acknowledgment: the freshly added chip pulses once, so the click
+   registers even if the eye was on the table row that was clicked. */
+.stmt-chip-flash{animation:stmtChipFlash 1.2s ease}
+@keyframes stmtChipFlash{0%{box-shadow:0 0 0 4px rgba(37,87,199,.5);border-color:var(--gold)}100%{box-shadow:0 0 0 0 rgba(37,87,199,0);border-color:rgba(20,40,63,.16)}}
 .stmt-companion-strip{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .stmt-companion-chip{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.3);border-radius:3px 12px 12px 12px;padding:7px 11px;font-size:11.5px;color:rgba(20,40,63,.75);cursor:pointer;max-width:340px;transition:background .12s,border-color .12s,transform .1s}
 .stmt-companion-chip b{color:var(--gold)}
@@ -789,6 +816,47 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-flag-detail{margin-top:10px;background:rgba(160,58,34,.07);border-left:3px solid var(--red);border-radius:2px 10px 10px 2px;padding:12px 16px;font-size:13px;color:rgba(20,40,63,.85);line-height:1.6}
 .stmt-flag-detail .stmt-flag-note{display:block;margin-top:6px;color:var(--dim);font-size:12px}
 .stmt-flag-list-toggle{background:none;border:none;color:var(--gold);font-size:12px;cursor:pointer;margin-top:6px;padding:0}
+
+/* ---- Phase: Explore — the fullscreen comparison deck -------------------
+   Fixed overlay with its own listeners; never routes through render() or
+   updateStatementsUI(), so __statementsRenderCount cannot move while it is
+   open. Every number it plots comes from fySeries arithmetic over the
+   loaded bundles via statements-engine.js helpers. */
+#stmtExploreOverlay{position:fixed;inset:0;z-index:3200;background:rgba(248,250,252,.985);display:none;flex-direction:column}
+#stmtExploreOverlay.open{display:flex}
+.sx-head{display:flex;align-items:center;flex-wrap:wrap;gap:16px 22px;padding:15px 26px;border-bottom:1px solid rgba(20,40,63,.1);background:#fff}
+.sx-title{font-family:'Newsreader',serif;font-weight:700;font-size:23px;color:var(--ink2);line-height:1.1}
+.sx-cur{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--gold);font-weight:600;margin-top:2px}
+.sx-modes{display:inline-flex;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden}
+.sx-modes button{background:none;border:none;padding:8px 15px;font-family:'Spline Sans Mono',monospace;font-size:11.5px;cursor:pointer;color:var(--dim)}
+.sx-modes button.active{background:rgba(37,87,199,.14);color:var(--gold);font-weight:600}
+.sx-close{margin-left:auto;background:none;border:1px solid rgba(20,40,63,.18);border-radius:10px;padding:8px 14px;font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:var(--dim);cursor:pointer;transition:border-color .12s,color .12s}
+.sx-close:hover{border-color:var(--red);color:var(--red)}
+.sx-body{flex:1;overflow-y:auto;padding:20px 26px 34px}
+.sx-controls{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:flex-end;padding:0 0 16px}
+.sx-field{display:flex;flex-direction:column;gap:4px}
+.sx-field label{font-family:'Spline Sans Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.sx-field select{min-width:190px;max-width:340px;background:#fff;border:1px solid rgba(20,40,63,.2);border-radius:8px;padding:7px 9px;font-family:'Figtree',sans-serif;font-size:12.5px;color:var(--ink2)}
+.sx-field select:focus{outline:none;border-color:var(--gold)}
+.sx-seg{display:inline-flex;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden}
+.sx-seg button{background:none;border:none;padding:8px 13px;font-family:'Spline Sans Mono',monospace;font-size:11px;cursor:pointer;color:var(--dim)}
+.sx-seg button.active{background:rgba(37,87,199,.14);color:var(--gold);font-weight:600}
+.sx-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;min-height:26px}
+.sx-series-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.14);border-radius:10px;padding:5px 11px;font-size:11.5px;color:rgba(20,40,63,.75)}
+.sx-series-chip .sw{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.sx-empty{padding:70px 20px;text-align:center;color:var(--dim);font-size:13.5px;line-height:1.6}
+.sx-chart-card{background:#fff;border:1px solid rgba(20,40,63,.1);border-radius:14px;padding:18px}
+.sx-open-btn{margin-left:auto;font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600;background:rgba(37,87,199,.1);color:var(--gold);border:1px solid rgba(37,87,199,.3);border-radius:10px;padding:6px 13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;transition:background .12s,border-color .12s}
+.sx-open-btn:hover{background:rgba(37,87,199,.22);border-color:var(--gold)}
+
+/* Jump-nav targets must land below the sticky nav bar, never underneath it */
+.stmt-card,[data-stmt-section]{scroll-margin-top:72px}
+@media print{
+  .stmt-jumpnav,.stmt-topbar,#stmtExploreOverlay{display:none!important}
+  .stmt-table-wrap{overflow:visible!important;border:none}
+  .stmt-table th,.stmt-table td:first-child{position:static}
+  .stmt-card{break-inside:avoid-page}
+}
 
 .stmt-caption{font-size:13px;color:rgba(20,40,63,.7);margin-top:8px;line-height:1.55;font-style:italic}
 
@@ -1621,6 +1689,7 @@ const L = {
     indexed:true,       // Bench chart: indexed-to-100 vs actual rupees
     changeMode:false,   // statement cell: show YoY change annotation instead of the raw number
     density:'compact',  // comfortable | compact | dense
+    benchPinned:false,  // sticky+minimized Bench, opt-in via #stmtBenchPinBtn -- unpinned (default) sits in normal page flow
     search:'', recent:[],
     expandedFlags:false,
     openDefinitions:{}, // "label|section" -> true, which inline definitions are open
@@ -1700,7 +1769,10 @@ function resetTab(tabId){
   // (see the rendering note above initChart()) -- a reset is exactly the
   // one case besides mount/add-company/tab-switch where a full rebuild is
   // warranted, so drop the mounted flag to force render() to rebuild it.
-  if(tabId==='statements') statementsShellMounted=false;
+  // The comparison builder overlays this tab and reads L.statements.data,
+  // which the reset just wiped -- close it rather than let it show a stale
+  // company against empty data.
+  if(tabId==='statements'){ statementsShellMounted=false; stmtExploreClose(); }
   render();
 }
 // Panel header with a title and a ghost "reset this tool" button, used
@@ -5528,6 +5600,7 @@ function renderStatementsShell(){
         <span class="stmt-topbar-chevron">${s.topbarOpen?'▾':'▸'}</span>
       </button>
       <button class="stmt-fullwidth-btn" id="stmtFullWidthBtn" title="Hide the tools list on the left to use the full width of the screen for reading">&#8596; Full width</button>
+      <button class="stmt-fullwidth-btn" data-sx-open title="Open the fullscreen comparison builder">&#9974; Build a comparison</button>
       <button class="reset-tab-btn" data-reset-tab="statements" title="Reset this tool's inputs back to their defaults">Reset</button>
     </div>
     <div class="stmt-topbar-body" id="stmtTopbarBody" style="display:${s.topbarOpen?'':'none'}">
@@ -5572,6 +5645,7 @@ function renderStatementsShell(){
     <nav class="stmt-jumpnav" id="stmtJumpNav">
       <button data-stmt-jump="stmtHeaderCard">Overview</button>
       <button data-stmt-jump="stmtBenchCard">The Bench</button>
+      <button data-stmt-jump="stmtExploreCard">Compare</button>
       <button data-stmt-jump-section="profitLoss">Profit &amp; Loss</button>
       <button data-stmt-jump-section="balanceSheet">Balance Sheet</button>
       <button data-stmt-jump-section="cashFlow">Cash Flow</button>
@@ -5582,7 +5656,8 @@ function renderStatementsShell(){
     <div class="stmt-card" id="stmtHeaderCard"></div>
     <div id="stmtRefusal"></div>
     <div class="stmt-card" id="stmtBenchCard">
-      <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>The Bench</div>
+      <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>The Bench<button class="stmt-bench-pin-btn" id="stmtBenchPinBtn" type="button" title="Dock the Bench in a small fixed window so it stays visible while you scroll">📌 Pin</button></div>
+      <div class="stmt-section-title" style="margin-top:0"><span style="font-size:12px;font-family:'Spline Sans Mono',monospace;color:var(--dim);font-weight:400">Pin rows below &#8595; and they chart here instantly. For bigger, deliberate comparisons use <b style="color:var(--gold)">Build a comparison</b> below.</span></div>
       <div class="stmt-bench-hint" id="stmtBenchHint"></div>
       <div class="stmt-chips" id="stmtBenchChips"></div>
       <div class="stmt-companion-strip" id="stmtCompanionStrip"></div>
@@ -5592,6 +5667,14 @@ function renderStatementsShell(){
         <div class="stmt-tickrow" id="stmtTickRow"></div>
         <div class="stmt-checksummary" id="stmtCheckSummary"></div>
         <div id="stmtFlagDetail"></div>
+      </div>
+    </div>
+    <div class="stmt-card" id="stmtExploreCard">
+      <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Build a comparison</div>
+      <div class="cap" style="max-width:820px;line-height:1.6">Pull any reported rows into one fullscreen chart: overlay them over time to compare growth shapes, or plot any two against each other year by year to see which one leads. Every line item screener reports is reachable here \u2014 including rows the tables above group differently \u2014 for this company and its comparison, side by side.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:14px">
+        <button class="ns-btn" data-sx-open style="display:inline-flex">Open the comparison builder</button>
+        <span class="cap" style="margin:0">Fullscreen \u00b7 Esc closes it \u00b7 nothing here is saved or scored</span>
       </div>
     </div>
     <div class="stmt-card">
@@ -5613,11 +5696,14 @@ function renderStatementsShell(){
 
 function mountStatements(){
   teardownStatements();
+  statementsApplyBenchPinned();
   statementsEnsureLoaded();
 }
 function teardownStatements(){
   disposeChart('stmtBenchChart');
   disposeChart('stmtProfitCashChart');
+  disposeChart('stmtExploreChart');
+  stmtExploreClose();
 }
 
 /* ---- data loading ------------------------------------------------------ */
@@ -5725,13 +5811,25 @@ function renderRecentUI(){
 function statementsTogglePin(section,label){
   const key=rowKey(section,label);
   const idx=L.statements.pins.findIndex(p=>rowKey(p.section,p.label)===key);
+  let added=false;
   if(idx>=0) L.statements.pins.splice(idx,1);
   else {
     L.statements.pins.push({section,label});
     if(L.statements.pins.length>4) L.statements.pins.shift();
     L.statements.companionFocus = {section,label};
+    added=true;
   }
   updateStatementsUI();
+  if(added){
+    // The freshly added pin is always the last chip; pulse it once so the
+    // click registers even when the eye was on the table row, deep in a
+    // scrolled-down section. Pure CSS animation — no re-render.
+    const chip=document.querySelector('#stmtBenchChips .stmt-chip:nth-child('+L.statements.pins.length+')');
+    if(chip){
+      chip.classList.add('stmt-chip-flash');
+      chip.addEventListener('animationend',function h(){ chip.classList.remove('stmt-chip-flash'); chip.removeEventListener('animationend',h); });
+    }
+  }
 }
 function statementsFocusYear(year){
   L.statements.focusYear = (year===L.statements.focusYear) ? null : year;
@@ -6103,9 +6201,18 @@ function renderBenchChipsHTML(){
   if(!s.pins.length) return '';
   const chips = s.pins.map((pin,i)=>{
     const color = SERIES_PALETTE[i%SERIES_PALETTE.length].color;
+    // Latest reported figure rides along on the chip — "Sales · ₹64,518 Cr"
+    // answers "what am I looking at" without a trip to the table, using the
+    // same arithmetic as everywhere else on this tab.
+    const resolved = statementsPinSeries(pin);
+    const last = resolved.series.length ? resolved.series[resolved.series.length-1] : null;
+    const valTxt = last && last.value!=null ? formatCellRaw(pin.label, last.value) : '';
+    const unit = rowUnit(pin.label);
+    const suffix = valTxt ? ' \u00b7 '+(unit==='cr' ? '\u20b9'+valTxt+' Cr' : valTxt+(unit==='%'?'%':'')) : '';
     return `<div class="stmt-chip">
       <span class="stmt-chip-swatch" style="background:${color}"></span>
       <span>${advisorAttr(pin.label)}</span>
+      <span style="font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);white-space:nowrap">${advisorAttr(suffix.trim())}</span>
       ${statementsChipGapHTML(pin)}
       <button data-stmt-pin-move="${i}" data-dir="-1" title="Move left" ${i===0?'disabled':''}>&larr;</button>
       <button data-stmt-pin-move="${i}" data-dir="1" title="Move right" ${i===s.pins.length-1?'disabled':''}>&rarr;</button>
@@ -6275,8 +6382,410 @@ function updateProfitCashChart(){
   if(capEl) capEl.textContent = profitVsCashCaption(np, cfo) || '';
 }
 
+/* ---- Explore: the fullscreen comparison deck ---------------------------
+   Self-contained overlay: builds its own DOM once, patches only itself,
+   never calls render()/updateStatementsUI() — so __statementsRenderCount
+   cannot move while it is open. Every plotted number is fySeries
+   arithmetic over the loaded bundles via statements-engine helpers
+   (stmtExploreCatalog / alignFyPairs / pctOfSalesSeries). */
+const STMT_EXPLORE_CHART_ID = 'stmtExploreChart';
+
+function stmtExploreState(){
+  if(!L.statements.explore){
+    L.statements.explore = {
+      mode:'lines',            // 'lines' (over time) | 'scatter' (X vs Y)
+      slots:[null,null,null],  // row keys for lines mode (up to 3 series)
+      xKey:null, yKey:null,    // row keys for scatter mode
+      company:'primary',       // whose rows: 'primary' | 'compare'
+      scale:'indexed',         // 'indexed' | 'level' | 'pctSales'
+      yFrom:null, yTo:null     // fiscal-year window (nulls = full range)
+    };
+  }
+  return L.statements.explore;
+}
+function stmtExploreCompanySym(which){
+  if(which==='compare'){
+    const sym=L.statements.compare;
+    if(sym && statementsBundle(sym)) return sym;
+  }
+  return L.statements.primary;
+}
+function stmtExploreCatalogFor(sym){
+  // Delegates to statements-engine.js's own stmtExploreCatalog rather than
+  // rebuilding the row walk here -- that copy is the one covered by
+  // engine.test.js and carries sectionLabel, which stmtExploreOptionHTML
+  // below reads to print "Profit & Loss · Sales" instead of "Sales" alone.
+  return stmtExploreCatalog(statementsBundle(sym));
+}
+function stmtExploreSeed(st){
+  const cat=stmtExploreCatalogFor(stmtExploreCompanySym(st.company));
+  if(!cat.length) return;
+  const find=(label)=>{ const hit=cat.find(c=>c.label===label); return hit?hit.key:null; };
+  if(!st.slots[0]) st.slots[0]=find('Sales')||find('Revenue')||cat[0].key;
+  if(!st.slots[1]){ const np=find('Net Profit'); st.slots[1]=(np&&np!==st.slots[0])?np:(cat.find(c=>c.key!==st.slots[0])||{}).key||null; }
+  if(!st.slots[2]){ const opm=find('OPM %'); st.slots[2]=(opm&&opm!==st.slots[0]&&opm!==st.slots[1])?opm.key:null; }
+  if(st.mode==='scatter'){
+    if(!st.xKey) st.xKey=st.slots[0]||(cat[0]?cat[0].key:null);
+    if(!st.yKey) st.yKey=st.slots[1]||(cat[1]?cat[1].key:null);
+  }
+}
+function stmtExploreSeriesFor(key, which, scale){
+  const parts=String(key||'').split('|');
+  const sectionKey=parts[0], label=parts.slice(1).join('|');
+  if(!sectionKey||!label) return null;
+  const sym=stmtExploreCompanySym(which);
+  const b=statementsBundle(sym); if(!b) return null;
+  const section=b[sectionKey]; if(!section) return null;
+  let s=fySeriesSafe(section,label); if(!s.length) return null;
+  const unit=rowUnit(label);
+  let name=label;
+  // % of sales is only meaningful for absolute rupee rows — a margin ratio
+  // divided by sales is arithmetic with no meaning, so non-cr rows plot at
+  // face value under this scale and say so.
+  if(scale==='pctSales' && unit==='cr'){
+    let sales=fySeries(b.profitLoss,'Sales'); if(!sales.length) sales=fySeries(b.profitLoss,'Revenue');
+    s=pctOfSalesSeries(s,sales);
+    name=label+' \u00b7 % of sales';
+  }
+  const clean=s.filter(p=>p.value!=null);
+  if(!clean.length) return null;
+  return { name: name, label: label, unit: unit, sym: sym, data: clean };
+}
+function stmtExploreUnitSuffix(label){
+  const u=rowUnit(label);
+  if(u==='cr') return ' (\u20b9 Cr)';
+  if(u==='pct') return ' (%)';
+  if(u==='days') return ' (days)';
+  if(u==='ratio') return ' (x)';
+  if(u==='rupee') return ' (\u20b9)';
+  return '';
+}
+function stmtExploreOpen(){
+  const st=stmtExploreState();
+  stmtExploreSeed(st);
+  let ov=document.getElementById('stmtExploreOverlay');
+  if(!ov){
+    ov=document.createElement('div');
+    ov.id='stmtExploreOverlay';
+    ov.innerHTML=
+      '<div class="sx-head">'+
+        '<div><div class="sx-title">Build a comparison</div><div class="sx-cur" id="sxCur"></div></div>'+
+        '<div class="sx-modes" role="tablist" aria-label="Comparison mode">'+
+          '<button data-sx-mode="lines">Over time</button>'+
+          '<button data-sx-mode="scatter">X vs Y</button>'+
+        '</div>'+
+        '<div class="sx-controls" id="sxControls"></div>'+
+        '<button class="sx-close" data-sx-close title="Close (Esc)">Close &#10005;</button>'+
+      '</div>'+
+      '<div class="sx-body">'+
+        '<div class="sx-chips" id="sxSeriesChips"></div>'+
+        '<div class="sx-chart-card"><div id="'+STMT_EXPLORE_CHART_ID+'" style="height:min(58vh,540px)"></div></div>'+
+        '<div class="stmt-caption" id="sxCaption" style="margin-top:10px"></div>'+
+      '</div>';
+    document.body.appendChild(ov);
+  }
+  ov.classList.add('open');
+  document.body.style.overflow='hidden';
+  ov.querySelectorAll('[data-sx-mode]').forEach(b=>b.classList.toggle('active',b.dataset.sxMode===st.mode));
+  stmtExploreRenderControls();
+  stmtExploreUpdateChart();
+}
+function stmtExploreClose(){
+  const ov=document.getElementById('stmtExploreOverlay');
+  if(ov) ov.classList.remove('open');
+  document.body.style.overflow='';
+  disposeChart(STMT_EXPLORE_CHART_ID);
+}
+function stmtExploreOptionHTML(cat, selected){
+  return cat.map(function(c){
+    return '<option value="'+advisorAttr(c.key)+'"'+(c.key===selected?' selected':'')+'>'+advisorAttr(c.sectionLabel+' \u00b7 '+c.label)+'</option>';
+  }).join('');
+}
+function stmtExploreRenderControls(){
+  const st=stmtExploreState();
+  const box=document.getElementById('sxControls'); if(!box) return;
+  // The picker list must reflect whichever company is actually selected --
+  // a bank and a manufacturer report different rows, and offering the
+  // wrong company's row list would let a pick silently plot nothing.
+  const activeCat=stmtExploreCatalogFor(stmtExploreCompanySym(st.company));
+  const hasCompare=!!(L.statements.compare && statementsBundle(L.statements.compare));
+  let html='';
+  const companySel=function(){
+    let opts='<option value="primary"'+(st.company!=='compare'?' selected':'')+'>'+advisorAttr(L.statements.primary||'\u2014')+'</option>';
+    if(hasCompare) opts+='<option value="compare"'+(st.company==='compare'?' selected':'')+'>'+advisorAttr(L.statements.compare)+'</option>';
+    return '<div class="sx-field"><label>Company</label><select data-sx-company>'+opts+'</select></div>';
+  };
+  if(st.mode==='lines'){
+    html+=companySel();
+    for(let i=0;i<3;i++){
+      html+='<div class="sx-field"><label>Metric '+(i+1)+'</label><select data-sx-slot="'+i+'"><option value="">\u2014 none \u2014</option>'+stmtExploreOptionHTML(activeCat,st.slots[i])+'</select></div>';
+    }
+    html+='<div class="sx-field"><label>Scale</label><div class="sx-seg">'+
+      '<button data-sx-scale="indexed"'+(st.scale==='indexed'?' class="active"':'')+'>Indexed</button>'+
+      '<button data-sx-scale="level"'+(st.scale==='level'?' class="active"':'')+'>Rupees</button>'+
+      '<button data-sx-scale="pctSales"'+(st.scale==='pctSales'?' class="active"':'')+'>% of sales</button></div></div>';
+  } else {
+    html+=companySel();
+    html+='<div class="sx-field"><label>X axis</label><select data-sx-axis="x">'+stmtExploreOptionHTML(activeCat,st.xKey)+'</select></div>';
+    html+='<div class="sx-field"><label>Y axis</label><select data-sx-axis="y">'+stmtExploreOptionHTML(activeCat,st.yKey)+'</select></div>';
+  }
+  const years=stmtExploreYearUnion();
+  if(years.length>2){
+    const yrOpts=function(sel){ return years.map(function(y){ return '<option value="'+y+'"'+((st.mode==='lines'&&sel==null&&y===years[years.length-1])||(sel===y)?' selected':'')+'>'+'FY'+y+'</option>'; }).join(''); };
+    html+='<div class="sx-field"><label>From year</label><select data-sx-year="from"><option value="">earliest</option>'+yrOpts(st.yFrom)+'</select></div>';
+    html+='<div class="sx-field"><label>To year</label><select data-sx-year="to"><option value="">latest</option>'+yrOpts(st.yTo)+'</select></div>';
+  }
+  box.innerHTML=html;
+  const cur=document.getElementById('sxCur');
+  if(cur) cur.textContent=(L.statements.primary||'No company open')+(L.statements.compare?' vs '+L.statements.compare:'');
+}
+function stmtExploreYearUnion(){
+  const st=stmtExploreState();
+  let list=[];
+  if(st.mode==='lines'){
+    list=st.slots.filter(Boolean).map(k=>stmtExploreSeriesFor(k,st.company,st.scale)).filter(Boolean);
+  } else {
+    list=[st.xKey?stmtExploreSeriesFor(st.xKey,st.company,'level'):null, st.yKey?stmtExploreSeriesFor(st.yKey,st.company,'level'):null].filter(Boolean);
+  }
+  const set=new Set();
+  list.forEach(s=>s.data.forEach(p=>set.add(p.year)));
+  return Array.from(set).sort(function(a,b){return a-b;});
+}
+function stmtExploreLinesCaption(defs, st){
+  const names=defs.map(o=>o.s.name);
+  const list=names.length<=2?names.join(' and '):names.slice(0,-1).join(', ')+' and '+names[names.length-1];
+  const who=stmtExploreCompanySym(st.company);
+  if(st.scale==='indexed') return 'Indexed to 100 at each series\u2019 first plotted year, so shapes compare regardless of scale \u2014 '+list+' ('+who+').';
+  if(st.scale==='pctSales') return 'Each series as a percentage of the same year\u2019s sales \u2014 absolute size divides out, mix is what remains: '+list+'.';
+  return 'Actual reported values: '+list+' ('+who+').';
+}
+function stmtExploreUpdateChart(){
+  const st=stmtExploreState();
+  const dom=document.getElementById(STMT_EXPLORE_CHART_ID);
+  const capEl=document.getElementById('sxCaption');
+  const chipsEl=document.getElementById('sxSeriesChips');
+  if(!dom) return;
+  const clearAll=function(msg){
+    disposeChart(STMT_EXPLORE_CHART_ID);
+    dom.innerHTML='<div class="sx-empty">'+msg+'</div>';
+    if(chipsEl) chipsEl.innerHTML='';
+    if(capEl) capEl.textContent='';
+  };
+  if(!statementsBundle(L.statements.primary)){ clearAll('Load a company first \u2014 close this and use the search box in the bar above.'); return; }
+  // Year window with an inverted-range guard: From > To reads as the same
+  // span either way, so swap rather than chart an empty selection.
+  let lo=st.yFrom, hi=st.yTo;
+  if(lo!=null && hi!=null && lo>hi){ const t=lo; lo=hi; hi=t; }
+  const inWindow=function(yr){ return (lo==null || yr>=lo) && (hi==null || yr<=hi); };
+
+  if(st.mode==='lines'){
+    const defs=st.slots.filter(Boolean)
+      .map(k=>{ const s=stmtExploreSeriesFor(k,st.company,st.scale==='pctSales'?'pctSales':'level'); return s?{ s:s, unit:s.unit, label:s.label }:null; })
+      .filter(Boolean)
+      .map(o=>({ s:o.s, unit:o.unit, label:o.label, data:o.s.data.filter(p=>inWindow(p.year)) }))
+      .filter(o=>o.data.length>0);
+    if(!defs.length){ clearAll('Pick at least one metric with values inside the chosen year window.'); return; }
+    // No manual dom.innerHTML clear here -- initChart() already reuses the
+    // existing echarts instance in place via setOption(...,true) when one
+    // exists for this node. Clearing innerHTML first detaches its rendered
+    // SVG root from the DOM while the instance still points at it, so every
+    // subsequent setOption silently updates a node nothing can see -- the
+    // exact bug already fixed once this session in the Bench/profit-cash
+    // charts, reintroduced here by switching Explore's own mode/scale.
+    const years=Array.from(new Set(defs.flatMap(o=>o.data.map(p=>p.year)))).sort((a,b)=>a-b);
+    const cats=years.map(y=>'FY'+y);
+
+    // Unit grouping: absolute rupee rows and ratio rows (%, days, x, ₹/share)
+    // do not share a scale — a payout % plotted against ₹278 Cr of financing
+    // cash on one axis makes both numbers unreadable. Two groups max: money
+    // (₹ Cr) and everything else, drawn as stacked bands sharing the same
+    // fiscal years (the plan's sanctioned two-grid pattern — never dual
+    // y-axes on one plot).
+    const money=defs.filter(o=>o.unit==='cr');
+    const ratios=defs.filter(o=>o.unit!=='cr');
+    const mixed = st.scale!=='indexed' && money.length>0 && ratios.length>0;
+
+    let series;
+    if(st.scale==='indexed'){
+      series=defs.map(function(o,idx){
+        const col=SERIES_PALETTE[idx%SERIES_PALETTE.length].color;
+        const basePt=o.data.find(p=>p.value!=null);
+        const base=basePt?basePt.value:null;
+        return { name:o.s.name, type:'line', showSymbol:true, symbolSize:6,
+          data:o.data.map(p=>['FY'+p.year, base?(+(p.value/base*100).toFixed(1)):null]),
+          itemStyle:{color:col}, lineStyle:{color:col,width:2} };
+      });
+    } else if(mixed){
+      series=defs.map(function(o){
+        const col=SERIES_PALETTE[defs.indexOf(o)%SERIES_PALETTE.length].color;
+        const gi=o.unit==='cr' ? 0 : 1;
+        const isMoney=gi===0;
+        return { name:o.s.name, type:isMoney?'bar':'line', xAxisIndex:gi, yAxisIndex:gi,
+          barMaxWidth:22, showSymbol:!isMoney, symbolSize:6,
+          data:o.data.map(p=>['FY'+p.year, p.value]),
+          itemStyle:isMoney?{color:col, borderRadius:[3,3,0,0]}:{color:col},
+          lineStyle:isMoney?undefined:{color:col,width:2} };
+      });
+    } else {
+      series=defs.map(function(o,idx){
+        const col=SERIES_PALETTE[idx%SERIES_PALETTE.length].color;
+        const isLine=st.scale==='pctSales';
+        return { name:o.s.name, type:isLine?'line':'bar', barMaxWidth:26, showSymbol:isLine, symbolSize:6,
+          data:o.data.map(p=>['FY'+p.year, isLine?(p.value==null?null:+p.value.toFixed(2)):p.value]),
+          itemStyle:isLine?{color:col}:{color:col, borderRadius:[3,3,0,0]},
+          lineStyle:isLine?{color:col,width:2}:undefined };
+      });
+    }
+
+    // Per-grid axis names: the money band reads in ₹ Cr; the ratio band's
+    // name reflects whichever ratio units are actually in play.
+    const ratioUnits=Array.from(new Set(ratios.map(o=>o.unit)));
+    const ratioAxisName=ratioUnits.length===1 ? (ratioUnits[0]==='pct'?'%':ratioUnits[0]==='days'?'days':ratioUnits[0]==='rupee'?'₹':ratioUnits[0]==='ratio'?'x':'value') : 'value';
+    // Tooltip carries each series' real unit (₹278.9 Cr, 128.2 %, 14d, 0.9x)
+    // via the same formatCellRaw the tables use — a bare number taught
+    // nothing about what it measured.
+    const lineTooltip=(function(dd){
+      return function(params){
+        const arr=Array.isArray(params)?params:[params];
+        const year=arr.length?arr[0].axisValue:'';
+        const rows=arr.filter(p=>p.value!=null).map(function(p){
+          const d=dd[p.seriesIndex]; if(!d) return '';
+          return '<div>'+p.marker+' '+advisorAttr(d.s.name)+': <b>'+advisorAttr(formatCellRaw(d.label,p.value))+'</b></div>';
+        }).join('');
+        return '<b>'+year+'</b>'+rows;
+      };
+    })(defs);
+
+    let option;
+    if(mixed){
+      option={
+        axisPointer:{link:[{xAxisIndex:'all'}]},
+        grid:[{left:74,right:26,top:26,height:'40%',containLabel:true},
+              {left:74,right:26,top:'66%',bottom:44,containLabel:true}],
+        xAxis:[
+          {type:'category',gridIndex:0,data:cats,axisLabel:{show:false},axisTick:{show:false},axisLine:{lineStyle:{color:'rgba(20,40,63,.2)'}}},
+          {type:'category',gridIndex:1,data:cats,axisLabel:{fontSize:10.5,color:'rgba(20,40,63,.55)'},axisLine:{lineStyle:{color:'rgba(20,40,63,.2)'}}}
+        ],
+        yAxis:[
+          {gridIndex:0,type:'value',name:'₹ Cr',nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.6)'},axisLabel:{formatter:function(v){ return formatCroreValue(v); },fontSize:10,color:'rgba(20,40,63,.55)'},splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}},
+          {gridIndex:1,type:'value',name:ratioAxisName,nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.6)'},axisLabel:{fontSize:10,color:'rgba(20,40,63,.55)'},splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}}
+        ],
+        tooltip:{trigger:'axis',confine:true,formatter:lineTooltip},
+        series:series
+      };
+    } else {
+      const moneyOnly=money.length>0;
+      option={
+        grid:{left:70,right:26,top:30,bottom:46,containLabel:true},
+        xAxis:{type:'category',data:cats,axisLabel:{fontSize:10.5,color:'rgba(20,40,63,.55)'},axisLine:{lineStyle:{color:'rgba(20,40,63,.2)'}}},
+        yAxis:{type:'value',name:st.scale==='level'?(moneyOnly?'₹ Cr':ratioAxisName):'',nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.6)'},axisLabel:{formatter:function(v){ return st.scale==='pctSales' ? v+'%' : (moneyOnly?formatCroreValue(v):v); },fontSize:10.5,color:'rgba(20,40,63,.55)'},splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}},
+        tooltip:{trigger:'axis',confine:true,formatter:lineTooltip},
+        series:series
+      };
+    }
+    initChart(STMT_EXPLORE_CHART_ID, option);
+    if(chipsEl) chipsEl.innerHTML=defs.map(function(o,idx){
+      return '<div class="sx-series-chip"><span class="sw" style="background:'+SERIES_PALETTE[idx%SERIES_PALETTE.length].color+'"></span>'+advisorAttr(o.s.name)+'</div>';
+    }).join('');
+    let cap=stmtExploreLinesCaption(defs,st);
+    if(mixed) cap='Rupee rows and ratio rows draw as two stacked bands over the same years, each with its own scale. '+cap;
+    // The ratio band only gets a real unit name (%, days, x) when every row
+    // in it shares one unit. Two different units (say % and days) can still
+    // land in the same band together -- the tooltip always carries the real
+    // per-series value, but the shared axis position does not mean what it
+    // looks like it means, so say so rather than let it pass as comparable.
+    if(mixed && ratioUnits.length>1) cap+=' The lower band mixes different units ('+ratioUnits.join(', ')+') on one shared scale \u2014 read each line\u2019s value from its tooltip, not its height against the others.';
+    if(st.scale==='pctSales' && ratios.length) cap+=' Ratio rows are shown at face value \u2014 a percentage of sales is not a meaningful transform for them.';
+    if(capEl) capEl.textContent=cap;
+    return;
+  }
+
+  // scatter: X vs Y over common fiscal years
+  const xDef=st.xKey?stmtExploreSeriesFor(st.xKey,st.company,'level'):null;
+  const yDef=st.yKey?stmtExploreSeriesFor(st.yKey,st.company,'level'):null;
+  if(!xDef||!yDef){ clearAll('Pick an X metric and a Y metric.'); return; }
+  const pairsRaw=alignFyPairs(xDef.data,yDef.data).filter(function(p){ return inWindow(p.year); });
+  if(pairsRaw.length<2){ clearAll('Fewer than two common years between those two metrics'+((st.yFrom!=null||st.yTo!=null)?' inside the chosen year window':'')+'. Widen the window or pick different rows.'); return; }
+  // Same reasoning as the lines branch above -- initChart() reuses the
+  // existing instance in place; a manual clear here orphans it.
+  initChart(STMT_EXPLORE_CHART_ID, {
+    grid:{left:78,right:34,top:32,bottom:58,containLabel:true},
+    xAxis:{type:'value',name:xDef.label+stmtExploreUnitSuffix(xDef.label),nameLocation:'middle',nameGap:36,
+      nameTextStyle:{fontSize:11,color:'rgba(20,40,63,.6)'},
+      axisLabel:{formatter:function(v){ return formatCellRaw(xDef.label,v); },fontSize:10,color:'rgba(20,40,63,.55)'},
+      splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}},
+    yAxis:{type:'value',name:yDef.label+stmtExploreUnitSuffix(yDef.label),nameLocation:'middle',nameGap:48,
+      nameTextStyle:{fontSize:11,color:'rgba(20,40,63,.6)'},
+      axisLabel:{formatter:function(v){ return formatCellRaw(yDef.label,v); },fontSize:10,color:'rgba(20,40,63,.55)'},
+      splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}},
+    tooltip:{trigger:'item',confine:true,formatter:function(p){
+      const d=pairsRaw[p.dataIndex]; if(!d) return '';
+      return '<b>FY'+d.year+'</b><br/>'+advisorAttr(xDef.label)+': <b>'+advisorAttr(formatCellRaw(xDef.label,d.x))+'</b><br/>'+advisorAttr(yDef.label)+': <b>'+advisorAttr(formatCellRaw(yDef.label,d.y))+'</b>';
+    }},
+    series:[{ type:'scatter', data:pairsRaw.map(function(p){ return [p.x,p.y]; }), symbolSize:12,
+      itemStyle:{color:'#2557C7',opacity:.85,borderColor:'#fff',borderWidth:1},
+      label:{show:pairsRaw.length<=14, formatter:function(p){ const d=pairsRaw[p.dataIndex]; return d?('FY'+d.year):''; },
+        position:'top', fontSize:9.5, color:'rgba(20,40,63,.62)', fontFamily:"'Spline Sans Mono',monospace"} }]
+  });
+  if(chipsEl) chipsEl.innerHTML='<div class="sx-series-chip"><span class="sw" style="background:#2557C7"></span>Each point is one fiscal year ('+pairsRaw.length+' years, labeled)</div>';
+  if(capEl) capEl.textContent='FY'+pairsRaw[0].year+'\u2013FY'+pairsRaw[pairsRaw.length-1].year+', '+pairsRaw.length+' common years. X: '+xDef.label+stmtExploreUnitSuffix(xDef.label)+' ('+xDef.sym+'). Y: '+yDef.label+stmtExploreUnitSuffix(yDef.label)+' ('+yDef.sym+').';
+}
+
+// One delegated click listener for every overlay button (open/mode/scale/
+// close), bound once at load like the tab's other body-level handlers.
+document.body.addEventListener('click', function(e){
+  if(e.target.closest('[data-sx-open]')){ stmtExploreOpen(); return; }
+  if(e.target.closest('[data-sx-close]')){ stmtExploreClose(); return; }
+  const modeBtn=e.target.closest('[data-sx-mode]');
+  if(modeBtn){
+    const st=stmtExploreState(); st.mode=modeBtn.dataset.sxMode;
+    document.querySelectorAll('#stmtExploreOverlay [data-sx-mode]').forEach(function(b){ b.classList.toggle('active',b.dataset.sxMode===st.mode); });
+    stmtExploreSeed(st); stmtExploreRenderControls(); stmtExploreUpdateChart(); return;
+  }
+  const scaleBtn=e.target.closest('[data-sx-scale]');
+  if(scaleBtn){
+    const st=stmtExploreState(); st.scale=scaleBtn.dataset.sxScale;
+    scaleBtn.parentElement.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active',b.dataset.sxScale===st.scale); });
+    stmtExploreUpdateChart(); return;
+  }
+});
+document.body.addEventListener('change', function(e){
+  const ov=document.getElementById('stmtExploreOverlay');
+  if(!ov || !ov.contains(e.target)) return;
+  const st=stmtExploreState();
+  if(e.target.matches('[data-sx-slot]')){
+    st.slots[parseInt(e.target.dataset.sxSlot,10)]=e.target.value||null;
+  } else if(e.target.matches('[data-sx-axis]')){
+    if(e.target.dataset.sxAxis==='x') st.xKey=e.target.value||null; else st.yKey=e.target.value||null;
+  } else if(e.target.matches('[data-sx-company]')){
+    st.company=e.target.value;
+    // Keys from the previous company may not exist in this one's rows —
+    // drop dead selections rather than chart an empty series silently.
+    const cat=stmtExploreCatalogFor(stmtExploreCompanySym(st.company));
+    const live=function(k){ return !k || cat.some(function(c){ return c.key===k; }); };
+    st.slots=st.slots.map(function(k){ return live(k)?k:null; });
+    if(!live(st.xKey)) st.xKey=null;
+    if(!live(st.yKey)) st.yKey=null;
+    stmtExploreSeed(st); stmtExploreRenderControls();
+  } else if(e.target.matches('[data-sx-year]')){
+    const v=e.target.value?parseInt(e.target.value,10):null;
+    if(e.target.dataset.sxYear==='from') st.yFrom=v; else st.yTo=v;
+  } else { return; }
+  stmtExploreUpdateChart();
+});
+// Escape closes the deck first; capture phase keeps the existing pin-clearing
+// Escape handler from also firing underneath it.
+document.addEventListener('keydown', function(e){
+  if(e.key!=='Escape') return;
+  const ov=document.getElementById('stmtExploreOverlay');
+  if(!ov || !ov.classList.contains('open')) return;
+  e.stopPropagation(); e.preventDefault();
+  stmtExploreClose();
+}, true);
+
 /* ---- rendering: the four statement tables ----------------------------- */
 function statementRowHTML(sectionKey, label, primarySection, compareSection, periods, pinnedSet, focusYear, changeMode, rowIndex){
+
   const primSeriesAll = fySeriesSafe(primarySection, label);
   const {med, maxAbsDev} = statementsMedianAndSpread(primarySection, label);
   const iqr = iqrBounds(primSeriesAll.map(p=>p.value));
@@ -6409,13 +6918,20 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
       coverageNote = `<div class="stmt-coverage-note">Years covered don't fully overlap — ${parts.join('; ')}. Those years aren't linked-highlighted across companies.</div>`;
     }
   }
+  // Title-bar summary: row count and the years the section actually spans,
+  // so a stack of collapsed sections reads as a table of contents rather
+  // than N identical-looking bars.
+  const fyPeriods = periods.filter(p=>p.type==='fy');
+  const spanTxt = fyPeriods.length
+    ? rows.length+' rows \u00b7 FY'+fyPeriods[0].year+'\u2013FY'+fyPeriods[fyPeriods.length-1].year
+    : rows.length+' rows';
   const collapsed = !!L.statements.collapsedSections[sectionKey];
   return `<div class="stmt-section-block${collapsed?' stmt-collapsed':''}" data-stmt-section="${sectionKey}">
   <div class="stmt-table-title" data-stmt-collapse="${sectionKey}" role="button" tabindex="0" aria-expanded="${collapsed?'false':'true'}" title="Click to collapse or expand this section">
     ${stmtSectionIcon(sectionKey)}
     <span class="stmt-collapse-chevron">${collapsed?'▸':'▾'}</span>
     <span class="stmt-table-title-label">${advisorAttr(sectionLabel)}</span>
-    <span class="cap" style="font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:400">${sectionKey==='ratios'?'':'Rs Cr unless noted'}</span>
+    <span class="cap" style="font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:400">${spanTxt}${sectionKey==='ratios'?'':' \u00b7 Rs Cr unless noted'}</span>
   </div>
   ${coverageNote}
   <div class="stmt-table-wrap"><table class="stmt-table">
@@ -6642,6 +7158,21 @@ document.body.addEventListener('click', e=>{
 document.body.addEventListener('click', e=>{
   if(e.target.id==='stmtToLiveBtn' || e.target.closest('#stmtToLiveBtn')) statementsAddToLive();
 });
+document.body.addEventListener('click', e=>{
+  if(!e.target.closest('#stmtBenchPinBtn')) return;
+  L.statements.benchPinned = !L.statements.benchPinned;
+  statementsApplyBenchPinned();
+});
+function statementsApplyBenchPinned(){
+  const card=document.getElementById('stmtBenchCard');
+  const btn=document.getElementById('stmtBenchPinBtn');
+  if(card) card.classList.toggle('stmt-bench-pinned', L.statements.benchPinned);
+  if(btn){
+    btn.classList.toggle('active', L.statements.benchPinned);
+    btn.textContent = L.statements.benchPinned ? '📌 Pinned' : '📌 Pin';
+    btn.title = L.statements.benchPinned ? 'Unpin the Bench and let it scroll with the page' : 'Dock the Bench in a small fixed window so it stays visible while you scroll';
+  }
+}
 // Collapsing a section is on the stable-shell's explicit never-full-re-render
 // list -- toggle the class on the one section block plus the button's own
 // glyph/aria-state, nothing else touches the DOM.

@@ -1049,3 +1049,71 @@ test('advisor guardrail: an adversarial suite of recommendation-shaped sentences
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Phase: the Explore deck — pure helpers behind the fullscreen comparison
+// space on "Read the Company". Synthetic fixtures, hand-checked values.
+// ---------------------------------------------------------------------------
+
+test('stmtExploreCatalog lists every plottable row in canonical section order', () => {
+  const bundle = loadFinancials('TCS');
+  const cat = stmt.stmtExploreCatalog(bundle);
+  assert.ok(cat.length > 20, `expected a real company to expose 20+ rows (got ${cat.length})`);
+  // canonical section order: all profitLoss rows before any balanceSheet row
+  const firstBS = cat.findIndex((c) => c.sectionKey === 'balanceSheet');
+  const lastPL = cat.map((c) => c.sectionKey).lastIndexOf('profitLoss');
+  assert.ok(lastPL < firstBS, 'profitLoss rows must precede balanceSheet rows');
+  // keys are section|label and round-trip through the parser's findRow
+  const sample = cat[0];
+  const section = bundle[sample.sectionKey];
+  assert.ok(section.rows.some((r) => r.label === sample.label), 'catalog label resolves to a real reported row');
+});
+
+test('stmtExploreCatalog skips rows with no fiscal-year values', () => {
+  const bundle = {
+    profitLoss: {
+      periods: [{ type: 'fy', year: 2024 }],
+      rows: [
+        { label: 'Real Row', values: [{ raw: '5', value: 5 }] },
+        { label: 'Empty Row', values: [{ raw: '-', value: null }] },
+      ],
+    },
+  };
+  const cat = stmt.stmtExploreCatalog(bundle);
+  assert.strictEqual(cat.length, 1);
+  assert.strictEqual(cat[0].label, 'Real Row');
+});
+
+test('alignFyPairs keeps only common years, sorted oldest first', () => {
+  const X = [{ year: 2019, value: 10 }, { year: 2020, value: 20 }, { year: 2021, value: 30 }];
+  const Y = [{ year: 2020, value: 5 }, { year: 2021, value: 7 }, { year: 2022, value: 11 }];
+  const pairs = stmt.alignFyPairs(X, Y);
+  assert.deepStrictEqual(pairs, [
+    { year: 2020, x: 20, y: 5 },
+    { year: 2021, x: 30, y: 7 },
+  ]);
+});
+
+test('alignFyPairs drops null points instead of pairing them as zero', () => {
+  const X = [{ year: 2020, value: 1 }, { year: 2021, value: null }, { year: 2022, value: 3 }];
+  const Y = [{ year: 2020, value: 9 }, { year: 2021, value: 8 }, { year: 2022, value: null }];
+  const pairs = stmt.alignFyPairs(X, Y);
+  assert.deepStrictEqual(pairs, [{ year: 2020, x: 1, y: 9 }]);
+});
+
+test('pctOfSalesSeries converts rupee rows to margin-like percentages of sales', () => {
+  const sales = [{ year: 2023, value: 100 }, { year: 2024, value: 200 }];
+  const row = [{ year: 2023, value: 50 }, { year: 2024, value: 50 }];
+  const out = stmt.pctOfSalesSeries(row, sales);
+  assert.strictEqual(out[0].value, 50);
+  assert.strictEqual(out[1].value, 25);
+});
+
+test('pctOfSalesSeries refuses non-positive or missing sales with null, never zero', () => {
+  const sales = [{ year: 2023, value: 0 }, { year: 2024, value: -5 }, { year: 2025, value: null }];
+  const row = [{ year: 2023, value: 50 }, { year: 2024, value: 50 }, { year: 2025, value: 50 }];
+  const out = stmt.pctOfSalesSeries(row, sales);
+  assert.strictEqual(out[0].value, null);
+  assert.strictEqual(out[1].value, null);
+  assert.strictEqual(out[2].value, null);
+});

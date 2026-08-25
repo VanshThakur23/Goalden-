@@ -1151,6 +1151,68 @@ function checklistQualityGate(divergenceResult) {
   };
 }
 
+/* =====================================================================
+   EXPLORE DECK — pure helpers behind the tab's fullscreen comparison
+   space. Same contract as everything above: data in, structured output
+   out, no DOM, no model — every number a viewer sees traces to these.
+   ===================================================================== */
+
+// Section order/key contract of the parser, mirrored here so the Explore
+// deck's pickers list rows in the same order the tables render them.
+const EXPLORE_SECTIONS = [
+  { key: 'profitLoss', label: 'Profit & Loss' },
+  { key: 'balanceSheet', label: 'Balance Sheet' },
+  { key: 'cashFlow', label: 'Cash Flow' },
+  { key: 'ratios', label: 'Ratios' },
+];
+
+// Every plottable row in a parsed bundle, in canonical section order then
+// as-reported row order. Rows carrying no fiscal-year value at all are
+// skipped — a picker option that can never plot anything is noise.
+function stmtExploreCatalog(bundle) {
+  if (!bundle) return [];
+  const out = [];
+  EXPLORE_SECTIONS.forEach((sec) => {
+    const section = bundle[sec.key];
+    if (!section || !Array.isArray(section.rows)) return;
+    section.rows.forEach((row) => {
+      const series = fySeries(section, row.label);
+      if (!series.some((p) => p.value != null)) return;
+      out.push({ key: sec.key + '|' + row.label, label: row.label, sectionKey: sec.key, sectionLabel: sec.label });
+    });
+  });
+  return out;
+}
+
+// Aligns two FY series on their common years — the X-vs-Y scatter's
+// backbone. Years present in only one series are dropped (and the caller
+// discloses the shrinkage), never silently paired against a wrong year.
+function alignFyPairs(seriesX, seriesY) {
+  const byYearX = new Map();
+  (seriesX || []).forEach((p) => { if (p.value != null) byYearX.set(p.year, p.value); });
+  const out = [];
+  (seriesY || []).forEach((p) => {
+    if (p.value == null) return;
+    if (!byYearX.has(p.year)) return;
+    out.push({ year: p.year, x: byYearX.get(p.year), y: p.value });
+  });
+  out.sort((a, b) => a.year - b.year);
+  return out;
+}
+
+// Each year expressed as a percentage of the same year's Sales (or Revenue)
+// — turns absolute rupee rows into comparable margin-like shapes. Null
+// wherever sales is missing or non-positive; never a fabricated zero.
+function pctOfSalesSeries(series, salesSeries) {
+  const byYear = new Map();
+  (salesSeries || []).forEach((p) => { if (p.value != null && p.value > 0) byYear.set(p.year, p.value); });
+  return (series || []).map((p) => {
+    const sales = byYear.get(p.year);
+    const value = (sales && p.value != null) ? (p.value / sales) * 100 : null;
+    return { year: p.year, value };
+  });
+}
+
 const api = {
   findRow, fySeries, median, pctChange, yearIndex, vsOwnMedian,
   classifySchema, compareRefusal,
@@ -1163,6 +1225,7 @@ const api = {
   capitalEmployedSeries, incrementalRoce, assetTurnover, bookValuePerShareSeries,
   priceToBookLatest, reratingSpread, fyEndPriceSeries, peHistoryBand,
   compoundingChecklist, checklistQualityGate,
+  stmtExploreCatalog, alignFyPairs, pctOfSalesSeries,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

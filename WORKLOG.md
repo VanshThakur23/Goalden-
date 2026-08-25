@@ -1356,3 +1356,155 @@ zero new hallucination surface.
 
 ### Known / not done
 - Nothing outstanding. Ready to commit.
+
+---
+
+## 2026-08-18 - opencode - "Read the Company": Explore deck + layout pass
+
+### Done
+- **Explore (the big build):** a fullscreen comparison deck on "Read the
+  Company", opened from a new ⛶ Explore button on the Bench card and the
+  topbar. Two modes: *Over time* (up to 3 metrics as indexed lines / rupee
+  bars / %-of-sales, any loaded company) and *X vs Y* scatter (each point is
+  one fiscal year, labeled FYxx when ≤14 points, tooltip carries both raw
+  values). Year From/To window filters both modes. Pickers list EVERY
+  reported row via a per-company catalog (not just canonical rows), seeded
+  with Sales / Net Profit / OPM % on first open. Self-contained overlay:
+  opens/closes/patches only itself — never calls render() or
+  updateStatementsUI() (grep-verified: zero full-render calls in the module),
+  so __statementsRenderCount cannot move while it is open. Esc closes it via
+  a capture-phase handler that preempts the existing pin-clearing Escape.
+  teardownStatements() disposes its chart and closes the overlay on tab exit.
+- statements-engine.js: +3 pure helpers behind the deck — stmtExploreCatalog
+  (deterministic plottable-row catalog, skips rows with no FY values),
+  alignFyPairs (common-year X/Y alignment for the scatter, drops nulls),
+  pctOfSalesSeries (% of same-year sales, null where sales ≤0/missing) — all
+  exported through the existing api shim.
+- engine.test.js: +6 tests (89 total now): catalog ordering + empty-row skip
+  (synthetic + real TCS fixture), alignFyPairs common-years/null handling,
+  pctOfSalesSeries conversion + refusal-on-non-positive-sales.
+- Layout pass: jump-nav/card targets get scroll-margin-top so the sticky nav
+  never covers a landing title; print rules (nav/topbar hidden, table overflow
+  released, sticky cells relaxed, cards avoid page breaks); Bench chips now
+  carry each row's latest reported figure ("Sales · ₹x Cr") using the same
+  formatCellRaw arithmetic; second Bench title line names the pin mechanism.
+
+### Verified
+- node --test engine.test.js: 89/89 PASS (incl. 6 new).
+- smoke-02, 05–13: ALL PASS (no regressions; literal-string checks intact).
+- Inline-script parse check across all four HTML files: ALL OK.
+- agent-evals loadPage('goalden-lab.html') still loads clean after the new
+  top-level listeners.
+- Architecture tripwire: grepped the whole Explore module (319 lines) — zero
+  calls to updateStatementsUI( or render( ; the only regex hits are the
+  comment saying so.
+
+### Known / not done
+- No commit made (per the git rule).
+- NOT browser-tested here (no browser in this env): overlay visuals at narrow
+  widths, chart resize behavior inside the fixed deck, and the exact feel of
+  the scatter labels need Claude Code's live pass. Everything structural is
+  verified as above.
+
+---
+
+## 2026-08-18 - opencode - "Read the Company" round 2: visibility, stickiness, unit honesty
+
+### Done
+- **Jump-nav overlap, root cause:** the bar stuck at top:0 with square bottom
+  corners and a one-sided fade — content sliding under it hard-clipped at the
+  bar's top edge with zero clearance. Now floats as a deliberate toolbar
+  (top:10px, full 14px radius, stronger shadow, z-index 30 — above the sticky
+  Bench at 20 and table headers at 2/3), with fade bands on BOTH sides
+  (::before above + ::after below, pointer-events:none) so content dissolves
+  as it passes underneath instead of half-clipping. Targets already carry
+  scroll-margin-top from the last pass.
+- **Bench sticky on desktop** (the plan's own call, was missing): ≥1100px,
+  #stmtBenchCard sticks at top:86px (clear of the floating nav), capped at
+  calc(100vh - 106px) with internal scroll. Pinning a row while scrolled into
+  Cash Flow or Ratios now updates the chart in the sticky Bench without any
+  scrolling. Plus a one-shot pulse on the freshly added chip (pure CSS
+  animation, no re-render) so the click registers even when the eye was on
+  the table row.
+- **Explore re-homed and renamed** — was a small ⛶ button tucked into the
+  Bench card's corner with a name that said nothing. Now: a dedicated
+  "Build a comparison" card between the Bench and the tables (description +
+  full-size button), a "Compare" entry in the jump nav, the topbar button
+  renamed, and the overlay title changed to match. Bench title reverted to
+  plain — the Bench stays the zero-effort click-a-row loop; the deliberate
+  tool has its own visible home.
+- **Unit honesty in the Explore deck** (the "278.9 what?" problem): series
+  are grouped by unit (₹ Cr vs %, days, x, ₹/share). When a selection mixes
+  groups, the chart draws as TWO STACKED BANDS sharing the same fiscal-year
+  axis — rupee bars on top, ratio lines below, each band with its own
+  y-scale and named axis (the plan's sanctioned two-grid pattern, never dual
+  y-axes). Every tooltip value now carries its real unit via the same
+  formatCellRaw the tables use ("₹278.9 Cr", "128.2 %"), scatter axis names
+  carry unit suffixes, and % of sales only applies to absolute rupee rows —
+  ratio rows plot at face value with a caption note.
+- **Inverted year window guard:** From > To swaps rather than charting empty.
+- **Reset closes the comparison builder** — resetTab('statements') wipes
+  L.statements.data; the overlay read it, so it closes rather than showing
+  stale companies against empty data.
+- **Section title summaries:** each statement section's title bar now shows
+  "N rows · FYxx–FYyy" (plus "Rs Cr unless noted" where true), so a stack of
+  collapsed sections reads as a table of contents instead of N identical bars.
+- Bench chips carry each row's latest reported figure (added last session,
+  confirmed still working after this round's changes).
+
+### Verified
+- node --test engine.test.js: 89/89 PASS.
+- smoke-02, 05–13: ALL PASS.
+- Inline-script parse across all four HTML files: ALL OK.
+- agent-evals loadPage('goalden-lab.html'): OK.
+- Render-count tripwire: grepped the entire Explore module (396 lines) —
+  the only regex hits are the comment saying "never calls render()/
+  updateStatementsUI()"; zero actual invocations.
+- 10-point structural audit: dedicated card ✓, jump-nav Compare ✓, Bench
+  sticky desktop-guarded ✓, reset closes ✓, two-grid layout ✓, unit
+  tooltips ✓, scatter unit suffixes ✓, inverted window guard ✓, Bench
+  button removed ✓.
+
+### Known / not done
+- No commit made (per the git rule).
+- NOT browser-tested here: the exact feel of the floating nav, the sticky
+  Bench's internal scroll, the stacked-band proportions with real data, and
+  the scatter label density at 12+ points all need Claude Code's live pass.
+- The Bench sticky is full-width (not a narrow side panel) — the plan
+  specified sticky, and the chart updating live as you pin is the point,
+  but if it feels too heavy in a real browser, the easy dial is capping
+  max-height further or hiding the divergence strip from the stuck state.
+
+---
+
+## 2026-08-25 - Claude Code - "Read the Company": live browser pass on the Bench, mixed-unit chart caption
+
+### Done
+- **Mixed-unit ratio band caption:** the Explore deck's two-grid layout can
+  land rows with different units (e.g. Debtor Days and ROCE %) on the same
+  shared ratio axis. Added a conditional caption naming the mixed units and
+  pointing the reader at each line's tooltip instead of its height, so the
+  shared "value" axis label doesn't imply the two are comparable.
+- **Bench sticky, reverted to opt-in:** browser-testing round 2's full-width
+  sticky Bench (position:sticky, capped at calc(100vh - 106px)) turned out to
+  cover the entire statement tables underneath it on a real screen — at
+  900px viewport height that cap is 794px, 88% of the screen. First cut
+  shrank the cap to min(420px,55vh); still blocked too much. Final fix: the
+  Bench is back to normal document flow by default (no sticky at any width),
+  with a new 📌 Pin button in its header that docks it at min(260px,38vh)
+  sticky only when the user explicitly wants it pinned while scrolling
+  through the tables to keep adding rows. Toggle state lives in
+  L.statements.benchPinned and is re-applied on every mount.
+- Verified live in the Browser pane against local_server.py + TCS: unpinned
+  computes to position:static (tables fully reachable by scroll), pinned
+  computes to position:sticky/max-height:260px, __statementsRenderCount
+  stayed at 1 through both toggles.
+
+### Verified
+- node --test engine.test.js: 89/89 PASS.
+- Live browser check against localhost:8000/api/financials?symbol=TCS: 200,
+  full payload (Sales/OPM/price/market cap) — confirms the local Python
+  server fetches screener.in live and needs no commit/deploy to test.
+
+### Known / not done
+- No further browser-testing gaps flagged this pass.
