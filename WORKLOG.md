@@ -2107,3 +2107,52 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
 - node --test engine.test.js: 102/102 PASS.
 - Last commit pushed: (see next commit)
 
+---
+
+## 2026-08-18 - opencode - Explore deck: trajectory paths, correlation, drill-down, factual observations
+
+### Done
+- **Scatter trajectory path:** consecutive fiscal years are now connected
+  with a dashed line so the viewer sees the company's direction of travel
+  through metric space â€” is margin improving while sales growth slows?
+  That pattern is invisible in disconnected dots. The latest year gets a
+  distinct color (terracotta vs blue) and an inline "FY20xx" label at the
+  end of the path.
+- **Live Pearson correlation coefficient:** computed from the aligned
+  pairs on every scatter render. Shown as a chip with a plain-language
+  strength label ("strong linear relationship", "moderate", "no clear").
+  Caption adds "These two metrics have moved together/in opposite
+  directions across this window" when |r| >= 0.7.
+- **Double-click drill-down:** double-clicking any point or line in the
+  Explore chart closes the deck, scrolls to the source row in the
+  statements table, and pulses the row with a blue flash. Uses ECharts'
+  own dblclick event (not DOM events) so the exact series is identified.
+- **Factual observation strip on lines mode:** after rendering, computes
+  each series' first-to-last change and prints deterministic sentences:
+  "Sales went up 142% over this window. Net Profit went up 89% over this
+  window." When every series moves the same direction, prepends "Every
+  metric moved up/down in this window." Pure arithmetic + a template,
+  same data in = same sentences out.
+- **Row flash CSS:** .stmt-row-flash animation on td elements for the
+  drill-down highlight.
+
+### Verified
+- node --test engine.test.js: 102/102 PASS.
+- smoke-02, 05-13: ALL PASS.
+- Inline-script parse: ALL OK across all four HTML files.
+- Render-count tripwire: zero render()/updateStatementsUI() calls in the
+  new trajectory/correlation/drill-down code (comment-only matches
+  excluded).
+
+### Known / not done
+- No commit made (per the git rule).
+- NOT browser-tested: trajectory path visual density with 12+ years,
+  correlation chip readability, dblclick drill-down smoothness â€” need
+  Claude Code's live pass.
+- 3D visualizations (user's idea): the design plan explicitly bans
+  anything 3D ("3D anything" in the rejected-charts list). Financial
+  charts in 3D obscure the numbers behind surfaces. If the user wants to
+  override this ban for a specific chart type, that's a deliberate
+  design decision that should be made explicitly â€” not something to
+  sneak in as a default.
+
