@@ -903,7 +903,14 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .sx-series-chip{display:inline-flex;align-items:center;gap:7px;background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.14);border-radius:10px;padding:5px 11px;font-size:11.5px;color:rgba(20,40,63,.75)}
 .sx-series-chip .sw{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .sx-empty{padding:70px 20px;text-align:center;color:var(--dim);font-size:13.5px;line-height:1.6}
-.sx-chart-card{background:#fff;border:1px solid rgba(20,40,63,.1);border-radius:14px;padding:18px}
+.sx-chart-card{background:#fff;border:1px solid rgba(20,40,63,.1);border-radius:14px;padding:18px;margin-bottom:14px}
+.sx-caption-block{margin-top:12px;font-size:12.5px;color:rgba(20,40,63,.65);line-height:1.6;font-style:italic;white-space:pre-line}
+.sx-pearson-explain{margin-top:12px;padding:12px 16px;background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.12);border-radius:10px;font-size:12.5px;color:rgba(20,40,63,.7);line-height:1.65;max-width:820px}
+.sx-data-table{width:100%;border-collapse:collapse;font-size:11.5px;font-family:'Spline Sans Mono',monospace;color:rgba(20,40,63,.75);background:#fff;border:1px solid rgba(20,40,63,.1);border-radius:10px;overflow:hidden}
+.sx-data-table th,.sx-data-table td{padding:6px 10px;border-bottom:1px solid rgba(20,40,63,.07);text-align:right;white-space:nowrap}
+.sx-data-table th:first-child,.sx-data-table td:first-child{text-align:left;font-family:'Figtree',sans-serif;font-weight:600;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.sx-data-table thead th{font-family:'Spline Sans Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:rgba(20,40,63,.5);border-bottom:1px solid rgba(20,40,63,.14)}
+.sx-data-table .sw{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 .sx-open-btn{margin-left:auto;font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600;background:rgba(37,87,199,.1);color:var(--gold);border:1px solid rgba(37,87,199,.3);border-radius:10px;padding:6px 13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;transition:background .12s,border-color .12s}
 .sx-open-btn:hover{background:rgba(37,87,199,.22);border-color:var(--gold)}
 
@@ -5785,12 +5792,15 @@ function renderStatementsShell(){
       <button data-stmt-jump="stmtHeaderCard">Overview</button>
       <button data-stmt-jump="stmtBenchCard">The Bench</button>
       <button data-stmt-jump-section="profitLoss">Profit &amp; Loss</button>
+      <button data-stmt-jump-section="quarterly">Quarterly Results</button>
       <button data-stmt-jump-section="balanceSheet">Balance Sheet</button>
       <button data-stmt-jump-section="cashFlow">Cash Flow</button>
       <button data-stmt-jump-section="ratios">Ratios</button>
+      <button data-stmt-jump-section="shareholding">Shareholding Pattern</button>
       <button data-stmt-jump="stmtExploreCard">Charts</button>
-      <button data-stmt-jump="stmtDepth">Growth &amp; Returns</button>
-      <button data-stmt-jump="stmtChecklist">Compounding</button>
+<button data-stmt-jump="stmtDepth">Growth &amp; Returns</button>
+<button data-stmt-jump="stmtPeers">Peers</button>
+<button data-stmt-jump="stmtChecklist">Compounding</button>
     </nav>
     <div class="stmt-card" id="stmtHeaderCard"></div>
     <div id="stmtRefusal"></div>
@@ -5832,8 +5842,9 @@ function renderStatementsShell(){
       <div id="stmtWaterfallChart" style="height:300px"></div>
     </div>
     <div class="stmt-zone-header">Analysis</div>
-    <div class="stmt-card" id="stmtDepth"></div>
-    <div class="stmt-card" id="stmtChecklist"></div>
+<div class="stmt-card" id="stmtDepth"></div>
+<div class="stmt-card" id="stmtPeers"></div>
+<div class="stmt-card" id="stmtChecklist"></div>
     <div class="stmt-card" id="stmtToLiveCard" style="text-align:center">
       <button class="ns-btn" id="stmtToLiveBtn" style="display:inline-flex">Add to Test Real Investments</button>
     </div>
@@ -6346,6 +6357,57 @@ function renderDepthMetricsHTML(){
   ${bvBlock}
   ${reratingBlock}`;
 }
+
+/* ---- Peer comparison card ----------------------------------------------
+   screener.in publishes a peer table (same-sector companies side by side
+   on key ratios). CAVEAT found while building this: the static page ships
+   only <div id="peers-table-placeholder">Loading peers table ...</div> --
+   the actual rows arrive via JavaScript after load, so parsePeerTable()
+   returns null on both fixtures and live scrapes today. This renderer is
+   written and correct for whenever that changes (screener may server-side
+   render for crawlers/AMP, or a future fixture may capture the hydrated
+   DOM); until then it returns '' and the card stays invisible. Every cell
+   would be screener's own published number -- no rank, no score computed
+   here. The primary company's row is highlighted so the eye lands there,
+   but no "best/worst" badge is printed: peers differ in business model,
+   not just quality. */
+function renderPeerTableHTML(){
+  const s=L.statements;
+  const d = s.data[s.primary];
+  if(!d || d.status!=='ready') return '';
+  const bundle = d.result;
+  if(!bundle.peerTable || !bundle.peerTable.rows || !bundle.peerTable.rows.length) return '';
+  // The peer table carries S.No. / Name / P/E / Market Cap / DY / NP Qtr /
+  // Qtr High / Sales Qtr / ROCE columns. Column names vary by schema — read
+  // them from the parsed header row rather than assuming fixed positions.
+  const header = bundle.peerTable.periods ? bundle.peerTable.periods.map(p=>p.label) : [];
+  if(!header.length) return '';
+  const nameCol = header.findIndex(h=>/name/i.test(h));
+  if(nameCol<0) return '';
+  // Which columns are worth showing: skip S.No., keep ratio/money columns.
+  const keepCols = [];
+  header.forEach(function(h,i){
+    if(i===nameCol) return;
+    if(/s\.?\s*no/i.test(h)) return;
+    keepCols.push({idx:i,label:h});
+  });
+  const rowsHtml = bundle.peerTable.rows.map(function(row){
+    const cells = row.values;
+    const name = nameCol<cells.length ? String(cells[nameCol]||'').trim() : '';
+    if(!name) return '';
+    const isPrimary = stmtNormalizeCompanyName(name)===stmtNormalizeCompanyName(bundle.companyName||'');
+    const tds = keepCols.map(function(c){
+      const v = c.idx<cells.length ? cells[c.idx] : null;
+      return '<td>'+(v!=null&&v!==''?advisorAttr(String(v)):'\u2014')+'</td>';
+    }).join('');
+    return '<tr'+(isPrimary?' class="stmt-peer-primary"':' data-stmt-peer="'+advisorAttr(name)+'"')+'><td>'+advisorAttr(name)+(isPrimary?' <span style="font-size:9px;color:var(--gold);font-family:\'Spline Sans Mono\',monospace">THIS COMPANY</span>':'')+'</td>'+tds+'</tr>';
+  }).join('');
+  if(!rowsHtml) return '';
+  const headHtml = keepCols.map(c=>'<th>'+advisorAttr(c.label)+'</th>').join('');
+  return `<div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>How It Compares With Peers</div>
+  <div class="cap" style="margin-bottom:10px">Published by screener.in for companies in the same sector. These are their numbers, not ours \u2014 no rank, no score, no verdict. A peer with a lower P/E is not automatically cheaper: it may carry more debt, lower growth, or a different business.</div>
+  <div style="overflow-x:auto"><table class="stmt-depth-table"><thead><tr><th></th>${headHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+}
 /* ---- Phase 3: the Compounding Checklist ------------------------------
    Per-company only, never a total, never a rank -- see the plan's hard
    constraints. compoundingChecklist() already returns all ten conditions
@@ -6560,6 +6622,25 @@ function updateBenchChart(){
   const option = s.focusYear!=null ? benchChartOptionAtYear(pins, s.focusYear) : benchChartOption(pins, s.indexed);
   option.tooltip = s.focusYear!=null ? benchTooltipAtYear(pins) : benchTooltipOverTime(pins);
   initChart('stmtBenchChart', option);
+  // Double-click a Bench series to jump to its source table row — same
+  // drill-down pattern the Explore deck uses. seriesIndex maps to
+  // s.pins order because benchChartOption builds one series per pin.
+  var benchInst=chartInstances['stmtBenchChart'];
+  if(benchInst){
+    benchInst.inst.off('dblclick');
+    benchInst.inst.on('dblclick', function(params){
+      var pin=s.pins[params.seriesIndex];
+      if(!pin) return;
+      var key=rowKey(pin.section,pin.label);
+      var rowEl=document.querySelector('#stmtRoot [data-stmt-pin="'+advisorAttr(key).replace(/&quot;/g,'"').replace(/&amp;/g,'&')+'"]');
+      if(rowEl){
+        rowEl.scrollIntoView({behavior:'smooth',block:'center'});
+        rowEl.style.transition='background .8s ease';
+        rowEl.style.background='rgba(37,87,199,.15)';
+        setTimeout(function(){ rowEl.style.background=''; },1200);
+      }
+    });
+  }
   // Bar-at-a-year mode re-keys the x-axis to pin labels, not fiscal years,
   // so a data-period hover value can't address a dataIndex on it the same
   // way -- cross-highlight only applies to the default over-time view.
@@ -6722,6 +6803,7 @@ function stmtExploreOpen(){
         '<div class="sx-chips" id="sxSeriesChips"></div>'+
         '<div class="sx-chart-card"><div id="'+STMT_EXPLORE_CHART_ID+'" style="height:min(58vh,540px)"></div></div>'+
         '<div class="stmt-caption" id="sxCaption" style="margin-top:10px"></div>'+
+        '<div id="sxDataTable" style="margin-top:14px"></div>'+
       '</div>';
     document.body.appendChild(ov);
   }
@@ -6819,12 +6901,14 @@ function stmtExploreUpdateChart(){
   const dom=document.getElementById(STMT_EXPLORE_CHART_ID);
   const capEl=document.getElementById('sxCaption');
   const chipsEl=document.getElementById('sxSeriesChips');
+  const tblEl=document.getElementById('sxDataTable');
   if(!dom) return;
   const clearAll=function(msg){
     disposeChart(STMT_EXPLORE_CHART_ID);
     dom.innerHTML='<div class="sx-empty">'+msg+'</div>';
     if(chipsEl) chipsEl.innerHTML='';
     if(capEl) capEl.textContent='';
+    if(tblEl) tblEl.innerHTML='';
   };
   if(!statementsBundle(L.statements.primary)){ clearAll('Load a company first \u2014 close this and use the search box in the bar above.'); return; }
   // Year window with an inverted-range guard: From > To reads as the same
@@ -6961,6 +7045,23 @@ function stmtExploreUpdateChart(){
     if(chipsEl) chipsEl.innerHTML=defs.map(function(o,idx){
       return '<div class="sx-series-chip"><span class="sw" style="background:'+SERIES_PALETTE[idx%SERIES_PALETTE.length].color+'"></span>'+advisorAttr(o.s.name)+'</div>';
     }).join('');
+    // Compact exact-value table below the chart: years as columns, series
+    // as rows, same real-unit formatting the tooltip uses. The chart shows
+    // shape; this shows the numbers behind it without hovering.
+    if(tblEl){
+      const tYears=Array.from(new Set(defs.flatMap(function(o){ return o.data.map(function(p){return p.year;}); }))).sort(function(a,b){return a-b;});
+      let html='<table class="sx-data-table"><thead><tr><th>Metric</th>'+tYears.map(function(y){ return '<th>FY'+y+'</th>'; }).join('')+'</tr></thead><tbody>';
+      defs.forEach(function(o,idx){
+        html+='<tr><td><span class="sw" style="background:'+SERIES_PALETTE[idx%SERIES_PALETTE.length].color+'"></span>'+advisorAttr(o.s.name)+'</td>';
+        tYears.forEach(function(y){
+          const pt=o.data.find(function(p){ return p.year===y; });
+          html+='<td>'+(pt&&pt.value!=null?advisorAttr(formatCellRaw(o.label,pt.value)):'\u2014')+'</td>';
+        });
+        html+='</tr>';
+      });
+      html+='</tbody></table>';
+      tblEl.innerHTML=html;
+    }
     let cap=stmtExploreLinesCaption(defs,st);
     if(mixed) cap='Rupee rows and ratio rows draw as two stacked bands over the same years, each with its own scale. '+cap;
     // The ratio band only gets a real unit name (%, days, x) when every row
@@ -6997,7 +7098,7 @@ function stmtExploreUpdateChart(){
       }
       if(observations.length) cap+='\n'+observations.join('. ')+'.'; 
     }
-    if(capEl) { capEl.textContent=cap; capEl.style.whiteSpace='pre-line'; }
+    if(capEl){ capEl.textContent=cap; capEl.className='sx-caption-block'; }
     return;
   }
 
@@ -7065,6 +7166,20 @@ function stmtExploreUpdateChart(){
     }
     chipsEl.innerHTML=chips;
   }
+  // Scatter-mode data table: one row per year, X and Y columns, real units.
+  if(tblEl){
+    let html='<table class="sx-data-table"><thead><tr><th>Year</th>'
+      +'<th>'+advisorAttr(xDef.label)+'</th>'
+      +'<th>'+advisorAttr(yDef.label)+'</th>'
+      +'</tr></thead><tbody>';
+    pairsRaw.forEach(function(p){
+      html+='<tr><td>FY'+p.year+'</td>'
+        +'<td>'+advisorAttr(formatCellRaw(xDef.label,p.x))+'</td>'
+        +'<td>'+advisorAttr(formatCellRaw(yDef.label,p.y))+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    tblEl.innerHTML=html;
+  }
   if(capEl){
     let cap='FY'+pairsRaw[0].year+'\u2013FY'+pairsRaw[pairsRaw.length-1].year+', '+pairsRaw.length+' common years.';
     cap+=' X: '+xDef.label+stmtExploreUnitSuffix(xDef.label)+' ('+xDef.sym+').';
@@ -7078,7 +7193,7 @@ function stmtExploreUpdateChart(){
     if(!pearsonEl){
       pearsonEl=document.createElement('div');
       pearsonEl.id='sxPearsonExplain';
-      pearsonEl.style.cssText='margin-top:10px;padding:12px 16px;background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.12);border-radius:10px;font-size:12.5px;color:rgba(20,40,63,.7);line-height:1.65;max-width:820px';
+      pearsonEl.className='sx-pearson-explain';
       capEl.parentNode.insertBefore(pearsonEl,capEl.nextSibling);
     }
     if(pearsonR!=null){
@@ -7144,6 +7259,14 @@ document.body.addEventListener('click', function(e){
     statementsSetCompare(sym);
     // fetchStatementsCompany is async — re-render controls after it settles
     setTimeout(function(){ stmtExploreRenderControls(); stmtExploreUpdateChart(); },600);
+    return;
+  }
+  // Clicking anywhere else inside the overlay while the inline compare
+  // search is open cancels back to the "+ Compare" button — otherwise the
+  // search stays stuck open with no way back except closing the whole deck.
+  if(stmtExploreCompareLoading && !e.target.closest('[data-sx-compare-input]') && !e.target.closest('[data-sx-add-compare]')){
+    stmtExploreCompareLoading=false;
+    stmtExploreRenderControls();
     return;
   }
   var modeBtn=e.target.closest('[data-sx-mode]');
@@ -7264,7 +7387,16 @@ document.getElementById('main').addEventListener('mouseover', function(e){
         +'Best '+advisorAttr(formatCellRaw(parsed.label,box.best.value))+' (FY'+box.best.year+')<br/>'
         +'Worst '+advisorAttr(formatCellRaw(parsed.label,box.worst.value))+' (FY'+box.worst.year+')<br/>'
         +(box.cagr!=null?box.years+'Y CAGR '+(box.cagr*100).toFixed(1)+'%':'CAGR crosses a loss year')
-        +'</div>':'');
+        +'</div>':'')
+      +(function(){
+        // The same deterministic readingSentence the table's reading column
+        // prints — repeated here so the popup is a complete mini-briefing
+        // without needing to find the row in the dense table. Sub-year rows
+        // (quarterly/shareholding) get their sentence too.
+        var isSubYear = parsed.section==='quarterly' || parsed.section==='shareholding';
+        var sentence=readingSentence(labelTxt,series,isSubYear);
+        return sentence?'<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(20,40,63,.08);font-family:Figtree,sans-serif;font-size:11.5px;color:rgba(20,40,63,.72);line-height:1.5">'+advisorAttr(sentence)+'</div>':'';
+      })();
     var rect=tr.getBoundingClientRect();
     stmtHoverPopup.style.display='';
     stmtHoverPopup.style.left=Math.min(rect.right+12, window.innerWidth-300)+'px';
@@ -7496,6 +7628,13 @@ function updateStatementsUI(){
   updateProfitCashChart();
   renderStatementTables();
   const depthEl=document.getElementById('stmtDepth'); if(depthEl) depthEl.innerHTML = renderDepthMetricsHTML();
+  const peersEl=document.getElementById('stmtPeers'); if(peersEl) peersEl.innerHTML = renderPeerTableHTML();
+  // The Peers jump-nav button only makes sense when there's a table to
+  // jump to — screener.in loads its peer rows via JS, so this card is
+  // usually empty; an orphan nav button that scrolls to nothing reads as
+  // a bug.
+  var peersBtn=document.querySelector('#stmtJumpNav [data-stmt-jump="stmtPeers"]');
+  if(peersBtn) peersBtn.style.display=(peersEl && peersEl.innerHTML) ? '' : 'none';
   // P/E band chart: price on top, P/E below, sharing the x-axis. Run only
   // after the innerHTML assignment just above has actually put
   // #stmtPeBandChart into the DOM -- see the comment in
@@ -7613,7 +7752,7 @@ document.body.addEventListener('click', e=>{
   const btn = e.target.closest('#stmtJumpNav button');
   if(!btn) return;
   // Two addressing schemes on one bar: a plain id for cards that only ever
-  // appear once (data-stmt-jump), and a canonical section key for the four
+  // appear once (data-stmt-jump), and a canonical section key for the six
   // statement tables, which live inside #stmtTables and are looked up by
   // their data-stmt-section attribute so this keeps working regardless of
   // which sections a given company's schema actually renders.

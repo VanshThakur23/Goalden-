@@ -1201,7 +1201,7 @@ function peBandChartOption(priceFySeries, peResult) {
       { type: 'category', gridIndex: 1, data: peYears.length ? peYears : years, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
     ],
     yAxis: [
-      { gridIndex: 0, type: 'value', name: '\u20b9 / share', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => '\u20b9' + formatCroreSafe(v), fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
+      { gridIndex: 0, type: 'value', name: '\u20b9 / share', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => '\u20b9' + formatShareValueSafe(v), fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
       { gridIndex: 1, type: 'value', name: 'P/E (x)', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
     ],
     tooltip: { trigger: 'axis', confine: true },
@@ -1528,6 +1528,17 @@ function formatCroreSafe(v) {
   if (abs >= 1e7) return (v / 1e7).toFixed(1) + 'L Cr';
   if (abs >= 1e3) return (v / 1e3).toFixed(1) + 'k Cr';
   return v.toFixed(0) + ' Cr';
+}
+// Per-share rupee values (a stock price, not a whole-statement aggregate)
+// -- same abbreviation style as formatCroreSafe but without its "Cr" suffix,
+// which would turn a Rs4,000 share price into the nonsensical "Rs4.0k Cr".
+function formatShareValueSafe(v) {
+  if (v == null || !isFinite(v)) return '\u2014';
+  const sign = v < 0 ? '-' : '';
+  const abs = Math.abs(v);
+  if (abs >= 1e5) return sign + (abs / 1e5).toFixed(1) + 'L';
+  if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + 'k';
+  return sign + abs.toFixed(0);
 }
 function advisorEscapeSafe(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });

@@ -2287,3 +2287,127 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
   OK.
 - Last commit pushed: (see next commit)
 
+
+---
+
+## 2026-08-18 - opencode - Explore deck overlap fix + two-company comparison + Pearson explanation
+
+### Done
+- Fixed the overlap between chart, caption and Pearson explanation panel
+  inside the Explore fullscreen deck. Added .sx-caption-block and
+  .sx-pearson-explain CSS classes with proper margins; updated JS to use
+  these classes instead of inline styles.
+- Two-company comparison: each Explore slot and each scatter axis now has
+  its own company selector when a comparison company is loaded. Series
+  names include the company symbol when different from primary.
+- Pearson r explained: visible plain-language panel below the scatter
+  chart explaining what r means, where this value sits on the -1 to +1
+  scale, and that it describes the past window without predicting or
+  implying causation.
+- "+ Compare with another company" button in the Explore controls when no
+  comparison company is loaded, with inline search input. Loads the company
+  via fetchStatementsCompany and re-renders controls with both companies.
+
+### Verified
+- node --test engine.test.js: 102/102 PASS.
+- smoke-02, 05-13: ALL PASS.
+- Inline-script parse across all four HTML files: ALL OK.
+- Render-count tripwire: zero render()/updateStatementsUI() calls.
+
+### Known / not done
+- No commit made (per the git rule).
+- NOT browser-tested: overlap fix, two-company rendering, Pearson
+  explanation readability need Claude Code's live browser pass.
+
+---
+
+## 2026-08-18 - opencode - Explore data table, Bench drill-down, hover reading line, peer card groundwork
+
+### Done
+- Explore deck: compact exact-value table below the chart in both modes.
+  Lines mode = metrics as rows, years as columns, same real-unit
+  formatting the tooltip uses. Scatter mode = one row per year, X and Y
+  values. The chart shows shape; this shows the numbers without hovering.
+- Bench chart: double-click any series to scroll to its source table row
+  and pulse it — same drill-down pattern the Explore deck already had.
+  seriesIndex maps to pins order (one echarts series per pin).
+- Compare-search stuck state fixed: clicking anywhere else inside the
+  overlay cancels the inline compare search back to the "+ Compare"
+  button; previously only closing the deck got out of it.
+- Row hover popup now also prints the row's deterministic readingSentence
+  below best/worst/CAGR, so the popup is a complete mini-briefing.
+- Peer comparison card added (#stmtPeers between Growth & Returns and
+  Compounding), wired into updateStatementsUI + jump-nav. IMPORTANT CAVEAT:
+  screener.in loads its peer rows via client-side JS ("Loading peers
+  table..." placeholder in static HTML), so parsePeerTable returns null on
+  fixtures AND live scrapes today. The renderer is correct but will show
+  nothing until the parser gets hydrated-DOM data. Jump-nav Peers button
+  auto-hides while the card is empty.
+
+### Verified
+- node --test engine.test.js: 102/102 PASS.
+- smoke-02, 05-13: ALL PASS.
+- Inline-script parse across all four HTML files: ALL OK.
+- Render-count tripwire: zero render()/updateStatementsUI() calls from new code.
+- rowPolarity/readingSentence availability confirmed (engine shim globals).
+
+### Known / not done
+- No commit made (per the git rule).
+- NOT browser-tested: data table layout, Bench dblclick scroll target,
+  popup reading-line wrap on narrow rows need Claude Code's browser pass.
+- Peer table needs a JS-hydrated fixture or server-side-rendered source to ever fire.
+
+---
+
+## 2026-08-28 - Claude Code - Jump-nav gap, P/E band axis mislabel, Bench drill-down bug
+
+### Done
+- `#stmtJumpNav` was missing buttons for two of the six statement tables
+  (Quarterly Results, Shareholding Pattern). The shareholding/promoter data
+  the user was looking for was rendering correctly all along — TCS just
+  puts it far down the page with no way to jump straight to it. Added the
+  two missing buttons and fixed a stale comment that still said "four
+  statement tables" instead of six.
+- P/E band chart (`peBandChartOption`, statements-engine.js) had its price
+  y-axis (`₹ / share`) formatted with `formatCroreSafe`, a formatter built
+  for whole-statement ₹-crore aggregates that always appends " Cr". A
+  ₹4,000 share price rendered as "₹4.0k Cr" — a nonsensical 4,000-crore
+  per-share figure, and the bug the user's screenshot showed. Added
+  `formatShareValueSafe` (same k/L abbreviation, no "Cr" suffix) and pointed
+  the price axis at it. The cash-flow waterfall's `formatCroreSafe` calls
+  are genuine crore aggregates and were left untouched.
+- Found and fixed a real bug in opencode's Bench dblclick drill-down
+  (flagged by opencode itself as untested): the handler read
+  `s.pins[params.seriesIndex]`, which is a `{section, label}` object, and
+  passed it straight into `advisorAttr()` — stringifying to `"[object
+  Object]"`, which never matches any row's `data-stmt-pin` attribute
+  (`"section|label"`, built via `rowKey()`). Fixed by building the key with
+  `rowKey(pin.section, pin.label)` before the lookup.
+
+### Verified
+- `node --check statements-engine.js`: OK.
+- Inline-script extraction + `node --check`: OK.
+- `node --test engine.test.js`: 102/102 PASS.
+- Live in the browser (TCS): P/E band chart's axis formatter sample-tested
+  with `[500, 4000, 123456, 0.5]` → `["₹500", "₹4.0k", "₹1.2L", "₹1"]`,
+  zero errors.
+- Live: jump-nav buttons for Quarterly Results and Shareholding Pattern
+  resolve to the correct section via the existing generic
+  `data-stmt-jump-section` handler.
+- Live: Explore deck's exact-value data table confirmed in both lines mode
+  (Sales/Net Profit, real FY-column headers) and scatter mode (12 rows,
+  Year/X/Y columns).
+- Live: Peers card correctly renders nothing and its jump-nav button stays
+  hidden — matches the documented screener.in client-side-hydration gap,
+  not a bug.
+- Live: compare-search cancels back to the "+ Compare" button on any click
+  outside the input/button.
+- Live: row hover popup's new reading-sentence mini-briefing renders
+  correctly below best/worst/CAGR.
+- Live: Bench dblclick drill-down, after the fix, scrolls to and pulses
+  the correct row — confirmed by capturing the live-registered handler and
+  invoking it directly with `{seriesIndex: 0}`.
+
+### Known / not done
+- Peer table still needs a JS-hydrated fixture or server-rendered source
+  before it can show anything — unchanged from opencode's note above.
