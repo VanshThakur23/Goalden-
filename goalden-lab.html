@@ -7360,62 +7360,6 @@ document.getElementById('main').addEventListener('scroll', function(){
   });
 },{passive:true});
 
-// Statement table row hover popup — a floating card showing the row's
-// sparkline, best/worst/CAGR, and a "pin" button. Appears near the cursor,
-// disappears on mouseout. Pure DOM patch, no re-render.
-var stmtHoverPopup=null, stmtHoverTimeout=null;
-document.getElementById('main').addEventListener('mouseover', function(e){
-  if(L.tab!=='statements') return;
-  var tr=e.target.closest('[data-stmt-pin]');
-  if(!tr){ if(stmtHoverPopup) stmtHoverPopup.style.display='none'; return; }
-  var key=tr.dataset.stmtPin;
-  if(stmtHoverPopup && stmtHoverPopup.dataset.forKey===key){ stmtHoverPopup.style.display=''; return; }
-  if(stmtHoverTimeout) clearTimeout(stmtHoverTimeout);
-  stmtHoverTimeout=setTimeout(function(){
-    var parsed=parseRowKey(key);
-    var primary=statementsBundle(L.statements.primary);
-    if(!primary) return;
-    var section=primary[parsed.section]; if(!section) return;
-    var series=fySeriesSafe(section,parsed.label); if(!series.length) return;
-    var box=rowBoxScore(series);
-    var spark=sparklineSVG(series);
-    if(!stmtHoverPopup){
-      stmtHoverPopup=document.createElement('div');
-      stmtHoverPopup.style.cssText='position:fixed;z-index:2000;background:#fff;border:1px solid rgba(20,40,63,.15);border-radius:12px;box-shadow:0 8px 30px rgba(20,40,63,.18);padding:14px 16px;font-size:12px;pointer-events:none;max-width:280px';
-      document.body.appendChild(stmtHoverPopup);
-    }
-    stmtHoverPopup.dataset.forKey=key;
-    var label=tr.querySelector('.stmt-label');
-    var labelTxt=label?label.textContent:key.split('|')[1];
-    stmtHoverPopup.innerHTML='<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:14px;color:#14283F;margin-bottom:6px">'+advisorAttr(labelTxt)+'</div>'
-      +'<div style="margin-bottom:8px">'+spark+'</div>'
-      +(box?'<div style="font-family:\'Spline Sans Mono\',monospace;font-size:10.5px;color:rgba(20,40,63,.6);line-height:1.5">'
-        +'Best '+advisorAttr(formatCellRaw(parsed.label,box.best.value))+' (FY'+box.best.year+')<br/>'
-        +'Worst '+advisorAttr(formatCellRaw(parsed.label,box.worst.value))+' (FY'+box.worst.year+')<br/>'
-        +(box.cagr!=null?box.years+'Y CAGR '+(box.cagr*100).toFixed(1)+'%':'CAGR crosses a loss year')
-        +'</div>':'')
-      +(function(){
-        // The same deterministic readingSentence the table's reading column
-        // prints — repeated here so the popup is a complete mini-briefing
-        // without needing to find the row in the dense table. Sub-year rows
-        // (quarterly/shareholding) get their sentence too.
-        var isSubYear = parsed.section==='quarterly' || parsed.section==='shareholding';
-        var sentence=readingSentence(labelTxt,series,isSubYear);
-        return sentence?'<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(20,40,63,.08);font-family:Figtree,sans-serif;font-size:11.5px;color:rgba(20,40,63,.72);line-height:1.5">'+advisorAttr(sentence)+'</div>':'';
-      })();
-    var rect=tr.getBoundingClientRect();
-    stmtHoverPopup.style.display='';
-    stmtHoverPopup.style.left=Math.min(rect.right+12, window.innerWidth-300)+'px';
-    stmtHoverPopup.style.top=Math.max(10, rect.top-10)+'px';
-  }, 300);
-});
-document.getElementById('main').addEventListener('mouseout', function(e){
-  if(L.tab!=='statements') return;
-  if(!e.target.closest('[data-stmt-pin]')) return;
-  if(stmtHoverTimeout) clearTimeout(stmtHoverTimeout);
-  stmtHoverTimeout=setTimeout(function(){ if(stmtHoverPopup) stmtHoverPopup.style.display='none'; }, 200);
-});
-
 /* ---- rendering: the four statement tables ----------------------------- */
 function statementRowHTML(sectionKey, label, primarySection, compareSection, periods, pinnedSet, focusYear, changeMode, rowIndex){
 
@@ -7941,8 +7885,12 @@ document.body.addEventListener('mouseover', e=>{
     stmtHlRaf=null;
     const root=document.getElementById('stmtRoot');
     if(!root) return;
+    // Only the hovered row lights up (data-hl-metric) -- data-hl-period is
+    // deliberately never written to the DOM here, since painting every row's
+    // cell in that column made unrelated rows look "selected" on a plain
+    // hover. The period is still passed straight to the chart cross-highlight
+    // below, which is a targeted single-point echo, not a table-wide fill.
     if(root.dataset.hlMetric!==stmtHlPendingMetric) root.dataset.hlMetric=stmtHlPendingMetric;
-    if(root.dataset.hlPeriod!==stmtHlPendingPeriod) root.dataset.hlPeriod=stmtHlPendingPeriod;
     statementsCrossHighlight(stmtHlPendingMetric, stmtHlPendingPeriod);
   });
 });
