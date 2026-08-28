@@ -2444,3 +2444,41 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
 - Live: confirmed the bottom of the second grid (P/E line) still leaves
   ~74px of clearance for its x-axis labels and the dataZoom slider — no
   new clipping introduced at the bottom.
+
+---
+
+## 2026-08-28 - Claude Code - Explore deck: switching a slot's company left its metric dropdown showing the old company's rows
+
+### Done
+- User report: picking Sales for TCS and Sales for HDFC Bank in the
+  Explore deck's lines mode only ever showed one company's line. Traced
+  to the per-slot "Company" `<select>` change handler
+  (`document.body`'s delegated `change` listener, `data-sx-company`
+  branch for slot ids): it updated `st.slotCompanies[si]` and nulled out
+  the slot's metric if it didn't exist on the new company, but never
+  called `stmtExploreRenderControls()`. The slot's own metric `<select>`
+  kept rendering the *previous* company's row list, so a value that
+  looked selectable (e.g. "Sales") silently didn't exist for the newly
+  chosen company — HDFC Bank reports `Revenue`, not `Sales`, by design
+  (banks and non-banks use different as-reported labels, no synonym map
+  per the statements plan). `stmtExploreSeriesFor` returned null for
+  that slot and it vanished from the chart and table with no error.
+  This is distinct from the intentional schema refusal — the bug is that
+  the UI never told the user their selection had gone stale.
+- Fixed by calling `stmtExploreRenderControls()` in that branch too, the
+  same way the scatter-mode x/y company branch already does — the
+  dropdown now rebuilds against the new company's actual catalog
+  immediately, and a metric that doesn't carry over resets to
+  "— none —" instead of silently pointing at nothing.
+
+### Verified
+- Inline-script extraction + `node --check`: OK. `node --test
+  engine.test.js`: 102/102 PASS.
+- Live (TCS + HDFCBANK compare, local server): switching slot 1's company
+  selector to "compare" rebuilds its metric dropdown to HDFC Bank's own
+  catalog (`Revenue`, `Interest`, `Expenses`, `Financing Profit`,
+  `Financing Margin %`, ...) instead of TCS's.
+- Live: with slot 0 = Sales (TCS) and slot 1 = Revenue (HDFCBANK), both
+  lines render together — `series` names `["Sales", "Revenue
+  (HDFCBANK)"]` — and both rows appear in the exact-value data table.
+  Zero console errors.

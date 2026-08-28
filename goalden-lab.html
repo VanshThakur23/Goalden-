@@ -7307,6 +7307,12 @@ document.body.addEventListener('change', function(e){
       // Drop dead selections from the other company's row list
       var cat=stmtExploreCatalogFor(stmtExploreCompanySym(e.target.value));
       if(st.slots[si] && !cat.some(function(c){ return c.key===st.slots[si]; })) st.slots[si]=null;
+      // Rebuild this slot's metric <select> against the new company's
+      // catalog -- without this the dropdown kept listing the OLD
+      // company's row labels (e.g. "Sales" for a bank that only reports
+      // "Revenue"), so picking a metric that no longer applied silently
+      // dropped that slot from the chart with no error.
+      stmtExploreRenderControls();
     } else {
       st.company=e.target.value;
       if(which==='x') st.xCompany=e.target.value;
