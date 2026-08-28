@@ -2411,3 +2411,36 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
 ### Known / not done
 - Peer table still needs a JS-hydrated fixture or server-rendered source
   before it can show anything — unchanged from opencode's note above.
+
+---
+
+## 2026-08-28 - Claude Code - P/E band chart: axis name and median-line label were clipped by the canvas edge
+
+### Done
+- User screenshot showed the top-left `₹ / share` axis name cut off
+  mid-glyph, and the P/E grid's median markLine label truncated to "medi"
+  on the right. Both were ECharts drawing past its own canvas boundary,
+  not a CSS overflow issue (confirmed the container and its parent both
+  have `overflow: visible` — the clip was the canvas itself).
+- Measured the actual cause with `convertToPixel`: `grid[0].top: 20` put
+  the axis name's top edge at pixel y ≈ -1.6 (name needs ~26px above the
+  topmost gridline: nameGap 15 + text height); `grid[*].right: 26` put the
+  median label's text end at pixel x ≈ 1154 against a canvas only 1115px
+  wide.
+- Fixed by widening both grids' margins: `top: 20 → 32` on the price grid,
+  `right: 26 → 70` on both grids (both must match, or the linked x-axis
+  between the two stacked grids stops aligning pixel-for-pixel).
+
+### Verified
+- `node --check statements-engine.js`: OK. `node --test engine.test.js`:
+  102/102 PASS.
+- Live (TCS, local server): `convertToPixel` on the fixed option puts the
+  axis-name anchor at y≈36.2 (was 24.4) — positive margin, no longer
+  clipped.
+- Live: measured the median label's actual rendered width via
+  `canvas.measureText` against the new grid boundary — text now ends at
+  x≈1102 inside a 1115px-wide canvas (was ending at ≈1154, 39px past the
+  edge).
+- Live: confirmed the bottom of the second grid (P/E line) still leaves
+  ~74px of clearance for its x-axis labels and the dataZoom slider — no
+  new clipping introduced at the bottom.

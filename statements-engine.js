@@ -1193,8 +1193,16 @@ function peBandChartOption(priceFySeries, peResult) {
       { type: 'slider', xAxisIndex: [0, 1], bottom: 2, height: 18 },
     ],
     grid: [
-      { left: 70, right: 26, top: 20, height: '42%', containLabel: true },
-      { left: 70, right: 26, top: '64%', bottom: 56, containLabel: true },
+      // top:32 (not 20) leaves room for the yAxis name drawn above the
+      // topmost gridline -- at 20 the name's glyphs land at a negative
+      // pixel y and get clipped by the canvas edge instead of the axis.
+      { left: 70, right: 70, top: 32, height: '40%', containLabel: true },
+      // right:70 (not 26) on both grids -- the P/E median markLine's
+      // label ("median 25.3x") draws past the grid's right edge toward
+      // the axis end, and at 26 that text ran off the canvas entirely.
+      // Both grids must share right/left so the linked x-axis stays
+      // pixel-aligned between the two stacked charts.
+      { left: 70, right: 70, top: '62%', bottom: 56, containLabel: true },
     ],
     xAxis: [
       { type: 'category', gridIndex: 0, data: years, axisLabel: { show: false }, axisTick: { show: false }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
