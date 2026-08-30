@@ -1295,3 +1295,114 @@ test('parseGrowthSummaries reads each card\'s own table, not the next card\'s (s
   assert.strictEqual(out.compoundedProfitGrowth[0].values[0], 8, 'profit growth reads its own 8%, not stock CAGR\'s 6%');
   assert.strictEqual(out.stockPriceCAGR[1].values[0], -9, 'negative percentages parse correctly, not dropped to null');
 });
+
+/* ---- benchChartOption: indexing refuses a zero base ------------------- */
+test('benchChartOption never plots a raw series on an axis labelled Indexed', () => {
+  // A row whose first plotted year is 0 has no base to index against. The
+  // old code returned that 0 as the base, `indexed && base` fell through
+  // falsy, and the series was drawn at its RAW values beside genuinely
+  // indexed ones -- two scales on one axis, which is the manufactured
+  // crossover this page exists to refuse.
+  const pins = [
+    { label: 'Zero base', series: [{ year: 2020, value: 0 }, { year: 2021, value: 50 }] },
+    { label: 'Normal', series: [{ year: 2020, value: 100 }, { year: 2021, value: 150 }] },
+  ];
+  const opt = stmt.benchChartOption(pins, true);
+  assert.deepStrictEqual(opt.series[0].data, [null, null], 'zero-base series is refused, not drawn raw');
+  assert.deepStrictEqual(opt.series[1].data, [100, 150], 'normal series still indexes');
+  assert.deepStrictEqual(opt.__notIndexable, ['Zero base'], 'names the refused row so the caption can explain it');
+  // Actual (non-indexed) mode is unaffected -- the values are real there.
+  assert.deepStrictEqual(stmt.benchChartOption(pins, false).series[0].data, [0, 50]);
+});
+
+/* ---- vsOwnMedian: refuses a non-positive median ----------------------- */
+test('vsOwnMedian refuses a negative median instead of inverting the column', () => {
+  // Median is -150. Dividing by it ranks the SMALLEST loss (-50) lowest at
+  // 0.33 and the LARGEST loss (-200) highest at 1.33, so the best year
+  // reads as the weakest. There is no sign convention that fixes this.
+  const loss = [{ year: 2020, value: -100 }, { year: 2021, value: -200 },
+                { year: 2022, value: -150 }, { year: 2023, value: -50 }];
+  assert.ok(stmt.vsOwnMedian(loss).every((r) => r.ratio === null), 'every ratio refused');
+  const ok = [{ year: 2020, value: 100 }, { year: 2021, value: 200 }];
+  assert.deepStrictEqual(stmt.vsOwnMedian(ok).map((r) => r.ratio), [2 / 3, 4 / 3], 'positive median still computes');
+});
+
+/* ---- crossCompanyDivergence ------------------------------------------ */
+const divYears = [2018, 2019, 2020, 2021, 2022, 2023].map((y) => ({ type: 'fy', year: y }));
+const divRow = (label, vals) => ({ label, values: vals.map((v) => ({ raw: String(v), value: v })) });
+const divCo = (symbol, schema, pl, bs) => ({
+  symbol, schema,
+  profitLoss: { rows: pl, periods: divYears },
+  balanceSheet: { rows: bs || [], periods: divYears },
+  cashFlow: { rows: [], periods: divYears },
+  ratios: { rows: [], periods: divYears },
+});
+
+test('crossCompanyDivergence ranks opposite-direction rows above bigger gaps', () => {
+  const A = divCo('AAA', 'nonfinancial',
+    [divRow('Sales', [100, 120, 140, 170, 200, 240]), divRow('Interest', [5, 5, 6, 6, 7, 7])],
+    [divRow('Reserves', [500, 540, 560, 620, 700, 800])]);
+  const B = divCo('BBB', 'nonfinancial',
+    [divRow('Sales', [100, 105, 108, 112, 118, 124]), divRow('Interest', [5, 7, 10, 14, 19, 26])],
+    [divRow('Reserves', [500, 480, 450, 430, 410, 390])]);
+  const d = stmt.crossCompanyDivergence(A, B);
+  assert.strictEqual(d.rows[0].label, 'Reserves', 'a sign disagreement outranks a larger magnitude gap');
+  assert.strictEqual(d.rows[0].opposite, true);
+  assert.strictEqual(d.rows[1].label, 'Interest', 'then the largest gap: +420% vs +40%');
+  assert.strictEqual(Math.round(d.rows[1].gapPoints), 380);
+  assert.deepStrictEqual(d.window, { from: 2018, to: 2023 });
+});
+
+test('crossCompanyDivergence pairs only rows both companies actually report', () => {
+  // A lender reports Revenue, a manufacturer reports Sales. With no synonym
+  // map, the row-set intersection means that pairing can never be formed --
+  // the refusal is structural, not a special case.
+  const bank = divCo('BANKX', 'financial', [divRow('Revenue', [100, 110, 120, 130, 140, 150]), divRow('Net Profit', [10, 12, 14, 16, 18, 20])]);
+  const mfr = divCo('MFRX', 'nonfinancial', [divRow('Sales', [100, 120, 140, 160, 180, 200]), divRow('Net Profit', [10, 11, 12, 13, 14, 15])]);
+  const d = stmt.crossCompanyDivergence(bank, mfr);
+  const labels = d.rows.map((r) => r.label);
+  assert.ok(!labels.includes('Sales') && !labels.includes('Revenue'), 'no Sales/Revenue pairing across schemas');
+  assert.ok(labels.includes('Net Profit'), 'genuinely shared rows still compare');
+  assert.strictEqual(d.refusalApplied, 'SCHEMA_MISMATCH');
+  assert.ok(d.rows.every((r) => r.section !== 'balanceSheet' && r.section !== 'cashFlow'),
+    'the balance sheet stays refused rather than reappearing as a divergence ranking');
+});
+
+test('crossCompanyDivergence refuses windows that are too short or cross zero', () => {
+  const shortYears = [{ type: 'fy', year: 2022 }, { type: 'fy', year: 2023 }];
+  const short = (sym) => ({ symbol: sym, schema: 'nonfinancial',
+    profitLoss: { rows: [divRow('Sales', [100, 120])], periods: shortYears },
+    balanceSheet: { rows: [], periods: shortYears }, cashFlow: { rows: [], periods: shortYears }, ratios: { rows: [], periods: shortYears } });
+  assert.strictEqual(stmt.crossCompanyDivergence(short('A'), short('B')).rows.length, 0, 'two overlapping years is below the minimum');
+
+  const A = divCo('AAA', 'nonfinancial', [divRow('Net Profit', [-10, -5, 5, 10, 15, 20])]);
+  const B = divCo('BBB', 'nonfinancial', [divRow('Net Profit', [10, 11, 12, 13, 14, 15])]);
+  const d = stmt.crossCompanyDivergence(A, B);
+  assert.strictEqual(d.rows.length, 0, 'a change from -10 to +20 has no readable percentage');
+  assert.ok(d.skipped.some((s) => s.label === 'Net Profit'), 'and says so rather than dropping it silently');
+});
+
+test('crossCompanyDivergenceSentence is deterministic and free of judgement words', () => {
+  const A = divCo('AAA', 'nonfinancial', [divRow('Sales', [100, 120, 140, 170, 200, 240])]);
+  const B = divCo('BBB', 'nonfinancial', [divRow('Sales', [100, 105, 108, 112, 118, 124])]);
+  const row = stmt.crossCompanyDivergence(A, B).rows[0];
+  const s1 = stmt.crossCompanyDivergenceSentence(row, 'AAA', 'BBB');
+  assert.strictEqual(s1, stmt.crossCompanyDivergenceSentence(row, 'AAA', 'BBB'), 'same bytes every call');
+  assert.strictEqual(s1, 'Sales over FY2018–FY2023: AAA +140%, BBB +24% — a gap of 116 percentage points.');
+  const banned = /\b(because|due to|driven by|will|expected|likely|cheap|expensive|undervalued|overvalued|attractive|good|strong|weak|healthy|deteriorat|improv|concerning|risky|better|worse|safer|outperform)/i;
+  assert.ok(!banned.test(s1), 'no causal, forecast, valuation or judgement vocabulary');
+});
+
+test('crossCompanyDivergence does not call a rounding-level move an opposite direction', () => {
+  // TCS -16% vs INFY +0% is a sign disagreement on paper only. Flagging it
+  // as "opposite directions" put it above a genuine 2287-point gap on real
+  // TCS/INFY data. Both sides must actually have moved.
+  const A = divCo('AAA', 'nonfinancial', [divRow('Net Profit', [100, 96, 92, 88, 86, 84])]);      // -16%
+  const B = divCo('BBB', 'nonfinancial', [divRow('Net Profit', [100, 100, 100, 100, 100, 100.2])]); // +0.2%
+  const flat = stmt.crossCompanyDivergence(A, B).rows[0];
+  assert.strictEqual(flat.opposite, false, 'a flat line is not a direction to disagree with');
+
+  const C = divCo('CCC', 'nonfinancial', [divRow('Net Profit', [100, 90, 80, 70, 60, 50])]);   // -50%
+  const D = divCo('DDD', 'nonfinancial', [divRow('Net Profit', [100, 120, 140, 160, 180, 200])]); // +100%
+  assert.strictEqual(stmt.crossCompanyDivergence(C, D).rows[0].opposite, true, 'two real moves in opposite directions still flag');
+});

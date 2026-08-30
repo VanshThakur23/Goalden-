@@ -695,6 +695,7 @@ body.stmt-page main{max-width:1600px}
 .stmt-zone-header{grid-column:1/-1;display:flex;align-items:center;gap:12px;font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin:10px 0 -6px}
 .stmt-zone-header::after{content:'';flex:1;height:1px;background:rgba(20,40,63,.13)}
 #stmtBenchCard{grid-column:1/-1}
+#stmtPartedCard{grid-column:1/-1}
 #stmtExploreCard{grid-column:1/-1;background:rgba(37,87,199,.03);border:1px dashed rgba(37,87,199,.35);box-shadow:none;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
 #stmtExploreCard:hover{background:rgba(37,87,199,.06);box-shadow:0 2px 10px rgba(20,40,63,.06)}
 #stmtExploreCard .stmt-section-title{margin-bottom:0}
@@ -913,6 +914,23 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .sx-data-table .sw{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 .sx-open-btn{margin-left:auto;font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600;background:rgba(37,87,199,.1);color:var(--gold);border:1px solid rgba(37,87,199,.3);border-radius:10px;padding:6px 13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;transition:background .12s,border-color .12s}
 .sx-open-btn:hover{background:rgba(37,87,199,.22);border-color:var(--gold)}
+
+/* "Where they parted" — cross-company divergence. Neutral accent only: a
+   wider gap between two companies is a bigger number, not a worse one, so
+   nothing here is red. The red budget belongs to divergence flags. */
+.stmt-parted-lede{font-size:12.5px;color:rgba(20,40,63,.62);line-height:1.6;margin:2px 0 12px;max-width:760px}
+.stmt-parted-empty{font-size:12.5px;color:rgba(20,40,63,.6);line-height:1.6;padding:6px 0 2px;max-width:760px}
+.stmt-parted-list{display:flex;flex-direction:column;gap:6px}
+.stmt-parted-row{display:grid;grid-template-columns:104px 1fr 84px;align-items:center;gap:12px;width:100%;text-align:left;background:rgba(20,40,63,.02);border:1px solid rgba(20,40,63,.09);border-left:3px solid transparent;border-radius:9px;padding:9px 12px;cursor:pointer;font-family:'Figtree',sans-serif;transition:background .12s,border-color .12s}
+.stmt-parted-row:hover{background:rgba(37,87,199,.06);border-color:rgba(37,87,199,.28)}
+.stmt-parted-row.pinned{border-left-color:#2557C7;background:rgba(37,87,199,.05)}
+.stmt-parted-sec{font-family:'Spline Sans Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:rgba(20,40,63,.45)}
+.stmt-parted-txt{font-size:12.5px;color:rgba(20,40,63,.82);line-height:1.5}
+.stmt-parted-tag{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:20px;background:rgba(20,40,63,.08);font-family:'Spline Sans Mono',monospace;font-size:9.5px;letter-spacing:.03em;color:rgba(20,40,63,.6);vertical-align:1px}
+.stmt-parted-bar{display:block;height:5px;border-radius:3px;background:rgba(20,40,63,.07);overflow:hidden}
+.stmt-parted-bar>span{display:block;height:100%;border-radius:3px;background:#2557C7;opacity:.55}
+.stmt-parted-skipped{margin-top:10px;font-size:11.5px;color:rgba(20,40,63,.5);line-height:1.55;font-style:italic}
+@media(max-width:720px){.stmt-parted-row{grid-template-columns:1fr;gap:5px}.stmt-parted-bar{width:100%}}
 
 /* Jump-nav targets must land below the sticky nav bar, never underneath it */
 .stmt-card,[data-stmt-section]{scroll-margin-top:72px}
@@ -5791,6 +5809,7 @@ function renderStatementsShell(){
     <nav class="stmt-jumpnav" id="stmtJumpNav">
       <button data-stmt-jump="stmtHeaderCard">Overview</button>
       <button data-stmt-jump="stmtBenchCard">The Bench</button>
+      <button data-stmt-jump="stmtPartedCard">Where they parted</button>
       <button data-stmt-jump-section="profitLoss">Profit &amp; Loss</button>
       <button data-stmt-jump-section="quarterly">Quarterly Results</button>
       <button data-stmt-jump-section="balanceSheet">Balance Sheet</button>
@@ -5819,6 +5838,7 @@ function renderStatementsShell(){
         <div id="stmtFlagDetail"></div>
       </div>
     </div>
+    <div class="stmt-card" id="stmtPartedCard" style="display:none"></div>
     <div id="stmtTables" class="stmt-density-compact"></div>
     <div class="stmt-zone-header">Charts</div>
     <div class="stmt-card" id="stmtExploreCard">
@@ -6510,6 +6530,49 @@ function renderBenchChipsHTML(){
   }).join('');
   return chips + `<button class="stmt-chip-clear" id="stmtClearPins">Clear all</button>`;
 }
+/* ---- "Where they parted": cross-company divergence --------------------
+   The divergence rules read one company against itself over time. This
+   reads the two loaded companies against each other and ranks the rows
+   whose growth rates pulled furthest apart. Rendered only when a compare
+   company is loaded; every row is clickable and pins itself, so the card
+   is an entry point into the Bench rather than a dead-end summary.
+   All arithmetic and sentence templating lives in statements-engine.js
+   (crossCompanyDivergence / crossCompanyDivergenceSentence) so it stays
+   unit-testable and byte-identical on every refresh. */
+function renderPartedCardHTML(){
+  const s=L.statements;
+  if(!s.compare) return '';
+  const A=statementsBundle(s.primary), B=statementsBundle(s.compare);
+  if(!A||!B) return '';
+  const d=crossCompanyDivergence(A,B,{limit:5});
+  if(!d) return '';
+  const title=`<div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v6a6 6 0 0 0 6 6 6 6 0 0 1 6 6v3"/><path d="M18 3v6a6 6 0 0 1-6 6 6 6 0 0 0-6 6v3"/></svg>Where they parted</div>`;
+  if(!d.rows.length){
+    return title+`<div class="stmt-parted-empty">No row has enough overlapping years for ${advisorAttr(s.primary)} and ${advisorAttr(s.compare)} to be compared over a common window.${d.refusalApplied?' The balance sheet and cash flow are excluded because these two report on different formats.':''}</div>`;
+  }
+  const w=d.window;
+  const lede=`<div class="stmt-parted-lede">Of the ${d.total} row${d.total===1?'':'s'} both companies report over FY${w.from}&ndash;FY${w.to}, these moved the furthest apart. Percentages are each company&rsquo;s own change across that window. Click a row to pin it.</div>`;
+  const items=d.rows.map(function(r){
+    const key=rowKey(r.section,r.label);
+    const pinned=s.pins.some(p=>rowKey(p.section,p.label)===key);
+    const sentence=crossCompanyDivergenceSentence(r, s.primary, s.compare);
+    // The bar is a pure magnitude cue for the gap, scaled against the
+    // largest gap in this list. Neutral accent only -- a wider gap is not
+    // a worse one, and this page spends its red budget on divergence
+    // flags alone.
+    const maxGap=Math.max.apply(null,d.rows.map(x=>x.gapPoints))||1;
+    const w2=Math.max(4,Math.min(100,r.gapPoints/maxGap*100));
+    return `<button class="stmt-parted-row${pinned?' pinned':''}" data-stmt-parted="${advisorAttr(key)}" type="button" title="${pinned?'Unpin':'Pin'} ${advisorAttr(r.label)}">
+      <span class="stmt-parted-sec">${advisorAttr(r.sectionLabel)}</span>
+      <span class="stmt-parted-txt">${advisorAttr(sentence)}${r.opposite?'<span class="stmt-parted-tag">opposite directions</span>':''}</span>
+      <span class="stmt-parted-bar"><span style="width:${w2.toFixed(1)}%"></span></span>
+    </button>`;
+  }).join('');
+  const skippedNote=d.skipped.length
+    ? `<div class="stmt-parted-skipped">${d.skipped.length} row${d.skipped.length===1?'':'s'} could not be compared &mdash; ${advisorAttr(d.skipped[0].reason)}${d.skipped.length>1?', and similar':''}.</div>`
+    : '';
+  return title+lede+`<div class="stmt-parted-list">${items}</div>`+skippedNote;
+}
 function renderCompanionStripHTML(){
   const s=L.statements;
   // companionFocus tracks whichever the user pinned or clicked most recently
@@ -6550,7 +6613,7 @@ function benchChartOptionAtYear(pins, year){
 // indexed line means, useless for the beginner this whole tab is for.
 // Computed from the pins actually on screen, so it can never drift from
 // what the chart is showing.
-function benchCaptionText(pins, indexed, focusYear){
+function benchCaptionText(pins, indexed, focusYear, notIndexable){
   if(!pins.length) return '';
   const names = pins.map(p=>p.label);
   const list = names.length<=2 ? names.join(' and ') : names.slice(0,-1).join(', ')+' and '+names[names.length-1];
@@ -6559,9 +6622,15 @@ function benchCaptionText(pins, indexed, focusYear){
   const years = pins.flatMap(p=>p.series.map(s=>s.year));
   const minY = years.length?Math.min(...years):null, maxY=years.length?Math.max(...years):null;
   const rangeTxt = (minY!=null && maxY!=null) ? `FY${minY}–FY${maxY}` : '';
-  return indexed
+  // A row whose first plotted year is zero has no base to index against, so
+  // benchChartOption refuses it rather than plotting raw values on an
+  // indexed axis. Say which row went missing instead of leaving a gap.
+  const skipped = (notIndexable&&notIndexable.length)
+    ? ` ${notIndexable.length===1?'One row is':'Some rows are'} not shown here — ${notIndexable.join(', ')} started at zero in ${minY!=null?'FY'+minY:'the first year'}, and there is no percentage of zero. Switch to Actual to see ${notIndexable.length===1?'it':'them'}.`
+    : '';
+  return (indexed
     ? `Indexed to 100 at ${minY!=null?'FY'+minY:'the earliest common year'} so lines are comparable regardless of scale, ${rangeTxt}: ${list}.`
-    : `Actual reported values, ${rangeTxt}: ${list}.`;
+    : `Actual reported values, ${rangeTxt}: ${list}.`) + skipped;
 }
 // Hover tooltip for the default (over-time) Bench chart: the row's real
 // reported value for the hovered year -- never the indexed-to-100 number
@@ -6645,7 +6714,7 @@ function updateBenchChart(){
   // so a data-period hover value can't address a dataIndex on it the same
   // way -- cross-highlight only applies to the default over-time view.
   stmtChartYears.bench = s.focusYear==null ? (option.__years||[]) : [];
-  if(capEl) capEl.textContent = benchCaptionText(pins, s.indexed, s.focusYear);
+  if(capEl) capEl.textContent = benchCaptionText(pins, s.indexed, s.focusYear, option.__notIndexable);
 }
 function renderDivergenceParts(){
   const result = computeStatementsDivergence();
@@ -7400,7 +7469,13 @@ function statementRowHTML(sectionKey, label, primarySection, compareSection, per
     </td>`;
   }).join('');
   const lastVal = primSeriesAll.length ? primSeriesAll[primSeriesAll.length-1].value : null;
-  const vsMedian = (med && lastVal!=null) ? (lastVal/med*100).toFixed(0)+'%' : '\u2014';
+  // Only meaningful against a positive median -- see vsOwnMedian() in
+  // statements-engine.js for why a negative median inverts this column.
+  const vsMedianOk = med!=null && med>0 && lastVal!=null;
+  const vsMedian = vsMedianOk ? (lastVal/med*100).toFixed(0)+'%' : '\u2014';
+  const vsMedianTitle = vsMedianOk ? '' : (med!=null && med<=0
+    ? ' title="This row&rsquo;s 12-year median is not above zero, so a percentage of it would read backwards \u2014 the best year would show the lowest number."'
+    : ' title="Not enough reported values to take a 12-year median."');
   const reading = readingSentence(label, primSeriesAll, sectionKey==='quarterly'||sectionKey==='shareholding');
   const spark = sparklineSVG(primSeriesAll);
   const defKey = sectionKey+'::'+label;
@@ -7426,7 +7501,7 @@ function statementRowHTML(sectionKey, label, primarySection, compareSection, per
       </div>
     </td>
     ${cells}
-    <td class="stmt-vsmedian">${vsMedian}</td>
+    <td class="stmt-vsmedian"${vsMedianTitle}>${vsMedian}</td>
     <td class="stmt-reading">${advisorAttr(reading)}</td>
   </tr>
   <tr class="stmt-def-row" data-stmt-def-row="${advisorAttr(defKey)}" style="display:none"><td colspan="${periods.length+3}">${advisorAttr(rowDefinitionText(label))}</td></tr>${compareRow}`;
@@ -7575,6 +7650,16 @@ function updateStatementsUI(){
   const tickEl=document.getElementById('stmtTickRow'); if(tickEl) tickEl.innerHTML=tickRow;
   const sumEl=document.getElementById('stmtCheckSummary'); if(sumEl) sumEl.innerHTML=summary;
   const flagEl=document.getElementById('stmtFlagDetail'); if(flagEl) flagEl.innerHTML=renderFlagDetailHTML();
+  // Only present when two companies are loaded; hidden (not empty) so the
+  // jump-nav button can be hidden in lockstep and never scroll to nothing.
+  const partedEl=document.getElementById('stmtPartedCard');
+  if(partedEl){
+    const partedHTML=renderPartedCardHTML();
+    partedEl.innerHTML=partedHTML;
+    partedEl.style.display = partedHTML ? '' : 'none';
+    const partedBtn=document.querySelector('#stmtJumpNav [data-stmt-jump="stmtPartedCard"]');
+    if(partedBtn) partedBtn.style.display = partedHTML ? '' : 'none';
+  }
   updateProfitCashChart();
   renderStatementTables();
   const depthEl=document.getElementById('stmtDepth'); if(depthEl) depthEl.innerHTML = renderDepthMetricsHTML();
@@ -7649,6 +7734,15 @@ document.body.addEventListener('click', e=>{
   const el = e.target.closest('[data-stmt-companion-pin]');
   if(!el) return;
   const {section,label} = parseRowKey(el.dataset.stmtCompanionPin);
+  statementsTogglePin(section,label);
+});
+// A "Where they parted" row pins the metric it names, so the card leads
+// into the Bench (where both companies' lines are already drawn) rather
+// than being a summary you can only read.
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-parted]');
+  if(!el) return;
+  const {section,label} = parseRowKey(el.dataset.stmtParted);
   statementsTogglePin(section,label);
 });
 document.body.addEventListener('click', e=>{

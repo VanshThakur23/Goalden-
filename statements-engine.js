@@ -69,14 +69,23 @@ function yearIndex(series, year) {
 // vs-own-median: the sticky rightmost table column and the deviation bars.
 // Ratio > 1 means "above its own 12-year normal", which is legible to a
 // beginner in a way an absolute rupee figure is not.
+// A ratio to the median only reads as "% of its own normal" when that
+// median is positive. On a row whose median is negative (a loss-maker's
+// Net Profit, Cash from Financing, free cash flow) the percentage inverts:
+// the year with the SMALLEST loss divides to the LOWEST percentage, so the
+// best year reads as the weakest one. There is no sign convention that
+// fixes this for a beginner, so it is refused -- `ratio: null`, which the
+// table renders as an em dash with a reason, per the plan's rule that
+// not_computable is never a number.
 function vsOwnMedian(series) {
   const values = series.map((p) => p.value);
   const med = median(values);
+  const usable = med != null && med > 0;
   return series.map((p) => ({
     year: p.year,
     value: p.value,
     median: med,
-    ratio: med && p.value != null ? p.value / med : null,
+    ratio: usable && p.value != null ? p.value / med : null,
   }));
 }
 
@@ -697,32 +706,47 @@ const SERIES_PALETTE = [
 function benchChartOption(pins, indexed) {
   const allSeries = pins.flatMap((p) => [p.series, p.compareSeries || []]);
   const allYears = Array.from(new Set(allSeries.flat().map((s) => s.year))).sort((a, b) => a - b);
+  // A series can only be indexed against a base that is non-zero and
+  // finite. A base of 0 (a row that starts at nothing -- CWIP, borrowings
+  // on a debt-free year, a segment's first year) has no percentage
+  // relationship to anything later. Returning the base unchanged used to
+  // let `indexed && base` fall through falsy and plot that series at its
+  // RAW rupee values on an axis labelled "Indexed (=100)", silently mixing
+  // two scales on one axis -- exactly the manufactured crossover this page
+  // forbids. Such a series is refused instead, and named in __notIndexable
+  // so the caption can say which row dropped out and why.
+  const notIndexable = [];
   const indexBase = (series) => {
     if (!indexed) return null;
     const firstVal = series.find((s) => s.value != null);
-    return firstVal ? firstVal.value : null;
+    if (!firstVal || !firstVal.value || !isFinite(firstVal.value)) return NaN;
+    return firstVal.value;
   };
   const seriesFor = (points, base) => {
     const byYear = new Map(points.map((s) => [s.year, s.value]));
     return allYears.map((y) => {
       const v = byYear.has(y) ? byYear.get(y) : null;
       if (v == null) return null;
-      return indexed && base ? (v / base) * 100 : v;
+      if (!indexed) return v;
+      if (!Number.isFinite(base)) return null; // refused, not silently raw
+      return (v / base) * 100;
+    });
+  };
+  const push = (name, points, style, isCompare) => {
+    const base = indexBase(points);
+    if (indexed && points.length && !Number.isFinite(base)) notIndexable.push(name);
+    series.push({
+      name, type: 'bar', data: seriesFor(points, base),
+      itemStyle: isCompare ? { color: style.color, opacity: 0.45 } : { color: style.color },
+      label: { show: false },
     });
   };
   const series = [];
   pins.forEach((pin, i) => {
     const style = SERIES_PALETTE[i % SERIES_PALETTE.length];
-    series.push({
-      name: pin.label, type: 'bar', data: seriesFor(pin.series, indexBase(pin.series)),
-      itemStyle: { color: style.color }, label: { show: false },
-    });
+    push(pin.label, pin.series, style, false);
     if (pin.compareSeries && pin.compareSeries.length) {
-      series.push({
-        name: (pin.compareLabel || 'Compare') + ' — ' + pin.label, type: 'bar',
-        data: seriesFor(pin.compareSeries, indexBase(pin.compareSeries)),
-        itemStyle: { color: style.color, opacity: 0.45 }, label: { show: false },
-      });
+      push((pin.compareLabel || 'Compare') + ' — ' + pin.label, pin.compareSeries, style, true);
     }
   });
   return {
@@ -736,6 +760,9 @@ function benchChartOption(pins, indexed) {
     // data-period value (a plain fiscal year, e.g. 2023) into the dataIndex
     // this chart's category axis actually uses (e.g. "FY23").
     __years: allYears,
+    // Series that could not be indexed (base year value was 0/null) and so
+    // are drawn empty rather than at raw scale. The caption names them.
+    __notIndexable: notIndexable,
   };
 }
 
@@ -1400,6 +1427,118 @@ function stmtExploreCatalog(bundle) {
   return out;
 }
 
+/* =====================================================================
+   CROSS-COMPANY DIVERGENCE — "Where they parted"
+
+   The divergence rules read ONE company against itself over time. This
+   reads TWO companies against each other, over their common window, and
+   ranks the rows where their growth rates pulled furthest apart.
+
+   Everything is expressed as one unit -- percentage change across the
+   common window -- so a rupee row and a margin row rank on the same
+   scale. Every guard is inherited rather than reinvented: pctChange()
+   already refuses a sign flip and a zero base, and the row set is the
+   INTERSECTION of the two companies' canonical rows, which means a
+   lender vs a manufacturer simply never produces a Sales-vs-Revenue
+   pairing -- the no-synonym-map rule enforced by construction rather
+   than by a special case.
+
+   No causal or comparative language: this reports two growth rates and
+   the arithmetic gap between them. It never says which is better.
+   ===================================================================== */
+const DIVERGENCE_MIN_COMMON_YEARS = 4;
+// A sign disagreement only counts as one when BOTH companies actually
+// moved. Without this, "TCS -16%, INFY +0%" reads as "opposite directions"
+// off the sign of a rounding-level change, and outranks a genuine
+// thousand-point gap — the same relative-gate-alone false positive the
+// single-company rules guard against with an absolute floor.
+const DIVERGENCE_OPPOSITE_MIN_MOVE = 0.10;
+
+function crossCompanyDivergence(bundleA, bundleB, options) {
+  const opts = options || {};
+  const limit = opts.limit || 5;
+  if (!bundleA || !bundleB) return null;
+  const schemaA = bundleA.schema || classifySchema(bundleA.profitLoss);
+  const schemaB = bundleB.schema || classifySchema(bundleB.profitLoss);
+  const rowsA = CANONICAL_ROWS[schemaA];
+  const rowsB = CANONICAL_ROWS[schemaB];
+  if (!rowsA || !rowsB) {
+    return { rows: [], skipped: [], window: null, note: 'One of these companies uses a reporting format we do not recognise, so there is no row set we can line up.' };
+  }
+  const refusal = compareRefusal(bundleA, bundleB);
+  // A schema mismatch already blocks the balance sheet and cash flow from
+  // being shown side by side; ranking their divergence would smuggle the
+  // same comparison back in through a different card.
+  const sections = refusal
+    ? [{ key: 'profitLoss', label: 'Profit & Loss' }, { key: 'ratios', label: 'Ratios' }]
+    : [{ key: 'profitLoss', label: 'Profit & Loss' }, { key: 'balanceSheet', label: 'Balance Sheet' },
+       { key: 'cashFlow', label: 'Cash Flow' }, { key: 'ratios', label: 'Ratios' }];
+
+  const out = [];
+  const skipped = [];
+  let windowFrom = null, windowTo = null;
+
+  sections.forEach((sec) => {
+    const listA = rowsA[sec.key] || [];
+    const listB = rowsB[sec.key] || [];
+    const shared = listA.filter((label) => listB.indexOf(label) >= 0);
+    shared.forEach((label) => {
+      const sa = fySeries(bundleA[sec.key], label);
+      const sb = fySeries(bundleB[sec.key], label);
+      const mapA = new Map(sa.filter((p) => p.value != null).map((p) => [p.year, p.value]));
+      const mapB = new Map(sb.filter((p) => p.value != null).map((p) => [p.year, p.value]));
+      const years = Array.from(mapA.keys()).filter((y) => mapB.has(y)).sort((x, y) => x - y);
+      if (years.length < DIVERGENCE_MIN_COMMON_YEARS) {
+        if (years.length) skipped.push({ section: sec.key, label, reason: 'fewer than ' + DIVERGENCE_MIN_COMMON_YEARS + ' overlapping years' });
+        return;
+      }
+      const from = years[0], to = years[years.length - 1];
+      const pa = pctChange(mapA.get(from), mapA.get(to));
+      const pb = pctChange(mapB.get(from), mapB.get(to));
+      if (pa == null || pb == null) {
+        skipped.push({ section: sec.key, label, reason: 'the change crosses zero or starts from zero for one of them, so a percentage would not mean anything' });
+        return;
+      }
+      if (windowFrom == null || from > windowFrom) windowFrom = from;
+      if (windowTo == null || to > windowTo) windowTo = to;
+      out.push({
+        section: sec.key, sectionLabel: sec.label, label,
+        from, to, years: years.length,
+        pctA: pa, pctB: pb,
+        gapPoints: Math.abs(pa - pb) * 100,
+        opposite: (pa < 0) !== (pb < 0)
+          && Math.abs(pa) >= DIVERGENCE_OPPOSITE_MIN_MOVE
+          && Math.abs(pb) >= DIVERGENCE_OPPOSITE_MIN_MOVE,
+        unit: rowUnit(label),
+      });
+    });
+  });
+
+  // Rows where the two moved in OPPOSITE directions rank above rows where
+  // they merely moved at different speeds -- a sign disagreement is a
+  // categorically different observation from a magnitude one, and sorting
+  // purely by gap size would bury it under a fast-grower's big number.
+  out.sort((x, y) => (Number(y.opposite) - Number(x.opposite)) || (y.gapPoints - x.gapPoints));
+  return {
+    window: windowFrom != null ? { from: windowFrom, to: windowTo } : null,
+    rows: out.slice(0, limit),
+    total: out.length,
+    skipped,
+    refusalApplied: refusal ? refusal.code : null,
+  };
+}
+
+// Deterministic, template-only. Same inputs produce the same bytes on
+// every refresh -- no adjective, no causal connective, no verdict.
+function crossCompanyDivergenceSentence(row, symA, symB) {
+  const pct = (v) => (v >= 0 ? '+' : '') + (v * 100).toFixed(0) + '%';
+  const span = 'FY' + row.from + '–FY' + row.to;
+  const head = symA + ' ' + pct(row.pctA) + ', ' + symB + ' ' + pct(row.pctB);
+  return row.opposite
+    ? row.label + ' moved in opposite directions over ' + span + ': ' + head + '.'
+    : row.label + ' over ' + span + ': ' + head + ' — a gap of ' + row.gapPoints.toFixed(0) + ' percentage points.';
+}
+
 // Aligns two FY series on their common years — the X-vs-Y scatter's
 // backbone. Years present in only one series are dropped (and the caller
 // discloses the shrinkage), never silently paired against a wrong year.
@@ -1575,6 +1714,7 @@ const api = {
   priceToBookLatest, reratingSpread, fyEndPriceSeries, peHistoryBand,
   compoundingChecklist, checklistQualityGate,
   stmtExploreCatalog, alignFyPairs, pctOfSalesSeries, pearsonR,
+  crossCompanyDivergence, crossCompanyDivergenceSentence,
   growthChartOption, cashFlowWaterfallOption, companionMapFor,
   peBandChartOption,
 };
