@@ -696,6 +696,7 @@ body.stmt-page main{max-width:1600px}
 .stmt-zone-header::after{content:'';flex:1;height:1px;background:rgba(20,40,63,.13)}
 #stmtBenchCard{grid-column:1/-1}
 #stmtPartedCard{grid-column:1/-1}
+#stmtLynchCard{grid-column:1/-1}
 #stmtExploreCard{grid-column:1/-1;background:rgba(37,87,199,.03);border:1px dashed rgba(37,87,199,.35);box-shadow:none;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
 #stmtExploreCard:hover{background:rgba(37,87,199,.06);box-shadow:0 2px 10px rgba(20,40,63,.06)}
 #stmtExploreCard .stmt-section-title{margin-bottom:0}
@@ -930,6 +931,22 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-parted-bar{display:block;height:5px;border-radius:3px;background:rgba(20,40,63,.07);overflow:hidden}
 .stmt-parted-bar>span{display:block;height:100%;border-radius:3px;background:#2557C7;opacity:.55}
 .stmt-parted-skipped{margin-top:10px;font-size:11.5px;color:rgba(20,40,63,.5);line-height:1.55;font-style:italic}
+.stmt-parted-basis{display:inline-block;margin-top:5px;font-size:11.5px;color:rgba(20,40,63,.5);font-style:italic}
+
+/* "What kind of company is this?" — a description, never a grade, so the
+   badge takes the same neutral accent every category gets. Colouring a
+   "fast grower" green and a "slow grower" amber would turn a description
+   into a ranking, which is the one thing this card must not do. */
+.stmt-lynch-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:2px 0 10px}
+.stmt-lynch-badge{font-family:'Spline Sans Mono',monospace;font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--gold);background:rgba(37,87,199,.1);border:1px solid rgba(37,87,199,.28);border-radius:20px;padding:5px 14px;white-space:nowrap}
+.stmt-lynch-basis{font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:rgba(20,40,63,.6);line-height:1.55}
+.stmt-lynch-plain{font-size:13.5px;color:rgba(20,40,63,.82);line-height:1.65;max-width:820px;margin-bottom:14px}
+.stmt-lynch-careful{background:rgba(20,40,63,.03);border:1px solid rgba(20,40,63,.09);border-radius:10px;padding:13px 17px;max-width:900px}
+.stmt-lynch-careful-h{font-family:'Spline Sans Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:rgba(20,40,63,.5);margin-bottom:8px}
+.stmt-lynch-careful ul{margin:0;padding-left:18px}
+.stmt-lynch-careful li{font-size:12.5px;color:rgba(20,40,63,.75);line-height:1.6;margin-bottom:6px}
+.stmt-lynch-careful li:last-child{margin-bottom:0}
+.stmt-lynch-foot{margin-top:11px;font-size:11.5px;color:rgba(20,40,63,.5);line-height:1.55;max-width:900px}
 @media(max-width:720px){.stmt-parted-row{grid-template-columns:1fr;gap:5px}.stmt-parted-bar{width:100%}}
 
 /* Jump-nav targets must land below the sticky nav bar, never underneath it */
@@ -5809,6 +5826,7 @@ function renderStatementsShell(){
     <nav class="stmt-jumpnav" id="stmtJumpNav">
       <button data-stmt-jump="stmtHeaderCard">Overview</button>
       <button data-stmt-jump="stmtBenchCard">The Bench</button>
+      <button data-stmt-jump="stmtLynchCard">What kind of company</button>
       <button data-stmt-jump="stmtPartedCard">Where they parted</button>
       <button data-stmt-jump-section="profitLoss">Profit &amp; Loss</button>
       <button data-stmt-jump-section="quarterly">Quarterly Results</button>
@@ -5838,6 +5856,7 @@ function renderStatementsShell(){
         <div id="stmtFlagDetail"></div>
       </div>
     </div>
+    <div class="stmt-card" id="stmtLynchCard" style="display:none"></div>
     <div class="stmt-card" id="stmtPartedCard" style="display:none"></div>
     <div id="stmtTables" class="stmt-density-compact"></div>
     <div class="stmt-zone-header">Charts</div>
@@ -6530,6 +6549,33 @@ function renderBenchChipsHTML(){
   }).join('');
   return chips + `<button class="stmt-chip-clear" id="stmtClearPins">Clear all</button>`;
 }
+/* ---- "What kind of company is this?" — Lynch's six categories ---------
+   The page already refuses to read a bank through manufacturing ratios.
+   This is the same discipline one level finer: name the shape of the
+   business, then name the measures that mean less because of it. A
+   description of reported history, never a rating -- no category ranks
+   above another and no score is produced. Logic lives in
+   classifyLynchCategory() in statements-engine.js. */
+function renderLynchCardHTML(){
+  const s=L.statements;
+  const b=statementsBundle(s.primary);
+  if(!b) return '';
+  const c=classifyLynchCategory(b);
+  if(!c) return '';
+  const careful=c.careful.map(t=>`<li>${advisorAttr(t)}</li>`).join('');
+  return `<div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>What kind of company is this?</div>
+    <div class="stmt-lynch-head">
+      <span class="stmt-lynch-badge">${advisorAttr(c.name)}</span>
+      <span class="stmt-lynch-basis">${advisorAttr(c.basis)}</span>
+    </div>
+    <div class="stmt-lynch-plain">${advisorAttr(c.plain)}</div>
+    <div class="stmt-lynch-careful">
+      <div class="stmt-lynch-careful-h">What this means for reading the numbers below</div>
+      <ul>${careful}</ul>
+    </div>
+    <div class="stmt-lynch-foot">Categories follow Peter Lynch&rsquo;s six types in <i>One Up on Wall Street</i>. ${c.from!=null?`This describes how the reported figures for FY${c.from}&ndash;FY${c.to} have behaved. `:''}It is not a rating, not a forecast, and no category is better than another.</div>`;
+}
+
 /* ---- "Where they parted": cross-company divergence --------------------
    The divergence rules read one company against itself over time. This
    reads the two loaded companies against each other and ranks the rows
@@ -6551,7 +6597,8 @@ function renderPartedCardHTML(){
     return title+`<div class="stmt-parted-empty">No row has enough overlapping years for ${advisorAttr(s.primary)} and ${advisorAttr(s.compare)} to be compared over a common window.${d.refusalApplied?' The balance sheet and cash flow are excluded because these two report on different formats.':''}</div>`;
   }
   const w=d.window;
-  const lede=`<div class="stmt-parted-lede">Of the ${d.total} row${d.total===1?'':'s'} both companies report over FY${w.from}&ndash;FY${w.to}, these moved the furthest apart. Percentages are each company&rsquo;s own change across that window. Click a row to pin it.</div>`;
+  const avgYears=d.rows.length?d.rows[0].avgYears:1;
+  const lede=`<div class="stmt-parted-lede">Of the ${d.total} row${d.total===1?'':'s'} both companies report over FY${w.from}&ndash;FY${w.to}, these moved the furthest apart. Percentages are each company&rsquo;s own change across that window. Click a row to pin it.<br><span class="stmt-parted-basis">${advisorAttr(crossCompanyDivergenceBasis(avgYears))}</span></div>`;
   const items=d.rows.map(function(r){
     const key=rowKey(r.section,r.label);
     const pinned=s.pins.some(p=>rowKey(p.section,p.label)===key);
@@ -7650,6 +7697,14 @@ function updateStatementsUI(){
   const tickEl=document.getElementById('stmtTickRow'); if(tickEl) tickEl.innerHTML=tickRow;
   const sumEl=document.getElementById('stmtCheckSummary'); if(sumEl) sumEl.innerHTML=summary;
   const flagEl=document.getElementById('stmtFlagDetail'); if(flagEl) flagEl.innerHTML=renderFlagDetailHTML();
+  const lynchEl=document.getElementById('stmtLynchCard');
+  if(lynchEl){
+    const lynchHTML=renderLynchCardHTML();
+    lynchEl.innerHTML=lynchHTML;
+    lynchEl.style.display = lynchHTML ? '' : 'none';
+    const lynchBtn=document.querySelector('#stmtJumpNav [data-stmt-jump="stmtLynchCard"]');
+    if(lynchBtn) lynchBtn.style.display = lynchHTML ? '' : 'none';
+  }
   // Only present when two companies are loaded; hidden (not empty) so the
   // jump-nav button can be hidden in lockstep and never scroll to nothing.
   const partedEl=document.getElementById('stmtPartedCard');

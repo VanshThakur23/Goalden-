@@ -1349,7 +1349,7 @@ test('crossCompanyDivergence ranks opposite-direction rows above bigger gaps', (
   assert.strictEqual(d.rows[0].label, 'Reserves', 'a sign disagreement outranks a larger magnitude gap');
   assert.strictEqual(d.rows[0].opposite, true);
   assert.strictEqual(d.rows[1].label, 'Interest', 'then the largest gap: +420% vs +40%');
-  assert.strictEqual(Math.round(d.rows[1].gapPoints), 380);
+  assert.strictEqual(Math.round(d.rows[1].gapPoints), 235);
   assert.deepStrictEqual(d.window, { from: 2018, to: 2023 });
 });
 
@@ -1388,7 +1388,7 @@ test('crossCompanyDivergenceSentence is deterministic and free of judgement word
   const row = stmt.crossCompanyDivergence(A, B).rows[0];
   const s1 = stmt.crossCompanyDivergenceSentence(row, 'AAA', 'BBB');
   assert.strictEqual(s1, stmt.crossCompanyDivergenceSentence(row, 'AAA', 'BBB'), 'same bytes every call');
-  assert.strictEqual(s1, 'Sales over FY2018–FY2023: AAA +140%, BBB +24% — a gap of 116 percentage points.');
+  assert.strictEqual(s1, 'Sales over FY2018–FY2023: AAA +100%, BBB +18% — a gap of 82 percentage points.');
   const banned = /\b(because|due to|driven by|will|expected|likely|cheap|expensive|undervalued|overvalued|attractive|good|strong|weak|healthy|deteriorat|improv|concerning|risky|better|worse|safer|outperform)/i;
   assert.ok(!banned.test(s1), 'no causal, forecast, valuation or judgement vocabulary');
 });
@@ -1405,4 +1405,112 @@ test('crossCompanyDivergence does not call a rounding-level move an opposite dir
   const C = divCo('CCC', 'nonfinancial', [divRow('Net Profit', [100, 90, 80, 70, 60, 50])]);   // -50%
   const D = divCo('DDD', 'nonfinancial', [divRow('Net Profit', [100, 120, 140, 160, 180, 200])]); // +100%
   assert.strictEqual(stmt.crossCompanyDivergence(C, D).rows[0].opposite, true, 'two real moves in opposite directions still flag');
+});
+
+/* ---- Graham's averaged endpoints -------------------------------------- */
+test('crossCompanyDivergence averages the ends of the window, so one freak year cannot set the result', () => {
+  // Graham's defensive-investor test compares three-year averages at each
+  // end of a ten-year window rather than the two endpoint years, precisely
+  // because a single unusual first year otherwise determines everything.
+  // Here FY2015 is a one-off collapse for AAA; every other year is flat.
+  // Measured endpoint-to-endpoint that reads as explosive growth. Measured
+  // Graham's way it reads as what it is: a flat line with one bad year.
+  const yrs = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022].map((y) => ({ type: 'fy', year: y }));
+  const mk = (sym, vals) => ({ symbol: sym, schema: 'nonfinancial',
+    profitLoss: { rows: [divRow('Sales', vals)], periods: yrs },
+    balanceSheet: { rows: [], periods: yrs }, cashFlow: { rows: [], periods: yrs }, ratios: { rows: [], periods: yrs } });
+  const freak = mk('AAA', [20, 100, 100, 100, 100, 100, 100, 100]);
+  const flat  = mk('BBB', [100, 100, 100, 100, 100, 100, 100, 100]);
+  const row = stmt.crossCompanyDivergence(freak, flat).rows[0];
+  assert.strictEqual(row.avgYears, 3, 'an 8-year window averages 3 years at each end');
+  // Endpoint-to-endpoint would be (100-20)/20 = +400%. Averaged: first
+  // three are (20+100+100)/3 = 73.3, last three are 100 -> +36%.
+  assert.ok(row.pctA < 0.4, 'the freak first year is diluted, not amplified: got ' + (row.pctA * 100).toFixed(0) + '%');
+  assert.ok(row.pctA > 0.3, 'but not erased either');
+  assert.strictEqual(Math.round(row.pctB * 100), 0, 'the genuinely flat company still reads flat');
+});
+
+/* ---- materiality gate on the ranking ---------------------------------- */
+test('crossCompanyDivergence will not rank a line that is a rounding error', () => {
+  // Other Income goes 1 -> 40 (+3900%) at a company whose sales are ~40,000.
+  // A percentage that large on a line worth 0.1% of the business is noise,
+  // and ranking it first is the same relative-gate-alone failure the
+  // opposite-direction flag already guards against.
+  const yrs = [2018, 2019, 2020, 2021, 2022, 2023].map((y) => ({ type: 'fy', year: y }));
+  const mk = (sym, oi) => ({ symbol: sym, schema: 'nonfinancial',
+    profitLoss: { rows: [divRow('Sales', [40000, 41000, 42000, 43000, 44000, 45000]), divRow('Other Income', oi)], periods: yrs },
+    balanceSheet: { rows: [], periods: yrs }, cashFlow: { rows: [], periods: yrs }, ratios: { rows: [], periods: yrs } });
+  const d = stmt.crossCompanyDivergence(mk('AAA', [1, 2, 5, 10, 25, 40]), mk('BBB', [1, 1, 1, 1, 1, 1]));
+  assert.ok(!d.rows.some((r) => r.label === 'Other Income'), 'an immaterial line does not rank');
+  assert.ok(d.skipped.some((r) => r.label === 'Other Income' && /too small a share/.test(r.reason)), 'and says why');
+
+  // The same line at a material size does rank.
+  const big = stmt.crossCompanyDivergence(mk('AAA', [1000, 1200, 1500, 2000, 2500, 4000]), mk('BBB', [1000, 1000, 1000, 1000, 1000, 1000]));
+  assert.ok(big.rows.some((r) => r.label === 'Other Income'), 'a material line still ranks');
+});
+
+/* ---- Lynch category classifier ---------------------------------------- */
+const lynchYears = (n) => Array.from({ length: n }, (_, i) => ({ type: 'fy', year: 2014 + i }));
+const lynchCo = (sales, np, opm) => ({ symbol: 'X', schema: 'nonfinancial',
+  profitLoss: { rows: [divRow('Sales', sales), divRow('Net Profit', np || sales.map((v) => v * 0.1)),
+                       divRow('OPM %', opm || sales.map(() => 20))], periods: lynchYears(sales.length) } });
+const compound = (r) => Array.from({ length: 10 }, (_, i) => Math.round(100 * Math.pow(1 + r, i)));
+
+test('classifyLynchCategory uses Lynch\'s own growth bands', () => {
+  assert.strictEqual(stmt.classifyLynchCategory(lynchCo(compound(0.25))).key, 'fastGrower', '20%+ is a fast grower');
+  assert.strictEqual(stmt.classifyLynchCategory(lynchCo(compound(0.12))).key, 'stalwart', 'low-to-mid teens is a stalwart');
+  assert.strictEqual(stmt.classifyLynchCategory(lynchCo(compound(0.05))).key, 'slowGrower', 'below ~10% is a slow grower');
+});
+
+test('classifyLynchCategory tests cyclical FIRST, so a peak-of-cycle year cannot read as a fast grower', () => {
+  // The misread Lynch warns about: at the top of a cycle the trailing
+  // growth rate looks spectacular and the P/E looks cheap, at exactly the
+  // moment both are least informative. A wide margin swing marks it.
+  const wildMargin = [8, 30, 12, 35, 9, 28, 14, 33, 11, 31];
+  const c = stmt.classifyLynchCategory(lynchCo(compound(0.25), null, wildMargin));
+  assert.strictEqual(c.key, 'cyclical', 'the swing wins over the headline growth rate');
+  assert.ok(/least informative/.test(c.basis), 'and the basis says why the rate should not be leaned on');
+});
+
+test('classifyLynchCategory flags a loss year as a possible turnaround, not a growth rate', () => {
+  const c = stmt.classifyLynchCategory(lynchCo(compound(0.12), [10, 12, -5, 8, 14, 16, 18, 20, 22, 25]));
+  assert.strictEqual(c.key, 'turnaround');
+  assert.strictEqual(c.hadLoss, true);
+});
+
+test('classifyLynchCategory refuses to categorise too little history', () => {
+  const c = stmt.classifyLynchCategory(lynchCo([100, 120, 140]));
+  assert.strictEqual(c.key, 'unclear');
+  assert.ok(/fewer than four/.test(c.basis));
+});
+
+test('every Lynch category is a description, never a grade', () => {
+  // No category may carry ranking or valuation vocabulary -- the card
+  // states what shape the history has, and refuses to say which is better.
+  const banned = /\b(better|worse|best|worst|strong|weak|good|bad|attractive|cheap|expensive|undervalued|overvalued|safer|riskier|quality|should)\b/i;
+  Object.keys(stmt.LYNCH_CATEGORIES).forEach((k) => {
+    const c = stmt.LYNCH_CATEGORIES[k];
+    assert.ok(!banned.test(c.name), k + ' name is neutral');
+    assert.ok(!banned.test(c.plain), k + ' description is neutral: ' + c.plain);
+    c.careful.forEach((t) => assert.ok(!banned.test(t), k + ' note is neutral: ' + t));
+  });
+});
+
+test('classifyLynchCategory refuses to categorise a lender', () => {
+  // detectCyclical falls back to a bank's Financing Margin %, which swings
+  // with the interest-rate cycle. On live data HDFCBANK came out "Cyclical"
+  // off a 34-point margin range -- a fact about rates, not a business cycle,
+  // and exactly the category error this page refuses everywhere else.
+  const yrs = lynchYears(10);
+  const bank = { symbol: 'BANKX', schema: 'financial', profitLoss: { rows: [
+    divRow('Revenue', compound(0.19)),
+    divRow('Financing Margin %', [8, 30, 12, 35, 9, 28, 14, 33, 11, 31]),
+    divRow('Net Profit', compound(0.18)),
+  ], periods: yrs } };
+  const c = stmt.classifyLynchCategory(bank);
+  assert.strictEqual(c.key, 'lender', 'a lender is refused, not labelled cyclical');
+  assert.strictEqual(c.salesCagr, null, 'and no growth rate is asserted for it');
+  assert.strictEqual(c.from, null, 'no window is claimed either');
+  // The refusal still says what it WILL show, per the plan's refusal shape.
+  assert.ok(c.careful.some((t) => /revenue|financing profit/i.test(t)), 'names what is comparable instead');
 });
