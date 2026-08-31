@@ -922,7 +922,9 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-parted-lede{font-size:12.5px;color:rgba(20,40,63,.62);line-height:1.6;margin:2px 0 12px;max-width:760px}
 .stmt-parted-empty{font-size:12.5px;color:rgba(20,40,63,.6);line-height:1.6;padding:6px 0 2px;max-width:760px}
 .stmt-parted-list{display:flex;flex-direction:column;gap:6px}
-.stmt-parted-row{display:grid;grid-template-columns:104px 1fr 84px;align-items:center;gap:12px;width:100%;text-align:left;background:rgba(20,40,63,.02);border:1px solid rgba(20,40,63,.09);border-left:3px solid transparent;border-radius:9px;padding:9px 12px;cursor:pointer;font-family:'Figtree',sans-serif;transition:background .12s,border-color .12s}
+.stmt-parted-row{display:grid;grid-template-columns:104px 1fr 84px auto;align-items:center;gap:12px;width:100%;text-align:left;background:rgba(20,40,63,.02);border:1px solid rgba(20,40,63,.09);border-left:3px solid transparent;border-radius:9px;padding:9px 12px;cursor:pointer;font-family:'Figtree',sans-serif;transition:background .12s,border-color .12s}
+.stmt-parted-chart-btn{font-family:'Spline Sans Mono',monospace;font-size:10.5px;font-weight:600;color:var(--gold);background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.25);border-radius:8px;padding:5px 10px;cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s}
+.stmt-parted-chart-btn:hover{background:rgba(37,87,199,.18);border-color:var(--gold)}
 .stmt-parted-row:hover{background:rgba(37,87,199,.06);border-color:rgba(37,87,199,.28)}
 .stmt-parted-row.pinned{border-left-color:#2557C7;background:rgba(37,87,199,.05)}
 .stmt-parted-sec{font-family:'Spline Sans Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:rgba(20,40,63,.45)}
@@ -6598,7 +6600,7 @@ function renderPartedCardHTML(){
   }
   const w=d.window;
   const avgYears=d.rows.length?d.rows[0].avgYears:1;
-  const lede=`<div class="stmt-parted-lede">Of the ${d.total} row${d.total===1?'':'s'} both companies report over FY${w.from}&ndash;FY${w.to}, these moved the furthest apart. Percentages are each company&rsquo;s own change across that window. Click a row to pin it.<br><span class="stmt-parted-basis">${advisorAttr(crossCompanyDivergenceBasis(avgYears))}</span></div>`;
+  const lede=`<div class="stmt-parted-lede">Of the ${d.total} row${d.total===1?'':'s'} both companies report over FY${w.from}&ndash;FY${w.to}, these moved the furthest apart. Percentages are each company&rsquo;s own change across that window. Click a row to pin it, or open it as a full chart.<br><span class="stmt-parted-basis">${advisorAttr(crossCompanyDivergenceBasis(avgYears))}</span></div>`;
   const items=d.rows.map(function(r){
     const key=rowKey(r.section,r.label);
     const pinned=s.pins.some(p=>rowKey(p.section,p.label)===key);
@@ -6609,11 +6611,16 @@ function renderPartedCardHTML(){
     // flags alone.
     const maxGap=Math.max.apply(null,d.rows.map(x=>x.gapPoints))||1;
     const w2=Math.max(4,Math.min(100,r.gapPoints/maxGap*100));
-    return `<button class="stmt-parted-row${pinned?' pinned':''}" data-stmt-parted="${advisorAttr(key)}" type="button" title="${pinned?'Unpin':'Pin'} ${advisorAttr(r.label)}">
+    // A <div role="button"> rather than a <button> -- the chart-open
+    // control below is itself a real <button>, and a button can't nest
+    // inside a button (the browser will hoist it out and silently break
+    // the row's layout).
+    return `<div class="stmt-parted-row${pinned?' pinned':''}" data-stmt-parted="${advisorAttr(key)}" role="button" tabindex="0" title="${pinned?'Unpin':'Pin'} ${advisorAttr(r.label)}">
       <span class="stmt-parted-sec">${advisorAttr(r.sectionLabel)}</span>
       <span class="stmt-parted-txt">${advisorAttr(sentence)}${r.opposite?'<span class="stmt-parted-tag">opposite directions</span>':''}</span>
       <span class="stmt-parted-bar"><span style="width:${w2.toFixed(1)}%"></span></span>
-    </button>`;
+      <button class="stmt-parted-chart-btn" data-stmt-parted-chart="${advisorAttr(key)}" data-stmt-parted-from="${w.from}" data-stmt-parted-to="${w.to}" type="button" title="Open ${advisorAttr(r.label)} as a full chart, both companies, over time">Chart &#8599;</button>
+    </div>`;
   }).join('');
   const skippedNote=d.skipped.length
     ? `<div class="stmt-parted-skipped">${d.skipped.length} row${d.skipped.length===1?'':'s'} could not be compared &mdash; ${advisorAttr(d.skipped[0].reason)}${d.skipped.length>1?', and similar':''}.</div>`
@@ -6898,6 +6905,22 @@ function stmtExploreUnitSuffix(label){
   if(u==='rupee') return ' (\u20b9)';
   return '';
 }
+/* ---- "Where they parted" -> full chart. Reuses the same fullscreen
+   comparison builder as "Build a comparison" rather than a second chart
+   surface: slot 0 is the named row for the primary company, slot 1 is the
+   same row for the compare company, any other slots are cleared so the
+   chart isn't cluttered by whatever was pinned before, and the year window
+   is set to the exact FY range the divergence card's sentence describes. */
+function stmtExploreOpenForRow(section, label, fromYear, toYear){
+  const key = section+'|'+label;
+  const st = stmtExploreState();
+  st.mode='lines';
+  st.slots=[key, key];
+  st.slotCompanies=['primary','compare'];
+  st.yFrom = fromYear!=null ? fromYear : null;
+  st.yTo = toYear!=null ? toYear : null;
+  stmtExploreOpen();
+}
 function stmtExploreOpen(){
   const st=stmtExploreState();
   stmtExploreSeed(st);
@@ -6966,7 +6989,7 @@ function stmtExploreRenderControls(){
     for(let i=0;i<st.slots.length;i++){
       var comp=st.slotCompanies[i]||'primary';
       var cat=catFor(comp);
-      html+='<div class="sx-field" style="min-width:260px"><label>'+(i+1)+(hasCompare?' \u00b7 '+companySel('slot'+i):'')+'</label>';
+      html+='<div class="sx-field" style="min-width:260px"><label>'+(i+1)+(hasCompare?' \u00b7 '+companySel('slot'+i, comp):'')+'</label>';
       html+='<select data-sx-slot="'+i+'"><option value="">\u2014 none \u2014</option>'+stmtExploreOptionHTML(catFor(comp),st.slots[i])+'</select></div>';
     }
     if(st.slots.length<8) html+='<div class="sx-field"><label>&nbsp;</label><button class="ns-btn" data-sx-add-slot style="display:inline-flex;white-space:nowrap;padding:7px 14px">+ Add metric</button></div>';
@@ -6976,10 +6999,10 @@ function stmtExploreRenderControls(){
       '<button data-sx-scale="level"'+(st.scale==='level'?' class="active"':'')+'>Rupees</button>'+
       '<button data-sx-scale="pctSales"'+(st.scale==='pctSales'?' class="active"':'')+'>% of sales</button></div></div>';
   } else {
-    html+=companySel('x');
+    html+=companySel('x', st.xCompany||'primary');
     html+='<div class="sx-field"><label>X axis</label><select data-sx-axis="x">'+stmtExploreOptionHTML(catFor(st.xCompany||'primary'),st.xKey)+'</select></div>';
     html+=compareCta;
-    html+=companySel('y');
+    html+=companySel('y', st.yCompany||'primary');
     html+='<div class="sx-field"><label>Y axis</label><select data-sx-axis="y">'+stmtExploreOptionHTML(catFor(st.yCompany||'primary'),st.yKey)+'</select></div>';
   }
   const years=stmtExploreYearUnion();
@@ -7795,10 +7818,31 @@ document.body.addEventListener('click', e=>{
 // into the Bench (where both companies' lines are already drawn) rather
 // than being a summary you can only read.
 document.body.addEventListener('click', e=>{
+  if(e.target.closest('[data-stmt-parted-chart]')) return;
   const el = e.target.closest('[data-stmt-parted]');
   if(!el) return;
   const {section,label} = parseRowKey(el.dataset.stmtParted);
   statementsTogglePin(section,label);
+});
+document.body.addEventListener('keydown', e=>{
+  if(e.key!=='Enter' && e.key!==' ') return;
+  const el = e.target && e.target.closest && e.target.closest('[data-stmt-parted]');
+  if(!el || el.tagName==='BUTTON') return;
+  e.preventDefault();
+  const {section,label} = parseRowKey(el.dataset.stmtParted);
+  statementsTogglePin(section,label);
+});
+// "Chart ↗" on a parted row opens the same fullscreen builder as "Build a
+// comparison", pre-loaded with that one row for both companies over the
+// exact window the row's sentence describes.
+document.body.addEventListener('click', e=>{
+  const el = e.target.closest('[data-stmt-parted-chart]');
+  if(!el) return;
+  e.stopPropagation();
+  const {section,label} = parseRowKey(el.dataset.stmtPartedChart);
+  const from = el.dataset.stmtPartedFrom ? +el.dataset.stmtPartedFrom : null;
+  const to = el.dataset.stmtPartedTo ? +el.dataset.stmtPartedTo : null;
+  stmtExploreOpenForRow(section, label, from, to);
 });
 document.body.addEventListener('click', e=>{
   const el = e.target.closest('[data-stmt-market-companion]');
