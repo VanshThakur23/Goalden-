@@ -969,17 +969,22 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-density-dense .stmt-bar-track{height:4px}
 
 .stmt-table-wrap{overflow-x:auto;margin-top:0;border-radius:0 0 10px 10px;border:1px solid rgba(20,40,63,.12);border-top:none;contain:layout paint}
-/* width:auto + table-layout:fixed with every column explicitly sized below
-   means the table's rendered width is exactly the sum of those widths --
-   never squeezed to fit the container. Before this, only the label/median/
-   reading columns had a width; every year column was left to split
-   whatever space remained, which on a 12-year table could be ~25px per
-   column -- not enough for a 6-digit rupee figure, so digits overflowed
-   their cell and visually ran into the next column's digits, reading as
-   one fused number. .stmt-table-wrap's overflow-x:auto is what makes a
-   table wider than the viewport still usable -- it scrolls instead of
-   compressing. */
-.stmt-table{width:auto;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:13.5px;table-layout:fixed;min-width:900px;font-variant-numeric:tabular-nums}
+/* Column widths come from a <colgroup> written in JS (stmtYearColWidthPx /
+   stmtRelayoutTableColumns below), not from CSS -- table-layout:fixed only
+   honours per-cell min-width/max-width as a suggestion, and browsers were
+   observed ignoring it outright and squeezing year columns to ~40px on a
+   16-year table, reintroducing the digit-overlap this fixed layout exists
+   to prevent. A <colgroup>'s <col style="width:…"> is what the fixed
+   algorithm actually keys off, so the JS computes each year column's
+   share of the real container width there, floored so digits never
+   overlap and capped so columns don't stretch absurdly wide on an
+   ultrawide monitor. When even the floor doesn't fit (many years, a
+   narrow window), the columns hold the floor, the table becomes wider
+   than its wrap, and .stmt-table-wrap's overflow-x:auto is the fallback --
+   scroll only when it truly won't fit, never as the default. The CSS
+   widths below are the same numbers as a same-frame fallback for the
+   instant before the colgroup is in the DOM. */
+.stmt-table{width:auto;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:13.5px;table-layout:fixed;font-variant-numeric:tabular-nums}
 .stmt-table th{text-align:right;padding:8px 8px;color:var(--dim);font-weight:600;font-size:11px;background:#fbfcfe;position:sticky;top:0;z-index:2;vertical-align:bottom;border-bottom:2px solid rgba(20,40,63,.14)}
 /* Frozen line-item column: on a 12-year-wide table the row label is the one
    thing that must never scroll out of view, or every number loses its
@@ -990,12 +995,9 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-table th:first-child{z-index:3;background:#fbfcfe}
 .stmt-table td:first-child{z-index:1;background:#fff}
 .stmt-table th.stmt-th-ttm{color:var(--warn)}
-.stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.055);width:92px}
-.stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:12.5px;width:230px;white-space:normal;line-height:1.45}
-/* Every year/TTM column gets a fixed, generous width -- this is the actual
-   fix for the overlapping-digits bug above. */
-.stmt-table th:not(:first-child):not(.stmt-th-median),.stmt-table td.stmt-bar-cell{width:88px;min-width:88px}
-.stmt-density-dense .stmt-table th:not(:first-child):not(.stmt-th-median),.stmt-density-dense .stmt-table td.stmt-bar-cell{width:72px;min-width:72px}
+.stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.055);width:80px}
+.stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:12.5px;width:210px;white-space:normal;line-height:1.45}
+.stmt-table th:not(:first-child):not(.stmt-th-median),.stmt-table td.stmt-bar-cell{width:88px}
 .stmt-table td{text-align:right;padding:7px 8px;color:rgba(20,40,63,.82);border-bottom:1px solid rgba(20,40,63,.07);position:relative;cursor:pointer}
 .stmt-table tr.stmt-row.stmt-alt td{background:rgba(20,40,63,.022)}
 .stmt-table tr.stmt-row.stmt-alt td:first-child{background:#fbfcfd}
@@ -1054,7 +1056,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-empty-state{padding:40px 20px;text-align:center;color:var(--dim)}
 
 @media(max-width:860px){
-  .stmt-table{min-width:700px}
+  .stmt-table{min-width:480px}
   .stmt-table td.stmt-reading{display:none}
 }
 </style>
@@ -5895,10 +5897,25 @@ function renderStatementsShell(){
 </div>`;
 }
 
+let stmtColResizeObserver=null, stmtColResizeRaf=null;
 function mountStatements(){
   teardownStatements();
   statementsApplyBenchPinned();
   statementsEnsureLoaded();
+  // Keeps the statement tables' year-column widths matched to the actual
+  // available width whenever it changes for any reason -- window resize,
+  // the "Full width" nav-collapse toggle, panel collapse -- without
+  // rebuilding the tables themselves (see stmtRelayoutTableColumns).
+  const tablesEl=document.getElementById('stmtTables');
+  if(tablesEl){
+    if(!stmtColResizeObserver){
+      stmtColResizeObserver=new ResizeObserver(()=>{
+        if(stmtColResizeRaf) return;
+        stmtColResizeRaf=requestAnimationFrame(()=>{ stmtColResizeRaf=null; stmtRelayoutTableColumns(); });
+      });
+    }
+    stmtColResizeObserver.observe(tablesEl);
+  }
 }
 function teardownStatements(){
   disposeChart('stmtBenchChart');
@@ -5908,6 +5925,8 @@ function teardownStatements(){
   disposeChart('stmtWaterfallChart');
   disposeChart('stmtPeBandChart');
   stmtExploreClose();
+  if(stmtColResizeObserver) stmtColResizeObserver.disconnect();
+  if(stmtColResizeRaf){ cancelAnimationFrame(stmtColResizeRaf); stmtColResizeRaf=null; }
 }
 function salesLabelFor(bundle){
   return fySeries(bundle.profitLoss,'Sales').length ? 'Sales' : 'Revenue';
@@ -7589,7 +7608,7 @@ function stmtSectionIcon(sectionKey){
   };
   return `<svg class="stmt-table-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths[sectionKey]||''}</svg>`;
 }
-function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle, compareBundle, compareSymbol){
+function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle, compareBundle, compareSymbol, availWidth){
   const primSection = primaryBundle ? primaryBundle[sectionKey] : null;
   if(!primSection || !primSection.periods || !primSection.periods.length) return '';
   const rows = statementsCanonicalRows(schema)[sectionKey] || [];
@@ -7661,11 +7680,47 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
   </div>
   ${coverageNote}
   <div class="stmt-table-wrap"><table class="stmt-table">
+    ${stmtColgroupHTML(periods.length, availWidth)}
     <thead><tr><th>Line item</th>${theadCols}<th class="stmt-th-median">vs 12y median</th><th></th></tr></thead>
     <tbody>${bodyRows}</tbody>
     ${footer}
   </table></div>
   </div>`;
+}
+/* ---- statement table column widths -------------------------------------
+   table-layout:fixed does not reliably honour per-cell min-width (browsers
+   were observed dividing space evenly and ignoring it), so column sizing
+   is done explicitly via a <colgroup> instead -- the one thing the fixed
+   algorithm does key off. stmtYearColWidthPx gives every year column an
+   equal share of whatever room the container actually has, floored so
+   digits never overlap and capped so they don't stretch pointlessly wide
+   on an ultrawide screen; stmtRelayoutTableColumns keeps that share
+   current when the container resizes (window resize, or the "Full width"
+   nav toggle) without rebuilding the tables themselves. */
+const STMT_COL_FIRST_PX=230, STMT_COL_MEDIAN_PX=80, STMT_COL_READING_PX=210, STMT_COL_YEAR_MAX_PX=130;
+function stmtYearColWidthPx(availWidth, count){
+  const floor = L.statements.density==='dense' ? 52 : 64;
+  if(!count || !availWidth) return floor;
+  const fixedPx = STMT_COL_FIRST_PX + STMT_COL_MEDIAN_PX + STMT_COL_READING_PX;
+  const raw = (availWidth - fixedPx) / count;
+  return Math.max(floor, Math.min(STMT_COL_YEAR_MAX_PX, Math.floor(raw)));
+}
+function stmtColgroupHTML(yearCount, availWidth){
+  const yearPx = stmtYearColWidthPx(availWidth, yearCount);
+  const yearCols = new Array(yearCount).fill(`<col class="stmt-col-year" style="width:${yearPx}px">`).join('');
+  return `<colgroup><col style="width:${STMT_COL_FIRST_PX}px">${yearCols}<col style="width:${STMT_COL_MEDIAN_PX}px"><col style="width:${STMT_COL_READING_PX}px"></colgroup>`;
+}
+function stmtRelayoutTableColumns(){
+  const container=document.getElementById('stmtTables');
+  if(!container) return;
+  const availWidth = container.clientWidth;
+  if(!availWidth) return;
+  container.querySelectorAll('.stmt-table').forEach(table=>{
+    const yearCols = table.querySelectorAll('col.stmt-col-year');
+    if(!yearCols.length) return;
+    const px = stmtYearColWidthPx(availWidth, yearCols.length) + 'px';
+    yearCols.forEach(c=>{ if(c.style.width!==px) c.style.width=px; });
+  });
 }
 function renderStatementTables(){
   const container=document.getElementById('stmtTables');
@@ -7674,8 +7729,9 @@ function renderStatementTables(){
   const primary = statementsBundle(s.primary);
   if(!primary){ container.innerHTML=''; return; }
   const schema = primary.schema || 'unknown';
+  const availWidth = container.clientWidth;
   const compare = statementsEffectiveCompare();
-  container.innerHTML = STMT_SECTIONS.map(sec=>renderOneStatementTable(sec.key, sec.label, schema, primary, compare, s.compare)).join('');
+  container.innerHTML = STMT_SECTIONS.map(sec=>renderOneStatementTable(sec.key, sec.label, schema, primary, compare, s.compare, availWidth)).join('');
 }
 
 /* ---- CSS-only linked highlighting -------------------------------------
