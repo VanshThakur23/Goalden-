@@ -6232,7 +6232,9 @@ function statementsPeBand(sym){
   const d = L.statements.data[sym];
   if(!d || d.status!=='ready') return null;
   const priceHist = L.statements.priceHistory[sym];
-  if(!priceHist || priceHist.status!=='ready') return { status: priceHist ? priceHist.status : 'loading' };
+  if(!priceHist) return { status:'loading' };
+  if(priceHist.status==='error') return { status:'error', error: priceHist.error || 'Could not fetch this company\'s price history.' };
+  if(priceHist.status!=='ready') return { status: priceHist.status };
   const bundle = d.result;
   const faceValue = bundle.topRatios && bundle.topRatios.faceValue;
   if(!faceValue) return { status:'error', error:'Face value is not reported for this company, so shares cannot be split-adjusted.' };
