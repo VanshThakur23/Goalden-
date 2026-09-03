@@ -5959,8 +5959,36 @@ async function fetchStatementsPriceHistory(symbol){
   if(!sym) return;
   if(L.statements.priceHistory[sym] && L.statements.priceHistory[sym].status==='ready') return;
   L.statements.priceHistory[sym]={status:'loading'};
+  updateStatementsUI();
   try{
-    const result = await liveApiGet('/api/history?type=equity&symbol='+encodeURIComponent(sym+'.NS'));
+    let yahooSymbol = sym+'.NS';
+    // A bare numeric symbol is a BSE scrip code (e.g. "500493" for Bharat
+    // Forge) -- Screener accepts those directly and the statements above
+    // still render fine, but Yahoo's chart endpoint 404s on BSE numeric
+    // codes under both .NS and .BO for the large majority of listings (BSE
+    // coverage on Yahoo is far thinner than NSE's), so there's no suffix
+    // built from the code itself that reliably works. Instead, look the
+    // company up by its actual name (via the same /api/symbolsearch this
+    // app already uses for free-text ticker search) and read off Yahoo's
+    // own NSE-listed symbol for it.
+    if(/^\d+$/.test(sym)){
+      // fetchStatementsCompany(sym) is already in flight in parallel (see
+      // this function's own call sites) -- poll its result rather than
+      // re-fetching, so this doesn't duplicate the screener.in scrape.
+      let name = null;
+      for(let i=0;i<32;i++){
+        const d = L.statements.data[sym];
+        if(d && d.status==='ready'){ name = d.result.companyName; break; }
+        if(d && d.status==='error') break;
+        await new Promise(r=>setTimeout(r,250));
+      }
+      if(!name) throw new Error('This company was loaded by its BSE scrip code ('+sym+'), and its name did not resolve in time to look up a matching NSE symbol.');
+      const matches = await liveApiGet('/api/symbolsearch?q='+encodeURIComponent(name));
+      const nseMatch = (matches||[]).find(m=>m.type==='equity' && /NSE/i.test(m.exchange||''));
+      if(!nseMatch) throw new Error('This company was loaded by its BSE scrip code ('+sym+'), and no matching NSE symbol was found for "'+name+'" to look up its price history.');
+      yahooSymbol = nseMatch.symbol;
+    }
+    const result = await liveApiGet('/api/history?type=equity&symbol='+encodeURIComponent(yahooSymbol));
     L.statements.priceHistory[sym]={status:'ready', prices:result.prices, label:result.label};
   }catch(e){
     L.statements.priceHistory[sym]={status:'error', error:(e&&e.message)||String(e)};
