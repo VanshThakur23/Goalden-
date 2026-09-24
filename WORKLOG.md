@@ -1797,11 +1797,13 @@ Changes made by Claude Code, committed on the user's explicit go-ahead this sess
 - goalden-lab.html: the advisor FAB (advisor.js, right:18px) sat on top of the
   "Print / Save as PDF" button. The print button moved to right:92px, and below
   480px it becomes icon-only.
-- REVIEW-BOARD.md (new): reviewer hierarchy (Chief + 5 divisions of about 10
-  specialists each), tie-break/veto rules, and the backlog for the /loop cycle.
+- Reviewer hierarchy (Chief + 5 divisions of about 10 specialists each) and the
+  loop backlog are kept as a session-only working file, not in the repo
+  (REVIEW-BOARD.md was briefly committed in 0b72df6, then removed at the
+  user's request).
 - Pending: five read-only division reviews (Retirement, Portfolio, Company
   Analysis, Visual/Data-Viz, AI/Reliability) are running. Next iteration merges
-  them into the ranked backlog in REVIEW-BOARD.md and starts implementing
+  them into the ranked backlog and starts implementing
   (chart values visible without hover is the top ask).
 - Known: this sandbox blocks Yahoo/MFAPI/screener egress. Testing used a
   scratchpad-only synthetic-price server (not in repo).
