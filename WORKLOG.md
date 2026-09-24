@@ -1987,3 +1987,28 @@ Changes made by Claude Code: the D3 implementer agent (statements-engine.js, eng
   missing years; VEDL EPS from consolidated NP includes minority interest
   (P/E band biased low); structural breaks (HDFC merger, VEDL demerger) are
   not marked on charts.
+
+## 2026-09-24 - Claude Code (cloud session, review-board loop, iteration 5: new visualization)
+Changes made by Claude Code (Chief). Idea #1 from the D3 Company Analysis panel.
+- New "Where ₹100 of sales went" chart in Read the Company's Analysis zone
+  (statements-engine.js `marginBridgeData` / `marginBridgeOption`;
+  goalden-lab.html `#stmtBridgeCard`). A waterfall scaled to ₹100 of the top
+  line: sales -> operating costs -> operating profit -> other income ->
+  interest -> depreciation -> PBT -> tax & other -> net profit, each bar
+  labelled with this year's value and the same step 5 years earlier, plus a
+  one-line headline ("Of every ₹100 of sales in FY26, ₹18.5 ended as net
+  profit (FY21: ₹19.8)").
+  - Lenders bridge from total income (revenue + other income), because a
+    bank's other income is fees and insurance (core business). The title
+    switches to "Where ₹100 of income went".
+  - "Tax & other" = PBT - net profit, so the last bar is exactly reported
+    net profit (screener rounds Tax % to whole numbers, and consolidated NP
+    nets out minority interest).
+  - Custom-series bars (low/high ranges) so a loss year crossing zero draws
+    correctly.
+  - Verified: the bridge reconciles to reported net profit for all six
+    fixture companies (walk-vs-reported gap under 0.002 per ₹100); new test
+    (109/109). Screenshots checked for TCS, HDFC Bank and Paytm; no page or
+    console errors on any company; Read the Company still fits a 412px
+    phone.
+- Cash-flow chart caption updated to describe the diverging bars.

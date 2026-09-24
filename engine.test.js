@@ -1445,3 +1445,24 @@ test('D3-12 chart builders print key values without hover', () => {
   assert.strictEqual(idx, ratiosV.length - 1);
   assert.ok(Number.isFinite(val));
 });
+
+test('marginBridge: "where ₹100 of sales went" reconciles exactly to reported net profit', () => {
+  for (const sym of ['TCS', 'HDFCBANK', 'BAJFINANCE', 'HINDALCO', 'PAYTM', 'VEDL']) {
+    const b = loadFinancials(sym);
+    const opt = stmt.marginBridgeOption(b.profitLoss, b.schema, 5);
+    assert.ok(opt, sym + ': bridge builds');
+    const now = opt.__now;
+    const np = stmt.fySeries(b.profitLoss, 'Net Profit').find((p) => p.year === now.year).value;
+    assert.ok(Math.abs(now.npPer100 - (np * 100) / now.base) < 1e-9, sym + ': final bar is reported NP per ₹100');
+    // Walking every delta from ₹100 lands on the final bar.
+    const walk = now.steps.filter((x) => x.kind === 'up' || x.kind === 'down').reduce((a, x) => a + x.value, 100);
+    assert.ok(Math.abs(walk - now.npPer100) < 0.01, sym + ': deltas reconcile (' + walk + ' vs ' + now.npPer100 + ')');
+  }
+  // Lenders bridge from total income (Revenue + Other Income), not Revenue.
+  const hdfc = loadFinancials('HDFCBANK');
+  assert.strictEqual(stmt.marginBridgeOption(hdfc.profitLoss, hdfc.schema, 5).__now.baseLabel, 'Total income');
+  const tcs = loadFinancials('TCS');
+  const t = stmt.marginBridgeOption(tcs.profitLoss, tcs.schema, 5);
+  assert.strictEqual(t.__now.npPer100.toFixed(1), '18.5');
+  assert.strictEqual(t.__then.year, t.__now.year - 5);
+});

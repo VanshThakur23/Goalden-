@@ -1798,6 +1798,134 @@ function formatRowValueCompact(label, v) {
   if (unit === 'rupee') return '₹' + v.toFixed(1);
   return '₹' + formatCroreCompact(v) + ' Cr';
 }
+/* ---------------------------------------------------------------------
+   "Where ₹100 of sales went" -- margin bridge.
+   The single most common beginner question about a company ("of what it
+   sells, how much does it actually keep, and where does the rest go?")
+   answered as a waterfall scaled to ₹100 of the top line, with the same
+   bridge from N years earlier printed beside each step so the reader sees
+   what changed, not just what is.
+   Every step is a reported row; the only derived step is "Tax & other" =
+   PBT − Net Profit, which makes the bridge land EXACTLY on reported net
+   profit (Tax % is rounded to a whole number on screener, and consolidated
+   net profit also nets out minority interest -- splitting those would
+   print a residual that doesn't reconcile).
+   Lenders use total income (Revenue + Other Income) as the ₹100 base: for a
+   bank "Other Income" is fees and insurance, core business, and a
+   Revenue-only base drove HDFC Bank's bridge below zero mid-way.
+   --------------------------------------------------------------------- */
+function marginBridgeData(profitLoss, schema, year) {
+  const at = (label) => {
+    const pt = fySeries(profitLoss, label).find((p) => p.year === year);
+    return pt && pt.value != null ? pt.value : null;
+  };
+  const np = at('Net Profit'), pbt = at('Profit before tax');
+  const oi = at('Other Income') || 0, int = at('Interest') || 0, dep = at('Depreciation') || 0;
+  if (np == null || pbt == null) return null;
+  let base, baseLabel, steps;
+  if (schema === 'financial') {
+    const rev = at('Revenue'), exp = at('Expenses');
+    if (rev == null || exp == null) return null;
+    base = rev + oi; baseLabel = 'Total income';
+    steps = [
+      { key: 'int', label: 'Interest paid', delta: -int },
+      { key: 'exp', label: 'Operating costs', delta: -exp },
+      { key: 'dep', label: 'Depreciation', delta: -dep },
+      { key: 'pbt', label: 'Profit before tax', subtotal: true },
+    ];
+  } else {
+    const sales = at('Sales'), exp = at('Expenses');
+    if (sales == null || exp == null) return null;
+    base = sales; baseLabel = 'Sales';
+    steps = [
+      { key: 'exp', label: 'Operating costs', delta: -exp },
+      { key: 'op', label: 'Operating profit', subtotal: true },
+      { key: 'oi', label: 'Other income', delta: oi },
+      { key: 'int', label: 'Interest', delta: -int },
+      { key: 'dep', label: 'Depreciation', delta: -dep },
+      { key: 'pbt', label: 'Profit before tax', subtotal: true },
+    ];
+  }
+  if (!(base > 0)) return null;
+  steps.push({ key: 'tax', label: 'Tax & other', delta: -(pbt - np) });
+  steps.push({ key: 'np', label: 'Net profit', subtotal: true, final: true });
+  // Walk the bridge per ₹100, then pin the subtotals to the reported rows:
+  // the walk and the reported PBT agree to the rupee for these fixtures,
+  // but the reported figure is the one that must be printed.
+  const scale = 100 / base;
+  let run = 100;
+  const out = [{ key: 'base', label: baseLabel, start: 0, end: 100, value: 100, kind: 'total' }];
+  steps.forEach((st) => {
+    if (st.subtotal) {
+      const reported = st.key === 'pbt' ? pbt * scale : st.key === 'np' ? np * scale : run;
+      run = reported;
+      out.push({ key: st.key, label: st.label, start: 0, end: reported, value: reported, kind: st.final ? 'final' : 'total' });
+    } else {
+      const d = st.delta * scale;
+      out.push({ key: st.key, label: st.label, start: run, end: run + d, value: d, kind: d >= 0 ? 'up' : 'down' });
+      run += d;
+    }
+  });
+  return { year, base, baseLabel, steps: out, npPer100: np * scale, taxRate: pbt ? (pbt - np) / pbt : null };
+}
+
+function marginBridgeOption(profitLoss, schema, yearsBack) {
+  const ys = fySeries(profitLoss, 'Net Profit').filter((p) => p.value != null).map((p) => p.year);
+  if (!ys.length) return null;
+  const latestYear = ys[ys.length - 1];
+  const now = marginBridgeData(profitLoss, schema, latestYear);
+  if (!now) return null;
+  const then = marginBridgeData(profitLoss, schema, latestYear - (yearsBack || 5));
+  const fy = (y) => 'FY' + String(y).slice(-2);
+  // |v| < 0.05 prints as ₹0.0, never "−₹0.0" (TCS other income: −₹124 Cr on ₹2.67L Cr of sales).
+  const fmt = (v) => (v <= -0.05 ? '−' : '') + '₹' + Math.abs(v).toFixed(1);
+  const fill = { total: '#2557C7', final: '#256F55', up: '#5FA875', down: '#D97757' };
+  const text = { total: '#1E4FBE', final: '#256F55', up: '#256F55', down: '#9C4A2C' };
+  const data = now.steps.map((st, i) => {
+    const prev = then && then.steps[i] && then.steps[i].key === st.key ? then.steps[i] : null;
+    return { value: [i, Math.min(st.start, st.end), Math.max(st.start, st.end), st.value, prev ? prev.value : null], kind: st.kind };
+  });
+  return {
+    grid: { left: 8, right: 8, top: 62, bottom: 44, containLabel: true },
+    tooltip: {
+      trigger: 'item', confine: true,
+      formatter: (p) => {
+        const st = now.steps[p.dataIndex], v = p.value;
+        return '<b>' + st.label + '</b><br/>' + fy(now.year) + ': ' + fmt(v[3]) + ' per ₹100 of ' + now.baseLabel.toLowerCase()
+          + (v[4] != null ? '<br/>' + fy(then.year) + ': ' + fmt(v[4]) : '');
+      },
+    },
+    xAxis: { type: 'category', data: now.steps.map((s) => s.label),
+      axisLabel: { interval: 0, fontSize: 10.5, color: '#56698A', width: 78, overflow: 'break', lineHeight: 13 },
+      axisTick: { show: false } },
+    yAxis: { type: 'value', axisLabel: { formatter: (v) => '₹' + v, color: '#56698A' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
+    series: [{
+      type: 'custom', name: 'Bridge',
+      renderItem: (params, api) => {
+        const i = api.value(0), lo = api.value(1), hi = api.value(2), v = api.value(3), was = api.value(4);
+        const kind = data[params.dataIndex].kind;
+        const a = api.coord([i, hi]), b = api.coord([i, lo]);
+        const w = api.size([1, 0])[0] * 0.62;
+        const label = fmt(v) + (was != null && !isNaN(was) ? '\n' + fy(then.year) + ' ' + fmt(was) : '');
+        return {
+          type: 'rect',
+          shape: { x: a[0] - w / 2, y: a[1], width: w, height: Math.max(1, b[1] - a[1]) },
+          style: { fill: fill[kind] },
+          textContent: { style: { text: label, fill: text[kind], fontSize: 10.5, fontWeight: 600, lineHeight: 13, fontFamily: "'Spline Sans Mono',monospace", align: 'center' } },
+          textConfig: { position: 'top', distance: 4 },
+        };
+      },
+      encode: { x: 0, y: [1, 2] },
+      data: data.map((d) => d.value),
+    }],
+    graphic: [{ type: 'text', left: 8, top: 4, style: {
+      text: 'Of every ₹100 of ' + now.baseLabel.toLowerCase() + ' in ' + fy(now.year) + ', ' + fmt(now.npPer100) + ' ended as net profit'
+        + (then ? ' (' + fy(then.year) + ': ' + fmt(then.npPer100) + ')' : ''),
+      fill: '#14283F', fontSize: 12.5, fontWeight: 600, fontFamily: "'Spline Sans Mono',monospace" } }],
+    __now: now, __then: then,
+  };
+}
+
 function advisorEscapeSafe(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
 }
@@ -1816,6 +1944,7 @@ const api = {
   compoundingChecklist, checklistQualityGate,
   stmtExploreCatalog, alignFyPairs, pctOfSalesSeries,
   growthChartOption, cashFlowWaterfallOption, companionMapFor,
+  marginBridgeData, marginBridgeOption,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

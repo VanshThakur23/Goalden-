@@ -710,6 +710,7 @@ body.stmt-page main{max-width:1600px}
 #stmtWaterfallCard{grid-column:7/-1}
 #stmtWaterfallCard #stmtWaterfallChart{height:300px}
 #stmtTables{grid-column:1/-1}
+#stmtBridgeCard{grid-column:1/-1}
 #stmtDepth{grid-column:1/-1;box-shadow:0 1px 2px rgba(20,40,63,.03)}
 #stmtChecklist{grid-column:1/-1;box-shadow:0 1px 2px rgba(20,40,63,.03)}
 #stmtToLiveCard{grid-column:1/-1}
@@ -5988,10 +5989,15 @@ function renderStatementsShell(){
     </div>
     <div class="stmt-card" id="stmtWaterfallCard">
       <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6H4zM14 4h6v6h-6z"/><path d="M10 14l4-4M14 10l4 4"/></svg>Cash Flow Waterfall</div>
-      <div class="cap" style="margin-bottom:10px">Each year\u2019s operating, investing and financing flows stacked to show how they build to the net cash figure \u2014 the arithmetic is preserved visually.</div>
+      <div class="cap" style="margin-bottom:10px">Each year, cash from operations goes up, and investing and financing usually go down. The dot is what\u2019s left: that year\u2019s net change in cash.</div>
       <div id="stmtWaterfallChart" style="height:300px"></div>
     </div>
     <div class="stmt-zone-header">Analysis</div>
+    <div class="stmt-card" id="stmtBridgeCard">
+      <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="4" y="4" width="3" height="16"/><rect x="10.5" y="4" width="3" height="6"/><rect x="17" y="10" width="3" height="10"/></svg>Where \u20b9100 of sales went</div>
+      <div class="cap" id="stmtBridgeCap" style="margin-bottom:6px">Each step is a reported line. The final bar is exactly the reported net profit.</div>
+      <div id="stmtBridgeChart" style="height:340px"></div>
+    </div>
     <div class="stmt-card" id="stmtDepth"></div>
     <div class="stmt-card" id="stmtChecklist"></div>
     <div class="stmt-card" id="stmtToLiveCard" style="text-align:center">
@@ -7406,6 +7412,23 @@ function updateStatementsUI(){
         initChart('stmtWaterfallChart', cashFlowWaterfallOption(cfo,cfi,cff,ncf));
       } else { wfEl.innerHTML='<div class="cap" style="padding:14px">Not available for this reporting format.</div>'; }
     } else { disposeChart('stmtWaterfallChart'); wfEl.innerHTML=''; }
+  }
+  // "Where ₹100 of sales went": margin bridge, latest year vs 5 years back.
+  const brEl=document.getElementById('stmtBridgeChart');
+  if(brEl){
+    const d=L.statements.data[L.statements.primary];
+    const opt = (d && d.status==='ready' && d.result.profitLoss) ? marginBridgeOption(d.result.profitLoss, d.result.schema, 5) : null;
+    const capEl=document.getElementById('stmtBridgeCap');
+    const titleEl=brEl.parentElement && brEl.parentElement.querySelector('.stmt-section-title');
+    if(opt){
+      initChart('stmtBridgeChart', opt);
+      const lender = d.result.schema==='financial';
+      if(titleEl) titleEl.lastChild.textContent = lender ? 'Where \u20b9100 of income went' : 'Where \u20b9100 of sales went';
+      if(capEl) capEl.textContent = (lender ? 'For a lender the starting \u20b9100 is total income (interest earned plus fees and other income). ' : '')
+        + 'Each step is a reported line, scaled to \u20b9100. The second number above each bar is the same step '+(opt.__then?'in FY'+String(opt.__then.year).slice(-2):'5 years earlier')+', for comparison. "Tax & other" is profit before tax minus net profit, so the last bar is exactly the reported net profit.';
+    } else if(d && d.status==='ready'){
+      disposeChart('stmtBridgeChart'); brEl.innerHTML='<div class="cap" style="padding:14px">Not available for this reporting format.</div>';
+    } else { disposeChart('stmtBridgeChart'); brEl.innerHTML=''; }
   }
   buildStatementsHighlightCSS();
   const toLiveBtn=document.getElementById('stmtToLiveBtn'); if(toLiveBtn) toLiveBtn.textContent = 'Add '+(L.statements.primary||'\u2014')+' to Test Real Investments';
