@@ -17,6 +17,7 @@ import math
 import os
 import re
 import sys
+import threading
 import time
 import urllib.request
 import urllib.parse
@@ -33,10 +34,37 @@ def upstream_json(url, headers=None):
         return json.loads(resp.read().decode('utf-8'))
 
 
+# Market-data failures come in two kinds. Our own ValueError messages (bad
+# ticker, too few bars) tell the user what to change and pass through as-is.
+# Upstream/network failures used to reach the Lab and the model verbatim —
+# "<urlopen error Tunnel connection failed: 403 Forbidden>" on venue Wi-Fi —
+# and are not actionable, so they collapse to one plain sentence with the
+# detail kept in this server's log. Mirrors worker.js marketDataError().
+# Never replaced with made-up prices.
+MARKET_DATA_UNAVAILABLE = ('Market data is unavailable right now — the price source could not be '
+                           'reached. Please try again in a moment.')
+
+
+def _market_data_error(e, fallback):
+    # JSONDecodeError is a ValueError too (an HTML error page where JSON was
+    # expected), and HTTPError/URLError/socket timeouts are all OSError.
+    if isinstance(e, (OSError, json.JSONDecodeError)):
+        print(f'market data upstream error: {e}', file=sys.stderr)
+        return MARKET_DATA_UNAVAILABLE
+    return str(e) or fallback
+
+
 def fetch_equity_history(symbol):
     url = ('https://query1.finance.yahoo.com/v8/finance/chart/'
            f'{urllib.parse.quote(symbol)}?range=10y&interval=1d')
-    data = upstream_json(url, headers={'User-Agent': UA, 'Accept': 'application/json'})
+    try:
+        data = upstream_json(url, headers={'User-Agent': UA, 'Accept': 'application/json'})
+    except urllib.error.HTTPError as e:
+        # Yahoo answers an unknown symbol with a 404 — that's the user's
+        # ticker, not an outage, so it keeps the actionable message.
+        if e.code == 404:
+            raise ValueError(f'No chart data for {symbol} — check the ticker (India needs .NS or .BO)')
+        raise
     chart = data.get('chart') or {}
     if chart.get('error'):
         raise ValueError(chart['error'].get('description') or f'Yahoo error for {symbol}')
@@ -508,6 +536,69 @@ def financials_health_check():
 # ---------------------------------------------------------------------------
 DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions'
 
+# One shared conversation-length cap with the Worker (MAX_CHAT_MESSAGES).
+# advisor.js sends at most 36 and trims harder + retries once on a 413. This
+# server used to have no cap at all, so a long local session never showed
+# the 413 the deployed Worker would have returned.
+_MAX_CHAT_MESSAGES = 40
+_MAX_CHAT_BODY_CHARS = 200000
+
+
+# ---------------------------------------------------------------------------
+# Per-turn rate limiting — mirrors worker.js rateLimitWait() term-for-term, so
+# a flow that would 429 in production 429s here too. Counted per user TURN
+# (one X-Goalden-Turn id per user message; every round trip of that turn
+# reuses it), not per request: one message can take up to 18 round trips,
+# and the old flat 10 requests/min/IP cut "do it all" flows off midway. A
+# request with no turn id counts as its own turn. Set
+# GOALDEN_CHAT_RATE_LIMIT=off to disable it for local test harnesses that
+# fire many turns from 127.0.0.1 in a few seconds.
+# ---------------------------------------------------------------------------
+_RATE_WINDOW_S = 60.0
+_RATE_LIMITS = {'ipTurns': 10, 'ipRequests': 60, 'globalTurns': 60, 'globalRequests': 600}
+_rate_lock = threading.Lock()
+_chat_hits = {}  # ip -> {'turns': {turn_id: last_seen}, 'requests': [ts]}
+_global_turns = []
+_global_requests = []
+
+
+def _rate_limit_wait(ip, turn_id_raw):
+    """0 when the request may proceed, else seconds to wait (Retry-After)."""
+    global _global_turns, _global_requests
+    if os.environ.get('GOALDEN_CHAT_RATE_LIMIT', '').lower() in ('off', '0', 'false', 'no'):
+        return 0
+    with _rate_lock:
+        now = time.time()
+
+        def fresh(t):
+            return now - t < _RATE_WINDOW_S
+
+        def wait_for(oldest):
+            return max(1, int(math.ceil(oldest + _RATE_WINDOW_S - now)))
+
+        _global_turns = [t for t in _global_turns if fresh(t)]
+        _global_requests = [t for t in _global_requests if fresh(t)]
+        rec = _chat_hits.setdefault(ip, {'turns': {}, 'requests': []})
+        rec['requests'] = [t for t in rec['requests'] if fresh(t)]
+        rec['turns'] = {k: t for k, t in rec['turns'].items() if fresh(t)}
+        turn_id = str(turn_id_raw)[:64] if turn_id_raw else None
+        is_new_turn = not turn_id or turn_id not in rec['turns']
+        if len(rec['requests']) >= _RATE_LIMITS['ipRequests']:
+            return wait_for(rec['requests'][0])
+        if len(_global_requests) >= _RATE_LIMITS['globalRequests']:
+            return wait_for(_global_requests[0])
+        if is_new_turn:
+            if len(rec['turns']) >= _RATE_LIMITS['ipTurns']:
+                return wait_for(min(rec['turns'].values()))
+            if len(_global_turns) >= _RATE_LIMITS['globalTurns']:
+                return wait_for(_global_turns[0])
+            _global_turns.append(now)
+        # Refreshed on every round trip so a long-running turn stays known.
+        rec['turns'][turn_id or f'anon:{now}:{id(rec)}:{len(rec["requests"])}'] = now
+        rec['requests'].append(now)
+        _global_requests.append(now)
+        return 0
+
 
 # ---------------------------------------------------------------------------
 # Phase 11 — BM25 tool/knowledge routing. Pure, dependency-free, mirrored
@@ -517,6 +608,17 @@ DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions'
 # ---------------------------------------------------------------------------
 _TOOL_ROUTE_K = 8
 _KNOWLEDGE_ROUTE_K = 3
+# Pure top-K routing dropped the tools every multi-step flow depends on,
+# because their descriptions share no vocabulary with how people ask: "yes
+# do it all" on Door 1 lost build_goal_plan/compose_briefing/get_results,
+# "explain this graph" in the Lab lost read_current_chart, "what if I retire
+# at 55" lost run_full_analysis/set_value/navigate. These are always kept
+# (whichever of them the page actually offers); BM25 only ranks the rest.
+_SKILL_TOOLS = ('build_goal_plan', 'run_full_analysis')
+_CORE_TOOLS = ('navigate', 'set_value', 'get_state', 'get_results', 'read_current_chart', 'compose_briefing', 'propose_plan', 'execute_plan') + _SKILL_TOOLS
+# Below this size the whole list is cheap enough to send as-is — only the
+# Lab (~41 tools) is actually routed; every other page ships <= 20.
+_TOOL_ROUTE_MIN_TOOLS = 25
 
 # Tool families: some multi-step chains use tools whose descriptions don't
 # share vocabulary with the natural-language query that triggers them (e.g.
@@ -578,16 +680,27 @@ def _latest_user_message(messages):
 
 
 def _filter_tools(body):
+    """Every _CORE_TOOLS member the page offers, PLUS the top-K of the
+    remaining tools by BM25 relevance to the latest user message, PLUS every
+    tool already called earlier in the conversation, PLUS whole families
+    where any member survived. Mirrors worker.js filterTools()."""
     tools = body.get('tools') or []
-    if len(tools) <= _TOOL_ROUTE_K:
+    if len(tools) <= _TOOL_ROUTE_MIN_TOOLS:
         return tools
     query = _latest_user_message(body.get('messages'))
+
+    def name_of(t):
+        return (t.get('function') or {}).get('name')
+
+    keep = {name_of(t) for t in tools if name_of(t) in _CORE_TOOLS}
     docs = []
     for t in tools:
+        if name_of(t) in keep:
+            continue
         f = t.get('function') or {}
         docs.append({'id': f.get('name'), 'text': f"{f.get('name', '')} {f.get('description', '')}"})
     ranked = _bm25_rank(query, docs)
-    keep = {r['id'] for r in ranked[:_TOOL_ROUTE_K]}
+    keep.update(r['id'] for r in ranked[:_TOOL_ROUTE_K])
     for m in body.get('messages') or []:
         if m.get('role') == 'assistant' and m.get('tool_calls'):
             for tc in m['tool_calls']:
@@ -933,9 +1046,16 @@ def _deepseek_chat_stream(messages, tools, api_key):
     """Streaming variant of _deepseek_chat: same body plus stream:True and
     stream_options.include_usage, byte-forwarding DeepSeek's raw SSE stream.
     No parsing/re-encoding here — the client owns all delta accumulation.
-    Raises the same way as _deepseek_chat on an upstream error (urlopen
-    raises HTTPError before any bytes are yielded), so _friendly_chat_error
-    still applies."""
+
+    Deliberately NOT a generator itself: it opens the upstream connection
+    eagerly and returns an iterator over the already-open response. When
+    this was a generator, urlopen() only ran on the first next() — inside
+    _send_sse, AFTER the 200 + SSE headers were on the wire — so an upstream
+    failure (bad key, venue proxy refusing the CONNECT, DeepSeek 5xx)
+    escaped to do_POST's handler, which then wrote a second status line
+    ("HTTP/1.0 502") into the same response body. Opening here means those
+    errors raise before any header is sent and take the normal friendly-502
+    path via _friendly_chat_error."""
     req = urllib.request.Request(
         DEEPSEEK_URL,
         data=json.dumps({
@@ -955,14 +1075,18 @@ def _deepseek_chat_stream(messages, tools, api_key):
     )
     # 25s cap mirrors the Worker's AbortSignal.timeout(25000).
     resp = urllib.request.urlopen(req, timeout=25)
-    try:
-        while True:
-            chunk = resp.read(4096)
-            if not chunk:
-                break
-            yield chunk
-    finally:
-        resp.close()
+
+    def chunks():
+        try:
+            while True:
+                chunk = resp.read(4096)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            resp.close()
+
+    return chunks()
 
 
 def _wrap_mock_as_sse(message):
@@ -1064,7 +1188,9 @@ def _mock_navigate(navigate_spec):
         if not enum and isinstance(p, dict):
             enum = (p.get('items') or {}).get('enum') or []
         if enum:
-            for pref in ('results', 'plan', 'home'):
+            # 'home' used to be on this list, so the Lab's fallback demo
+            # "navigated" to its landing tab and briefed "Nothing to summarise".
+            for pref in ('results', 'plan', 'retirement'):
                 if pref in enum:
                     return pname, pref
             return pname, enum[min(1, len(enum) - 1)]
@@ -1106,8 +1232,31 @@ def _mock_summarize(content):
     return '\n'.join(lines)
 
 
+def _mock_chart_summary(data):
+    """read_current_chart returns {tool, charts:[{title, xAxis, yAxis, note,
+    points:[{label, value}]}]} — the generic key/value summary above only
+    ever saw "Ok: yes / Tool: ...", so walk the charts themselves."""
+    lines = []
+    for c in (data.get('charts') or [])[:3]:
+        if not isinstance(c, dict):
+            continue
+        axes = ', '.join(x for x in ((f"across: {c['xAxis']}" if c.get('xAxis') else ''),
+                                     (f"up: {c['yAxis']}" if c.get('yAxis') else '')) if x)
+        lines.append('📊 **' + str(c.get('title') or c.get('kind') or 'Chart') + '**' + (f' — {axes}' if axes else ''))
+        if c.get('note'):
+            lines.append(str(c['note'])[:160])
+        pts = [f"{p.get('label')}: **{p.get('value')}**" for p in (c.get('points') or [])[:4] if isinstance(p, dict)]
+        if pts:
+            lines.append('; '.join(pts))
+    return '\n'.join(lines) if lines else _mock_summarize(json.dumps(data))
+
+
 def _mock_term_answer(text):
     t = text.strip().rstrip('?').strip()
+    # "run a monte carlo for me" is short enough to look like a bare term,
+    # but it's an instruction, not a glossary question.
+    if re.match(r'^(run|show|build|make|calculate|do|simulate)\b', t):
+        return None
     is_question = any(k in text for k in
                       ('what is', "what's", 'what does', 'explain', 'mean',
                        'difference between', 'how does'))
@@ -1121,7 +1270,29 @@ def _mock_build_intent(text):
     return any(k in text for k in
                ('plan', 'calculate', 'how much do i need', 'how much should i',
                 'retire', 'save for', 'college', 'build me', 'goal',
-                'help me save', 'help me invest'))
+                'help me save', 'help me invest', 'monte carlo', 'simulat'))
+
+
+def _mock_chart_intent(text):
+    """A question about what's on screen — answered by reading the page, not
+    by the A/B build offer (which is what it used to get)."""
+    return bool(re.search(r'\b(chart|graph|plot|curve|diagram)s?\b', text)) or any(
+        k in text for k in ('what am i looking at', 'explain this', 'on my screen', 'on screen'))
+
+
+def _mock_choice(text):
+    """The user's answer to the A/B offer, tolerant of how people type it
+    ("A", "a - do it all for me.", "yes do it all", "walk me through it").
+    The old exact-match list missed most of these and re-offered A/B."""
+    t = re.sub(r'\s+', ' ', re.sub(r'[^a-z ]+', ' ', text)).strip()
+    if (t in ('a', 'option a', 'yes', 'y', 'yes please', 'do it', 'sure', 'ok', 'okay')
+            or t.startswith(('a do', 'a just', 'a go', 'option a '))
+            or any(p in t for p in ('do it all', 'do it for me', 'just do it', 'go ahead'))):
+        return 'A'
+    if (t in ('b', 'option b') or t.startswith(('b walk', 'b step', 'b guide', 'option b '))
+            or any(p in t for p in ('walk me through', 'step by step', 'guide me'))):
+        return 'B'
+    return None
 
 
 def _mock_mode(mode, text):
@@ -1131,10 +1302,103 @@ def _mock_mode(mode, text):
     return f'MODE: {mode}\n{text}'
 
 
-def _mock_demo_turn(specs):
-    """One batched turn of real tool calls: set a value, move the app, run
-    the calculation. Reads each tool's schema so it only ever sends arguments
-    the page will accept (country is an IN/US enum on all three doors)."""
+def _mock_call(call_id, name, args):
+    return {'id': call_id, 'type': 'function',
+            'function': {'name': name, 'arguments': json.dumps(args)}}
+
+
+def _mock_json(content):
+    try:
+        data = json.loads(content or '')
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+# Sample inputs for the scripted demo. Every value sits inside that page's
+# own field schema (ADVISOR_FIELDS on each page), and the reply always says
+# plainly that they're samples — the mock never pretends it heard numbers
+# the user didn't give.
+_MOCK_SAMPLE_RET = ('I\'m using sample numbers — a 30-year-old in India retiring at 60 and spending '
+                    '₹50,000 a month, balanced risk. Tell me your own and I\'ll redo it.')
+
+
+def _mock_skill_call(specs, text):
+    """The page's compound skill tool (one of _SKILL_TOOLS) filled with
+    sample inputs, shaped by its own schema: a 'tab' property is the Lab,
+    'goalType' is Quick Calculate, otherwise it's The Full Plan's multi-goal
+    plan. Returns (name, args, note) or (None, None, None)."""
+    name = next((n for n in _SKILL_TOOLS if n in specs), None)
+    if not name:
+        return None, None, None
+    props = ((specs[name].get('parameters') or {}).get('properties') or {})
+    if 'tab' in props:
+        if 'monte carlo' in text or 'simulat' in text:
+            return name, {'tab': 'mc', 'params': {'sip': 200000, 'years': 20, 'meanReturn': 12, 'volatility': 15}}, (
+                'I\'m using sample numbers — ₹2,00,000 a year for 20 years at a 12% expected return and 15% '
+                'volatility. Tell me your own and I\'ll rerun it.')
+        return name, {'tab': 'retirement', 'params': {'age': 30, 'retireAge': 60, 'monthlyExpense': 50000,
+                                                      'preRate': 10, 'postRate': 8, 'inflation': 6}}, _MOCK_SAMPLE_RET
+    if 'goalType' in props:
+        if any(k in text for k in ('college', 'education', 'child', 'school')):
+            return name, {'goalType': 'education', 'country': 'IN', 'params': {
+                'annualFee': 500000, 'yearsToCollege': 10, 'courseDuration': 4, 'risk': 'balanced', 'existingSavings': 0}}, (
+                'I\'m using sample numbers — a ₹5,00,000-a-year college fee today, starting in 10 years, for a '
+                '4-year course, balanced risk. Tell me your own and I\'ll redo it.')
+        gen = next((g for k, g in (('car', 'car'), ('house', 'house'), ('home', 'house'), ('wedding', 'wedding'),
+                                    ('travel', 'travel'), ('trip', 'travel')) if k in text), None)
+        if gen:
+            return name, {'goalType': 'generic', 'country': 'IN', 'params': {
+                'genType': gen, 'genAmount': 800000, 'genYears': 5, 'risk': 'balanced', 'existingSavings': 0}}, (
+                f'I\'m using sample numbers — a {gen} costing ₹8,00,000 today, needed in 5 years, balanced risk. '
+                'Tell me your own and I\'ll redo it.')
+        return name, {'goalType': 'retirement', 'country': 'IN', 'params': {
+            'age': 30, 'retireAge': 60, 'monthlyExpense': 50000, 'risk': 'balanced', 'existingSavings': 0}}, _MOCK_SAMPLE_RET
+    return name, {'country': 'IN', 'params': {
+        'monthlyCapacity': 50000, 'monthlyExpense': 50000, 'emergencyStatus': 'full', 'emergencyPrioritize': False,
+        'cap_0': 3, 'cap_1': 3, 'cap_2': 4, 'cap_3': 3, 'tol_0': 3, 'tol_1': 3, 'tol_2': 3, 'tol_3': 3, 'tol_4': 3,
+        'goals': [{'type': 'retirement', 'currentAge': 30, 'retireAge': 60, 'monthlyExpense': 50000, 'existingSavings': 0}]}}, (
+        'I\'m using sample numbers — ₹50,000 a month to invest, a full emergency fund, middle-of-the-road '
+        'answers to the risk questions, and one retirement goal (age 30 to 60, ₹50,000 a month). Tell me '
+        'your own and I\'ll redo it.')
+
+
+def _mock_pick_door(door_spec, text):
+    """index.html has no fields of its own — it can only open a door. Same
+    routing the real prompt teaches: The Full Plan by default, Quick
+    Calculate only for "just a quick number", the Lab for Lab-only tools."""
+    enum = _mock_enum(door_spec, 'door')
+    if 'lab' in enum and any(k in text for k in ('lab', 'monte carlo', 'frontier', 'simulat')):
+        return 'lab'
+    if 'quick' in enum and any(k in text for k in ('quick', 'fast', 'just a number')):
+        return 'quick'
+    if 'full' in enum:
+        return 'full'
+    return enum[0] if enum else None
+
+
+def _mock_demo_turn(specs, text=''):
+    """One batched turn of real tool calls. On a door, the page's compound
+    skill tool fills every input with sample values and get_results runs the
+    real calculation. On index.html it hands off to a door with
+    auto_continue, so the destination page carries on by itself. Reads each
+    tool's schema so it only ever sends arguments the page will accept."""
+    name, args, note = _mock_skill_call(specs, text)
+    if name:
+        calls = [_mock_call('call_mock_skill', name, args)]
+        if 'get_results' in specs:
+            calls.append(_mock_call('call_mock_res', 'get_results', {}))
+        return {'role': 'assistant',
+                'content': _mock_mode('B', 'Let me build that on the real app — watch each step land. ' + note),
+                'tool_calls': calls}
+    door_spec = specs.get('open_door')
+    if door_spec:
+        door = _mock_pick_door(door_spec, text)
+        if door:
+            return {'role': 'assistant',
+                    'content': _mock_mode('B', 'This page only points you to the right tool, so I\'ll open it and keep '
+                                          'going there — it will fill everything in and hand you a report.'),
+                    'tool_calls': [_mock_call('call_mock_door', 'open_door', {'door': door, 'auto_continue': True})]}
     calls = []
     sv = specs.get('set_value')
     if sv and 'country' in (_mock_enum(sv, 'field') or []):
@@ -1162,11 +1426,14 @@ def _mock_chat(body):
     """Scripted stand-in when no API key is set.
 
     A decision tree, not a random-reply generator: a term question gets a
-    real plain-language answer; a build request gets the same A/B choice the
+    real plain-language answer; a question about the chart on screen reads
+    it with read_current_chart; a build request gets the same A/B choice the
     system prompt teaches the real model; picking A (or arriving with state)
-    triggers a genuine batched tool sequence (set_value -> navigate ->
-    get_results), then a formatted summary parsed from the actual tool JSON,
-    then a real compose_briefing call so the demo ends on the report page.
+    triggers a genuine batched tool sequence (the page's compound skill tool
+    with clearly-labelled sample inputs -> get_results; on index.html an
+    open_door hand-off with auto_continue), then a formatted summary parsed
+    from the actual tool JSON, then a real compose_briefing call — and the
+    demo only says "that is the full report" if that call returned ok.
     Every page's tool schemas are read from the request body, so the same
     tree drives Door 1, Door 2, the Lab and index.html without knowing which
     one it is talking to.
@@ -1176,66 +1443,123 @@ def _mock_chat(body):
     specs = _mock_tool_specs(body)
 
     text = ''
-    for m in reversed(messages):
+    last_user_idx = -1
+    for i in range(len(messages) - 1, -1, -1):
+        m = messages[i]
         if m.get('role') == 'user' and m.get('content'):
             text = str(m['content']).strip().lower()
+            last_user_idx = i
             break
+    # Every user message, so a hand-off turn ("A") still knows the original
+    # ask ("help me plan my retirement") it is answering.
+    all_text = ' '.join(str(m.get('content') or '').lower() for m in messages if m.get('role') == 'user')
     last = messages[-1] if messages else {}
+    # Only this turn's tool traffic counts — "briefed" used to look at the
+    # whole history, so one earlier report made every later tool result
+    # end with "that is the full report".
+    turn = messages[last_user_idx + 1:]
 
     # ---- we are mid-loop: the last message is a tool result ----
     if last.get('role') == 'tool':
         name = last.get('name') or ''
-        briefed = any(m.get('role') == 'tool' and m.get('name') == 'compose_briefing'
-                      for m in messages)
-        if briefed:
+        data = _mock_json(last.get('content'))
+        if name == 'compose_briefing':
+            if data.get('ok') is True:
+                return {'role': 'assistant', 'content':
+                        _mock_mode('B', 'And that is the full report — every number in it came from the app\'s '
+                        'own math, not from me. Scroll the briefing, print it if you like, and '
+                        'ask me to change anything you want explored differently.' + _MOCK_NOTE)}
+            # Never claim a report that didn't open.
             return {'role': 'assistant', 'content':
-                    _mock_mode('B', 'And that is the full report — every number in it came from the app\'s '
-                    'own math, not from me. Scroll the briefing, print it if you like, and '
-                    'ask me to change anything you want explored differently.' + _MOCK_NOTE)}
-        if name == 'get_results':
-            summary = _mock_summarize(last.get('content') or '')
+                    _mock_mode('A', 'I couldn\'t open the report page — the app said: '
+                               + str(data.get('error') or 'it could not be built yet').rstrip('. ')
+                               + '. Everything I calculated is still on your screen; give me the missing '
+                               'details and I\'ll try again.' + _MOCK_NOTE)}
+        if name == 'open_door':
+            where = data.get('opened') or 'that tool'
+            return {'role': 'assistant', 'content':
+                    _mock_mode('A', f'Opening {where} now — I\'ll pick up there as soon as it loads.')}
+        if name == 'read_current_chart':
+            if data.get('ok') is False:
+                return {'role': 'assistant', 'content': _mock_mode('A', 'The app says: ' + str(data.get('error')) + _MOCK_NOTE)}
+            return {'role': 'assistant', 'content':
+                    _mock_mode('B', 'Here is what is on your screen right now:\n'
+                               + _mock_chart_summary(data) + _MOCK_NOTE)}
+        if name == 'get_results' or name in _SKILL_TOOLS:
+            res = data.get('result') if name == 'get_results' else data.get('results')
+            if data.get('ok') is not True or not res:
+                # e.g. "No goal chosen yet" — say so plainly and stop, rather
+                # than composing a report around a missing result.
+                return {'role': 'assistant', 'content':
+                        _mock_mode('A', _mock_summarize(last.get('content') or '') + _MOCK_NOTE)}
+            summary = _mock_summarize(json.dumps(res))
             bf = specs.get('compose_briefing')
             if bf:
                 enum = _mock_enum(bf, 'sections') or []
-                chosen = [s for s in ('headline', 'assumptions', 'next', 'retirement') if s in enum][:3] or enum[:3]
+                ran_tab = None
+                for m in turn:
+                    for tc in (m.get('tool_calls') or []) if m.get('role') == 'assistant' else []:
+                        if (tc.get('function') or {}).get('name') in _SKILL_TOOLS:
+                            ran_tab = _mock_json((tc.get('function') or {}).get('arguments')).get('tab') or ran_tab
+                tab_section = {'retirement': 'retirement', 'mc': 'montecarlo'}.get(ran_tab)
+                prefs = (['headline', tab_section, 'assumptions', 'next'] if ran_tab
+                         else ['headline', 'goals', 'allocation', 'assumptions', 'next'])
+                chosen = [s for s in prefs if s and s in enum][:4] or enum[:3]
                 return {'role': 'assistant',
-                        'content': _mock_mode('B', 'Here is what your plan currently says:\n' + summary
+                        'content': _mock_mode('B', 'Here is what your plan says:\n' + summary
                                    + '\n\nLet me put this together as a proper report page for you.'),
-                        'tool_calls': [{'id': 'call_mock_brief', 'type': 'function',
-                                        'function': {'name': 'compose_briefing',
-                                                     'arguments': json.dumps({
-                                                         'title': 'Your plan so far',
-                                                         'intro': 'Everything in this briefing was computed by Goalden from your own inputs.',
-                                                         'sections': chosen})}}]}
-            return {'role': 'assistant', 'content': _mock_mode('B', 'Here is what your plan currently says:\n' + summary + _MOCK_NOTE)}
-        if 'get_results' in specs:
+                        'tool_calls': [_mock_call('call_mock_brief', 'compose_briefing', {
+                            'title': 'Your plan',
+                            'intro': 'Everything in this briefing was computed by Goalden from the inputs on screen.',
+                            'sections': chosen})]}
+            return {'role': 'assistant', 'content': _mock_mode('B', 'Here is what your plan says:\n' + summary + _MOCK_NOTE)}
+        ran_results = any(m.get('role') == 'tool' and m.get('name') == 'get_results' for m in turn)
+        if 'get_results' in specs and not ran_results:
             return {'role': 'assistant',
                     'content': _mock_mode('B', 'Done — you saw each step land on the real form. Now let me run the actual calculation.'),
-                    'tool_calls': [{'id': 'call_mock_res', 'type': 'function',
-                                    'function': {'name': 'get_results', 'arguments': '{}'}}]}
+                    'tool_calls': [_mock_call('call_mock_res', 'get_results', {})]}
         return {'role': 'assistant', 'content': _mock_mode('B', 'Done — that change is live on your screen.' + _MOCK_NOTE)}
 
     # ---- plain user turn ----
-    if text in ('a', 'b', 'a)', 'b)', 'yes', 'y', 'do it', 'do it all', 'do it for me',
-                'go ahead', 'option a', 'walk me through it', 'walk me through',
-                'guide me', 'option b', 'b) walk me through it step by step'):
-        if text.startswith(('b', 'walk', 'guide', 'option b')):
-            return {'role': 'assistant', 'content':
-                    _mock_mode('B', "Great — we'll go one screen at a time. Move on whenever you're ready, "
-                    'and ask me about anything you see: a term, a number, or why a question '
-                    'is asked at all. (Mock mode — no API key set — so my explanations here '
-                    'are canned, but the app itself is fully live.)')}
-        return _mock_demo_turn(specs)
+    choice = _mock_choice(text)
+    if choice == 'B':
+        door_spec = specs.get('open_door')
+        door = _mock_pick_door(door_spec, all_text) if door_spec else None
+        if door:
+            # Walk-through hand-off: open the door WITHOUT auto_continue, so
+            # the user stays in control of the new page.
+            return {'role': 'assistant',
+                    'content': _mock_mode('A', "Great — I'll open the right tool, and you take it one screen at a time."),
+                    'tool_calls': [_mock_call('call_mock_door', 'open_door', {'door': door})]}
+        return {'role': 'assistant', 'content':
+                _mock_mode('B', "Great — we'll go one screen at a time. Move on whenever you're ready, "
+                'and ask me about anything you see: a term, a number, or why a question '
+                'is asked at all. (Mock mode — no API key set — so my explanations here '
+                'are canned, but the app itself is fully live.)')}
+    if choice == 'A':
+        return _mock_demo_turn(specs, all_text)
+
+    if _mock_chart_intent(text) and 'read_current_chart' in specs:
+        return {'role': 'assistant',
+                'content': _mock_mode('B', 'Let me read exactly what is on your screen.'),
+                'tool_calls': [_mock_call('call_mock_chart', 'read_current_chart', {})]}
 
     term = _mock_term_answer(text)
     if term:
         return {'role': 'assistant', 'content': _mock_mode('A', term + _MOCK_NOTE)}
 
+    if 'report' in text and 'compose_briefing' in specs and 'get_results' in specs:
+        # Report the inputs already on screen — never overwrite them with the
+        # demo's sample numbers just to have something to print.
+        return {'role': 'assistant',
+                'content': _mock_mode('B', 'Let me re-run your numbers and put them on a report page.'),
+                'tool_calls': [_mock_call('call_mock_res', 'get_results', {})]}
+
     if _mock_build_intent(text):
         # With state already on screen, demo immediately; fresh session gets
         # the same A/B offer the real model is instructed to make.
         if state and ('set_value' in specs or 'navigate' in specs or 'get_results' in specs):
-            return _mock_demo_turn(specs)
+            return _mock_demo_turn(specs, all_text)
         return {'role': 'assistant', 'content': _mock_mode('B', _MOCK_AB)}
 
     if text and len(text) <= 24 and text.split()[0] in ('hi', 'hello', 'hey', 'namaste'):
@@ -1268,12 +1592,14 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         super().end_headers()
 
-    def _send_json(self, obj, status=200):
+    def _send_json(self, obj, status=200, extra_headers=None):
         body = json.dumps(obj).encode('utf-8')
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Content-Length', str(len(body)))
+        for k, v in (extra_headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
 
@@ -1296,12 +1622,24 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-cache')
         self.send_header('Connection', 'close')
         self.end_headers()
-        for chunk in byte_iterable:
-            if not chunk:
-                continue
-            self.wfile.write(chunk)
-            self.wfile.flush()
         self.close_connection = True
+        try:
+            for chunk in byte_iterable:
+                if not chunk:
+                    continue
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except Exception as e:
+            # The 200 is already sent, so a JSON 502 is no longer possible —
+            # letting this reach do_POST's handler is exactly what wrote a
+            # second status line into the body before. Finish the stream with
+            # one SSE error event the client turns into a normal error bubble.
+            print(f'chat stream error after headers: {e}', file=sys.stderr)
+            try:
+                self.wfile.write(('data: ' + json.dumps({'error': _friendly_chat_error(e)}) + '\n\n').encode('utf-8'))
+                self.wfile.flush()
+            except Exception:
+                pass
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -1322,7 +1660,7 @@ class Handler(SimpleHTTPRequestHandler):
                     return self._send_json(fetch_fund_history(scheme))
                 return self._send_json({'error': 'type must be "equity" or "fund"'}, 400)
             except Exception as e:
-                return self._send_json({'error': str(e) or 'Failed to fetch history'}, 502)
+                return self._send_json({'error': _market_data_error(e, 'Failed to fetch history')}, 502)
 
         if parsed.path == '/api/fundsearch':
             q = (qs.get('q') or [None])[0]
@@ -1331,7 +1669,7 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 return self._send_json(fund_search(q))
             except Exception as e:
-                return self._send_json({'error': str(e) or 'Fund search failed'}, 502)
+                return self._send_json({'error': _market_data_error(e, 'Fund search failed')}, 502)
 
         if parsed.path == '/api/symbolsearch':
             q = (qs.get('q') or [None])[0]
@@ -1340,7 +1678,7 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 return self._send_json(symbol_search(q))
             except Exception as e:
-                return self._send_json({'error': str(e) or 'Symbol search failed'}, 502)
+                return self._send_json({'error': _market_data_error(e, 'Symbol search failed')}, 502)
 
         if parsed.path == '/api/financials/health':
             return self._send_json(financials_health_check())
@@ -1362,9 +1700,18 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == '/api/chat':
+            wait_s = _rate_limit_wait(self.client_address[0], self.headers.get('X-Goalden-Turn'))
+            if wait_s:
+                return self._send_json({'error': 'Too many requests — please slow down and try again in a minute.'}, 429,
+                                       extra_headers={'Retry-After': str(wait_s)})
             try:
                 length = int(self.headers.get('Content-Length') or 0)
-                body = json.loads(self.rfile.read(length).decode('utf-8') or '{}')
+                raw = self.rfile.read(length).decode('utf-8')
+                if len(raw) > _MAX_CHAT_BODY_CHARS:
+                    return self._send_json({'error': 'Request is too large.'}, 413)
+                body = json.loads(raw or '{}')
+                if len(body.get('messages') or []) > _MAX_CHAT_MESSAGES:
+                    return self._send_json({'error': 'This conversation has grown too long — please start a new one.'}, 413)
                 api_key = os.environ.get('DEEPSEEK_API_KEY')
                 if body.get('stream') is True:
                     if api_key:

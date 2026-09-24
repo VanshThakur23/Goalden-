@@ -9021,10 +9021,24 @@ function briefingHeadline() {
   const r = advisorGetResults();
   if (!r.ok) return { ok:false, error: r.error };
   const res = r.result;
-  const fmt = function (v) { return typeof v === 'number' ? c.compact(v) : String(v); };
+  // Format by what the field IS, not by type alone: every number used to go
+  // through c.compact(), so the report read "AGE ₹30 ... YEARS ₹30".
+  const fmt = function (k, v) {
+    if (typeof v !== 'number') return String(v);
+    if (/^(age|retireAge|years|drawYrs|jointYears|children|n)$|Years$|Age$|Count$/.test(k)) return String(Math.round(v));
+    if (/score/i.test(k)) return Math.round(v) + '/100';
+    if (/sharpe|beta/i.test(k)) return v.toFixed(2);
+    if (/ratio|diversificationBenefit/i.test(k)) return v.toFixed(2) + 'x';
+    // *Pct fields are already in percentage points (frontierGapPct 0.57 =
+    // 0.57 points), never fractions.
+    if (/Pct$|Percent|percent/.test(k)) return v.toFixed(/gap/i.test(k) ? 2 : 1) + (/gap/i.test(k) ? ' pts' : '%');
+    return c.compact(v);
+  };
+  // "monthlySIP" -> "Monthly SIP", "corpusTodayMoney" -> "Corpus today money".
+  const label = function (k) { const t = k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
   const skip = { tool:1, note:1, breakdown:1, holdings:1, correlations:1, weights:1, inputs:1 };
   const rows = Object.keys(res).filter(function (k) { return !skip[k] && !(res[k] && typeof res[k] === 'object'); }).map(function (k) {
-    return '<div class="stat"><div class="stat-label">' + k + '</div><div class="stat-value">' + fmt(res[k]) + '</div></div>';
+    return '<div class="stat"><div class="stat-label">' + label(k) + '</div><div class="stat-value">' + fmt(k, res[k]) + '</div></div>';
   }).join('');
   // Every numeric scalar in the result becomes an auditable figure — composeBriefing
   // re-reads them via get_results and blocks on any drift.
@@ -9231,14 +9245,21 @@ window.GOALDEN_ADVISOR_CONFIG = {
   // can go deeper without thinking of the next question themselves.
   chartFollowUps: function () {
     var tab = L.tab || 'home';
+    // Keys must be real TABS ids: they used to be 'ret-lab' / 'montecarlo',
+    // which never matched, so those tabs fell through to the generic chips.
     var followUps = {
-      'ret-lab':   ['Why is the curve shaped like that?', 'What if I retire 5 years earlier?', 'How reliable is this projection?'],
+      'retirement': ['Why is the curve shaped like that?', 'What if I retire 5 years earlier?', 'How reliable is this projection?'],
       'portfolio': ['What does my Sharpe ratio mean?', 'How do I move closer to the frontier?', 'Which asset is pulling my mix off the curve?'],
       'livefrontier': ['Why does this correlation matter?', 'Which blend is the best balance?', 'What happened in the worst year for this pair?'],
-      'montecarlo': ['What does the spread mean?', 'What is the chance of running out of money?', 'How does equity allocation change the fan?'],
-      'stepup':    ['Why does stepping up beat a flat SIP?', 'What if my income grows slower?', 'How much of the gain is real vs inflation?'],
+      'mc': ['What does the spread mean?', 'What is the chance of running out of money?', 'What if volatility is higher?'],
+      'stepup': ['What does stepping up cost me in total?', 'What if my income grows slower?', 'How much of the gain is real vs inflation?'],
+      'swp': ['What happens if markets crash early?', 'How much could I withdraw for 30 years?', 'Why does inflation matter here?'],
+      'joint': ['Why are separate pots cheaper here?', 'What if the second child starts later?', 'Where is the tightest year?'],
+      'statements': ['What does this chart show about the company?', 'Is profit turning into cash?', 'What changed versus five years ago?'],
     };
-    return followUps[tab] || ['What does this number mean?', 'What should I do with this?'];
+    // Generic fallback stays descriptive -- "What should I do with this?"
+    // invited exactly the personal-advice answer the guardrail then blocks.
+    return followUps[tab] || ['What does this number mean?', 'Which assumption matters most here?'];
   },
   lang: function () { return L.country === 'US' ? 'en-US' : 'en-IN'; },
   greeting: 'Hi! I can run any of these tools for you. Tell me what you\'re trying to figure out, or just ask a question.',

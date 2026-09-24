@@ -38,9 +38,49 @@
     "mockOnly": true,
     "userMessages": ["help me plan my retirement"],
     "expect": {
-      "toolsCalled": ["set_value", "get_results", "compose_briefing"],
-      "fieldsSet": { "country": "IN" }
+      "toolsCalled": ["build_goal_plan", "get_results", "compose_briefing"],
+      "fieldsSet": { "country": "IN", "goalType": "retirement", "age": 30, "retireAge": 60, "monthlyExpense": 50000, "risk": "balanced" },
+      "figures": { "corpus": "retirementCorpus", "monthlySIP": "retirementSIP" }
     }
+  },
+  {
+    "name": "door2 do-it-all mechanics (mock)",
+    "page": "goalden-door2.html",
+    "country": "IN",
+    "mockOnly": true,
+    "userMessages": ["help me plan my retirement"],
+    "expect": {
+      "toolsCalled": ["build_goal_plan", "get_results", "compose_briefing"],
+      "fieldsSet": { "country": "IN", "monthlyCapacity": 50000 }
+    }
+  },
+  {
+    "name": "lab do-it-all mechanics (mock)",
+    "page": "goalden-lab.html",
+    "country": "IN",
+    "mockOnly": true,
+    "userMessages": ["help me plan my retirement"],
+    "expect": {
+      "toolsCalled": ["run_full_analysis", "get_results", "compose_briefing"],
+      "notToolsCalled": ["navigate"],
+      "fieldsSet": { "tab": "retirement", "ret.age": 30, "ret.retireAge": 60, "ret.monthlyExpense": 50000 }
+    }
+  },
+  {
+    "name": "lab chart question reads the chart (mock)",
+    "page": "goalden-lab.html",
+    "country": "IN",
+    "mockOnly": true,
+    "userMessages": ["explain this graph"],
+    "expect": { "toolsCalled": ["read_current_chart"], "notToolsCalled": ["set_value", "run_full_analysis", "compose_briefing"] }
+  },
+  {
+    "name": "index do-it-all hands off with auto_continue (mock)",
+    "page": "index.html",
+    "country": "IN",
+    "mockOnly": true,
+    "userMessages": ["help me plan my retirement", "A"],
+    "expect": { "toolsCalled": ["open_door"], "toolArgs": { "open_door": { "door": "full", "auto_continue": true } } }
   },
   {
     "name": "goalden do-it-all retirement",

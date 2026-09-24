@@ -10,6 +10,9 @@
 //
 // Usage: node agent-evals/runner.js [--scenario NAME] [--base URL]
 // Exits 0 when every scenario that RUNS passes; 1 on any failure or error.
+// The chat endpoint rate-limits per user turn (10/min per IP); a run with
+// more turns than that waits out the 429's Retry-After once. Start
+// local_server.py with GOALDEN_CHAT_RATE_LIMIT=off to skip the wait.
 //
 // No new dependencies: node:vm, node:fs, node:path, global fetch/AbortSignal.
 
@@ -143,7 +146,8 @@ function loadPage(page) {
     cfg,
     getTools: () => { try { const t = get('advisorTools'); return (typeof t === 'function') ? t() : []; } catch (e) { return []; } },
     executeTool: (name, args) => get('executeAdvisorTool')(name, args),
-    getResults: () => get('advisorGetResults')(),
+    // index.html has no results of its own (it can only open a door).
+    getResults: () => { try { const f = get('advisorGetResults'); return typeof f === 'function' ? f() : null; } catch (e) { return null; } },
     getState: () => (cfg && typeof cfg.stateForAdvisor === 'function') ? cfg.stateForAdvisor() : (cfg ? cfg.state : {}),
     getRawState: () => get('(typeof S!=="undefined"?S:(typeof G!=="undefined"?G:(typeof L!=="undefined"?L:null)))'),
     getPage: () => (cfg && typeof cfg.page === 'function') ? cfg.page() : 'start',
@@ -152,6 +156,18 @@ function loadPage(page) {
   };
   return api;
 }
+
+// The client's send-side history trim (advisorCleanMessages +
+// advisorFitMessages), extracted from advisor.js so a long live scenario
+// sends exactly what the browser would and never trips the servers'
+// 40-message cap (413) that the browser itself never hits.
+const fitMessages = (function () {
+  const clean = ADVISOR_SRC.match(/function advisorCleanMessages\(messages\) \{[\s\S]*?\n\}/);
+  const fit = ADVISOR_SRC.match(/const ADVISOR_MAX_SEND_MESSAGES = \d+;[\s\S]*?function advisorFitMessages\(messages, max\) \{[\s\S]*?\n\}/);
+  if (!clean || !fit) return (m) => m;
+  const f = new Function(clean[0] + '\n' + fit[0] + '\nreturn { advisorFitMessages, ADVISOR_MAX_SEND_MESSAGES };')();
+  return (m) => f.advisorFitMessages(m, f.ADVISOR_MAX_SEND_MESSAGES);
+})();
 
 // Extract advisorGuardrail from advisor.js (same technique as smoke-02.js).
 const guardrailMatch = ADVISOR_SRC.match(/const ADVISOR_TICKER_DENY = \[[\s\S]*?\];[\s\S]*?function advisorGuardrail\(text\) \{[\s\S]*?\n\}/);
@@ -193,17 +209,22 @@ async function runScenario(sc, api) {
   const knowledge = api.getKnowledge();
   const messages = [];
   const toolsCalled = [];
+  const toolCalls = [];
   let lastReply = '';
   let lastErr = null;
 
   // Send each user message one at a time, running a full ReAct round after
   // each (so a "do it all" flow's A/B offer can be answered with a second
   // user message in the same scenario).
-  for (const um of sc.userMessages) {
+  for (let ui = 0; ui < sc.userMessages.length; ui++) {
+    const um = sc.userMessages[ui];
     messages.push({ role: 'user', content: um });
+    // One rate-limit turn per user message, exactly like advisor.js — the
+    // servers count turns, not round trips (see rateLimitWait in worker.js).
+    const turnId = 'eval-' + Date.now().toString(36) + '-' + ui + '-' + Math.random().toString(36).slice(2, 8);
     for (let step = 0; step < 18; step++) {
       const body = {
-        messages,
+        messages: fitMessages(messages),
         tools,
         state: api.getState(),
         knowledge,
@@ -211,17 +232,26 @@ async function runScenario(sc, api) {
       };
       let resp;
       try {
-        resp = await fetch(BASE + '/api/chat', {
+        const post = () => fetch(BASE + '/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Goalden-Turn': turnId },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(25000),
         });
+        resp = await post();
+        // A full live run sends ~30 turns; if it outpaces the per-IP turn
+        // limit, wait out Retry-After once instead of failing the scenario.
+        if (resp.status === 429) {
+          const waitS = Math.min(65, Number(resp.headers.get('Retry-After')) || 60);
+          console.log('        (rate-limited; waiting ' + waitS + 's)');
+          await new Promise((r) => setTimeout(r, waitS * 1000));
+          resp = await post();
+        }
       } catch (e) {
         lastErr = 'could not reach ' + BASE + '/api/chat — is local_server.py running? (' + e.message + ')';
-        return { toolsCalled, lastReply, lastErr, state: api.getRawState(), results: api.getResults() };
+        return { toolsCalled, toolCalls, lastReply, lastErr, state: api.getRawState(), results: api.getResults() };
       }
-      if (!resp.ok) { lastErr = 'chat returned HTTP ' + resp.status; return { toolsCalled, lastReply, lastErr, state: api.getRawState(), results: api.getResults() }; }
+      if (!resp.ok) { lastErr = 'chat returned HTTP ' + resp.status; return { toolsCalled, toolCalls, lastReply, lastErr, state: api.getRawState(), results: api.getResults() }; }
       const data = await resp.json();
       const msg = data.message || {};
       if (msg.tool_calls && msg.tool_calls.length) {
@@ -231,6 +261,7 @@ async function runScenario(sc, api) {
           let args = {};
           try { args = JSON.parse(tc.function.arguments || '{}'); } catch (e) { args = {}; }
           toolsCalled.push(name);
+          toolCalls.push({ name, args });
           let result;
           try {
             if (INTERNAL_TOOL_NAMES.has(name)) {
@@ -250,7 +281,7 @@ async function runScenario(sc, api) {
     }
   }
 
-  return { toolsCalled, lastReply, lastErr, state: api.getRawState(), results: api.getResults() };
+  return { toolsCalled, toolCalls, lastReply, lastErr, state: api.getRawState(), results: api.getResults() };
 }
 
 // ---------------------------------------------------------------------------
@@ -304,6 +335,16 @@ function checkScenario(sc, out) {
   if (expect.replyIncludes) {
     assert((out.lastReply || '').toLowerCase().includes(expect.replyIncludes.toLowerCase()), 'reply should include "' + expect.replyIncludes + '"');
   }
+  if (expect.toolArgs) {
+    // { toolName: { argKey: expectedValue } } — at least one call of that
+    // tool must carry every listed argument value (e.g. open_door's
+    // auto_continue:true, which is what makes the index hand-off finish).
+    for (const t in expect.toolArgs) {
+      const want = expect.toolArgs[t];
+      const hit = (out.toolCalls || []).some((c) => c.name === t && Object.keys(want).every((k) => c.args && c.args[k] === want[k]));
+      assert(hit, 'expected a "' + t + '" call with ' + JSON.stringify(want) + ' (got: ' + JSON.stringify((out.toolCalls || []).filter((c) => c.name === t).map((c) => c.args)) + ')');
+    }
+  }
   if (expect.noTools) {
     assert(out.toolsCalled.length === 0, 'expected no tool calls (got: ' + out.toolsCalled.join(', ') + ')');
   }
@@ -315,11 +356,20 @@ function checkScenario(sc, out) {
 // ---------------------------------------------------------------------------
 async function detectMode() {
   try {
-    const resp = await fetch(BASE + '/api/chat', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    const probe = () => fetch(BASE + '/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Goalden-Turn': 'eval-detect-' + Date.now().toString(36) },
       body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }], tools: [], state: {}, knowledge: '', context: {} }),
       signal: AbortSignal.timeout(8000),
     });
+    let resp = await probe();
+    // A 429 body has no "mock mode" text in it, so without this a
+    // rate-limited probe silently misreported the server as live.
+    if (resp.status === 429) {
+      const waitS = Math.min(65, Number(resp.headers.get('Retry-After')) || 60);
+      console.log('(rate-limited; waiting ' + waitS + 's before probing mode)');
+      await new Promise((r) => setTimeout(r, waitS * 1000));
+      resp = await probe();
+    }
     const data = await resp.json();
     const text = JSON.stringify(data);
     return /mock mode|no api key set/i.test(text) ? 'mock' : 'live';

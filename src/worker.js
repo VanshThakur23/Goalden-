@@ -44,6 +44,24 @@ function json(data, status) {
   });
 }
 
+// Market-data failures come in two kinds. Our own validation messages (bad
+// ticker, too few bars) tell the user what to change and pass through as-is.
+// Upstream/network failures (offline venue Wi-Fi, a proxy refusing the
+// CONNECT, a Yahoo/MFAPI 5xx, an HTML error page where JSON was expected)
+// are not actionable, and their raw text ("fetch failed", "Unexpected token
+// <") was shown verbatim in the Lab and handed to the model. Those collapse
+// to one plain sentence; the detail stays in the Worker log. Mirrored in
+// local_server.py (_market_data_error). Never replaced with made-up prices.
+const MARKET_DATA_UNAVAILABLE = 'Market data is unavailable right now — the price source could not be reached. Please try again in a moment.';
+class UpstreamError extends Error {}
+function marketDataError(e, fallback) {
+  if (e instanceof UpstreamError || e instanceof TypeError || e instanceof SyntaxError || (e && (e.name === 'TimeoutError' || e.name === 'AbortError'))) {
+    console.log('market data upstream error:', (e && e.message) || e);
+    return MARKET_DATA_UNAVAILABLE;
+  }
+  return (e && e.message) || fallback;
+}
+
 // /api/chat is a paid endpoint (it spends the owner's DeepSeek credits), so
 // it is locked down far more tightly than the read-only GET market-data
 // routes, which keep the wildcard below. The Origin allowlist + per-IP rate
@@ -74,29 +92,67 @@ function isAllowedOrigin(origin, requestUrl) {
 // Object or KV would be overkill for 50-200 people and would add a billing
 // surface. The global cap exists because per-IP limits alone don't bound
 // total spend if someone spins up requests from many IPs.
-const chatHits = new Map();
-let globalHits = [];
-function rateLimitOk(ip) {
+//
+// Counted per user TURN, not per HTTP request. One user message can take up
+// to 18 /api/chat round trips (advisorLoop: tool call -> result -> next
+// call ...), so the old flat 10 requests/min/IP cut a single "do it all"
+// flow off with a 429 halfway through, and evaluators sharing one venue IP
+// hit it almost immediately. The client sends one X-Goalden-Turn id per user
+// message (advisorContinue mints it); every round trip of that turn reuses
+// it. Turns are the meaningful limit; the request ceilings are a backstop
+// against a client that mints a fresh id every call. A request with no turn
+// id (curl, an old cached advisor.js) counts as its own turn — exactly as
+// strict as before. Mirrored term-for-term in local_server.py.
+const RATE_WINDOW_MS = 60 * 1000;
+const RATE_LIMITS = { ipTurns: 10, ipRequests: 60, globalTurns: 60, globalRequests: 600 };
+const chatHits = new Map(); // ip -> { turns: Map(turnId -> last seen ms), requests: [ms] }
+let globalTurns = [];
+let globalRequests = [];
+// Returns 0 when the request may proceed, otherwise the seconds to wait (for
+// the 429's Retry-After header).
+function rateLimitWait(ip, turnIdRaw) {
   const now = Date.now();
-  const window = 60 * 1000;
-  globalHits = globalHits.filter((t) => now - t < window);
-  if (globalHits.length >= 60) return false; // ~60 chat turns/min site-wide
-  const hits = (chatHits.get(ip) || []).filter((t) => now - t < window);
-  if (hits.length >= 10) { chatHits.set(ip, hits); return false; }
-  hits.push(now);
-  globalHits.push(now);
-  chatHits.set(ip, hits);
-  return true;
+  const fresh = (t) => now - t < RATE_WINDOW_MS;
+  const waitFor = (oldest) => Math.max(1, Math.ceil((oldest + RATE_WINDOW_MS - now) / 1000));
+  globalTurns = globalTurns.filter(fresh);
+  globalRequests = globalRequests.filter(fresh);
+  const rec = chatHits.get(ip) || { turns: new Map(), requests: [] };
+  rec.requests = rec.requests.filter(fresh);
+  for (const [id, t] of rec.turns) if (!fresh(t)) rec.turns.delete(id);
+  chatHits.set(ip, rec);
+  const turnId = turnIdRaw ? String(turnIdRaw).slice(0, 64) : null;
+  const isNewTurn = !turnId || !rec.turns.has(turnId);
+  if (rec.requests.length >= RATE_LIMITS.ipRequests) return waitFor(rec.requests[0]);
+  if (globalRequests.length >= RATE_LIMITS.globalRequests) return waitFor(globalRequests[0]);
+  if (isNewTurn) {
+    if (rec.turns.size >= RATE_LIMITS.ipTurns) return waitFor(Math.min(...rec.turns.values()));
+    if (globalTurns.length >= RATE_LIMITS.globalTurns) return waitFor(globalTurns[0]);
+    globalTurns.push(now);
+  }
+  // Refreshed on every round trip, so a long-running turn stays "known" and
+  // its later round trips never re-count as a new turn.
+  rec.turns.set(turnId || ('anon:' + now + ':' + Math.random()), now);
+  rec.requests.push(now);
+  globalRequests.push(now);
+  return 0;
 }
 
-function chatJson(data, status, origin) {
+function chatJson(data, status, origin, extraHeaders) {
   const headers = { 'Content-Type': 'application/json; charset=utf-8' };
   if (origin) headers['Access-Control-Allow-Origin'] = origin;
   else headers['Access-Control-Allow-Origin'] = '*';
   headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
-  headers['Access-Control-Allow-Headers'] = 'Content-Type';
-  return new Response(JSON.stringify(data), { status: status || 200, headers });
+  headers['Access-Control-Allow-Headers'] = CHAT_ALLOW_HEADERS;
+  return new Response(JSON.stringify(data), { status: status || 200, headers: { ...headers, ...(extraHeaders || {}) } });
 }
+// X-Goalden-Turn is the per-turn rate-limit key above; a cross-origin
+// caller's preflight must be told it's allowed or the browser drops it.
+const CHAT_ALLOW_HEADERS = 'Content-Type, X-Goalden-Turn';
+
+// One shared conversation-length cap. advisor.js trims what it sends to
+// ADVISOR_MAX_SEND_MESSAGES (36) so there's headroom, and on a 413 trims
+// harder and retries once; local_server.py enforces the same 40.
+const MAX_CHAT_MESSAGES = 40;
 
 /**
  * GET /api/history?type=equity&symbol=TITAN.NS
@@ -113,7 +169,10 @@ async function fetchEquityHistory(symbol) {
       Accept: 'application/json',
     },
   });
-  if (!res.ok) throw new Error(`Yahoo returned ${res.status} for ${symbol}`);
+  // Yahoo answers an unknown symbol with a 404 — that's the user's ticker,
+  // not an outage, so it gets the actionable message, not the generic one.
+  if (res.status === 404) throw new Error(`No chart data for ${symbol} — check the ticker (India needs .NS or .BO)`);
+  if (!res.ok) throw new UpstreamError(`Yahoo returned ${res.status} for ${symbol}`);
   const data = await res.json();
   const err = data && data.chart && data.chart.error;
   if (err) throw new Error(err.description || `Yahoo error for ${symbol}`);
@@ -175,7 +234,7 @@ async function fetchEquityHistory(symbol) {
 async function fetchFundHistory(schemeCode) {
   const url = `https://api.mfapi.in/mf/${encodeURIComponent(schemeCode)}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`MFAPI returned ${res.status} for scheme ${schemeCode}`);
+  if (!res.ok) throw new UpstreamError(`MFAPI returned ${res.status} for scheme ${schemeCode}`);
   const data = await res.json();
   const rows = data && data.data;
   if (!rows || !rows.length) throw new Error(`No NAV history for scheme ${schemeCode}`);
@@ -229,7 +288,7 @@ async function symbolSearch(query) {
       Accept: 'application/json',
     },
   });
-  if (!res.ok) throw new Error(`Yahoo search returned ${res.status}`);
+  if (!res.ok) throw new UpstreamError(`Yahoo search returned ${res.status}`);
   const data = await res.json();
   const quotes = Array.isArray(data.quotes) ? data.quotes : [];
   return quotes
@@ -253,7 +312,7 @@ async function symbolSearch(query) {
 async function fundSearch(query) {
   const url = `https://api.mfapi.in/mf/search?q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`MFAPI search returned ${res.status}`);
+  if (!res.ok) throw new UpstreamError(`MFAPI search returned ${res.status}`);
   const data = await res.json();
   return (Array.isArray(data) ? data : []).slice(0, 25).map((r) => ({
     schemeCode: r.schemeCode,
@@ -491,6 +550,17 @@ function bm25Rank(query, documents, opts) {
 }
 const TOOL_ROUTE_K = 8;
 const KNOWLEDGE_ROUTE_K = 3;
+// Pure top-K routing dropped the tools every multi-step flow depends on,
+// because their descriptions share no vocabulary with how people ask: "yes
+// do it all" on Door 1 lost build_goal_plan/compose_briefing/get_results,
+// "explain this graph" in the Lab lost read_current_chart, "what if I retire
+// at 55" lost run_full_analysis/set_value/navigate. These are always kept
+// (whichever of them the page actually offers); BM25 only ranks the rest.
+const SKILL_TOOLS = ['build_goal_plan', 'run_full_analysis'];
+const CORE_TOOLS = ['navigate', 'set_value', 'get_state', 'get_results', 'read_current_chart', 'compose_briefing', 'propose_plan', 'execute_plan'].concat(SKILL_TOOLS);
+// Below this size the whole list is cheap enough to send as-is — only the
+// Lab (~41 tools) is actually routed; every other page ships ≤ 20.
+const TOOL_ROUTE_MIN_TOOLS = 25;
 function latestUserMessage(messages) {
   for (let i = (messages || []).length - 1; i >= 0; i--) {
     if (messages[i].role === 'user' && messages[i].content) return String(messages[i].content);
@@ -509,17 +579,20 @@ const TOOL_FAMILIES = [
   ['search_instruments', 'add_instrument', 'remove_instrument', 'compare_portfolio', 'render_frontier_chart'],
   ['search_instruments', 'get_financial_statements'],
 ];
-// Returns the filtered tool array: top-K by BM25 relevance to the latest user
+// Returns the filtered tool array: every CORE_TOOLS member the page offers,
+// PLUS the top-K of the remaining tools by BM25 relevance to the latest user
 // message, PLUS every tool the model already called earlier in this
 // conversation (a mid-chain tool must never disappear), PLUS whole tool
 // families where any member survived ranking.
 function filterTools(body) {
   const tools = body.tools || [];
-  if (tools.length <= TOOL_ROUTE_K) return tools;
+  if (tools.length <= TOOL_ROUTE_MIN_TOOLS) return tools;
   const query = latestUserMessage(body.messages);
-  const docs = tools.map((t) => { const f = t.function || {}; return { id: f.name, text: (f.name || '') + ' ' + (f.description || '') }; });
+  const nameOf = (t) => (t.function || {}).name;
+  const keep = new Set(tools.map(nameOf).filter((n) => CORE_TOOLS.includes(n)));
+  const docs = tools.filter((t) => !keep.has(nameOf(t))).map((t) => { const f = t.function || {}; return { id: f.name, text: (f.name || '') + ' ' + (f.description || '') }; });
   const ranked = bm25Rank(query, docs);
-  const keep = new Set(ranked.slice(0, TOOL_ROUTE_K).map((r) => r.id));
+  ranked.slice(0, TOOL_ROUTE_K).forEach((r) => keep.add(r.id));
   for (const m of body.messages || []) {
     if (m.role === 'assistant' && m.tool_calls) {
       for (const tc of m.tool_calls) if (tc.function && tc.function.name) keep.add(tc.function.name);
@@ -703,7 +776,7 @@ async function callDeepSeekStream(messages, tools, apiKey, origin) {
       'Cache-Control': 'no-cache',
       'Access-Control-Allow-Origin': origin || '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': CHAT_ALLOW_HEADERS,
     },
   });
 }
@@ -734,7 +807,7 @@ export default {
         return new Response(null, { headers: {
           'Access-Control-Allow-Origin': origin || '*',
           'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Headers': CHAT_ALLOW_HEADERS,
           'Access-Control-Max-Age': '86400',
         } });
       }
@@ -756,7 +829,7 @@ export default {
         }
         return json({ error: 'type must be "equity" or "fund"' }, 400);
       } catch (e) {
-        return json({ error: (e && e.message) || 'Failed to fetch history' }, 502);
+        return json({ error: marketDataError(e, 'Failed to fetch history') }, 502);
       }
     }
 
@@ -766,7 +839,7 @@ export default {
       try {
         return json(await fundSearch(q));
       } catch (e) {
-        return json({ error: (e && e.message) || 'Fund search failed' }, 502);
+        return json({ error: marketDataError(e, 'Fund search failed') }, 502);
       }
     }
 
@@ -776,7 +849,7 @@ export default {
       try {
         return json(await symbolSearch(q));
       } catch (e) {
-        return json({ error: (e && e.message) || 'Symbol search failed' }, 502);
+        return json({ error: marketDataError(e, 'Symbol search failed') }, 502);
       }
     }
 
@@ -825,8 +898,9 @@ export default {
         return chatJson({ error: 'This origin is not allowed to use the advisor.' }, 403, origin);
       }
       const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-      if (!rateLimitOk(ip)) {
-        return chatJson({ error: 'Too many requests — please slow down and try again in a minute.' }, 429, origin);
+      const waitS = rateLimitWait(ip, request.headers.get('X-Goalden-Turn'));
+      if (waitS) {
+        return chatJson({ error: 'Too many requests — please slow down and try again in a minute.' }, 429, origin, { 'Retry-After': String(waitS) });
       }
       try {
         // Read as text first so we can check actual size — browsers don't set
@@ -836,7 +910,7 @@ export default {
           return chatJson({ error: 'Request is too large.' }, 413, origin);
         }
         const body = JSON.parse(bodyText);
-        if ((body.messages || []).length > 40) {
+        if ((body.messages || []).length > MAX_CHAT_MESSAGES) {
           return chatJson({ error: 'This conversation has grown too long — please start a new one.' }, 413, origin);
         }
         const apiKey = env.DEEPSEEK_API_KEY;
@@ -855,7 +929,7 @@ export default {
               'Cache-Control': 'no-cache',
               'Access-Control-Allow-Origin': origin || '*',
               'Access-Control-Allow-Methods': 'POST, OPTIONS',
-              'Access-Control-Allow-Headers': 'Content-Type',
+              'Access-Control-Allow-Headers': CHAT_ALLOW_HEADERS,
             } });
           }
           return chatJson({ message: notConfigured, usage: null, latencyMs: 0 }, 200, origin);

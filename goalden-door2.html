@@ -2613,6 +2613,10 @@ const BRIEFING_SECTIONS = {
     const c = cfg();
     if (!G.country) return { ok:false, error:'Pick your country first.' };
     const plan = buildPlan();
+    // With no goals the "plan" is all ₹0 — returning ok+figures here stamped
+    // "✓ Every figure recomputed" on a page that verifies nothing (zeros
+    // trivially match zeros). No goals means no plan to show yet.
+    if (!plan.goals.length) return { ok:false, error:'No goals added yet — add at least one goal, and your plan at a glance will appear here.' };
     const b = G.bucket ? BUCKETS[G.bucket] : null;
     const statusLabel = { ok:'Fits within your savings', warn:'Slightly over — small adjustments needed', gap:'Gap: plan needs adjustment' }[plan.status];
     // figures keys mirror advisorGetResults()'s result fields so composeBriefing

@@ -31,8 +31,9 @@ const advLang = (typeof ADVISOR_CFG.lang === 'function') ? ADVISOR_CFG.lang : ((
    disclaimer rule (only rendered when showDisclaimer is true).
    ===================================================================== */
 const ADVISOR_CSS = `
-#advisorFab{position:fixed;right:18px;bottom:18px;z-index:1000;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#3f6fe0);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(20,40,63,.32);transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .2s ease;animation:advisorFabBreathe 3.4s ease-in-out infinite}
-#advisorFab::before{content:'';position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 0 rgba(63,111,224,.45);animation:advisorFabPing 2.6s cubic-bezier(0,0,.2,1) infinite}
+/* Breathe/ping run 3 times, not forever: an endless attention animation fails WCAG 2.2.2 (pause, stop, hide) and kept the button from ever being "stable" for automated clicks. */
+#advisorFab{position:fixed;right:18px;bottom:18px;z-index:1000;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#3f6fe0);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(20,40,63,.32);transition:transform .25s cubic-bezier(.34,1.56,.64,1),box-shadow .2s ease;animation:advisorFabBreathe 3.4s ease-in-out 3}
+#advisorFab::before{content:'';position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 0 rgba(63,111,224,.45);animation:advisorFabPing 2.6s cubic-bezier(0,0,.2,1) 3}
 #advisorFab.is-open::before{animation:none;box-shadow:none}
 #advisorFab:hover{transform:translateY(-3px) scale(1.05)}
 #advisorFab:active{transform:translateY(-1px) scale(.96)}
@@ -72,7 +73,10 @@ body.advisor-docked{transition:padding-right .25s ease}
 .adv-msg.bot table{border-collapse:collapse;margin:6px 0;font-size:14px}
 .adv-msg.bot th,.adv-msg.bot td{border:1px solid rgba(20,40,63,.22);padding:4px 9px;text-align:left;vertical-align:top}
 .adv-msg.bot th{background:rgba(37,87,199,.08);font-weight:700}
-.adv-msg.sys{align-self:flex-start;background:transparent;color:rgba(20,40,63,.5);font-family:'Spline Sans Mono',monospace;font-size:11px;padding:0 4px}
+/* System notices are mostly errors ("Could not reach the advisor…"), so they
+   must be readable: 50% ink at 11px measured ~3.3:1 on the white panel,
+   under WCAG AA's 4.5:1. 78% ink is ~7:1. */
+.adv-msg.sys{align-self:flex-start;background:transparent;color:rgba(20,40,63,.78);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:0 4px}
 .adv-step{display:flex;align-items:flex-start;gap:7px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.55);padding:1px 2px;line-height:1.4}
 .adv-step .adv-step-tick{color:var(--gold);font-weight:600;flex-shrink:0}
 .adv-step.done{color:rgba(20,40,63,.4)}
@@ -164,19 +168,22 @@ body.advisor-docked{transition:padding-right .25s ease}
     ? '<div class="advisor-disclaimer">Not licensed financial advice — I explain and compare, I don\'t tell you what to buy.</div>'
     : '';
   const html =
-    '<button id="advisorFab" aria-label="Ask the Goalden advisor" title="Ask the advisor">' +
+    '<button id="advisorFab" aria-label="Ask the Goalden advisor" title="Ask the advisor" aria-controls="advisorPanel" aria-expanded="false">' +
       '<span class="fi">' +
         '<svg class="fi-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 20l1-5.4a8.5 8.5 0 1 1 17-3.1z"/></svg>' +
         '<svg class="fi-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
       '</span>' +
     '</button>' +
-    '<div id="advisorPanel">' +
+    // role=dialog + a name so a screen reader announces what opened; it is
+    // only aria-modal in focus mode (advisorSetMode), where the page behind
+    // is covered and Tab is trapped inside — docked, the page stays usable.
+    '<div id="advisorPanel" role="dialog" aria-labelledby="advisorTitle">' +
       '<div id="advisorHead">' +
-        '<div><div class="t">Goalden advisor</div><div class="s">Ask me anything</div></div>' +
+        '<div><div class="t" id="advisorTitle">Goalden advisor</div><div class="s">Ask me anything</div></div>' +
         '<div class="rc-btns">' +
           '<button id="advisorTraceBtn" aria-label="Developer trace" title="Developer trace: tokens &amp; latency">🔍</button>' +
           '<button id="advisorMode" aria-label="Dock or focus" title="Dock to the side / focus">⤢</button>' +
-          '<button id="advisorVoice" aria-label="Speak replies aloud" title="Speak replies aloud">🔊</button>' +
+          '<button id="advisorVoice" aria-label="Speak replies aloud" title="Speak replies aloud" aria-pressed="false" class="off">🔊</button>' +
           '<button id="advisorClear" aria-label="Clear chat" title="Clear chat" style="font-size:13px">🗑</button>' +
           '<button id="advisorClose" aria-label="Close" title="Close">✕</button>' +
         '</div>' +
@@ -199,7 +206,7 @@ body.advisor-docked{transition:padding-right .25s ease}
       '</div>' +
       '<div id="resultCanvasBody"></div>' +
     '</div>' +
-    '<div id="briefing" aria-label="Briefing">' +
+    '<div id="briefing" role="dialog" aria-modal="true" aria-labelledby="briefingTitle">' +
       '<div id="briefingHead">' +
         '<div class="t" id="briefingTitle">Briefing</div>' +
         '<div class="rc-btns">' +
@@ -227,7 +234,7 @@ body.advisor-docked{transition:padding-right .25s ease}
    State — conversation + persistence (sessionStorage, shared key).
    ===================================================================== */
 const ADVISOR_STORE_KEY = 'goalden_advisor_v1';
-const advisor = { messages: [], busy: false, mode: 'fab', pendingPlan: null, trace: [], traceOpen: false };
+const advisor = { messages: [], busy: false, mode: 'fab', pendingPlan: null, trace: [], traceOpen: false, turnId: null };
 let advisorThinkingEl = null;
 
 // Phase 7 — per-call cost estimate. DeepSeek's own usage block gives exact
@@ -236,7 +243,13 @@ let advisorThinkingEl = null;
 // https://api-docs.deepseek.com/quick_start/pricing before trusting it for
 // anything beyond a rough per-plan comparison.
 const ADVISOR_PRICE_PER_M = { prompt: 0.27, completion: 1.10 }; // USD / 1M tokens, deepseek-chat, cache-miss
-const advisorVoice = { on: true, listening: false, rec: null };
+// Spoken replies are OFF until the user turns them on: a page that starts
+// talking unprompted is jarring in a shared room (a demo venue) and hostile
+// to screen-reader users, whose own speech it talks over. The choice is
+// remembered per browser (localStorage can throw in private modes, hence
+// the try/catch — it just falls back to off).
+const ADVISOR_VOICE_KEY = 'goalden_advisor_voice';
+const advisorVoice = { on: (function () { try { return localStorage.getItem(ADVISOR_VOICE_KEY) === 'on'; } catch (e) { return false; } })(), listening: false, rec: null };
 const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 // F1b — panel mode: 'fab' (collapsed), 'dock' (right edge, page shifts), or
@@ -261,6 +274,10 @@ function advisorSetMode(mode) {
   const fab = document.getElementById('advisorFab');
   fab.setAttribute('aria-expanded', mode === 'fab' ? 'false' : 'true');
   fab.classList.toggle('is-open', mode !== 'fab');
+  // Focus mode covers the page, so it's modal (Tab is trapped in it by the
+  // keydown handler below); docked, the page beside it stays usable.
+  if (mode === 'focus') panel.setAttribute('aria-modal', 'true');
+  else panel.removeAttribute('aria-modal');
   advisorPersist();
 }
 // When the advisor starts acting, promote the panel to dock so the user can
@@ -293,6 +310,26 @@ function advisorTrim() {
   advisor.messages = tail;
 }
 
+// What actually goes over the wire is capped separately from the 80 kept
+// above for the on-screen history. worker.js and local_server.py both reject
+// a body with more than 40 messages (MAX_CHAT_MESSAGES) with a 413; before
+// this cap existed a long session sailed past 40 and every later message
+// dead-ended in "conversation has grown too long". 36 leaves headroom for
+// the system notes pushed mid-turn; a 413 anyway (e.g. the byte cap) gets
+// one retry at the tighter ADVISOR_RETRY_SEND_MESSAGES.
+const ADVISOR_MAX_SEND_MESSAGES = 36;
+const ADVISOR_RETRY_SEND_MESSAGES = 16;
+function advisorFitMessages(messages, max) {
+  if (messages.length <= max) return messages;
+  const firstUser = messages.find((m) => m.role === 'user');
+  // Keep the user's original ask (it frames the whole flow) plus the most
+  // recent tail. The cut can land inside a tool_calls/tool pair, so the tail
+  // goes back through advisorCleanMessages to drop any orphaned half.
+  let tail = advisorCleanMessages(messages.slice(-(max - (firstUser ? 1 : 0))));
+  if (firstUser && tail.indexOf(firstUser) === -1) tail = [firstUser].concat(tail);
+  return tail;
+}
+
 // Part C — advice guardrail, enforced in code. Best-effort heuristic layered
 // on top of the system-prompt instruction, NOT a guarantee: it rewrites only
 // a sentence that BOTH carries a recommendation verb or valuation/comparative
@@ -316,6 +353,9 @@ function advisorGuardrail(text) {
   if (typeof text !== 'string' || !text) return text;
   const parts = text.split(/(?<=[.!?\n])/);
   let changed = false;
+  // The neutral sentence is emitted ONCE per message: "Buy X. Sell Y."
+  // used to print the same canned paragraph twice back-to-back.
+  let cannedShown = false;
   const out = parts.map(function (sentence) {
     const lower = sentence.toLowerCase();
     const hasVerb = ADVISOR_DIRECTIVE_VERBS.test(lower);
@@ -347,7 +387,11 @@ function advisorGuardrail(text) {
     if (((hasVerb || hasValuation) && hasCompanyRef) || hasPrice) {
       changed = true;
       console.warn('[advisor] guardrail rewrote a recommendation-shaped sentence:', sentence.trim());
-      return "I can't give a view on whether a specific company is worth investing in. What I can do is explain what any of these numbers mean, or show you how a given return assumption would affect your goal.";
+      if (cannedShown) return '';
+      cannedShown = true;
+      // Keep the flagged sentence's leading space/newline so the canned text
+      // doesn't glue onto the previous sentence ("gist.I can't…").
+      return (sentence.match(/^\s*/) || [''])[0] + "I can't give a view on whether a specific company is worth investing in. What I can do is explain what any of these numbers mean, or show you how a given return assumption would affect your goal.";
     }
     return sentence;
   });
@@ -385,6 +429,9 @@ function advisorMarkdown(text) {
     if (/^\|.+\|$/.test(ln)) {
       flushList();
       const cells = ln.slice(1, -1).split('|').map((c) => c.trim());
+      // The GFM header separator (|---|:---:|) is syntax, not data — it
+      // used to render as a row of literal dashes under the header.
+      if (cells.every((c) => /^:?-{3,}:?$/.test(c))) continue;
       const tag = tableBuf ? 'td' : 'th';
       if (!tableBuf) tableBuf = [];
       tableBuf.push('<tr>' + cells.map((c) => '<' + tag + '>' + c + '</' + tag + '>').join('') + '</tr>');
@@ -498,12 +545,34 @@ function advisorStopSpeech() {
   try { if ('speechSynthesis' in window) window.speechSynthesis.cancel(); } catch (e) {}
 }
 
+// The model's line-1 reply-shape marker ("MODE: A"), which is a prompt
+// contract, never user-facing text. advisorMarkdown strips it for display;
+// speech and the streaming preview need the same strip.
+function advisorStripModeLine(text) {
+  return String(text == null ? '' : text).replace(/^\s*MODE\s*:\s*[ABC]\s*(?:\r?\n)?/i, '');
+}
+
 function advisorSpeakText(text) {
   return String(text || '')
+    .replace(/^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$/gm, '') // table separator rows
+    // A table row is read as "cell, cell, cell." rather than voicing pipes.
+    .replace(/^[ \t]*\|(.*)\|[ \t]*$/gm, function (m, inner) { return inner.split('|').map(function (c) { return c.trim(); }).filter(Boolean).join(', ') + '.'; })
+    .replace(/\|/g, ', ')
+    // Whole tags first: stripping the '>' character alone (next line) left
+    // "<bBold</b" to be read aloud when a reply carried raw HTML.
+    .replace(/<\/?[a-zA-Z][^<>]*>/g, ' ')
     .replace(/[*_`#>]/g, '')
     .replace(/₹/g, ' rupees ')
     .replace(/\$/g, ' dollars ')
     .replace(/\s+/g, ' ').trim();
+}
+
+// What the voice may say: exactly what the user can read — MODE line gone,
+// advice guardrail applied, markup stripped. Speaking raw msg.content read
+// "MODE: A" aloud and, worse, voiced any recommendation-shaped sentence the
+// guardrail had already replaced on screen.
+function advisorSpeechFor(content) {
+  return advisorSpeakText(advisorGuardrail(advisorStripModeLine(content)));
 }
 
 // Pick the best available voice for a language: prefer modern/neural voices
@@ -540,7 +609,8 @@ function advisorSpeak(text) {
   try {
     window.speechSynthesis.cancel();
     const id = ++advisorSpeechId;
-    const clean = advisorSpeakText(text);
+    const clean = advisorSpeechFor(text);
+    if (!clean) return;
     const lang = advLang();
     const u = new SpeechSynthesisUtterance(clean);
     u.lang = lang;
@@ -682,12 +752,30 @@ const ADVISOR_INTERNAL_TOOLS = [
   { type:'function', function:{ name:'execute_plan', description:'Execute the steps of the pending plan that was proposed with propose_plan. Runs only the steps the user left checked, in order, through the same tool dispatch as any other call. Pass planId (optional; must match the pending plan if provided).', parameters:{ type:'object', properties:{ planId:{ type:'string' } }, required:[] } } },
 ];
 
+// The ONE dispatcher for a tool call, used by both advisorLoop and
+// executePlan. Plan steps used to go straight to the page's advExecuteTool,
+// which doesn't know the advisor-level tools — so a plan step
+// "compose_briefing" came back "Unknown tool" while the plan still said
+// ok:true.
+function advisorDispatchTool(name, args) {
+  if (name === 'compose_briefing') return JSON.stringify(composeBriefing(args));
+  if (name === 'propose_plan') return JSON.stringify(proposePlan(args));
+  if (name === 'execute_plan') return executePlan(args && args.planId);
+  return advExecuteTool(name, args);
+}
+
 function proposePlan(args) {
   args = args || {};
   const steps = Array.isArray(args.steps) ? args.steps : [];
   if (!steps.length) return { ok:false, error:'propose_plan needs a non-empty steps array of {tool, args, label}.' };
+  // Validate at propose time, not run time: the user reviews and approves a
+  // checklist, so every row on it must be something that can actually run.
+  // Plan tools can't nest inside a plan.
+  const known = advTools().map(function (t) { return t && t.function && t.function.name; })
+    .filter(function (n) { return n && n !== 'propose_plan' && n !== 'execute_plan'; });
   for (let i = 0; i < steps.length; i++) {
     if (!steps[i] || !steps[i].tool) return { ok:false, error:'Step ' + i + ' is missing a tool name.' };
+    if (known.indexOf(steps[i].tool) === -1) return { ok:false, error:'Step ' + i + ' uses "' + steps[i].tool + '", which is not a tool on this page. Valid tools: ' + known.join(', ') + '.' };
   }
   const plan = {
     id: 'plan_' + Date.now() + '_' + Math.floor(Math.random() * 1e4),
@@ -704,27 +792,31 @@ function executePlan(planId) {
   if (!plan) return { ok:false, error:'There is no pending plan to run.' };
   if (planId != null && plan.id !== planId) return { ok:false, error:'That plan is no longer pending — the current pending plan has a different id, or none exists.' };
   // Run checked steps IN ORDER through the SAME dispatch every other tool
-  // uses (advExecuteTool) — no parallel path, no bypassed validation.
+  // uses (advisorDispatchTool) — no parallel path, no bypassed validation.
   const ranSteps = [];
   const skippedSteps = [];
+  const failedSteps = [];
   const results = [];
+  const record = function (key, step, r) {
+    results.push({ step: key, tool: step.tool, result: r });
+    ranSteps.push(key);
+    let parsed = r;
+    if (typeof r === 'string') { try { parsed = JSON.parse(r); } catch (e) { parsed = null; } }
+    if (parsed && parsed.ok === false) failedSteps.push(key);
+  };
   const runOne = function (step, i) {
     const key = step.label || step.tool;
     if (!plan.approved[i]) { skippedSteps.push(key); return null; }
     let r;
     try {
-      r = advExecuteTool(step.tool, step.args || {});
+      r = advisorDispatchTool(step.tool, step.args || {});
     } catch (e) {
       r = JSON.stringify({ ok:false, error:'Step failed: ' + (e && e.message || e) });
     }
     if (r && typeof r.then === 'function') {
-      return Promise.resolve(r).then(function (resolved) {
-        results.push({ step: key, tool: step.tool, result: resolved });
-        ranSteps.push(key);
-      });
+      return Promise.resolve(r).then(function (resolved) { record(key, step, resolved); });
     }
-    results.push({ step: key, tool: step.tool, result: r });
-    ranSteps.push(key);
+    record(key, step, r);
     return null;
   };
   const chain = (function () {
@@ -734,7 +826,9 @@ function executePlan(planId) {
   })();
   return chain.then(function () {
     advisor.pendingPlan = null;
-    return { ok:true, ranSteps: ranSteps, skippedSteps: skippedSteps, results: results };
+    // ok reflects the steps' own results — a plan whose step failed must
+    // not report success to the model.
+    return { ok: failedSteps.length === 0, ranSteps: ranSteps, skippedSteps: skippedSteps, failedSteps: failedSteps, results: results };
   });
 }
 
@@ -785,9 +879,10 @@ async function advisorRunPlanClick() {
   await advisorContinue(false);
 }
 
-function advisorBuildBody() {
+function advisorBuildBody(opts) {
+  opts = opts || {};
   const body = {
-    messages: advisorCleanMessages(advisor.messages),
+    messages: advisorFitMessages(advisorCleanMessages(advisor.messages), opts.maxMessages || ADVISOR_MAX_SEND_MESSAGES),
     tools: advTools().concat(ADVISOR_INTERNAL_TOOLS),
     state: advisorState(),
     knowledge: ADVISOR_CFG.knowledge || '',
@@ -797,7 +892,7 @@ function advisorBuildBody() {
     stream: true,
   };
   let serialized = JSON.stringify(body);
-  if (serialized.length > 60000) {
+  if (serialized.length > 60000 || opts.dropState) {
     console.warn('[advisor] state truncated: body was ' + serialized.length + ' bytes; dropping state to a skeleton.');
     body.state = { _truncated: true, note: 'State omitted because it was too large. Use get_state, get_detail, get_price_history or get_instrument_stats to pull what you need.' };
     serialized = JSON.stringify(body);
@@ -936,14 +1031,19 @@ async function advisorFetchStream(bodyStr, onDelta) {
   const reqStart = Date.now();
   const resp = await fetch('/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    // X-Goalden-Turn: every round trip of one user turn shares an id, so the
+    // server rate-limits turns, not the up-to-18 round trips a single "do it
+    // all" message can take (see rateLimitWait in worker.js).
+    headers: { 'Content-Type': 'application/json', 'X-Goalden-Turn': advisor.turnId || '' },
     body: bodyStr,
     // A hung Worker/upstream must not spin forever — mirrors the Worker side.
     signal: AbortSignal.timeout(25000),
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || ('Server responded ' + resp.status));
+    const e = new Error(err.error || ('Server responded ' + resp.status));
+    e.status = resp.status; // advisorLoop retries a 413 once, trimmed harder
+    throw e;
   }
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
@@ -968,6 +1068,9 @@ async function advisorFetchStream(bodyStr, onDelta) {
         if (payload === '[DONE]') { finished = true; break; }
         let chunk;
         try { chunk = JSON.parse(payload); } catch (e) { continue; }
+        // local_server.py ends a stream that failed AFTER its 200 was sent
+        // with one {"error": "..."} event — surface it like any HTTP error.
+        if (chunk.error) throw new Error(String(chunk.error));
         if (chunk.usage) usage = chunk.usage;
         const choice = (chunk.choices && chunk.choices[0]) || {};
         const delta = choice.delta || {};
@@ -1003,6 +1106,20 @@ async function advisorFetchStream(bodyStr, onDelta) {
   };
 }
 
+// The text a streaming bubble may show for the reply so far: MODE marker
+// held back (it can arrive split across deltas — "MO", "DE: A"), only the
+// complete sentences, and those through advisorGuardrail. A half-arrived
+// sentence waits for its full stop, because the guardrail can only judge a
+// whole sentence.
+function advisorStreamPreview(text) {
+  let s = String(text || '');
+  if (s.indexOf('\n') === -1 && /^\s*M(?:O(?:D(?:E(?:\s*:?\s*[ABC]?)?)?)?)?\s*$/i.test(s)) return '';
+  s = advisorStripModeLine(s).replace(/^\s+/, '');
+  const m = s.match(/^[\s\S]*[.!?\n]/);
+  if (!m) return '';
+  return advisorGuardrail(m[0]).replace(/\*\*/g, '').replace(/\s+$/, '');
+}
+
 async function advisorLoop(silent) {
   // F7d — track whether read_current_chart was called this turn so we can
   // append layered follow-up chips below the final bot reply.
@@ -1015,23 +1132,46 @@ async function advisorLoop(silent) {
   for (let step = 0; step < 18; step++) {
     const reqStart = Date.now();
     let streamBubble = null;
-    const data = await advisorFetchStream(advisorBuildBody(), function (text) {
-      // Type the reply out as content deltas arrive. Deliberately NOT
-      // advisorAddMsg — that would re-run guardrail/markdown on every partial
-      // chunk. Plain textContent here; the transforms run once at the end.
+    const onDelta = function (text) {
+      // Type the reply out as content deltas arrive — but only COMPLETE
+      // sentences, each already through the guardrail, with the MODE line
+      // held back. Streaming the raw deltas showed "MODE: A" and a
+      // recommendation like "You should buy REL…" for a second or two
+      // before the end-of-stream guardrail replaced it. Plain textContent;
+      // markdown still runs once on the final text below.
+      const preview = advisorStreamPreview(text);
+      if (!preview) return;
       if (!streamBubble) {
         advisorHideThinking();
         const msgs = document.getElementById('advisorMsgs');
         const div = document.createElement('div');
         div.className = 'adv-msg bot';
-        div.textContent = text;
+        div.textContent = preview;
         msgs.appendChild(div);
         msgs.scrollTop = msgs.scrollHeight;
         streamBubble = div;
-      } else {
-        streamBubble.textContent = text;
+      } else if (streamBubble.textContent !== preview) {
+        streamBubble.textContent = preview;
       }
-    });
+    };
+    // aria-busy while a reply streams in: the log is aria-live, and without
+    // it a screen reader re-announced the bubble on every delta.
+    const msgsEl = document.getElementById('advisorMsgs');
+    msgsEl.setAttribute('aria-busy', 'true');
+    let data;
+    try {
+      try {
+        data = await advisorFetchStream(advisorBuildBody(), onDelta);
+      } catch (e) {
+        if (!(e && e.status === 413)) throw e;
+        // The server's size/length cap still tripped (e.g. very large tool
+        // results) — retry ONCE with a much shorter history and no state.
+        console.warn('[advisor] 413 from /api/chat — retrying once with a trimmed history.');
+        data = await advisorFetchStream(advisorBuildBody({ maxMessages: ADVISOR_RETRY_SEND_MESSAGES, dropState: true }), onDelta);
+      }
+    } finally {
+      msgsEl.removeAttribute('aria-busy');
+    }
     const roundTripMs = Date.now() - reqStart;
     const msg = data.message || {};
     advisorRecordTrace({
@@ -1061,11 +1201,7 @@ async function advisorLoop(silent) {
         let args = {};
         try { args = JSON.parse(tc.function.arguments || '{}'); } catch (_) { args = {}; }
         const stepRow = advisorAddStep(advisorDescribe(name, args));
-        let result;
-        if (name === 'compose_briefing') result = JSON.stringify(composeBriefing(args));
-        else if (name === 'propose_plan') result = JSON.stringify(proposePlan(args));
-        else if (name === 'execute_plan') result = executePlan(args && args.planId);
-        else result = advExecuteTool(name, args);
+        let result = advisorDispatchTool(name, args);
         if (result && typeof result.then === 'function') result = await result;
         // Truncate large tool results before storing — chart data and price
         // history can be many KB; accumulated across 4+ tool rounds they
@@ -1150,6 +1286,9 @@ async function advisorLoop(silent) {
 async function advisorContinue(silent) {
   if (advisor.busy) return;
   advisor.busy = true;
+  // One rate-limit turn per call: a user message, a "Run plan" click, or an
+  // auto-continue after a page hand-off. Every round trip in it reuses this.
+  advisor.turnId = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   document.getElementById('advisorSend').disabled = true;
   try {
     advisorShowThinking();
@@ -1163,7 +1302,7 @@ async function advisorContinue(silent) {
     } else if (/TimeoutError|AbortError|timeout|aborted|timed out/i.test(msg)) {
       advisorAddMsg('sys', 'The advisor took too long to answer — please try again.');
     } else if (/too large|413|payload|too long/i.test(msg)) {
-      advisorAddMsg('sys', 'That request was too large to send. Try asking about one instrument or one tool at a time.');
+      advisorAddMsg('sys', 'This conversation got too long to send, even trimmed. Clear the chat (🗑) and ask again — your numbers on the page are kept.');
     } else {
       advisorAddMsg('sys', 'Could not reach the advisor: ' + (msg || e));
     }
@@ -1206,16 +1345,52 @@ async function advisorSend() {
 function advisorEscapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
 }
+// The briefing is a full-screen modal: focus moves into it on open (a
+// keyboard or screen-reader user was otherwise left on a control hidden
+// behind it) and goes back on close. The chat panel is collapsed to the FAB
+// while the briefing is up, so a return target inside it becomes the FAB.
+let advisorBriefingReturnFocus = null;
 function briefingOpen(title, html) {
+  const active = document.activeElement;
+  advisorBriefingReturnFocus = (active && active !== document.body) ? active : null;
   advisorSetMode('fab');
   document.getElementById('briefingTitle').textContent = title;
   document.getElementById('briefingBody').innerHTML = html;
   document.getElementById('briefing').classList.add('open');
+  try { document.getElementById('briefingClose').focus(); } catch (e) {}
 }
 function briefingClose() {
-  document.getElementById('briefing').classList.remove('open');
+  const el = document.getElementById('briefing');
+  const wasOpen = el.classList.contains('open');
+  el.classList.remove('open');
   document.getElementById('briefingBody').innerHTML = '';
+  if (!wasOpen) return;
+  let target = advisorBriefingReturnFocus;
+  advisorBriefingReturnFocus = null;
+  if (!target || !document.body.contains(target) || document.getElementById('advisorPanel').contains(target)) target = document.getElementById('advisorFab');
+  try { target.focus(); } catch (e) {}
 }
+
+// Keep Tab inside a modal surface: the briefing when it's open, else the
+// chat panel in focus mode (which covers the page). Docked, the panel is
+// non-modal and Tab moves freely between it and the page.
+function advisorTrapTab(container, e) {
+  const focusables = Array.prototype.filter.call(
+    container.querySelectorAll('button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'),
+    function (el) { return !el.disabled && el.getClientRects().length > 0; });
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  const active = document.activeElement;
+  if (!container.contains(active)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+  else if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+}
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Tab') return;
+  const briefing = document.getElementById('briefing');
+  if (briefing.classList.contains('open')) advisorTrapTab(briefing, e);
+  else if (advisor.mode === 'focus') advisorTrapTab(document.getElementById('advisorPanel'), e);
+});
 
 // Part A — recompute-and-compare. A briefing section may bake a number into
 // its HTML from whatever calc path its builder happened to call; this
@@ -1311,9 +1486,16 @@ document.getElementById('advisorMic').addEventListener('click', () => {
   else advisorStartListening();
 });
 if (!SpeechRec) document.getElementById('advisorMic').classList.add('hidden');
+function advisorRenderVoiceBtn() {
+  const btn = document.getElementById('advisorVoice');
+  btn.classList.toggle('off', !advisorVoice.on);
+  btn.setAttribute('aria-pressed', advisorVoice.on ? 'true' : 'false');
+}
+advisorRenderVoiceBtn();
 document.getElementById('advisorVoice').addEventListener('click', () => {
   advisorVoice.on = !advisorVoice.on;
-  document.getElementById('advisorVoice').classList.toggle('off', !advisorVoice.on);
+  advisorRenderVoiceBtn();
+  try { localStorage.setItem(ADVISOR_VOICE_KEY, advisorVoice.on ? 'on' : 'off'); } catch (e) {}
   if (!advisorVoice.on) advisorStopSpeech();
 });
 document.getElementById('advisorFab').addEventListener('click', () => {

@@ -81,7 +81,7 @@ exactly one place a formula can be wrong. Covered by
 [`agent-evals/`](agent-evals) is a headless eval harness for the agent
 itself — the piece most similar projects skip. `runner.js` drives the real
 `advisorLoop` (loaded into a Node `vm` context, real tool execution, no
-reimplemented mock) against 15 scenarios in `scenarios.json`, asserting on
+reimplemented mock) against 19 scenarios in `scenarios.json`, asserting on
 which tools got called, which fields got set, and whether the figures match
 `goalden-engine.js` computed independently. Re-run it after any prompt or
 tool-schema change:

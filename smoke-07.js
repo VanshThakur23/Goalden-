@@ -34,17 +34,20 @@ check(/advisor\.pendingPlan\s*=\s*null/.test(advisor), 'advisor.js: pendingPlan 
 const trimMatch = advisor.match(/function advisorTrim\(\) \{[\s\S]*?\n\}/);
 check(!!trimMatch && !/pendingPlan/.test(trimMatch[0]), 'advisor.js: advisorTrim does not touch pendingPlan');
 
-// 4. execute_plan routes through advExecuteTool (no parallel dispatch).
-check(/advExecuteTool\(step\.tool, step\.args/.test(advisor), 'advisor.js: executePlan uses advExecuteTool');
+// 4. execute_plan routes through the same dispatcher as the main loop
+// (advisorDispatchTool, D5-10), so page and advisor-level tools both run.
+check(/advisorDispatchTool\(step\.tool/.test(advisor), 'advisor.js: executePlan uses advisorDispatchTool');
 
 // 5. checkbox gating writes backing state and gates execution.
 check(/advisor\.pendingPlan\.approved\[i\] = cb\.checked/.test(advisor), 'advisor.js: checkbox change updates approved[i]');
 check(/!plan\.approved\[i\]/.test(advisor), 'advisor.js: executePlan skips unchecked steps');
 
-// 6. worker.js / local_server.py mirror (both mention propose_plan once).
+// 6. worker.js / local_server.py mirror each other on propose_plan (it is
+// now also in both servers' always-routed core tool list, so the absolute
+// count changed; parity is what matters -- smoke-14 checks the lists).
 const w = (worker.match(/propose_plan/g) || []).length;
 const p = (py.match(/propose_plan/g) || []).length;
-check(w === 1 && p === 1, `worker/local_server propose_plan mention match (${w} vs ${p})`);
+check(w > 0 && w === p, `worker/local_server propose_plan mention match (${w} vs ${p})`);
 
 console.log(fail ? `\n${fail} FAILURES` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

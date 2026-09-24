@@ -2012,3 +2012,59 @@ Changes made by Claude Code (Chief). Idea #1 from the D3 Company Analysis panel.
     console errors on any company; Read the Company still fits a 412px
     phone.
 - Cash-flow chart caption updated to describe the diverging bars.
+
+## 2026-09-24 - Claude Code (cloud session, review-board loop, iteration 6: AI advisor and reliability)
+Changes made by Claude Code: the D5 implementer agent (advisor.js, src/worker.js, local_server.py, goalden-door2.html, agent-evals/, smoke-14.js) plus the Chief (verification, extra fixes, Lab follow-ups). The Chief re-checked every claim with independent scripts.
+- Tool routing (both servers): BM25 routing used to drop core tools. "Yes
+  do it all" lost build_goal_plan/compose_briefing/get_results; "explain
+  this graph" lost read_current_chart. The core tools are now always kept;
+  lists of 25 tools or fewer skip routing. Chief check: 8 fresh prompts on
+  the Lab's 41 tools, 0 core tools dropped.
+- One message cap (40) in the Worker, local_server and the client (sends at
+  most 36, never splits a tool-call pair, retries once on 413). Chief
+  check: 41 messages gives 413, 39 gives 200.
+- Rate limit is per user TURN (X-Goalden-Turn): 10 turns and 60 requests
+  per minute per IP. Before, one long "do it all" (up to 18 round trips)
+  hit 429 midway. Chief check: 15 round trips in one turn all return 200;
+  requests without a turn id are still capped at 10/min.
+  `GOALDEN_CHAT_RATE_LIMIT=off` disables it locally for test harnesses.
+- Voice and streaming go through the advice guardrail; the "MODE: A" line
+  is never spoken or shown; voice is OFF by default (remembered). Chief fix
+  on top: HTML tags are stripped whole before speaking ("<bBold</b" was
+  being read aloud). Verified.
+- Demo mode without an API key (local_server mock) is properly scripted:
+  the landing page hands off to the Full Plan and finishes the report,
+  Level 1 builds a real plan, the Lab runs the retirement analysis, chart
+  questions call read_current_chart. Chief check: end-to-end chat in the
+  browser on index, goalden.html and the Lab; briefings open with real
+  figures and no errors.
+- The Full Plan no longer stamps "✓ every figure recomputed" on an empty,
+  all-₹0 plan.
+- Plans use the same dispatcher as the main loop (a compose_briefing step
+  used to fail silently while the plan said ok); unknown tools are rejected
+  at proposal time.
+- local_server streaming errors now return one clean 502 instead of two
+  glued HTTP responses. Chief check: raw curl output with a fake key.
+- Market-data errors show "Market data is unavailable right now" instead of
+  raw urlopen proxy text. No price data was bundled or invented.
+- Accessibility: chat panel role=dialog with a label, FAB
+  aria-expanded/controls, voice aria-pressed, focus managed for the
+  briefing dialog, aria-busy while streaming, error text contrast about
+  7:1. Chief fix: the FAB's attention animation now runs 3 times, not
+  forever (WCAG 2.2.2; it also made the button un-clickable for automated
+  tests).
+- Markdown tables no longer render the |---| separator as a row; the
+  guardrail's canned paragraph no longer duplicates.
+- goalden-lab.html (Chief): chart follow-up chip keys fixed ('ret-lab' and
+  'montecarlo' never matched real tab ids); chips added for SWP, Joint and
+  Read the Company; the fallback chip no longer asks "What should I do with
+  this?" (it invited advice the guardrail then blocks). The briefing
+  headline formatted every number as money ("AGE ₹30", "Score ₹90",
+  "Diversification benefit ₹1"); it now formats by field (age/years plain,
+  score /100, ratios x, *Pct as % or pts) and labels are readable ("Monthly
+  SIP" instead of "monthlySIP"). Verified on 8 tabs.
+- smoke-07.js updated for the new dispatcher and core-tool list; new
+  smoke-14.js (routing parity, core-tool survival, chip keys, speech and
+  stream rules). README scenario count 15 became 19.
+- Checks: engine.test.js 109/109; all 11 smoke files ALL PASS;
+  agent-evals 9/9 in mock mode (was 4/9), 10 skipped (need a live key).
