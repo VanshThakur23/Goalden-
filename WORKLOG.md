@@ -1937,3 +1937,53 @@ Changes made by Claude Code (Chief), from the D4 Visual/Data-Viz division's repo
   (D4-05), porting the value labels to Levels 1/2 (goalden.html,
   goalden-door2.html), the radar-chart veto (D4-09), the step-up
   contribution-path chart and the FX bridge (D4-12/13).
+
+## 2026-09-24 - Claude Code (cloud session, review-board loop, iteration 4: Read the Company)
+Changes made by Claude Code: the D3 implementer agent (statements-engine.js, engine.test.js) plus the Chief (verification, extra fixes, Lab follow-ups). Every claim below was independently re-checked by the Chief against the raw fixture JSON or in the running page.
+- statements-engine.js `cashFlowWaterfallOption`: the invisible spacer bars
+  were stacked into the same column, so TCS FY26 drew a ~₹1.46 lakh Cr
+  tower for a year whose net cash flow was -₹1,925 Cr. Now a signed
+  diverging bar (CFO up, CFI/CFF down) with net cash flow as a labelled
+  dot. Verified: +52,094 / -54,019 nets to -1,925.
+- Share counts (`sharesSeries`, `bonusFactorsByYear`): bonus issues were
+  counted as dilution (Bajaj Finance "diluted 418%", HDFC Bank 179%). A
+  capital jump with steady NP/EPS is now treated as a bonus. Verified from
+  raw fixture NP/EPS: Bajaj about 603 to 633 crore shares FY21-26 (engine
+  now 3.7%), HDFC Bank about 40-45% real dilution (merger; engine 39.7%),
+  TCS FY18 EPS 67.7 vs reported 67.46. The proposed NP/EPS-only formula was
+  rejected because it breaks on PAYTM (pre-listing EPS not restated) and
+  VEDL (minority interest).
+- Lender-aware checks: cash-vs-profit checklist item switched off for
+  lenders, lenders are never "cyclical" (HDFC Bank's false banner is gone,
+  verified in page), and the margin item uses PBT/(Revenue+Other Income).
+- Flag rules: the CWIP "little changed" rule no longer fires on a 6x
+  increase (Hindalco); new DIVIDEND_EXCEEDS_FCF rule (VEDL FY23-25 paid
+  dividends above free cash flow while borrowing); interest cover is
+  EBIT-based with an explicit "loss before interest" message (PAYTM showed
+  "-88.6x thinly covered"); incremental ROCE uses EBIT and refuses windows
+  where capital barely moved (TCS median 169% became 49%); CAGRs count
+  fiscal years across gaps (PAYTM 9Y 43.7% became 11Y 34.5%); the checklist
+  is hidden only by earnings-quality flags.
+- Units and labels: CFO/OP is now a % (showed "93.00x"). The table footer is
+  direction-aware; verified: TCS Debtor Days "BEST 67d (FY2021) · WORST 93d
+  (FY2026) · 11Y change +14 days" (it called 93d BEST). Bench, growth and
+  profit-vs-cash charts print their values.
+- Chief fixes found while verifying: the profit-vs-cash CFO/NP end label
+  threw SVG "translate(x NaN)" errors on VEDL (pre-existing: series starts
+  with nulls). Replaced with a markPoint on the last real value; a test was
+  added. The ratio axis is capped at "4+" (a one-off 159x spike flattened
+  every other year). The NP tag is smaller so it fits narrow bars.
+  "22th percentile" now reads "22nd".
+- goalden-lab.html follow-ups: pass P&L into dilutionDrag and
+  bookValuePerShareSeries (bonus-aware in the Lab), EBIT wording for ROCE and
+  incremental ROCE, direction-aware footer, growth chart names Revenue for
+  lenders, flag evidence pins updated (EBIT rows; new dividend rule), fixed
+  `detectCyclical` being passed as an always-truthy object (every company
+  got cyclical P/E companions), 10-year window detail anchored by year.
+- Tests: 108/108 (97 + 10 implementer fixture tests + 1 Chief test).
+  All six fixture companies load with no page or console errors, and all
+  12 Lab tabs render cleanly.
+- Not fixed yet: other divergence rules still use index offsets across
+  missing years; VEDL EPS from consolidated NP includes minority interest
+  (P/E band biased low); structural breaks (HDFC merger, VEDL demerger) are
+  not marked on charts.

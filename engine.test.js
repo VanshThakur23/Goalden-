@@ -523,7 +523,7 @@ test('statements-engine: compareRefusal allows two non-lenders through', () => {
 test('statements-engine: evaluateDivergenceRules gates cash-conversion rules off for a lender (SECTOR_GATE)', () => {
   const hdfc = loadFinancials('HDFCBANK');
   const result = stmt.evaluateDivergenceRules(hdfc);
-  assert.strictEqual(result.notApplicable, 9, 'DIVIDEND_NOT_FROM_OPS, CFO_DIVERGENCE, DEBTOR_BALLOON, ASSET_SALE_GAIN, INVENTORY_BUILD, INTEREST_COVER_THIN, LEVERAGE_UP_RETURNS_DOWN, CWIP_FROZEN, CAPEX_NO_REVENUE are not_applicable for a lender');
+  assert.strictEqual(result.notApplicable, 10, 'DIVIDEND_NOT_FROM_OPS, DIVIDEND_EXCEEDS_FCF, CFO_DIVERGENCE, DEBTOR_BALLOON, ASSET_SALE_GAIN, INVENTORY_BUILD, INTEREST_COVER_THIN, LEVERAGE_UP_RETURNS_DOWN, CWIP_FROZEN, CAPEX_NO_REVENUE are not_applicable for a lender');
   assert.strictEqual(result.checksRun, result.notApplicable + result.clear + result.fired, 'the check-summary line must account for every evaluated transition');
 });
 
@@ -563,7 +563,7 @@ test('statements-engine: rule guards refuse on a loss-year base rather than emit
 });
 
 test('statements-engine: SECTOR_GATE list is complete — every rule with no meaning for a lender is nonfinancial-only', () => {
-  const gatedIds = ['DIVIDEND_NOT_FROM_OPS', 'CFO_DIVERGENCE', 'DEBTOR_BALLOON', 'ASSET_SALE_GAIN', 'INVENTORY_BUILD', 'INTEREST_COVER_THIN', 'LEVERAGE_UP_RETURNS_DOWN', 'CWIP_FROZEN', 'CAPEX_NO_REVENUE'];
+  const gatedIds = ['DIVIDEND_NOT_FROM_OPS', 'DIVIDEND_EXCEEDS_FCF', 'CFO_DIVERGENCE', 'DEBTOR_BALLOON', 'ASSET_SALE_GAIN', 'INVENTORY_BUILD', 'INTEREST_COVER_THIN', 'LEVERAGE_UP_RETURNS_DOWN', 'CWIP_FROZEN', 'CAPEX_NO_REVENUE'];
   gatedIds.forEach((id) => {
     const rule = stmt.DIVERGENCE_RULES.find((r) => r.id === id);
     assert.ok(rule, `${id} must be registered in DIVERGENCE_RULES`);
@@ -594,6 +594,7 @@ test('statements-engine: INTEREST_COVER_THIN treats zero borrowings as not_appli
       rows: [
         { label: 'Operating Profit', values: [{ value: 100 }] },
         { label: 'Interest', values: [{ value: 5 }] },
+        { label: 'Profit before tax', values: [{ value: 80 }] },
       ],
     },
     balanceSheet: { periods, rows: [{ label: 'Borrowings', values: [{ value: 0 }] }] },
@@ -609,15 +610,19 @@ test('statements-engine: INTEREST_COVER_THIN fires below 3x cover when borrowing
     profitLoss: {
       periods,
       rows: [
-        { label: 'Operating Profit', values: [{ value: 20 }] },
+        // Operating Profit (EBITDA) alone would read 5x and pass; cover is on
+        // EBIT = PBT + Interest = 10 + 10 = 20, i.e. 2x.
+        { label: 'Operating Profit', values: [{ value: 50 }] },
         { label: 'Interest', values: [{ value: 10 }] },
+        { label: 'Profit before tax', values: [{ value: 10 }] },
       ],
     },
     balanceSheet: { periods, rows: [{ label: 'Borrowings', values: [{ value: 200 }] }] },
     schema: 'nonfinancial',
   };
   const rows = stmt.DIVERGENCE_RULES.find((r) => r.id === 'INTEREST_COVER_THIN').run(bundle);
-  assert.strictEqual(rows[0].status, 'fired', '2x cover is below the 3x safety threshold');
+  assert.strictEqual(rows[0].status, 'fired', '2x EBIT cover is below the 3x safety threshold, even though EBITDA cover is 5x');
+  assert.ok(rows[0].detail.includes('2.0x'), rows[0].detail);
 });
 
 test('statements-engine: LEVERAGE_UP_RETURNS_DOWN needs both legs to move together', () => {
@@ -646,13 +651,13 @@ test('statements-engine: CWIP_FROZEN needs both an unchanged balance and a mater
       periods,
       rows: [
         { label: 'CWIP', values: [{ value: 200 }, { value: 210 }, { value: 195 }, { value: 205 }] },
-        { label: 'Fixed Assets', values: [{ value: 800 }, { value: 850 }, { value: 900 }, { value: 950 }] },
+        { label: 'Fixed Assets', values: [{ value: 800 }, { value: 810 }, { value: 820 }, { value: 840 }] },
       ],
     },
     schema: 'nonfinancial',
   };
   const fired = stmt.DIVERGENCE_RULES.find((r) => r.id === 'CWIP_FROZEN').run(bundleFires);
-  assert.strictEqual(fired[0].status, 'fired', 'CWIP barely moved in 3 years and is ~22% of fixed assets');
+  assert.strictEqual(fired[0].status, 'fired', 'CWIP barely moved in 3 years, is ~24% of fixed assets, and fixed assets grew only 5%');
 
   const bundleSmall = {
     balanceSheet: {
@@ -796,7 +801,8 @@ test('statements-engine: rowPolarity marks balance-sheet rows neutral and marks 
 test('statements-engine: rowUnit distinguishes percent, day-count and ratio rows from the plain rupee-crore default', () => {
   assert.strictEqual(stmt.rowUnit('OPM %'), 'pct');
   assert.strictEqual(stmt.rowUnit('Debtor Days'), 'days');
-  assert.strictEqual(stmt.rowUnit('CFO/OP'), 'ratio');
+  assert.strictEqual(stmt.rowUnit('CFO/OP'), 'pct', 'screener prints CFO/OP as "93%" and the parser stores 93 — as a ratio it rendered "93.00x"');
+  assert.strictEqual(loadFinancials('TCS').cashFlow.rows.find((r) => r.label === 'CFO/OP').values[0].raw.slice(-1), '%', 'the fixture confirms the row arrives as a percentage');
   assert.strictEqual(stmt.rowUnit('Sales'), 'cr');
 });
 
@@ -871,12 +877,17 @@ test('statements-engine: capitalEmployedSeries sums Equity Capital + Reserves + 
   approx(ce[ce.length - 1].value, 362 + 106878 + 11283);
   const roce = stmt.incrementalRoce(tcs.profitLoss, tcs.balanceSheet);
   const fy2018 = roce.find((r) => r.year === 2018);
-  approx(fy2018.value, (32516 - 24482) / (85375 - 50993), 1e-6);
+  // EBIT = PBT + Interest: FY18 34092 + 52, FY15 26298 + 104 (not Operating Profit, which is EBITDA)
+  approx(fy2018.value, ((34092 + 52) - (26298 + 104)) / (85375 - 50993), 1e-6);
   const zeroDelta = stmt.incrementalRoce(
-    { periods: [1, 2, 3, 4].map((y) => ({ type: 'fy', year: y })), rows: [{ label: 'Operating Profit', values: [{ value: 100 }, { value: 100 }, { value: 100 }, { value: 200 }] }] },
+    { periods: [1, 2, 3, 4].map((y) => ({ type: 'fy', year: y })), rows: [
+      { label: 'Profit before tax', values: [{ value: 90 }, { value: 90 }, { value: 90 }, { value: 190 }] },
+      { label: 'Interest', values: [{ value: 10 }, { value: 10 }, { value: 10 }, { value: 10 }] },
+    ] },
     { periods: [1, 2, 3, 4].map((y) => ({ type: 'fy', year: y })), rows: [{ label: 'Equity Capital', values: [{ value: 10 }, { value: 10 }, { value: 10 }, { value: 10 }] }, { label: 'Reserves', values: [{ value: 0 }, { value: 0 }, { value: 0 }, { value: 0.1 }] }, { label: 'Borrowings', values: [{ value: 0 }, { value: 0 }, { value: 0 }, { value: 0 }] }] }
   );
-  assert.strictEqual(zeroDelta[0].value, null, 'a capital-employed delta below the materiality floor must refuse rather than divide by near-zero');
+  assert.strictEqual(zeroDelta[0].value, null, 'a near-zero capital-employed delta must refuse rather than divide by near-zero');
+  assert.ok(/less than 10%/.test(zeroDelta[0].reason), zeroDelta[0].reason);
 });
 
 test('statements-engine: assetTurnover and bookValuePerShareSeries — the latter cross-checked against screener\'s own reported book value', () => {
@@ -1051,7 +1062,7 @@ test('advisor guardrail: an adversarial suite of recommendation-shaped sentences
 
 
 // ---------------------------------------------------------------------------
-// Phase: the Explore deck � pure helpers behind the fullscreen comparison
+// Phase: the Explore deck � pure helpers behind the fullscreen comparison
 // space on "Read the Company". Synthetic fixtures, hand-checked values.
 // ---------------------------------------------------------------------------
 
@@ -1168,15 +1179,40 @@ test('growthChartOption: returns valid ECharts config with two bar series', () =
   approx(opt.series[1].data[3], 3.0, 0.01);
 });
 
-test('cashFlowWaterfallOption: produces stacked bars + net line', () => {
+test('cashFlowWaterfallOption: signed CFO/CFI/CFF diverging stack + labelled net dot, no spacer series', () => {
   const cfo = [{ year: 2023, value: 100 }, { year: 2024, value: 120 }];
   const cfi = [{ year: 2023, value: -50 }, { year: 2024, value: -60 }];
   const cff = [{ year: 2023, value: 30 }, { year: 2024, value: -20 }];
   const ncf = [{ year: 2023, value: 80 }, { year: 2024, value: 40 }];
   const opt = stmt.cashFlowWaterfallOption(cfo, cfi, cff, ncf);
-  assert.ok(opt.series.length >= 6, 'waterfall needs placeholder + visible series + net line');
-  assert.ok(opt.series.some(s => s.name === 'CFO'), 'has CFO series');
-  assert.ok(opt.series.some(s => s.name === 'Net Cash Flow'), 'has Net Cash Flow line');
+  const val = (d) => (d != null && typeof d === 'object' ? d.value : d);
+  const bars = opt.series.filter((s) => s.type === 'bar');
+  assert.strictEqual(bars.length, 3, 'exactly CFO, CFI, CFF — no transparent spacer series in the stack');
+  assert.ok(bars.every((s) => s.stack === 'flow' && s.itemStyle.color !== 'transparent'));
+  assert.deepStrictEqual(bars.map((s) => s.data.map(val)), [[100, 120], [-50, -60], [30, -20]], 'segments carry their SIGNED values, never Math.abs');
+  const net = opt.series.find((s) => s.type === 'scatter');
+  assert.deepStrictEqual(net.data, [80, 40]);
+  assert.strictEqual(net.label.show, true, 'net cash flow is printed on every dot, not only in the tooltip');
+  assert.strictEqual(opt.legend.show, true);
+});
+
+test('cashFlowWaterfallOption: TCS FY26 stack spans +52,094 / −54,019 (net −1,925), not the old ~₹1.46 lakh Cr tower', () => {
+  const tcs = loadFinancials('TCS');
+  const f = (l) => stmt.fySeries(tcs.cashFlow, l);
+  const opt = stmt.cashFlowWaterfallOption(f('Cash from Operating Activity'), f('Cash from Investing Activity'), f('Cash from Financing Activity'), f('Net Cash Flow'));
+  const i = opt.xAxis.data.indexOf('FY26');
+  const vals = opt.series.filter((s) => s.stack).map((s) => { const d = s.data[i]; return typeof d === 'object' ? d.value : d; });
+  // ECharts stacks same-sign values separately, so these two sums ARE the drawn extent.
+  const up = vals.filter((v) => v > 0).reduce((a, b) => a + b, 0);
+  const down = vals.filter((v) => v < 0).reduce((a, b) => a + b, 0);
+  assert.strictEqual(up, 52094);
+  assert.strictEqual(down, -11886 + -42133);
+  const net = opt.series.find((s) => s.type === 'scatter').data[i];
+  assert.strictEqual(net, -1925);
+  assert.strictEqual(up + down, net, 'the column arithmetic reconciles to the reported net cash flow');
+  // Latest-year components are labelled with their values beside the column.
+  const cfoLast = opt.series[0].data[i];
+  assert.strictEqual(cfoLast.label.formatter(), 'Operations 52.1k');
 });
 
 test('generateFrontier: exact frontier dominates every sampled mix and every single asset', () => {
@@ -1212,4 +1248,200 @@ test('efficientFrontierExact: left end is the analytic 2-asset minimum-variance 
   const f = engine.efficientFrontierExact([0.12, 0.07], [s1, s2], [[1, rho], [rho, 1]], 40);
   const wStar = (s2 * s2 - rho * s1 * s2) / (s1 * s1 + s2 * s2 - 2 * rho * s1 * s2);
   assert.ok(Math.abs(f[0].w[0] - wStar) < 1e-5, `min-var weight ${f[0].w[0]} vs analytic ${wStar}`);
+});
+
+// ---------------------------------------------------------------------------
+// Review-board D3 fixes to "Read the Company". Every expectation below is a
+// number read off the real fixtures (fixtures/financials/*.json), so each
+// test pins the bug it fixes to the company that exposed it.
+// ---------------------------------------------------------------------------
+
+test('D3-02 sharesSeries: a bonus issue is not dilution (BAJFINANCE 4:1 in FY26, TCS 1:1 in FY19)', () => {
+  const baj = loadFinancials('BAJFINANCE');
+  const fv = baj.topRatios.faceValue;
+  const legacy = stmt.dilutionDrag(baj.balanceSheet, fv);
+  approx(legacy[legacy.length - 1].value, 622 / 120 - 1, 1e-9); // the old +418% — capital ÷ face value alone
+  const fixed = stmt.dilutionDrag(baj.balanceSheet, fv, baj.profitLoss);
+  const last = fixed[fixed.length - 1];
+  assert.strictEqual(last.year, 2026);
+  approx(last.value, 622 / (120 * 5) - 1, 1e-9); // +3.7%: FY21 restated by the 5x bonus
+  const shares = stmt.sharesSeries(baj.balanceSheet, fv, baj.profitLoss);
+  assert.strictEqual(shares.find((p) => p.year === 2016).bonusFactor, 10, 'FY16 sits before both the 2016 1:1 and the 2025 4:1 bonus');
+  assert.strictEqual(shares.find((p) => p.year === 2026).bonusFactor, 1);
+
+  const tcs = loadFinancials('TCS');
+  const eps = stmt.epsFromShrink(tcs.profitLoss, tcs.balanceSheet, tcs.topRatios.faceValue);
+  const fy18 = eps.find((p) => p.year === 2018).value;
+  assert.ok(Math.abs(fy18 / 67.46 - 1) < 0.01, `TCS FY18 EPS ${fy18} must land within 1% of screener's bonus-restated 67.46, not the old 135.5`);
+});
+
+test('D3-02 sharesSeries: real issuance survives the bonus adjustment (HDFCBANK merger), and the NP/EPS witness is never used as the level (PAYTM, VEDL)', () => {
+  const hdfc = loadFinancials('HDFCBANK');
+  const drag = stmt.dilutionDrag(hdfc.balanceSheet, 1, hdfc.profitLoss);
+  // FY21 551 Cr capital x2 (FY26 1:1 bonus) -> 1539: the FY24 merger issue is still there.
+  approx(drag[drag.length - 1].value, 1539 / (551 * 2) - 1, 1e-9);
+  const list = stmt.compoundingChecklist(hdfc, { faceValue: 1 });
+  assert.strictEqual(list.find((c) => c.id === 7).meets, false, 'a +39.7% share count from a merger is still a fail, just not a +179% one');
+  assert.strictEqual(stmt.compoundingChecklist(loadFinancials('BAJFINANCE'), { faceValue: 1 }).find((c) => c.id === 7).meets, true);
+  // PAYTM's pre-listing EPS is unrestated (NP/EPS implies ~6 crore shares, not 60) and VEDL's
+  // consolidated NP includes minority interest (implied count swings 265-661 crore); neither
+  // has a bonus, and neither may be restated by one.
+  for (const sym of ['PAYTM', 'VEDL', 'HINDALCO']) {
+    const b = loadFinancials(sym);
+    const sh = stmt.sharesSeries(b.balanceSheet, b.topRatios.faceValue, b.profitLoss);
+    assert.ok(sh.every((p) => p.bonusFactor === 1), `${sym}: no year may be bonus-restated`);
+  }
+  const vedl = loadFinancials('VEDL');
+  const vd = stmt.dilutionDrag(vedl.balanceSheet, 1, vedl.profitLoss);
+  approx(vd[vd.length - 1].value, 391 / 372 - 1, 1e-9); // the 2024 QIP, not the witness's +17%
+});
+
+test('D3-05/06 lenders: CFO-vs-profit is unavailable, cyclicality is not assessed, margin uses PBT / total income', () => {
+  for (const sym of ['HDFCBANK', 'BAJFINANCE']) {
+    const b = loadFinancials(sym);
+    const list = stmt.compoundingChecklist(b, { faceValue: b.topRatios.faceValue });
+    const c4 = list.find((c) => c.id === 4);
+    assert.strictEqual(c4.available, false, `${sym}: lending is operating cash outflow; item 4 must not score`);
+    assert.strictEqual(c4.meets, null);
+    const cyc = stmt.detectCyclical(b.profitLoss);
+    assert.strictEqual(cyc.cyclical, false);
+    assert.strictEqual(cyc.applicable, false);
+    assert.strictEqual(stmt.evaluateDivergenceRules(b).cyclical.cyclical, false);
+  }
+  const hdfc = loadFinancials('HDFCBANK');
+  const c9 = stmt.compoundingChecklist(hdfc, { faceValue: 1 }).find((c) => c.id === 9);
+  assert.ok(/pre-tax margin on total income/.test(c9.label));
+  // FY26: 102141 / (348615 + 146848) = 20.6%; the old Financing Margin % read 3y -12.0% vs 10y 14.0%.
+  assert.strictEqual(c9.value, '3y 20.4% vs 10y 27.3%');
+  // Non-lenders are untouched.
+  assert.strictEqual(stmt.compoundingChecklist(loadFinancials('TCS'), { faceValue: 1 }).find((c) => c.id === 4).value, '101%');
+  assert.strictEqual(stmt.detectCyclical(loadFinancials('VEDL').profitLoss).cyclical, true);
+});
+
+test('D3-04 CWIP_FROZEN: a CWIP balance that multiplied is not "little changed" (Hindalco FY26 49,526 vs 7,700)', () => {
+  const hindalco = loadFinancials('HINDALCO');
+  const rows = stmt.DIVERGENCE_RULES.find((r) => r.id === 'CWIP_FROZEN').run(hindalco);
+  assert.strictEqual(rows.find((r) => r.year === 2026).status, 'clear');
+  assert.deepStrictEqual(rows.filter((r) => r.status === 'fired').map((r) => r.year), [], 'FY21/24/25/26 used to fire on 1.4x-6.4x growth');
+  // Flat CWIP but fixed assets up 19% is a rolling programme that IS completing.
+  const periods = [2020, 2021, 2022, 2023].map((year) => ({ type: 'fy', year }));
+  const rolling = { balanceSheet: { periods, rows: [
+    { label: 'CWIP', values: [200, 210, 195, 205].map((value) => ({ value })) },
+    { label: 'Fixed Assets', values: [800, 850, 900, 950].map((value) => ({ value })) },
+  ] } };
+  assert.strictEqual(stmt.DIVERGENCE_RULES.find((r) => r.id === 'CWIP_FROZEN').run(rolling)[0].status, 'clear');
+});
+
+test('D3-07 dividends: VEDL FY23-25 paid more than FCF while borrowing rose; PAYTM FY26 paid nothing and must not fire', () => {
+  const vedl = loadFinancials('VEDL');
+  const rows = stmt.DIVERGENCE_RULES.find((r) => r.id === 'DIVIDEND_EXCEEDS_FCF').run(vedl);
+  assert.deepStrictEqual(rows.filter((r) => r.status === 'fired').map((r) => r.year), [2023, 2024, 2025]);
+  const fy23 = rows.find((r) => r.year === 2023);
+  approx(fy23.materiality, 3.57 * 14503 - 19411, 1e-9); // dividend (357% x NP) minus FCF
+  assert.strictEqual(rows.find((r) => r.year === 2026).status, 'clear', 'FY26 borrowings fell (91,479 -> 32,947)');
+  const gate = stmt.checklistQualityGate(stmt.evaluateDivergenceRules(vedl));
+  assert.strictEqual(gate.blocked, true);
+  assert.ok(gate.gatingFlags.every((f) => f.ruleId === 'DIVIDEND_EXCEEDS_FCF'));
+
+  const paytm = loadFinancials('PAYTM');
+  const fromOps = stmt.DIVERGENCE_RULES.find((r) => r.id === 'DIVIDEND_NOT_FROM_OPS').run(paytm);
+  assert.strictEqual(fromOps.find((r) => r.year === 2026).status, 'clear', '0% payout: nothing was paid, so nothing was funded by asset sales');
+});
+
+test('D3-08 interest cover: EBIT not EBITDA, and an operating loss says so instead of "-88.6x thinly covered" (PAYTM FY25)', () => {
+  const paytm = loadFinancials('PAYTM');
+  const rows = stmt.DIVERGENCE_RULES.find((r) => r.id === 'INTEREST_COVER_THIN').run(paytm);
+  const fy25 = rows.find((r) => r.year === 2025);
+  assert.strictEqual(fy25.status, 'fired');
+  assert.ok(/loss before interest/.test(fy25.message), fy25.message);
+  assert.ok(!/-\d+(\.\d+)?x/.test(fy25.detail), `no negative multiple may be printed: ${fy25.detail}`);
+  const c5 = stmt.compoundingChecklist(paytm, { faceValue: 1 }).find((c) => c.id === 5);
+  assert.strictEqual(c5.value, 'Interest cover loss, loss, loss, loss, 33.3x (last 5 years)');
+  assert.strictEqual(c5.meets, false);
+  // Hindalco FY26 on EBIT: (PBT + Interest) / Interest, straight off the fixture.
+  const h = loadFinancials('HINDALCO');
+  const pbt = stmt.fySeries(h.profitLoss, 'Profit before tax').slice(-1)[0].value;
+  const int = stmt.fySeries(h.profitLoss, 'Interest').slice(-1)[0].value;
+  const hc5 = stmt.compoundingChecklist(h, { faceValue: 1 }).find((c) => c.id === 5);
+  assert.ok(hc5.value.includes(((pbt + int) / int).toFixed(1) + 'x (last 5 years)'), hc5.value);
+});
+
+test('D3-10/15 rowBoxScore: polarity-aware best/worst, no CAGR for %/days rows, span counted in fiscal years', () => {
+  const tcs = loadFinancials('TCS');
+  const dd = stmt.fySeries(tcs.ratios, 'Debtor Days');
+  assert.strictEqual(stmt.rowBoxScore(dd).best.value, 93, 'label-blind call keeps its legacy shape');
+  const box = stmt.rowBoxScore(dd, 'Debtor Days');
+  assert.deepStrictEqual([box.best.year, box.best.value], [2021, 67], 'fewest debtor days is the best year');
+  assert.deepStrictEqual([box.worst.year, box.worst.value], [2026, 93]);
+  assert.strictEqual(box.cagr, null);
+  assert.strictEqual(box.cagrRefusal, 'unit');
+  assert.strictEqual(box.change, 93 - 79);
+  assert.strictEqual(box.changeUnit, 'days');
+  assert.strictEqual(stmt.rowBoxScore(stmt.fySeries(tcs.profitLoss, 'OPM %'), 'OPM %').changeUnit, 'pp');
+  assert.strictEqual(stmt.rowBoxScore(stmt.fySeries(tcs.balanceSheet, 'Borrowings'), 'Borrowings').directional, false);
+
+  const paytm = loadFinancials('PAYTM');
+  const sales = stmt.fySeries(paytm.profitLoss, 'Sales');
+  const pb = stmt.rowBoxScore(sales, 'Sales');
+  assert.strictEqual(pb.years, 11, 'FY15-FY26 is 11 years even though FY17/FY18 are missing');
+  approx(pb.cagr, Math.pow(8437 / 323, 1 / 11) - 1, 1e-9);
+  approx(stmt.windowCagr(sales, 10), Math.pow(8437 / 855, 1 / 10) - 1, 1e-9); // FY16 -> FY26, by year
+  assert.strictEqual(stmt.windowCagr(sales, 8), null, 'FY2018 is not reported: refuse, never borrow a neighbouring year');
+});
+
+test('D3-11 incrementalRoce: EBIT-based, refuses small/negative capital growth and loss endpoints', () => {
+  const tcs = loadFinancials('TCS');
+  const tr = stmt.incrementalRoce(tcs.profitLoss, tcs.balanceSheet);
+  assert.strictEqual(tr.find((r) => r.year === 2023).value, null, 'TCS CE grew 6% FY20-23: refused, not a 295% "return"');
+  const tcsItem2 = stmt.compoundingChecklist(tcs, { faceValue: 1 }).find((c) => c.id === 2);
+  assert.strictEqual(tcsItem2.value, '49.3% (median of 4 of 9 3-year windows)', 'was a 169.0% median');
+  const hindalco = stmt.incrementalRoce(loadFinancials('HINDALCO').profitLoss, loadFinancials('HINDALCO').balanceSheet);
+  assert.ok(hindalco.every((r) => r.value == null || Math.abs(r.value) < 1), 'Hindalco FY18 used to print 3,760%');
+  const paytm = loadFinancials('PAYTM');
+  const pr = stmt.incrementalRoce(paytm.profitLoss, paytm.balanceSheet);
+  assert.ok(pr.every((r) => r.value === null), 'a loss-making PAYTM has no positive-EBIT window to measure');
+  assert.strictEqual(stmt.compoundingChecklist(paytm, { faceValue: 1 }).find((c) => c.id === 2).available, false, 'PAYTM used to PASS at a 22.1% median');
+});
+
+test('D3-18 checklistQualityGate: gates on earnings-quality flags only, and sees past the top-3 display cut', () => {
+  for (const sym of ['HINDALCO', 'PAYTM']) {
+    const r = stmt.evaluateDivergenceRules(loadFinancials(sym));
+    assert.ok(r.flags.length > 0 && r.flags.every((f) => f.ruleId === 'INTEREST_COVER_THIN'), `${sym} has only interest-cover flags`);
+    assert.strictEqual(stmt.checklistQualityGate(r).blocked, false, `${sym}: thin interest cover is a risk, not a question about whether the numbers are honest`);
+  }
+  const risky = { ruleId: 'INTEREST_COVER_THIN', year: 2020 };
+  assert.strictEqual(stmt.checklistQualityGate({ flags: [risky, risky, risky], allFlags: [risky, risky, risky, { ruleId: 'CFO_DIVERGENCE', year: 2019 }] }).blocked, true, 'a 4th-ranked earnings-quality flag still gates');
+  assert.strictEqual(stmt.checklistQualityGate({ flags: [{ ruleId: 'CORRELATED', year: 2021, rules: ['INTEREST_COVER_THIN', 'CWIP_FROZEN'] }] }).blocked, false);
+  assert.strictEqual(stmt.checklistQualityGate({ flags: [{ ruleId: 'CORRELATED', year: 2021, rules: ['TAX_DRIVEN_MARGIN', 'CWIP_FROZEN'] }] }).blocked, true);
+});
+
+test('D3-12 chart builders print key values without hover', () => {
+  const tcs = loadFinancials('TCS');
+  const sales = stmt.fySeries(tcs.profitLoss, 'Sales');
+  const bench = stmt.benchChartOption([{ label: 'Sales', series: sales }], true);
+  const s0 = bench.series[0];
+  assert.strictEqual(s0.label.formatter({ dataIndex: s0.data.length - 1 }), '₹267.0k Cr', 'the ACTUAL latest value, even on an indexed chart');
+  assert.strictEqual(s0.label.formatter({ dataIndex: 0 }), '', 'only the last bar is labelled');
+
+  const growth = stmt.growthChartOption(stmt.growthSummary(sales), stmt.growthSummary(stmt.fySeries(tcs.profitLoss, 'Net Profit')), 'Sales');
+  assert.strictEqual(growth.legend.show, true);
+  assert.deepStrictEqual(growth.legend.data, growth.series.map((s) => s.name));
+  assert.strictEqual(growth.series[0].label.formatter({ value: growth.series[0].data[0] }), '9.4%');
+  assert.strictEqual(growth.series[0].label.position, 'outside', 'outside flips below a negative bar');
+  assert.strictEqual(stmt.growthChartOption({}, {}, 'Revenue').series[0].name, 'Revenue CAGR');
+
+  const pv = stmt.profitVsCashChartOption(stmt.fySeries(tcs.profitLoss, 'Net Profit'), stmt.fySeries(tcs.cashFlow, 'Cash from Operating Activity'));
+  assert.strictEqual(pv.series[2].markLine.label.show, false, 'the y=1 markLine\'s default "1" label sat exactly where the CFO/NP end label goes');
+  assert.strictEqual(pv.series[1].endLabel.formatter({ value: 52094 }), 'CFO\n52.1k');
+  const lastRatio = pv.series[2].data[pv.series[2].data.length - 1];
+  assert.strictEqual(pv.series[2].markPoint.label.formatter(), 'CFO/NP\n' + lastRatio.toFixed(2));
+  // VEDL's ratio series starts with nulls (early cumulative profit <= 0);
+  // the value tag must anchor on the last real point, never a null one.
+  const vedl = loadFinancials('VEDL');
+  const pvV = stmt.profitVsCashChartOption(stmt.fySeries(vedl.profitLoss, 'Net Profit'), stmt.fySeries(vedl.cashFlow, 'Cash from Operating Activity'));
+  const ratiosV = pvV.series[2].data;
+  assert.strictEqual(ratiosV[0], null, 'fixture precondition: leading null');
+  const [idx, val] = pvV.series[2].markPoint.data[0].coord;
+  assert.strictEqual(idx, ratiosV.length - 1);
+  assert.ok(Number.isFinite(val));
 });

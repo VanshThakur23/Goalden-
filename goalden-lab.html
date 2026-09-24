@@ -5745,7 +5745,7 @@ const ROW_DEFINITIONS = {
   'Days Payable':'How many days, on average, the company takes to pay its own suppliers.',
   'Cash Conversion Cycle':'Debtor Days plus Inventory Days minus Days Payable \u2014 how long cash is tied up before it comes back.',
   'Working Capital Days':'A broader measure of how long operating cash is tied up in the day-to-day business.',
-  'ROCE %':'Return on Capital Employed \u2014 operating profit as a percentage of all capital invested in the business.',
+  'ROCE %':'Return on Capital Employed \u2014 earnings before interest and tax (EBIT) as a percentage of all capital invested in the business (equity plus borrowings).',
   'ROE %':'Return on Equity \u2014 Net Profit as a percentage of shareholder funds.',
 };
 function rowDefinitionText(label){ return ROW_DEFINITIONS[label] || 'As reported by the company on screener.in.'; }
@@ -5759,7 +5759,9 @@ const FLAG_PIN_MAP = {
   ASSET_SALE_GAIN: [{section:'profitLoss',label:'Other Income'},{section:'cashFlow',label:'Cash from Investing Activity'}],
   TAX_DRIVEN_MARGIN: [{section:'profitLoss',label:'Net Profit'},{section:'profitLoss',label:'Tax %'}],
   INVENTORY_BUILD: [{section:'ratios',label:'Inventory Days'},{section:'profitLoss',label:'Sales'}],
-  INTEREST_COVER_THIN: [{section:'profitLoss',label:'Operating Profit'},{section:'profitLoss',label:'Interest'}],
+  // Cover is now EBIT-based (PBT + interest), so pin the rows it's computed from.
+  INTEREST_COVER_THIN: [{section:'profitLoss',label:'Profit before tax'},{section:'profitLoss',label:'Interest'}],
+  DIVIDEND_EXCEEDS_FCF: [{section:'profitLoss',label:'Dividend Payout %'},{section:'cashFlow',label:'Free Cash Flow'}],
   LEVERAGE_UP_RETURNS_DOWN: [{section:'balanceSheet',label:'Borrowings'},{section:'ratios',label:'ROCE %'}],
   CWIP_FROZEN: [{section:'balanceSheet',label:'CWIP'},{section:'balanceSheet',label:'Fixed Assets'}],
   CAPEX_NO_REVENUE: [{section:'balanceSheet',label:'Fixed Assets'},{section:'profitLoss',label:'Sales'}],
@@ -6201,7 +6203,7 @@ function renderStatementsHeaderHTML(){
   if(latestYear && (nowYear-latestYear)>=2){
     stale = `<div class="stmt-stale-banner">Latest reported period is FY${latestYear}. This company may be delisted, suspended, or not updated at source.</div>`;
   }
-  const cyc = r.profitLoss ? detectCyclical(r.profitLoss) : {cyclical:false};
+  const cyc = r.profitLoss ? detectCyclical(r.profitLoss, schema) : {cyclical:false};
   const cyclicalBanner = cyc.cyclical ? `<div class="stmt-cyclical-banner">This business looks cyclical \u2014 ${advisorAttr(cyc.reason)}</div>` : '';
   const sectorBanner = schema==='financial' ? `<div class="stmt-cyclical-banner">This is a lender. Borrowing money is the raw material of a bank's business, not a warning sign \u2014 so several of the usual cash-flow checks are switched off here.</div>` : '';
   // The sector breadcrumb is the one sector-adjacent fact screener's static
@@ -6251,8 +6253,12 @@ function renderRefusalHTML(){
    number itself. */
 function stmtWindowDetail(series, years){
   const clean = series.filter(p=>p.value!=null);
-  if(clean.length < years+1) return null;
-  const slice = clean.slice(-(years+1));
+  if(clean.length < 2) return null;
+  // By fiscal year, not array position: a company with missing years
+  // (PAYTM has no FY17/18) otherwise stretched a "5-year" window over 7.
+  const endYear = clean[clean.length-1].year;
+  const slice = clean.filter(p=>p.year>=endYear-years);
+  if(!slice.length || slice[0].year!==endYear-years) return null;
   let positives=0, total=0, worst=null;
   for(let i=1;i<slice.length;i++){
     const a=slice[i-1].value, b=slice[i].value;
@@ -6322,6 +6328,8 @@ function statementsPeBand(sym){
   const nameCheck = stmtTickerIdentityCheck(sym, priceHist.label);
   return { status:'ready', band, spread10: reratingSpread(priceFy, npSeries, 10), spread5: reratingSpread(priceFy, npSeries, 5), nameCheck };
 }
+// 1st/2nd/3rd/11th-13th/22nd: "22th percentile" was printed verbatim.
+function ordinalSuffix(n){ const v=n%100; return n+((v>=11&&v<=13)?'th':({1:'st',2:'nd',3:'rd'}[n%10]||'th')); }
 function stmtGrowthRowHTML(label, series){
   const g = growthSummary(series);
   const cell = v => v!=null ? `<span class="stmt-depth-cagr">${(v*100).toFixed(1)}%</span>` : '<span class="stmt-depth-dash">—</span>';
@@ -6359,7 +6367,7 @@ function renderDepthMetricsHTML(){
     const atLatest = atSeries.length ? atSeries[atSeries.length-1] : null;
     returnsBlock = `<div class="stmt-depth-stats">
       <div class="stmt-depth-stat">
-        <div class="stmt-depth-stat-label">Incremental ROCE<span class="stmt-ctrl-hint">Change in operating profit over change in capital employed, across 3-year windows — the return on capital added recently, not diluted by capital deployed decades ago</span></div>
+        <div class="stmt-depth-stat-label">Incremental ROCE<span class="stmt-ctrl-hint">Change in EBIT (profit before tax + interest) over change in capital employed, across 3-year windows — the return on capital added recently, not diluted by capital deployed decades ago</span></div>
         <div class="stmt-depth-stat-value">${incLatest ? (incLatest.value*100).toFixed(1)+'% (FY'+incLatest.year+')' : '—'}<span class="stmt-depth-stat-sub">${incMed!=null ? 'median '+(incMed*100).toFixed(1)+'%' : ''}</span></div>
       </div>
       <div class="stmt-depth-stat">
@@ -6368,15 +6376,15 @@ function renderDepthMetricsHTML(){
       </div>
       <div class="stmt-depth-stat">
         <div class="stmt-depth-stat-label">Dilution Drag (5y)<span class="stmt-ctrl-hint">Share-count change over 5 years, split-adjusted — positive means the company issued shares, so each existing shareholder owns a smaller fraction regardless of whether the business grew</span></div>
-        <div class="stmt-depth-stat-value">${(() => { const dd = dilutionDrag(bs, faceValue); const latest = dd.length ? dd[dd.length-1] : null; return latest && latest.value != null ? (latest.value>=0?'+':'')+(latest.value*100).toFixed(1)+'% (FY'+latest.year+')' : '\u2014'; })()}</div>
+        <div class="stmt-depth-stat-value">${(() => { const dd = dilutionDrag(bs, faceValue, pl); const latest = dd.length ? dd[dd.length-1] : null; return latest && latest.value != null ? (latest.value>=0?'+':'')+(latest.value*100).toFixed(1)+'% (FY'+latest.year+')' : '\u2014'; })()}</div>
       </div>
     </div>`;
   }
 
-  const bvSeries = faceValue ? bookValuePerShareSeries(bs, faceValue).filter(p=>p.value!=null) : [];
+  const bvSeries = faceValue ? bookValuePerShareSeries(bs, faceValue, pl).filter(p=>p.value!=null) : [];
   const bvLatest = bvSeries.length ? bvSeries[bvSeries.length-1] : null;
   const currentPrice = bundle.topRatios && bundle.topRatios.currentPrice;
-  const pb = (faceValue && currentPrice!=null) ? priceToBookLatest(currentPrice, bookValuePerShareSeries(bs, faceValue)) : null;
+  const pb = (faceValue && currentPrice!=null) ? priceToBookLatest(currentPrice, bookValuePerShareSeries(bs, faceValue, pl)) : null;
   const bvBlock = `<div class="stmt-depth-stats">
     <div class="stmt-depth-stat">
       <div class="stmt-depth-stat-label">Book Value per Share<span class="stmt-ctrl-hint">(Equity Capital + Reserves) ÷ split-adjusted shares, in today's share units — comparable across a stock split in a way the as-reported figure isn't</span></div>
@@ -6397,7 +6405,7 @@ function renderDepthMetricsHTML(){
   } else if(peResult && peResult.status==='ready'){
     const band = peResult.band;
     const spreadTxt = v => v!=null ? `${v>=0?'+':''}${(v*100).toFixed(1)}pp` : '—';
-    const bandTxt = (band.percentile!=null) ? `${band.current.toFixed(1)}x now, ${band.percentile}th percentile of its own last ${band.series.filter(p=>p.value!=null).length}-year range (${band.min.toFixed(1)}x–${band.max.toFixed(1)}x, median ${band.median.toFixed(1)}x)` : '—';
+    const bandTxt = (band.percentile!=null) ? `${band.current.toFixed(1)}x now, ${ordinalSuffix(band.percentile)} percentile of its own last ${band.series.filter(p=>p.value!=null).length}-year range (${band.min.toFixed(1)}x–${band.max.toFixed(1)}x, median ${band.median.toFixed(1)}x)` : '—';
     // Yahoo's chart endpoint caps daily history at 10 years, so a 10-year
     // spread needs 11 fiscal year-end prices and often has only 10 -- fall
     // back to the 5-year window rather than show a blank, and relabel the
@@ -6549,7 +6557,9 @@ function renderCompanionStripHTML(){
   const focus = s.companionFocus || (s.pins.length ? s.pins[s.pins.length-1] : null);
   if(!focus) return '';
   const primary=statementsBundle(L.statements.primary);
-  const isCyclical=primary?detectCyclical(primary.profitLoss):false;
+  // .cyclical, not the object: detectCyclical() returns {cyclical,...},
+  // which is always truthy, so every company got the cyclical companions.
+  const isCyclical=primary?!!detectCyclical(primary.profitLoss, primary.schema).cyclical:false;
   const companions=companionMapFor(focus.label,isCyclical);
   if(!companions) return '';
   return companions.map(c=>`<div class="stmt-companion-chip" data-stmt-companion-pin="${advisorAttr(rowKey(c.section,c.key))}"><b>${advisorAttr(c.key)}</b> \u2014 ${advisorAttr(c.reason)}</div>`).join('');
@@ -7251,12 +7261,28 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
   const sectionPins = L.statements.pins.filter(p=>p.section===sectionKey);
   const focusLabel = sectionPins.length ? sectionPins[sectionPins.length-1].label : headlineLabel;
   const focusSeries = focusLabel===headlineLabel ? headlineSeries : fySeries(primSection, focusLabel);
-  const box = rowBoxScore(focusSeries);
+  // Passing the label makes the engine direction-aware: for a
+  // lower-is-better row (Debtor Days) BEST is the LOWEST year, a neutral row
+  // gets HIGH/LOW instead of a claimed direction, and %/days/x rows show a
+  // plain end-to-end change instead of a meaningless CAGR of a margin.
+  const box = rowBoxScore(focusSeries, focusLabel);
+  const [hiTag, loTag, hiPt, loPt] = box && box.directional===false
+    ? ['HIGH','LOW', box ? box.high : null, box ? box.low : null]
+    : ['BEST','WORST', box ? box.best : null, box ? box.worst : null];
+  const fmtChange = b => {
+    const v=b.change, sign=v>0?'+':'';
+    if(b.changeUnit==='pp') return `${sign}${v.toFixed(1)} pp`;
+    if(b.changeUnit==='days') return `${sign}${Math.round(v)} days`;
+    return `${sign}${v.toFixed(2)}x`;
+  };
+  const trendText = !box ? '' : box.cagr!=null ? box.years+'Y CAGR '+(box.cagr*100).toFixed(1)+'%'
+    : box.cagrRefusal==='unit' && box.change!=null ? box.years+'Y change '+fmtChange(box)
+    : 'CAGR not shown — the window crosses a loss year or starts at zero';
   const footer = box ? `<tfoot><tr><td colspan="${periods.length+3}">
     <b>${advisorAttr(focusLabel)}</b> FY${box.windowStart}–FY${box.windowEnd} &middot;
-    BEST ${advisorAttr(formatCellRaw(focusLabel,box.best.value))} (FY${box.best.year}) &middot;
-    WORST ${advisorAttr(formatCellRaw(focusLabel,box.worst.value))} (FY${box.worst.year}) &middot;
-    ${box.cagr!=null ? box.years+'Y CAGR '+(box.cagr*100).toFixed(1)+'%' : 'CAGR not shown — the window crosses a loss year'}
+    ${hiTag} ${advisorAttr(formatCellRaw(focusLabel,hiPt.value))} (FY${hiPt.year}) &middot;
+    ${loTag} ${advisorAttr(formatCellRaw(focusLabel,loPt.value))} (FY${loPt.year}) &middot;
+    ${trendText}
   </td></tr></tfoot>` : '';
   // Coverage-mismatch note: two companies with different history lengths or
   // fiscal calendars must never silently compare -- a year present for only
@@ -7363,7 +7389,7 @@ function updateStatementsUI(){
       const sl=fySeries(d.result.profitLoss,salesLabelFor(d.result));
       const np=fySeries(d.result.profitLoss,'Net Profit');
       if(sl.length>=3 && np.length>=3){
-        initChart('stmtGrowthChart', growthChartOption(growthSummary(sl),growthSummary(np)));
+        initChart('stmtGrowthChart', growthChartOption(growthSummary(sl),growthSummary(np),salesLabelFor(d.result)));
       } else { growthChartEl.innerHTML='<div class="cap" style="padding:14px">Not enough years for a growth window.</div>'; }
     } else { growthChartEl.innerHTML=''; }
   }

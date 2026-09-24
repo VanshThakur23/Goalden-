@@ -208,8 +208,8 @@ const COMPANION_MAP = {
     { key: 'Borrowings', section: 'balanceSheet', reason: 'persistent negative free cash flow with rising borrowings means debt is funding the gap' },
   ],
   'CFO/OP': [
-    { key: 'Working Capital Days', section: 'ratios', reason: 'the most common explanation for cash conversion below 1.0' },
-    { key: 'Net Profit', section: 'profitLoss', reason: 'the denominator \u2014 a ratio below 0.75 on growing profit is the finding, not the ratio itself' },
+    { key: 'Working Capital Days', section: 'ratios', reason: 'the most common explanation for cash conversion below 100%' },
+    { key: 'Net Profit', section: 'profitLoss', reason: 'profit growing while cash conversion sits below 75% is the finding, not the percentage itself' },
   ],
   // --- Ratios ---
   'Debtor Days': [
@@ -285,6 +285,10 @@ function ruleDividendNotFromOps(bundle) {
       continue;
     }
     if (npT <= 0) { out.push({ year, status: 'not_applicable', reason: 'no profit to compute a dividend outflow from' }); continue; }
+    // No dividend, nothing to fund. Without this a 0% payout still "fired"
+    // whenever average CFO was negative (0 > −432 for PAYTM FY26), telling
+    // the reader a company that paid nothing had sold assets to pay it.
+    if (payoutT <= 0) { out.push({ year, status: 'clear' }); continue; }
     const divOutflow = (payoutT / 100) * npT;
     const meanCfo = (cfoT + cfoT1) / 2;
     const fired = divOutflow > meanCfo && cfiT > 0;
@@ -293,6 +297,51 @@ function ruleDividendNotFromOps(bundle) {
       message: fired ? 'The dividend paid was larger than the cash the business earned — the company sold assets to help pay it.' : null,
       detail: fired ? `FY${year} — dividend paid was ${(divOutflow / meanCfo).toFixed(1)}x average cash from operations, and investing cash flow was positive (net asset sales), at +Rs ${Math.round(cfiT)} Cr.` : null,
       materiality: fired ? Math.abs(divOutflow - meanCfo) : null,
+    });
+  }
+  return out;
+}
+
+// The dividend was bigger than the cash left after capex (FCF), and
+// borrowings rose the same year — the gap was, in effect, borrowed.
+// DIVIDEND_NOT_FROM_OPS above only catches the asset-sale route (CFI > 0);
+// the debt route is the more common one and it missed it entirely: VEDL
+// paid out 357%, 259% and 113% of profit in FY23–FY25 while borrowings went
+// from Rs 53,583 Cr to Rs 91,479 Cr. The dividend is estimated as payout% ×
+// Net Profit (screener's payout is dividend ÷ profit, so this inverts it,
+// including in a loss year where both are negative). Materiality is only
+// the part of the dividend FCF didn't cover — never more than the dividend
+// itself — so a capex-heavy year with negative FCF and a small dividend
+// doesn't outrank a genuinely debt-funded payout.
+function ruleDividendExceedsFcf(bundle) {
+  const byYear = (section, label) => new Map(fySeries(section, label).map((p) => [p.year, p.value]));
+  const payout = fySeries(bundle.profitLoss, 'Dividend Payout %');
+  const np = byYear(bundle.profitLoss, 'Net Profit');
+  const fcf = byYear(bundle.cashFlow, 'Free Cash Flow');
+  const borrowRaw = fySeries(bundle.balanceSheet, 'Borrowings');
+  const borrowSeries = borrowRaw.length ? borrowRaw : fySeries(bundle.balanceSheet, 'Borrowing');
+  const out = [];
+  if (!payout.length || !borrowSeries.length) return out;
+  for (let i = 1; i < borrowSeries.length; i++) {
+    const year = borrowSeries[i].year;
+    const bT = borrowSeries[i].value, bT1 = borrowSeries[i - 1].value;
+    const payoutRow = payout.find((p) => p.year === year);
+    const payoutT = payoutRow ? payoutRow.value : null;
+    const npT = np.get(year), fcfT = fcf.get(year);
+    if (bT == null || bT1 == null || payoutT == null || npT == null || fcfT == null) {
+      out.push({ year, status: 'not_applicable', reason: 'missing an input for this year' });
+      continue;
+    }
+    const dividend = (payoutT / 100) * npT;
+    if (!(dividend > 0)) { out.push({ year, status: 'clear' }); continue; } // no dividend paid
+    const uncovered = dividend - Math.max(fcfT, 0);
+    const borrowRise = bT - bT1;
+    const fired = dividend > fcfT && borrowRise > MATERIALITY_FLOOR;
+    out.push({
+      year, status: fired ? 'fired' : 'clear',
+      message: fired ? 'The dividend was larger than the cash left after investment, and borrowings rose — part of the payout was effectively funded with debt.' : null,
+      detail: fired ? `FY${year} — estimated dividend Rs ${Math.round(dividend).toLocaleString('en-IN')} Cr (${payoutT.toFixed(0)}% of profit) against free cash flow of Rs ${Math.round(fcfT).toLocaleString('en-IN')} Cr, while borrowings rose Rs ${Math.round(borrowRise).toLocaleString('en-IN')} Cr.` : null,
+      materiality: fired ? Math.min(dividend, uncovered) : null,
     });
   }
   return out;
@@ -437,32 +486,53 @@ function ruleInventoryBuild(bundle) {
   return out;
 }
 
-// Operating profit thinly covering interest -- a company whose interest
-// cover has fallen below a safety margin is one bad year away from
-// difficulty servicing debt. Borrowings = 0 is not_applicable, not clear:
-// there is nothing to cover, so the check has no meaning that year (the
-// same treatment condition 5 of the Compounding Checklist gives it).
+// EBIT = Profit before tax + Interest, per fiscal year, as a year-keyed
+// Map. Interest cover is EBIT ÷ interest, not screener's "Operating
+// Profit" (which is EBITDA — before depreciation): on EBITDA a
+// depreciation-heavy business looks better covered than it is, since
+// plant has to be replaced out of the same earnings.
+function ebitByYear(profitLoss) {
+  const interest = new Map(fySeries(profitLoss, 'Interest').map((p) => [p.year, p.value]));
+  return new Map(fySeries(profitLoss, 'Profit before tax').map((p) => {
+    const i = interest.get(p.year);
+    return [p.year, (p.value != null && i != null) ? p.value + i : null];
+  }));
+}
+
+// EBIT thinly covering interest -- a company whose interest cover has
+// fallen below a safety margin is one bad year away from difficulty
+// servicing debt. Borrowings = 0 is not_applicable, not clear: there is
+// nothing to cover, so the check has no meaning that year (the same
+// treatment condition 5 of the Compounding Checklist gives it). An
+// operating LOSS gets its own message: a cover of "−88.6x" (PAYTM FY25)
+// isn't a thin cover, it's no cover, and a negative multiple printed next
+// to "thinly" reads as a small positive problem.
 function ruleInterestCoverThin(bundle) {
-  const op = fySeries(bundle.profitLoss, 'Operating Profit');
-  const interest = fySeries(bundle.profitLoss, 'Interest');
+  const pbt = fySeries(bundle.profitLoss, 'Profit before tax');
+  const interest = new Map(fySeries(bundle.profitLoss, 'Interest').map((p) => [p.year, p.value]));
+  const ebit = ebitByYear(bundle.profitLoss);
   const borrowRaw = fySeries(bundle.balanceSheet, 'Borrowings');
-  const borrow = borrowRaw.length ? borrowRaw : fySeries(bundle.balanceSheet, 'Borrowing');
+  const borrow = new Map((borrowRaw.length ? borrowRaw : fySeries(bundle.balanceSheet, 'Borrowing')).map((p) => [p.year, p.value]));
   const out = [];
-  for (let i = 0; i < op.length; i++) {
-    const year = op[i].year;
-    const opT = op[i].value, intT = interest[i] && interest[i].value;
-    const borrowT = borrow[i] && borrow[i].value;
-    if (borrowT === 0) { out.push({ year, status: 'not_applicable', reason: 'no borrowings this year — interest cover is moot' }); continue; }
-    if (opT == null || intT == null || intT < MATERIALITY_FLOOR) { out.push({ year, status: 'not_applicable', reason: 'missing an input, or interest expense too small to divide by' }); continue; }
-    const cover = opT / intT;
-    const fired = cover < 3;
+  pbt.forEach(({ year }) => {
+    const ebitT = ebit.get(year), intT = interest.get(year);
+    const borrowT = borrow.get(year);
+    if (borrowT === 0) { out.push({ year, status: 'not_applicable', reason: 'no borrowings this year — interest cover is moot' }); return; }
+    if (ebitT == null || intT == null || intT < MATERIALITY_FLOOR) { out.push({ year, status: 'not_applicable', reason: 'missing an input, or interest expense too small to divide by' }); return; }
+    const cover = ebitT / intT;
+    const loss = ebitT <= 0;
+    const fired = loss || cover < 3;
     out.push({
       year, status: fired ? 'fired' : 'clear',
-      message: fired ? 'Operating profit is covering interest only thinly this year — a dip in profit could make interest payments difficult.' : null,
-      detail: fired ? `FY${year} — interest cover was ${cover.toFixed(1)}x, operating profit Rs ${Math.round(opT)} Cr against interest of Rs ${Math.round(intT)} Cr.` : null,
+      message: !fired ? null : loss
+        ? 'The business made a loss before interest this year — there was no operating profit at all to pay interest from.'
+        : 'Profit before interest and tax is covering interest only thinly this year — a dip in profit could make interest payments difficult.',
+      detail: !fired ? null : loss
+        ? `FY${year} — profit before interest and tax was Rs ${Math.round(ebitT).toLocaleString('en-IN')} Cr, against interest of Rs ${Math.round(intT).toLocaleString('en-IN')} Cr.`
+        : `FY${year} — interest cover was ${cover.toFixed(1)}x: profit before interest and tax Rs ${Math.round(ebitT).toLocaleString('en-IN')} Cr against interest of Rs ${Math.round(intT).toLocaleString('en-IN')} Cr.`,
       materiality: fired ? intT : null,
     });
-  }
+  });
   return out;
 }
 
@@ -498,6 +568,12 @@ function ruleLeverageUpReturnsDown(bundle) {
 // out of CWIP into Fixed Assets, so CWIP staying flat or rising is the
 // signal, not CWIP being large in isolation (some capital-intensive
 // businesses always carry a sizeable CWIP balance mid-expansion).
+// "Stayed" is a band, not a floor: ratio >= 0.90 alone also fired on CWIP
+// that had multiplied (Hindalco FY26: Rs 49,526 Cr against Rs 7,700 Cr —
+// a capex programme ramping up, reported as "little changed"). And a flat
+// CWIP balance next to fast-growing fixed assets is a rolling programme
+// whose projects ARE completing and being replaced, so the rule also needs
+// fixed assets to have barely moved over the same three years.
 function ruleCwipFrozen(bundle) {
   const cwip = fySeries(bundle.balanceSheet, 'CWIP');
   const fixedAssets = fySeries(bundle.balanceSheet, 'Fixed Assets');
@@ -507,14 +583,16 @@ function ruleCwipFrozen(bundle) {
     const year = cwip[i].year;
     const t = cwip[i].value, t3 = cwip[i - 3].value;
     const faT = fixedAssets[i] && fixedAssets[i].value;
-    if (t == null || t3 == null || t3 < MATERIALITY_FLOOR || faT == null || faT <= 0) { out.push({ year, status: 'not_applicable', reason: 'missing CWIP or fixed-assets data, or CWIP was negligible three years ago' }); continue; }
+    const faT3 = fixedAssets[i - 3] && fixedAssets[i - 3].value;
+    if (t == null || t3 == null || t3 < MATERIALITY_FLOOR || faT == null || faT <= 0 || faT3 == null || faT3 <= 0) { out.push({ year, status: 'not_applicable', reason: 'missing CWIP or fixed-assets data, or CWIP was negligible three years ago' }); continue; }
     const ratio = t / t3;
     const share = t / faT;
-    const fired = ratio >= 0.90 && share > 0.10;
+    const faGrowth = faT / faT3 - 1;
+    const fired = ratio >= 0.90 && ratio <= 1.30 && faGrowth < 0.10 && share > 0.10;
     out.push({
       year, status: fired ? 'fired' : 'clear',
       message: fired ? 'A large share of capital has stayed tied up in unfinished projects for years without converting into productive assets.' : null,
-      detail: fired ? `FY${year} — capital work in progress was Rs ${Math.round(t)} Cr, little changed from Rs ${Math.round(t3)} Cr three years ago, and ${(share * 100).toFixed(0)}% of fixed assets.` : null,
+      detail: fired ? `FY${year} — capital work in progress was Rs ${Math.round(t)} Cr against Rs ${Math.round(t3)} Cr three years earlier (${ratio >= 1 ? '+' : '−'}${Math.abs((ratio - 1) * 100).toFixed(0)}%), ${(share * 100).toFixed(0)}% of fixed assets, while fixed assets themselves grew only ${(faGrowth * 100).toFixed(0)}%.` : null,
       materiality: fired ? t : null,
     });
   }
@@ -555,6 +633,10 @@ function ruleCapexNoRevenue(bundle) {
 // way a manufacturer's does (see compareRefusal's SCHEMA_MISMATCH note).
 const DIVERGENCE_RULES = [
   { id: 'DIVIDEND_NOT_FROM_OPS', run: ruleDividendNotFromOps, validSchemas: ['nonfinancial'] },
+  // A lender's FCF is CFO net of loan growth — negative by design — and its
+  // borrowings are raw material, so "dividend above FCF while debt rose" is
+  // every healthy bank every year.
+  { id: 'DIVIDEND_EXCEEDS_FCF', run: ruleDividendExceedsFcf, validSchemas: ['nonfinancial'] },
   { id: 'CFO_DIVERGENCE', run: ruleCfoDivergence, validSchemas: ['nonfinancial'] },
   { id: 'DEBTOR_BALLOON', run: ruleDebtorBalloon, validSchemas: ['nonfinancial'] },
   { id: 'ASSET_SALE_GAIN', run: ruleAssetSaleGain, validSchemas: ['nonfinancial'] },
@@ -588,7 +670,16 @@ function discontinuityNote(year) {
 // simultaneously, which is roughly when the business is least distressed
 // relative to its own future: anti-signal, not signal. Detected once per
 // company and used to note (not hide) the flags below.
-function detectCyclical(profitLoss) {
+// Not assessed for a lender: its "Financing Margin %" swings on provisioning
+// and on how screener splits income between Revenue and Other Income
+// (HDFCBANK: +18% to −16% across its merger while profit kept rising), so
+// the margin-range test called HDFCBANK cyclical on accounting, not on a
+// business cycle. Returns cyclical:false with applicable:false so a caller
+// can say "not assessed" rather than "not cyclical" if it wants to.
+function detectCyclical(profitLoss, schema) {
+  if ((schema || classifySchema(profitLoss)) === 'financial') {
+    return { cyclical: false, applicable: false, reason: 'Cyclicality is judged from sales and operating margin, which a lender does not report.' };
+  }
   const sales = fySeries(profitLoss, 'Sales').length ? fySeries(profitLoss, 'Sales') : fySeries(profitLoss, 'Revenue');
   const opm = fySeries(profitLoss, 'OPM %').length ? fySeries(profitLoss, 'OPM %') : fySeries(profitLoss, 'Financing Margin %');
   if (sales.length < 4) return { cyclical: false };
@@ -634,6 +725,7 @@ function evaluateDivergenceRules(bundle) {
     if (group.length > 1) {
       collapsed.push({
         ruleId: 'CORRELATED', year,
+        rules: group.map((g) => g.ruleId),
         message: `Profit moved sharply for reasons the condensed statement doesn't break out on its own — check the annual report for exceptional items.`,
         detail: `FY${year} — ${group.length} separate checks (${group.map((g) => g.ruleId).join(', ')}) fired together, which usually means one underlying event rather than several.`,
         note: group.map((g) => g.note).find(Boolean) || null,
@@ -651,13 +743,14 @@ function evaluateDivergenceRules(bundle) {
   // only a tie-break, so ordering stays deterministic.
   collapsed.sort((a, b) => (b.materiality || 0) - (a.materiality || 0) || b.year - a.year);
 
-  const cyclical = detectCyclical(bundle.profitLoss);
+  const cyclical = detectCyclical(bundle.profitLoss, schema);
 
   return {
     checksRun: notApplicable + clear + fired,
     notApplicable, clear, fired,
     flags: collapsed.slice(0, 3),
     flagsTotal: collapsed.length,
+    allFlags: collapsed, // every visible-eligible flag, ranked; checklistQualityGate reads this
     cyclical,
   };
 }
@@ -696,19 +789,35 @@ function benchChartOption(pins, indexed) {
       return indexed && base ? (v / base) * 100 : v;
     });
   };
+  // Each series prints its ACTUAL latest value (in the row's own unit)
+  // above its last bar — even when the bars are indexed, since "245" on an
+  // index is a shape, while "₹2.67L Cr" is the fact a reader came for.
+  // Only the last bar: labels on every year of up to eight series would be
+  // unreadable, and the table under the chart already has every cell.
+  const endLabel = (points, color, rowLabel) => {
+    const byYear = new Map(points.map((s) => [s.year, s.value]));
+    const lastYear = [...allYears].reverse().find((y) => byYear.get(y) != null);
+    const lastIdx = lastYear == null ? -1 : allYears.indexOf(lastYear);
+    const raw = lastYear == null ? null : byYear.get(lastYear);
+    return {
+      label: { show: lastIdx >= 0, position: 'outside', distance: 4, fontSize: 10, fontWeight: 600, color,
+        formatter: (p) => (p.dataIndex === lastIdx ? formatRowValueCompact(rowLabel, raw) : '') },
+      labelLayout: { hideOverlap: true },
+    };
+  };
   const series = [];
   pins.forEach((pin, i) => {
     const style = SERIES_PALETTE[i % SERIES_PALETTE.length];
-    series.push({
+    series.push(Object.assign({
       name: pin.label, type: 'bar', data: seriesFor(pin.series, indexBase(pin.series)),
-      itemStyle: { color: style.color }, label: { show: false },
-    });
+      itemStyle: { color: style.color },
+    }, endLabel(pin.series, style.color, pin.label)));
     if (pin.compareSeries && pin.compareSeries.length) {
-      series.push({
+      series.push(Object.assign({
         name: (pin.compareLabel || 'Compare') + ' — ' + pin.label, type: 'bar',
         data: seriesFor(pin.compareSeries, indexBase(pin.compareSeries)),
-        itemStyle: { color: style.color, opacity: 0.45 }, label: { show: false },
-      });
+        itemStyle: { color: style.color, opacity: 0.45 },
+      }, endLabel(pin.compareSeries, style.color, pin.label)));
     }
   });
   return {
@@ -765,7 +874,12 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
   // 1.0 reference line against the axis boundary. Give it real headroom.
   const validRatios = cumRatio.filter((v) => v != null);
   const maxRatio = validRatios.length ? Math.max(...validRatios, 1) : 1;
-  const ratioMax = Math.ceil(maxRatio * 1.2 * 10) / 10;
+  // Capped at 4x: early cumulative profit near zero makes the running ratio
+  // explode (VEDL FY20: 159x), and scaling the axis to that one spike
+  // flattened every other year onto the zero line. Anything above the cap
+  // is clipped at the top edge ("4+" tick); the tooltip keeps the real value.
+  const RATIO_CAP = 4;
+  const ratioMax = maxRatio * 1.2 > RATIO_CAP ? RATIO_CAP : Math.ceil(maxRatio * 1.2 * 10) / 10;
   return {
     color: [A.color, B.color, C.color],
     legend: { show: false },
@@ -818,7 +932,7 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
       // in 6-7 tick labels there, each ~12px tall in an ~11px pitch, so
       // consecutive labels ("0.2"/"0.4"/etc) overlapped each other by a
       // pixel or two. Capping the tick count gives each label real room.
-      { type: 'value', gridIndex: 1, min: 0, max: ratioMax, splitNumber: 3 },
+      { type: 'value', gridIndex: 1, min: 0, max: ratioMax, splitNumber: 3, axisLabel: { formatter: (v) => (ratioMax === RATIO_CAP && v >= RATIO_CAP ? RATIO_CAP + '+' : String(v)) } },
     ],
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
     series: [
@@ -832,32 +946,53 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
         // in the chart title, the tooltip and the caption below, and a
         // ~90px-wide bar can't reliably fit "Net Profit" without it
         // spilling into the neighbouring column.
+        // The tag carries the latest value on a second line so the number
+        // is readable without hovering; two short lines fit a bar's width
+        // where one long "NP 49.5k" line would not.
         name: 'Net Profit', type: 'bar', xAxisIndex: 0, yAxisIndex: 0, itemStyle: { color: A.color },
         data: npData.map((v, i) => (i === lastIdx
-          ? { value: v, label: { show: true, position: 'insideTop', distance: 6, color: '#fff', fontWeight: 600, formatter: 'NP' } }
+          ? { value: v, label: { show: true, position: 'insideTop', distance: 6, color: '#fff', fontWeight: 600, fontSize: 10, lineHeight: 12, formatter: () => 'NP\n' + formatCroreCompact(v) } }
           : v)),
       },
       {
         // Same reasoning as Net Profit's tag above -- "Cash from Operations"
         // at 21 characters needs more right-margin than a narrower browser
         // window leaves this chart, and reliably ran off the visible edge.
+        // The value goes on a second line for the same width reason.
         name: 'Cash from Operations', type: 'line', xAxisIndex: 0, yAxisIndex: 0,
         lineStyle: { color: B.color, type: B.lineStyle.type }, itemStyle: { color: B.color }, symbol: B.symbol,
         data: cfoSeries.map((p) => p && p.value),
-        endLabel: { show: true, formatter: 'CFO', color: B.color, fontWeight: 600 },
+        endLabel: { show: true, formatter: (p) => 'CFO\n' + formatCroreCompact(Array.isArray(p.value) ? p.value[1] : p.value), color: B.color, fontWeight: 600, lineHeight: 13 },
       },
       {
         name: 'Cumulative CFO / NP', type: 'line', xAxisIndex: 1, yAxisIndex: 1,
         lineStyle: { color: C.color, type: C.lineStyle.type }, itemStyle: { color: C.color }, symbol: C.symbol,
         data: cumRatio,
-        endLabel: { show: true, formatter: 'CFO/NP', color: C.color, fontWeight: 600 },
+        // A markPoint on the last real value, not endLabel: this series
+        // starts with nulls whenever early cumulative profit is <= 0 (VEDL,
+        // PAYTM), and ECharts' endLabel then computes its position from a
+        // null point -- SVG "translate(x NaN)" console errors and a label
+        // that never appears.
+        markPoint: (() => {
+          let li = -1; cumRatio.forEach((v, i) => { if (v != null) li = i; });
+          return {
+            symbol: 'circle', symbolSize: 1, silent: true,
+            label: { show: true, position: 'right', distance: 6, formatter: () => 'CFO/NP\n' + Number(cumRatio[li]).toFixed(2), color: C.color, fontWeight: 600, lineHeight: 13 },
+            data: li >= 0 ? [{ coord: [li, cumRatio[li]] }] : [],
+          };
+        })(),
         // A dashed line at y=1, unlabelled -- the axis' own "1" tick already
         // names this value. An inline text label here (tried at two
         // different position keywords) kept rendering at the plot's left
         // edge regardless of the keyword, landing on top of the ratio
         // axis' own tick labels; the axis tick is the reliable annotation.
+        // label.show:false is explicit because a markLine labels itself by
+        // default: it printed "1" at the line's RIGHT end, which is exactly
+        // where the CFO/NP end label sits whenever the ratio is near 1.0 --
+        // the collision that looked like the label hitting the "1" tick.
         markLine: {
-          symbol: 'none', data: [{ yAxis: 1 }],
+          symbol: 'none', data: [{ yAxis: 1 }], silent: true,
+          label: { show: false },
           lineStyle: { color: 'rgba(20,40,63,.5)', type: 'dashed', width: 1.5 },
         },
       },
@@ -931,7 +1066,9 @@ const ROW_UNIT = {
   'OPM %': 'pct', 'Financing Margin %': 'pct', 'Tax %': 'pct', 'Dividend Payout %': 'pct', 'ROCE %': 'pct', 'ROE %': 'pct',
   'EPS in Rs': 'rupee',
   'Debtor Days': 'days', 'Inventory Days': 'days', 'Days Payable': 'days', 'Cash Conversion Cycle': 'days', 'Working Capital Days': 'days',
-  'CFO/OP': 'ratio',
+  // Screener prints this row as a percentage ("93%") and the parser keeps
+  // the number as 93, so 'ratio' rendered it "93.00x".
+  'CFO/OP': 'pct',
   'Promoters': 'pct', 'FIIs': 'pct', 'DIIs': 'pct', 'Government': 'pct', 'Public': 'pct', 'Pledged %': 'pct',
 };
 function rowUnit(label) { return ROW_UNIT[label] || 'cr'; }
@@ -940,18 +1077,49 @@ function rowUnit(label) { return ROW_UNIT[label] || 'cr'; }
 // row's own reported span. CAGR is refused (null) across a sign flip or a
 // non-positive base for the same reason pctChange refuses one — a single
 // two-endpoint CAGR fitted across a loss year asserts a rate that isn't real.
-function rowBoxScore(series) {
+//
+// Pass the row's label to make it polarity- and unit-aware (without one it
+// keeps the original label-blind behaviour, best = highest):
+//  - lower-better rows (Debtor Days…) swap best/worst — TCS Debtor Days
+//    printed "BEST 93d" for its slowest-collecting year;
+//  - neutral rows set directional:false, so a caller prints HIGH/LOW
+//    rather than claiming a direction the row doesn't support;
+//  - %, day-count and x rows get no CAGR (cagrRefusal:'unit') — a
+//    "1.5% CAGR" of debtor days or of a margin is compounding something
+//    that doesn't compound — and instead carry the plain end-to-end
+//    `change` in `changeUnit` ('pp', 'days' or 'x').
+// `high`/`low` are always the raw extremes whatever the polarity.
+// `years` is the fiscal-year span (last.year − first.year), not the point
+// count: PAYTM reports no FY2017/18, so FY15–FY26 is 11 years, not 9.
+const CHANGE_UNIT = { pct: 'pp', days: 'days', ratio: 'x' };
+function rowBoxScore(series, label) {
   const clean = series.filter((p) => p.value != null);
   if (clean.length < 2) return null;
-  const best = clean.reduce((a, b) => (b.value > a.value ? b : a));
-  const worst = clean.reduce((a, b) => (b.value < a.value ? b : a));
+  const high = clean.reduce((a, b) => (b.value > a.value ? b : a));
+  const low = clean.reduce((a, b) => (b.value < a.value ? b : a));
+  const polarity = label ? rowPolarity(label) : null;
+  const unit = label ? rowUnit(label) : null;
+  const lowerBetter = polarity === 'lower-better';
   const first = clean[0], last = clean[clean.length - 1];
-  const years = clean.length - 1;
-  let cagr = null;
-  if (years > 0 && first.value > 0 && (last.value > 0)) {
+  const years = last.year - first.year;
+  const changeUnit = unit ? (CHANGE_UNIT[unit] || null) : null;
+  let cagr = null, cagrRefusal = null;
+  if (changeUnit) {
+    cagrRefusal = 'unit';
+  } else if (years > 0 && first.value > 0 && (last.value > 0)) {
     cagr = Math.pow(last.value / first.value, 1 / years) - 1;
+  } else {
+    cagrRefusal = 'non-positive-base'; // a loss year or a zero start (PAYTM Borrowings FY15 = 0)
   }
-  return { best, worst, cagr, years, windowStart: first.year, windowEnd: last.year };
+  return {
+    best: lowerBetter ? low : high, worst: lowerBetter ? high : low,
+    cagr, years, windowStart: first.year, windowEnd: last.year,
+    high, low, polarity, unit,
+    directional: polarity == null ? null : polarity !== 'neutral',
+    cagrRefusal,
+    change: changeUnit ? last.value - first.value : null,
+    changeUnit,
+  };
 }
 
 /* =====================================================================
@@ -969,13 +1137,17 @@ function rowBoxScore(series) {
 // the latest year, not sequential periods -- a company that grew 40% in
 // year 1 and 2% a year since has a very different 1y and 5y number, and
 // showing both is the point).
+// The start point is the fiscal year exactly `years` before the latest one,
+// found by year: counting back N points instead would silently stretch the
+// window across a gap in the reported history (PAYTM has no FY2017/18, so
+// "5 points back" from FY2026 is FY2019 over 7 years, still divided as 5).
+// A missing start year refuses rather than borrowing a neighbour.
 function windowCagr(series, years) {
   const clean = series.filter((p) => p.value != null);
   if (clean.length < 2) return null;
   const last = clean[clean.length - 1];
-  const startIdx = clean.length - 1 - years;
-  if (startIdx < 0) return null;
-  const start = clean[startIdx];
+  const start = clean.find((p) => p.year === last.year - years);
+  if (!start) return null;
   if (start.value <= 0 || last.value <= 0) return null;
   return Math.pow(last.value / start.value, 1 / years) - 1;
 }
@@ -983,27 +1155,92 @@ function growthSummary(series) {
   return { y10: windowCagr(series, 10), y5: windowCagr(series, 5), y3: windowCagr(series, 3), y1: windowCagr(series, 1) };
 }
 
-// Split-adjusted share count. Equity Capital moves in lockstep with a
-// split (capital unchanged, face value halved), so dividing every year's
-// Equity Capital by *today's* face value expresses every year in today's
-// share units -- this one formula is what makes EPS_FROM_SHRINK and a P/E
-// band comparable across a split without modelling the split itself.
-function sharesSeries(balanceSheet, currentFaceValue) {
+// Bonus-issue multiples as (a+b)/b for an a:b bonus -- 1:2, 1:1, 3:2, 2:1,
+// 3:1, 4:1, 5:1, 9:1, 10:1. Detected factors snap to these so a 1-2% wobble
+// in the EPS witness below doesn't leave every adjusted year 1.3% off.
+const BONUS_MULTIPLES = [1.5, 2, 2.5, 3, 4, 5, 6, 10, 11];
+
+// Per-year bonus factor that restates an older year's share count in
+// today's units. A bonus issue is capitalised out of reserves at face
+// value, so Equity Capital jumps (TCS FY19 ×2, BAJFINANCE FY26 ×5) exactly
+// as it would for a real issue of new shares -- capital alone can't tell
+// the two apart, which is how "Dilution +418%" got onto BAJFINANCE.
+// Screener's EPS row IS restated for bonuses and splits, so Net Profit ÷
+// EPS gives an implied share count that doesn't jump on a bonus but does
+// jump on a real issue (HDFCBANK's FY24 merger: capital ×1.36, implied ×1.39).
+// That implied count is only a WITNESS here, never the share count itself:
+// it's unusable as a level because consolidated Net Profit includes
+// minority interest while EPS is on the owners' share (VEDL's implied count
+// swings 265–661 crore on a flat 372 crore shares), and screener leaves
+// pre-listing EPS unrestated (PAYTM FY15–FY21 imply ~6 crore shares, not
+// 60). So a transition counts as a bonus only when capital jumped at least
+// 1.4× AND the implied count stayed within 0.8–1.25× — a real issue moves
+// both, a bonus moves only capital. Smaller bonuses (1:3, 1:4) sit below
+// the 1.4× gate on purpose: VEDL's 1.25× Cairn merger would otherwise pass
+// as a 1:4 bonus, and misreading real dilution as none is the worse error.
+function bonusFactorsByYear(balanceSheet, profitLoss) {
   const capital = fySeries(balanceSheet, 'Equity Capital');
-  return capital.map((p) => ({
-    year: p.year,
-    value: (p.value != null && currentFaceValue > 0) ? (p.value * 1e7) / currentFaceValue : null,
-  }));
+  const factors = new Map(capital.map((p) => [p.year, 1]));
+  if (!profitLoss) return factors;
+  const np = new Map(fySeries(profitLoss, 'Net Profit').map((p) => [p.year, p.value]));
+  const eps = new Map(fySeries(profitLoss, 'EPS in Rs').map((p) => [p.year, p.value]));
+  const impliedShares = (year) => {
+    const n = np.get(year), e = eps.get(year);
+    if (n == null || e == null || e === 0 || Math.abs(n) < MATERIALITY_FLOOR || (n < 0) !== (e < 0)) return null;
+    return n / e;
+  };
+  const transitions = [];
+  for (let i = 1; i < capital.length; i++) {
+    const a = capital[i - 1], b = capital[i];
+    if (a.value == null || b.value == null || a.value <= 0) continue;
+    const capRatio = b.value / a.value;
+    if (capRatio < 1.4) continue;
+    const sa = impliedShares(a.year), sb = impliedShares(b.year);
+    if (sa == null || sb == null) continue; // no witness -- read the jump as real issuance, not a guess
+    const impliedRatio = sb / sa;
+    if (impliedRatio < 0.8 || impliedRatio > 1.25) continue;
+    const residual = capRatio / impliedRatio;
+    const snap = BONUS_MULTIPLES.reduce((best, m) => (Math.abs(m - residual) < Math.abs(best - residual) ? m : best));
+    transitions.push({ year: b.year, factor: Math.abs(snap - residual) / snap <= 0.05 ? snap : residual });
+  }
+  // Every year before a bonus is multiplied by that bonus (and every later one).
+  capital.forEach((p) => {
+    factors.set(p.year, transitions.filter((t) => t.year > p.year).reduce((acc, t) => acc * t.factor, 1));
+  });
+  return factors;
 }
 
-// Net Profit / split-adjusted shares -- comparable across a split in a way
-// screener's own reported EPS row is not (that row is as-reported, so a
-// split shows up as a discontinuity in the series).
+// Split- and bonus-adjusted share count, in today's share units. Dividing
+// Equity Capital by *today's* face value handles a split (capital unchanged,
+// face value halved); the bonus factor above handles a bonus (capital
+// multiplied, face value unchanged). Pass profitLoss to get the bonus
+// adjustment -- without it this is the split-only count, which reads every
+// bonus issue as dilution. `bonusFactor` is carried per point so a caller
+// can disclose that a year was restated.
+function sharesSeries(balanceSheet, currentFaceValue, profitLoss) {
+  const capital = fySeries(balanceSheet, 'Equity Capital');
+  const bonus = bonusFactorsByYear(balanceSheet, profitLoss);
+  return capital.map((p) => {
+    const factor = bonus.get(p.year) || 1;
+    return {
+      year: p.year,
+      value: (p.value != null && currentFaceValue > 0) ? (p.value * 1e7 * factor) / currentFaceValue : null,
+      bonusFactor: factor,
+    };
+  });
+}
+
+// Net Profit / split-and-bonus-adjusted shares -- one consistent basis
+// across every corporate action, matched by year (not index) to the share
+// count. Note consolidated Net Profit includes minority interest, so for a
+// group with large outside holdings (VEDL) this runs above screener's
+// owners'-share EPS row; it's the same bias every year, so the series'
+// shape (and a P/E band's percentile) is still internally consistent.
 function epsFromShrink(profitLoss, balanceSheet, currentFaceValue) {
   const np = fySeries(profitLoss, 'Net Profit');
-  const shares = sharesSeries(balanceSheet, currentFaceValue);
-  return np.map((p, i) => {
-    const sh = shares[i] && shares[i].value;
+  const shares = new Map(sharesSeries(balanceSheet, currentFaceValue, profitLoss).map((p) => [p.year, p.value]));
+  return np.map((p) => {
+    const sh = shares.get(p.year);
     return { year: p.year, value: (p.value != null && sh) ? (p.value * 1e7) / sh : null };
   });
 }
@@ -1011,14 +1248,20 @@ function epsFromShrink(profitLoss, balanceSheet, currentFaceValue) {
 // Share-count growth over 5 years -- the "cost" of dilution, expressed the
 // same way DILUTION_DRAG is defined in this implementation: how much more
 // of the company today's shareholder owns a smaller slice of, purely from
-// issuance, independent of whether the business itself grew.
-function dilutionDrag(balanceSheet, currentFaceValue) {
-  const shares = sharesSeries(balanceSheet, currentFaceValue);
+// issuance, independent of whether the business itself grew. Pass
+// profitLoss so a bonus issue isn't counted as issuance (see sharesSeries).
+// The base is the year exactly five fiscal years earlier, looked up by
+// year -- an index offset would silently stretch the window across a gap
+// in the reported history (PAYTM has no FY2017/FY2018).
+function dilutionDrag(balanceSheet, currentFaceValue, profitLoss) {
+  const shares = sharesSeries(balanceSheet, currentFaceValue, profitLoss);
+  const byYear = new Map(shares.map((p) => [p.year, p.value]));
   const out = [];
-  for (let i = 5; i < shares.length; i++) {
-    const t = shares[i].value, t5 = shares[i - 5].value;
-    out.push({ year: shares[i].year, value: (t != null && t5 > 0) ? (t / t5 - 1) : null });
-  }
+  shares.forEach((p) => {
+    if (!byYear.has(p.year - 5)) return;
+    const t = p.value, t5 = byYear.get(p.year - 5);
+    out.push({ year: p.year, value: (t != null && t5 > 0) ? (t / t5 - 1) : null });
+  });
   return out;
 }
 
@@ -1040,23 +1283,39 @@ function capitalEmployedSeries(balanceSheet) {
   });
 }
 
-// Incremental ROCE: change in Operating Profit (EBIT proxy) over change in
-// capital employed, across a 3-year window -- the marginal return on the
-// capital added recently, vs plain ROCE which is diluted by capital
-// deployed decades ago. Refuses when the capital-employed delta is too
-// small to divide by meaningfully (a near-zero denominator manufactures an
-// enormous, meaningless ratio).
+// Incremental ROCE: change in EBIT (PBT + Interest) over change in capital
+// employed, across a 3-year window (FY t-3 to FY t, found by year) -- the
+// marginal return on the capital added recently, vs plain ROCE which is
+// diluted by capital deployed decades ago.
+// Refuses (value null, with a reason) whenever the ratio stops meaning
+// "return on the capital added":
+//  - capital employed grew less than 10%: a small denominator manufactures
+//    an enormous ratio (Hindalco FY18 printed 3,760%, TCS's median was
+//    169% because a buyback-heavy balance sheet barely grows);
+//  - capital employed fell: a negative denominator flips the sign, so a
+//    profit decline on shrinking capital reads as a positive return;
+//  - EBIT not positive at either end: a move from a loss to a smaller loss
+//    is not a return on anything (PAYTM "passed" at a 22% median).
+// Screener's Operating Profit is EBITDA, which also flattered the
+// numerator on capital-heavy businesses; EBIT is what ROCE itself uses.
+const INC_ROCE_MIN_CE_GROWTH = 0.10;
 function incrementalRoce(profitLoss, balanceSheet) {
-  const ebit = fySeries(profitLoss, 'Operating Profit');
-  const ce = capitalEmployedSeries(balanceSheet);
+  const ebit = ebitByYear(profitLoss);
+  const ceSeries = capitalEmployedSeries(balanceSheet);
+  const ce = new Map(ceSeries.map((p) => [p.year, p.value]));
   const out = [];
-  for (let i = 3; i < ebit.length; i++) {
-    const dEbit = (ebit[i].value != null && ebit[i - 3].value != null) ? ebit[i].value - ebit[i - 3].value : null;
-    const dCe = (ce[i].value != null && ce[i - 3].value != null) ? ce[i].value - ce[i - 3].value : null;
-    let value = null;
-    if (dEbit != null && dCe != null && Math.abs(dCe) >= MATERIALITY_FLOOR) value = dEbit / dCe;
-    out.push({ year: ebit[i].year, value });
-  }
+  ceSeries.forEach(({ year }) => {
+    if (!ce.has(year - 3)) return;
+    const e0 = ebit.get(year - 3), e1 = ebit.get(year);
+    const c0 = ce.get(year - 3), c1 = ce.get(year);
+    let value = null, reason = null;
+    if (e0 == null || e1 == null || c0 == null || c1 == null || c0 <= 0) reason = 'missing an input';
+    else if (e0 <= 0 || e1 <= 0) reason = 'EBIT was not positive at one end of the window';
+    else if (c1 < c0) reason = 'capital employed fell over the window';
+    else if ((c1 - c0) / c0 < INC_ROCE_MIN_CE_GROWTH) reason = 'capital employed grew less than 10% — too little new capital to measure a return on';
+    else value = (e1 - e0) / (c1 - c0);
+    out.push(reason ? { year, value, reason } : { year, value });
+  });
   return out;
 }
 
@@ -1073,13 +1332,14 @@ function assetTurnover(profitLoss, balanceSheet) {
   });
 }
 
-// (Equity Capital + Reserves) / split-adjusted shares -- book value per
-// share in today's share units, comparable across a split the way
-// screener's as-reported book-value figures are not.
-function bookValuePerShareSeries(balanceSheet, currentFaceValue) {
+// (Equity Capital + Reserves) / split-and-bonus-adjusted shares -- book
+// value per share in today's share units, comparable across a split or a
+// bonus the way screener's as-reported book-value figures are not. Without
+// profitLoss, years before a bonus are overstated by the bonus multiple.
+function bookValuePerShareSeries(balanceSheet, currentFaceValue, profitLoss) {
   const eq = fySeries(balanceSheet, 'Equity Capital');
   const res = fySeries(balanceSheet, 'Reserves');
-  const shares = sharesSeries(balanceSheet, currentFaceValue);
+  const shares = sharesSeries(balanceSheet, currentFaceValue, profitLoss);
   return eq.map((p, i) => {
     const r = res[i] && res[i].value, sh = shares[i] && shares[i].value;
     const v = (p.value != null && r != null && sh) ? ((p.value + r) * 1e7) / sh : null;
@@ -1181,6 +1441,7 @@ function compoundingChecklist(bundle, options) {
   options = options || {};
   const pl = bundle.profitLoss, bs = bundle.balanceSheet, cf = bundle.cashFlow, ratios = bundle.ratios;
   const faceValue = options.faceValue;
+  const schema = bundle.schema || classifySchema(pl);
   const conditions = [];
 
   const roce = fySeries(ratios, 'ROCE %');
@@ -1191,9 +1452,13 @@ function compoundingChecklist(bundle, options) {
     conditions.push({ id: 1, label: 'ROCE at least 15% in 8 of the last 10 years', value: 'ROCE % is not reported for this schema', meets: null, available: false });
   }
 
+  // The window count is printed because incrementalRoce now refuses most
+  // windows for a buyback-heavy or loss-making company — "−77.8%" from one
+  // usable window (VEDL) is a much thinner claim than a median of nine.
   const incRoce = incrementalRoce(pl, bs);
-  const incMed = median(incRoce.map((r) => r.value));
-  conditions.push({ id: 2, label: 'Median incremental ROCE (3-year rolling) at least 15%', value: incMed != null ? `${(incMed * 100).toFixed(1)}%` : 'not computable', meets: incMed != null ? incMed >= 0.15 : null, available: incMed != null });
+  const incValues = incRoce.map((r) => r.value).filter((v) => v != null);
+  const incMed = median(incValues);
+  conditions.push({ id: 2, label: 'Median incremental ROCE (3-year rolling) at least 15%', value: incMed != null ? `${(incMed * 100).toFixed(1)}% (median of ${incValues.length} of ${incRoce.length} 3-year windows)` : (incRoce.length ? 'not computable — no 3-year window had positive EBIT at both ends and capital employed up at least 10%' : 'not computable'), meets: incMed != null ? incMed >= 0.15 : null, available: incMed != null });
 
   const salesRaw = fySeries(pl, 'Sales');
   const sales = salesRaw.length ? salesRaw : fySeries(pl, 'Revenue');
@@ -1210,24 +1475,40 @@ function compoundingChecklist(bundle, options) {
     sumCfo += c; sumNp += n;
   }
   const cfoRatio = (cfoOk && sumNp > 0) ? sumCfo / sumNp : null;
-  conditions.push({ id: 4, label: 'Cumulative cash from operations at least 75% of cumulative net profit (10 years)', value: cfoRatio != null ? `${(cfoRatio * 100).toFixed(0)}%` : 'not computable', meets: cfoRatio != null ? cfoRatio >= 0.75 : null, available: cfoRatio != null });
+  const cond4Label = 'Cumulative cash from operations at least 75% of cumulative net profit (10 years)';
+  if (schema === 'financial') {
+    // Same reason CFO_DIVERGENCE is gated off for a lender: new loans are an
+    // operating cash OUTFLOW, so a growing lender's CFO runs far below (or
+    // under) profit by construction — BAJFINANCE scores −426% on this — and
+    // a "Not met" would read as an earnings-quality finding it isn't.
+    conditions.push({ id: 4, label: cond4Label, value: 'Not meaningful for a lender — lending money out is counted as operating cash outflow', meets: null, available: false });
+  } else {
+    conditions.push({ id: 4, label: cond4Label, value: cfoRatio != null ? `${(cfoRatio * 100).toFixed(0)}%` : 'not computable', meets: cfoRatio != null ? cfoRatio >= 0.75 : null, available: cfoRatio != null });
+  }
 
-  const opRaw = fySeries(pl, 'Operating Profit');
-  const interest = fySeries(pl, 'Interest');
+  // Cover on EBIT (PBT + Interest), same as INTEREST_COVER_THIN and for the
+  // same reason; a loss year prints as a loss, never as a negative multiple.
+  // Lenders never reach the cover branch: interest is their cost of goods,
+  // and screener gives them no Operating Profit to have ever computed it on.
+  const interestMap = new Map(fySeries(pl, 'Interest').map((p) => [p.year, p.value]));
+  const ebit = ebitByYear(pl);
   const borrowRaw = fySeries(bs, 'Borrowings');
   const borrow = borrowRaw.length ? borrowRaw : fySeries(bs, 'Borrowing');
   const latestBorrow = borrow.length ? borrow[borrow.length - 1].value : null;
   let cond5 = null, cond5Value = 'not computable';
   if (latestBorrow === 0) {
     cond5 = true; cond5Value = 'Borrowings are zero — interest cover is moot';
-  } else if (opRaw.length >= 5 && interest.length >= 5) {
-    const last5op = opRaw.slice(-5), last5int = interest.slice(-5);
-    const covers = last5op.map((p, i) => (last5int[i] && last5int[i].value > 0) ? p.value / last5int[i].value : null);
-    const cleanCovers = covers.filter((v) => v != null);
-    cond5 = cleanCovers.length === 5 ? cleanCovers.every((v) => v > 6) : null;
-    cond5Value = cleanCovers.length ? `Interest cover ${cleanCovers.map((v) => v.toFixed(1) + 'x').join(', ')} (last ${cleanCovers.length} years)` : 'not computable';
+  } else if (schema !== 'financial') {
+    const last5 = [...ebit.keys()].slice(-5);
+    const covers = last5.map((y) => {
+      const e = ebit.get(y), i = interestMap.get(y);
+      if (e == null || i == null || i <= 0) return null;
+      return e <= 0 ? { loss: true } : { cover: e / i };
+    }).filter(Boolean);
+    cond5 = covers.length === 5 ? covers.every((c) => !c.loss && c.cover > 6) : null;
+    cond5Value = covers.length ? `Interest cover ${covers.map((c) => (c.loss ? 'loss' : c.cover.toFixed(1) + 'x')).join(', ')} (last ${covers.length} years)` : 'not computable';
   }
-  conditions.push({ id: 5, label: 'Operating profit more than 6x interest every year for 5 years, or no borrowings', value: cond5Value, meets: cond5, available: cond5 !== null });
+  conditions.push({ id: 5, label: 'Profit before interest and tax more than 6x interest every year for 5 years, or no borrowings', value: cond5Value, meets: cond5, available: cond5 !== null });
 
   const payout = fySeries(pl, 'Dividend Payout %');
   if (payout.length) {
@@ -1237,21 +1518,47 @@ function compoundingChecklist(bundle, options) {
     conditions.push({ id: 6, label: 'Dividend payout at most 40% in 8 of the last 10 years', value: 'not reported', meets: null, available: false });
   }
 
-  const shares = sharesSeries(bs, faceValue).filter((p) => p.value != null);
+  // Bonus-adjusted (profitLoss passed) and year-anchored: a 1:1 bonus is not
+  // a doubled share count, and "5 years" means FY(t-5), not six data points
+  // back across a gap in the history.
+  const shares = sharesSeries(bs, faceValue, pl).filter((p) => p.value != null);
   let dilutionRatio = null;
-  if (shares.length >= 6) {
-    const t = shares[shares.length - 1].value, t5 = shares[shares.length - 6].value;
-    dilutionRatio = t5 > 0 ? t / t5 : null;
+  if (shares.length >= 2) {
+    const last = shares[shares.length - 1];
+    const base = shares.find((p) => p.year === last.year - 5);
+    dilutionRatio = base && base.value > 0 ? last.value / base.value : null;
   }
   conditions.push({ id: 7, label: 'Share count grew at most 10% over the last 5 years', value: dilutionRatio != null ? `${((dilutionRatio - 1) * 100).toFixed(1)}% change` : 'not computable', meets: dilutionRatio != null ? dilutionRatio <= 1.10 : null, available: dilutionRatio != null });
 
   conditions.push({ id: 8, label: 'Promoter holding fell by at most 5 percentage points over 12 quarters, and pledge is under 10%', value: 'Shareholding pattern is not fetched by this app yet', meets: null, available: false });
 
-  const opmRaw = fySeries(pl, 'OPM %');
-  const opm = (opmRaw.length ? opmRaw : fySeries(pl, 'Financing Margin %')).filter((p) => p.value != null);
-  const opm3 = median(opm.slice(-3).map((p) => p.value));
-  const opm10 = median(opm.slice(-10).map((p) => p.value));
-  conditions.push({ id: 9, label: 'Median operating margin (3-year) at least as high as median operating margin (10-year)', value: (opm3 != null && opm10 != null) ? `3y ${opm3.toFixed(1)}% vs 10y ${opm10.toFixed(1)}%` : 'not computable', meets: (opm3 != null && opm10 != null) ? opm3 >= opm10 : null, available: opm3 != null && opm10 != null });
+  // A lender's "Financing Margin %" is Revenue − Interest − Expenses over
+  // Revenue, and screener's Expenses line carries provisions and (after
+  // HDFCBANK's merger) insurance-business costs whose income sits in Other
+  // Income — HDFCBANK's margin went from +18% to −16% with profit still
+  // rising. Pre-tax profit over total income (Revenue + Other Income) is the
+  // lender's comparable "margin": every rupee earned, every cost charged.
+  let margin, marginLabel;
+  if (schema === 'financial') {
+    const pbt = new Map(fySeries(pl, 'Profit before tax').map((p) => [p.year, p.value]));
+    const oi = new Map(fySeries(pl, 'Other Income').map((p) => [p.year, p.value]));
+    margin = fySeries(pl, 'Revenue').map((p) => {
+      const total = p.value != null && oi.get(p.year) != null ? p.value + oi.get(p.year) : null;
+      const b = pbt.get(p.year);
+      return { year: p.year, value: (total != null && total > 0 && b != null) ? (b / total) * 100 : null };
+    });
+    marginLabel = 'Median pre-tax margin on total income (3-year) at least as high as its 10-year median';
+  } else {
+    margin = fySeries(pl, 'OPM %');
+    marginLabel = 'Median operating margin (3-year) at least as high as median operating margin (10-year)';
+  }
+  const opm = margin.filter((p) => p.value != null);
+  // Windows by fiscal year, not by point count, so a gap in the history
+  // (PAYTM has no FY2017/18) can't stretch "10 years" to twelve.
+  const opmLastYear = opm.length ? opm[opm.length - 1].year : null;
+  const opm3 = median(opm.filter((p) => p.year > opmLastYear - 3).map((p) => p.value));
+  const opm10 = median(opm.filter((p) => p.year > opmLastYear - 10).map((p) => p.value));
+  conditions.push({ id: 9, label: marginLabel, value: (opm3 != null && opm10 != null) ? `3y ${opm3.toFixed(1)}% vs 10y ${opm10.toFixed(1)}%` : 'not computable', meets: (opm3 != null && opm10 != null) ? opm3 >= opm10 : null, available: opm3 != null && opm10 != null });
 
   const assetsCagr = windowCagr(fySeries(bs, 'Total Assets'), 5);
   conditions.push({ id: 10, label: 'Total assets grew at least 10% a year over the last 5 years', value: assetsCagr != null ? `${(assetsCagr * 100).toFixed(1)}%` : 'not computable', meets: assetsCagr != null ? assetsCagr >= 0.10 : null, available: assetsCagr != null });
@@ -1260,17 +1567,30 @@ function compoundingChecklist(bundle, options) {
 }
 
 // The plan requires the checklist to render behind a dismissible overlay
-// whenever "any HIGH-severity rule is open" -- Phase 1 shipped five rules
-// on a single tier, with no severity taxonomy, so this gates on any fired
-// flag at all rather than a HIGH-only subset. Documented here as a
-// deliberate simplification of an unbuilt distinction, not a silent
-// narrowing: growth must never read as clean when the underlying figures
-// are already in question.
+// whenever "any HIGH-severity rule is open". The overlay's own sentence is
+// about whether the reported numbers can be TRUSTED, so the rules that
+// gate it are the earnings-quality ones — profit not arriving as cash,
+// receivables/inventory piling up, one-off gains, tax-driven profit, a
+// dividend the business didn't earn. Balance-sheet-risk rules (thin
+// interest cover, leverage, stalled CWIP, capex without revenue) are real
+// findings but say nothing about whether the numbers are honest; gating on
+// "any flag" hid the whole checklist for Hindalco and PAYTM on interest
+// cover alone. A CORRELATED flag gates only if one of the rules it
+// collapsed is itself an earnings-quality rule.
+const EARNINGS_QUALITY_RULES = ['CFO_DIVERGENCE', 'DEBTOR_BALLOON', 'INVENTORY_BUILD', 'ASSET_SALE_GAIN', 'TAX_DRIVEN_MARGIN', 'DIVIDEND_NOT_FROM_OPS', 'DIVIDEND_EXCEEDS_FCF'];
 function checklistQualityGate(divergenceResult) {
-  if (!divergenceResult || !divergenceResult.flags.length) return { blocked: false };
+  if (!divergenceResult) return { blocked: false };
+  // allFlags, not flags: flags is the top-3-by-rupees display cut, and an
+  // earnings-quality flag ranked 4th behind three interest-cover years is
+  // still open.
+  const all = divergenceResult.allFlags || divergenceResult.flags || [];
+  const gating = all.filter((f) => EARNINGS_QUALITY_RULES.includes(f.ruleId)
+    || (f.ruleId === 'CORRELATED' && (!f.rules || f.rules.some((id) => EARNINGS_QUALITY_RULES.includes(id)))));
+  if (!gating.length) return { blocked: false };
   return {
     blocked: true,
     reason: 'This company has open questions about the quality of its reported numbers. The checklist below describes how its growth has looked; it does not check whether those numbers can be trusted.',
+    gatingFlags: gating,
   };
 }
 
@@ -1340,11 +1660,19 @@ function pctOfSalesSeries(series, salesSeries) {
 // (10y/5y/3y/1y — these are window lengths, not sequential periods, so the
 // x-axis is categorical and a line would imply progression that doesn't
 // exist). salesG and npG are growthSummary() outputs.
-function growthChartOption(salesG, npG) {
+// Values are printed on the bars (position 'outside' puts a negative bar's
+// label below it, where there's room) and the two series are named in a
+// legend — with two same-width colours side by side, colour alone was the
+// only way to tell Sales from Net Profit without hovering. Pass salesLabel
+// ('Revenue' for a lender) so the name matches the row the table shows.
+function growthChartOption(salesG, npG, salesLabel) {
   const cats = ['10y', '5y', '3y', '1y'];
   const fmt = v => v == null ? null : +(v * 100).toFixed(1);
+  const barLabel = { show: true, position: 'outside', distance: 4, fontSize: 10, fontWeight: 600, formatter: (p) => (p.value == null ? '' : p.value + '%') };
+  const salesName = (salesLabel || 'Sales') + ' CAGR';
   return {
-    grid: { left: 60, right: 20, top: 30, bottom: 36, containLabel: true },
+    legend: { show: true, top: 0, left: 'center', itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 10.5 }, data: [salesName, 'Net Profit CAGR'] },
+    grid: { left: 60, right: 20, top: 34, bottom: 36, containLabel: true },
     xAxis: { type: 'category', data: cats, axisLabel: { fontSize: 11, color: 'rgba(20,40,63,.55)' }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
     yAxis: { type: 'value', name: '% CAGR', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => v + '%', fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
     tooltip: { trigger: 'axis', confine: true, formatter: function (params) {
@@ -1353,85 +1681,90 @@ function growthChartOption(salesG, npG) {
       return '<b>' + win + '</b>' + arr.map(function (p) { return '<br/>' + p.marker + ' ' + advisorEscapeSafe(p.seriesName) + ': ' + (p.value != null ? p.value + '%' : '\u2014'); }).join('');
     } },
     series: [
-      { name: 'Sales CAGR', type: 'bar', barMaxWidth: 32, data: cats.map((c, i) => fmt([salesG.y10, salesG.y5, salesG.y3, salesG.y1][i])), itemStyle: { color: '#2557C7', borderRadius: [3, 3, 0, 0] } },
-      { name: 'Net Profit CAGR', type: 'bar', barMaxWidth: 32, data: cats.map((c, i) => fmt([npG.y10, npG.y5, npG.y3, npG.y1][i])), itemStyle: { color: '#A03A22', borderRadius: [3, 3, 0, 0] } },
+      { name: salesName, type: 'bar', barMaxWidth: 32, data: cats.map((c, i) => fmt([salesG.y10, salesG.y5, salesG.y3, salesG.y1][i])), itemStyle: { color: '#2557C7', borderRadius: [3, 3, 0, 0] }, label: Object.assign({ color: '#2557C7' }, barLabel), labelLayout: { hideOverlap: true } },
+      { name: 'Net Profit CAGR', type: 'bar', barMaxWidth: 32, data: cats.map((c, i) => fmt([npG.y10, npG.y5, npG.y3, npG.y1][i])), itemStyle: { color: '#A03A22', borderRadius: [3, 3, 0, 0] }, label: Object.assign({ color: '#A03A22' }, barLabel), labelLayout: { hideOverlap: true } },
     ],
   };
 }
 
-// Cash-flow waterfall: CFO, CFI, CFF as bars, Net Cash Flow as a separate
-// bar, with a transparent placeholder series carrying the running total to
-// produce the floating-bar waterfall effect. Preserves the arithmetic —
-// the bars visually add up to the total — unlike a Sankey.
+// Cash-flow bridge, one column per year: CFO, CFI and CFF as SIGNED
+// segments of a diverging stacked bar, Net Cash Flow as a labelled dot.
+// ECharts 5 stacks same-sign values separately (stackStrategy 'samesign',
+// the default), so inflows build up from zero, outflows build down from
+// zero, and the dot sits at (top of the inflows) − (depth of the outflows)
+// — the arithmetic is still visible without any helper series.
+// An earlier version stacked transparent "base" spacer series into the same
+// column to fake a floating waterfall; every spacer added its own height to
+// the stack, so TCS FY26 drew a ~₹1.46 lakh Cr tower for a year whose net
+// cash flow was −₹1,925 Cr. A true floating waterfall needs one category per
+// component, which 12 years × 4 steps doesn't fit — hence the diverging bar.
 function cashFlowWaterfallOption(cfoSeries, cfiSeries, cffSeries, ncfSeries) {
-  const years = cfoSeries.map(p => 'FY' + p.year);
-  const cfo = cfoSeries.map(p => p.value);
-  const cfi = cfiSeries.map(p => p.value);
-  const cff = cffSeries.map(p => p.value);
-  const ncf = ncfSeries.map(p => p.value);
-  // Running total for the waterfall placeholder
-  const running = [];
-  let total = 0;
-  for (let i = 0; i < cfo.length; i++) {
-    running.push(total);
-    total = cfo[i] + cfi[i] + cff[i];
-    running.push(total);
-  }
-  // Placeholder: even indices are the start-of-year total, odd are end-of-year
-  // (which equals the next start). The invisible bars lift the visible ones
-  // to the right position.
-  const placeholder = [];
-  const cfoBar = [], cfiBar = [], cffBar = [], ncfBar = [];
-  for (let i = 0; i < cfo.length; i++) {
-    const start = cfo[i], inv = cfi[i], fin = cff[i], net = start + inv + fin;
-    placeholder.push(null); // not used per-bar; the waterfall is per-component
-    // For each component bar: base is where it starts, value is the change
-    cfoBar.push(start >= 0 ? null : start); // simplified — full waterfall below
-  }
-  // Simpler approach: stacked invisible + visible bars per component
-  // CFO bar: base = 0 (starts from 0)
-  // CFI bar: base = CFO, value = CFI (can be negative)
-  // CFF bar: base = CFO + CFI, value = CFF
-  // Net bar: total
-  const baseCfi = cfo.map((v, i) => v);
-  const baseCff = cfo.map((v, i) => v + cfi[i]);
-  // For negative values, the invisible bar needs to go below
-  const invCfi = cfi.map((v, i) => {
-    const base = baseCfi[i];
-    if (v >= 0) return base;
-    return base + v; // negative: shift down
+  const yearsNum = cfoSeries.map((p) => p.year);
+  const years = yearsNum.map((y) => 'FY' + String(y).slice(2));
+  // Every component is looked up by year, not by array index — the four
+  // rows are separate fySeries calls and nothing guarantees equal lengths.
+  const byYear = (series) => {
+    const m = new Map((series || []).map((p) => [p.year, p.value]));
+    return yearsNum.map((y) => (m.has(y) ? m.get(y) : null));
+  };
+  const cfo = byYear(cfoSeries), cfi = byYear(cfiSeries), cff = byYear(cffSeries);
+  const ncfReported = byYear(ncfSeries);
+  // Screener's Net Cash Flow row is CFO+CFI+CFF; derive it only when the
+  // reported cell is missing and all three components are present.
+  const ncf = ncfReported.map((v, i) => (v != null ? v
+    : (cfo[i] != null && cfi[i] != null && cff[i] != null ? cfo[i] + cfi[i] + cff[i] : null)));
+  const lastIdx = years.length - 1;
+  // Values visible without hover: every year's net figure is printed on its
+  // dot (it's the answer the chart exists to give), and the latest year's
+  // three components are printed beside the last column, where the right
+  // margin has room. Labelling all 36 segments would bury the bars in text;
+  // the tooltip still carries every year's breakdown.
+  const componentSeries = (name, data, color) => ({
+    name, type: 'bar', stack: 'flow', barMaxWidth: 30, itemStyle: { color },
+    data: data.map((v, i) => (i === lastIdx && v != null
+      ? { value: v, label: { show: true, position: 'right', distance: 6, color, fontWeight: 600, fontSize: 10, formatter: () => name.split(' ')[0] + ' ' + formatCroreCompact(v) } }
+      : v)),
   });
-  const visCfi = cfi.map((v, i) => Math.abs(v));
-  const invCff = cff.map((v, i) => {
-    const base = baseCff[i];
-    if (v >= 0) return base;
-    return base + v;
-  });
-  const visCff = cff.map(v => Math.abs(v));
+  // The x-axis is pinned to the bottom (onZero:false) so year labels don't
+  // run through the outflow bars; this line marks zero instead, which is
+  // the line inflows and outflows diverge from.
+  const zeroLine = { silent: true, symbol: 'none', label: { show: false }, data: [{ yAxis: 0 }], lineStyle: { color: 'rgba(20,40,63,.45)', type: 'solid', width: 1 } };
   return {
-    grid: { left: 70, right: 20, top: 30, bottom: 46, containLabel: true },
-    xAxis: { type: 'category', data: years, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
+    legend: { show: true, top: 0, left: 'center', itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 10.5 },
+      data: ['Operations (CFO)', 'Investing (CFI)', 'Financing (CFF)', 'Net cash flow'] },
+    grid: { left: 60, right: 118, top: 34, bottom: 30, containLabel: true },
+    xAxis: { type: 'category', data: years, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, axisLine: { onZero: false, lineStyle: { color: 'rgba(20,40,63,.2)' } } },
     yAxis: { type: 'value', name: '\u20b9 Cr', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => formatCroreSafe(v), fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
     tooltip: { trigger: 'axis', confine: true, formatter: function (params) {
       const arr = Array.isArray(params) ? params : [params];
       const year = arr.length ? arr[0].axisValue : '';
       const i = arr.length ? arr[0].dataIndex : 0;
       const lines = [
-        '<b>CFO: ' + formatCroreSafe(cfo[i]) + '</b>',
-        '<b>CFI: ' + formatCroreSafe(cfi[i]) + '</b>',
-        '<b>CFF: ' + formatCroreSafe(cff[i]) + '</b>',
-        '<b>Net: ' + formatCroreSafe(ncf[i]) + '</b>',
+        'Operations: <b>' + formatCroreSafe(cfo[i]) + '</b>',
+        'Investing: <b>' + formatCroreSafe(cfi[i]) + '</b>',
+        'Financing: <b>' + formatCroreSafe(cff[i]) + '</b>',
+        'Net cash flow: <b>' + formatCroreSafe(ncf[i]) + '</b>',
       ];
       return '<b>' + year + '</b><br/>' + lines.join('<br/>');
     } },
     series: [
-      { name: 'CFO', type: 'bar', stack: 'flow', data: cfo, itemStyle: { color: '#2E8B6F' }, barMaxWidth: 30 },
-      { name: 'CFI base', type: 'bar', stack: 'flow', data: invCfi, itemStyle: { color: 'transparent' }, tooltip: { show: false }, silent: true, barMaxWidth: 30 },
-      { name: 'CFI', type: 'bar', stack: 'flow', data: visCfi, itemStyle: { color: '#A03A22' }, barMaxWidth: 30 },
-      { name: 'CFF base', type: 'bar', stack: 'flow', data: invCff, itemStyle: { color: 'transparent' }, tooltip: { show: false }, silent: true, barMaxWidth: 30 },
-      { name: 'CFF', type: 'bar', stack: 'flow', data: visCff, itemStyle: { color: '#14283F' }, barMaxWidth: 30 },
-      { name: 'Net Cash Flow', type: 'line', data: ncf, symbolSize: 7, lineStyle: { width: 0 }, itemStyle: { color: '#2557C7', borderWidth: 2, borderColor: '#2557C7' }, symbol: 'circle', z: 10 },
+      Object.assign(componentSeries('Operations (CFO)', cfo, '#2E8B6F'), { markLine: zeroLine }),
+      componentSeries('Investing (CFI)', cfi, '#A03A22'),
+      componentSeries('Financing (CFF)', cff, '#14283F'),
+      {
+        // A scatter, not a line: consecutive years' net flows aren't a path,
+        // and a connecting line would imply a trend between unrelated totals.
+        name: 'Net cash flow', type: 'scatter', data: ncf, symbol: 'circle', symbolSize: 9, z: 10,
+        itemStyle: { color: '#2557C7', borderColor: '#fff', borderWidth: 1.5 },
+        // White halo so the number stays legible where it sits on a bar.
+        label: { show: true, position: 'top', distance: 5, fontSize: 9.5, fontWeight: 600, color: '#2557C7', textBorderColor: '#fff', textBorderWidth: 2,
+          formatter: (p) => formatCroreCompact(Array.isArray(p.value) ? p.value[1] : p.value) },
+        // On a narrow (phone-width) chart twelve labels can't all fit; drop
+        // the ones that would collide rather than print them on each other.
+        labelLayout: { hideOverlap: true },
+      },
     ],
+    __years: yearsNum,
   };
 }
 
@@ -1443,6 +1776,27 @@ function formatCroreSafe(v) {
   if (abs >= 1e7) return (v / 1e7).toFixed(1) + 'L Cr';
   if (abs >= 1e3) return (v / 1e3).toFixed(1) + 'k Cr';
   return v.toFixed(0) + ' Cr';
+}
+// formatCroreSafe's "k" step without the unit, for on-chart value labels
+// where the axis name already says "₹ Cr" and every character of width
+// counts. Deliberately the same k-scaling as the axis ticks beside it, so
+// a label and the tick next to it never use two conventions.
+function formatCroreCompact(v) {
+  if (v == null || !isFinite(v)) return '—';
+  const abs = Math.abs(v), sign = v < 0 ? '−' : '';
+  if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + 'k';
+  return sign + abs.toFixed(0);
+}
+// A statement row's value in its own unit (rowUnit), short enough for an
+// on-chart label — the engine-side twin of the Lab's formatCellRaw.
+function formatRowValueCompact(label, v) {
+  if (v == null || !isFinite(v)) return '';
+  const unit = rowUnit(label);
+  if (unit === 'pct') return v.toFixed(1) + '%';
+  if (unit === 'days') return Math.round(v) + 'd';
+  if (unit === 'ratio') return v.toFixed(2) + 'x';
+  if (unit === 'rupee') return '₹' + v.toFixed(1);
+  return '₹' + formatCroreCompact(v) + ' Cr';
 }
 function advisorEscapeSafe(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
