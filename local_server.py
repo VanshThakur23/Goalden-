@@ -383,6 +383,15 @@ def _fetch_screener_page(symbol):
                 return resp.status, resp.read().decode('utf-8', errors='replace'), resp.geturl()
         except urllib.error.HTTPError as e:
             return e.code, None, url
+        except (urllib.error.URLError, OSError):
+            # No route to screener.in at all (offline, venue wifi, a proxy
+            # refusing the CONNECT). Must surface as 'transient', not escape
+            # as a bare URLError: fetch_screener_financials only falls back to
+            # the bundled fixture for ScreenerPageError, so an uncaught
+            # URLError here skipped the fixture tier entirely -- exactly the
+            # demo-day case the fixtures exist for. The Worker's catch-all
+            # already behaves this way.
+            return 503, None, url
 
     consolidated_url = f'https://www.screener.in/company/{urllib.parse.quote(symbol)}/consolidated/'
     c_status, c_html, c_final = attempt(consolidated_url)

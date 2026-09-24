@@ -1782,3 +1782,26 @@ zero new hallucination surface.
   chart, etc.) against the same file concurrently with this change; the
   next commit should pull opencode's latest work first and reconcile
   before pushing, since both sessions are editing goalden-lab.html.
+
+## 2026-09-24 - Claude Code (cloud session, review-board loop, iteration 1)
+Changes made by Claude Code, committed on the user's explicit go-ahead this session.
+- local_server.py: `_fetch_screener_page` only caught HTTPError, so an unreachable
+  screener.in (offline, venue wifi, proxy refusing CONNECT) escaped as a bare
+  URLError and skipped the bundled-fixture fallback entirely. Now mapped to a
+  transient 503 so the fixture tier fires, matching src/worker.js. Verified:
+  TCS loads from fixture with screener blocked.
+- goalden-lab.html: Lab home grid was `repeat(3,1fr)` with four primary tools,
+  leaving Read the Company orphaned on its own row. Now 4 across, then 2x2 below
+  1180px, then 1 column below 860px. Copy fixed ("Three main tools" became "Four",
+  and the secondary count is computed).
+- goalden-lab.html: the advisor FAB (advisor.js, right:18px) sat on top of the
+  "Print / Save as PDF" button. The print button moved to right:92px, and below
+  480px it becomes icon-only.
+- REVIEW-BOARD.md (new): reviewer hierarchy (Chief + 5 divisions of about 10
+  specialists each), tie-break/veto rules, and the backlog for the /loop cycle.
+- Pending: five read-only division reviews (Retirement, Portfolio, Company
+  Analysis, Visual/Data-Viz, AI/Reliability) are running. Next iteration merges
+  them into the ranked backlog in REVIEW-BOARD.md and starts implementing
+  (chart values visible without hover is the top ask).
+- Known: this sandbox blocks Yahoo/MFAPI/screener egress. Testing used a
+  scratchpad-only synthetic-price server (not in repo).
