@@ -2068,3 +2068,19 @@ Changes made by Claude Code: the D5 implementer agent (advisor.js, src/worker.js
   stream rules). README scenario count 15 became 19.
 - Checks: engine.test.js 109/109; all 11 smoke files ALL PASS;
   agent-evals 9/9 in mock mode (was 4/9), 10 skipped (need a live key).
+
+## 2026-09-24 - Claude Code (cloud session, review-board loop, iteration 7: contrast)
+Changes made by Claude Code (Chief), D4-04/D4-06 from the Visual division.
+- goalden-lab.html text contrast to WCAG AA (4.5:1) across the Lab:
+  - Pastel series colours used as TEXT (#8FC79E 1.8:1, #E8977A 2.2:1,
+    #D97757 2.9:1, #5FA875) now use dark tokens #256F55 / #9C4A2C in CSS
+    and inline styles (30 places). Chart fills keep the pastels.
+  - Muted ink text at .4-.6 opacity (2.3-4.0:1) now uses .74 (71 places);
+    `.card .cap` captions and the chart theme's axis labels use #56698A.
+  - Palette tokens nudged: --dim #5E7290 to #52647F, --ok #2E8B6F to
+    #22705A, --warn #C99A45 to #946514; faded-blue link text is now solid.
+  - Drawdown end-label text uses the dark tokens (the dot keeps its pastel).
+  Verified: an automated contrast audit (every visible text element vs its
+  effective background, large-text threshold 3:1) went from 11-169
+  failures per tab to 0 on all 12 Lab tabs; screenshot checked; no page
+  errors. Not yet applied to goalden.html / goalden-door2.html / index.html.

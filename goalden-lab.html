@@ -10,6 +10,8 @@
      not depend on a third party's uptime. Apache ECharts 5.6.0. -->
 <script src="vendor/echarts.min.js"></script>
 <style>
+/* Muted text uses ink at .74 opacity (about 4.6:1 on the panel tint). The
+   older .4-.6 opacities came out at 2.3-4.0:1, below WCAG AA's 4.5:1. */
 :root{
   /* White + shades of blue, replacing the original ink-green/gold identity
      (Track C, user-directed repalette). --ink and --paper keep their
@@ -19,7 +21,7 @@
      canvas colour that used to live in --ink. */
   --bg:#F5F8FC; --card:#FFFFFF;
   --ink:#14283F;--ink2:#1B3A63;--paper:#14283F;
-  --gold:#2557C7;--red:#A03A22;--dim:#5E7290;--ok:#2E8B6F;--warn:#C99A45;
+  --gold:#2557C7;--red:#A03A22;--dim:#52647F;--ok:#22705A;--warn:#946514;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 /* A flat single-colour canvas is what reads as "dull" at this scale -- a
@@ -43,7 +45,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:16p
 body.header-collapsed header{padding:6px 28px}
 body.header-collapsed .brand{display:none}
 .header-right{display:flex;align-items:center;gap:10px}
-.header-collapse-btn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.2);background:rgba(20,40,63,.03);display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(20,40,63,.55);flex-shrink:0;transition:transform .15s,background .15s}
+.header-collapse-btn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.2);background:rgba(20,40,63,.03);display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(20,40,63,.74);flex-shrink:0;transition:transform .15s,background .15s}
 .header-collapse-btn:hover{background:rgba(20,40,63,.08)}
 body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
 .brand{font-family:'Newsreader',serif;font-weight:700;font-size:19px;color:var(--gold);text-decoration:none;display:inline-block}
@@ -69,13 +71,13 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
 .tabbar.is-home{display:none} /* the home screen itself, in #main, is the chooser */
 .tabbar.is-slim{width:228px;flex-shrink:0;border-right:1px solid rgba(37,87,199,.18);padding:22px 14px 24px;transition:width .18s ease,padding .18s ease;overflow-y:auto}
 .tabs{display:flex;gap:8px;flex-wrap:wrap}
-.tab{font-family:'Spline Sans Mono',monospace;font-size:11.5px;letter-spacing:.02em;color:rgba(20,40,63,.68);background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:2px 12px 12px 12px;padding:9px 16px;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .1s}
+.tab{font-family:'Spline Sans Mono',monospace;font-size:11.5px;letter-spacing:.02em;color:rgba(20,40,63,.74);background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:2px 12px 12px 12px;padding:9px 16px;cursor:pointer;transition:background .15s,border-color .15s,color .15s,transform .1s}
 .tab:hover{color:var(--paper);border-color:rgba(37,87,199,.5);background:rgba(20,40,63,.08);transform:translateX(2px)}
 .tab.active{color:#fff;background:var(--gold);border-color:var(--gold);font-weight:600}
 .slim-row{display:flex;flex-direction:column;gap:2px}
-.slim-back{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.6);background:transparent;border:none;cursor:pointer;text-align:left;padding:4px 2px 14px;transition:color .15s}
+.slim-back{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.74);background:transparent;border:none;cursor:pointer;text-align:left;padding:4px 2px 14px;transition:color .15s}
 .slim-back:hover{color:var(--gold)}
-.slim-current{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(20,40,63,.45);display:block;padding:0 2px 12px}
+.slim-current{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(20,40,63,.74);display:block;padding:0 2px 12px}
 /* Vertical stack instead of the old horizontal scroller -- full labels,
    no clipping, no scrollbar at any width. */
 .tabs-slim{flex-direction:column;flex-wrap:nowrap;gap:3px}
@@ -94,7 +96,7 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
    itself for free once the rail shrinks -- no JS needed on that side. The
    button carries a visible text label (not just a 14px icon) because a
    bare icon in the corner of a 228px rail was easy to miss entirely. */
-.nav-toggle-btn{width:auto;height:32px;padding:0 12px 0 9px;border-radius:7px;border:1px solid rgba(20,40,63,.2);background:rgba(20,40,63,.03);display:flex;align-items:center;gap:7px;justify-content:center;cursor:pointer;color:rgba(20,40,63,.6);flex-shrink:0;margin-bottom:12px;transition:background .15s,color .15s;font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600}
+.nav-toggle-btn{width:auto;height:32px;padding:0 12px 0 9px;border-radius:7px;border:1px solid rgba(20,40,63,.2);background:rgba(20,40,63,.03);display:flex;align-items:center;gap:7px;justify-content:center;cursor:pointer;color:rgba(20,40,63,.74);flex-shrink:0;margin-bottom:12px;transition:background .15s,color .15s;font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:600}
 .nav-toggle-btn:hover{background:rgba(37,87,199,.12);color:var(--gold);border-color:rgba(37,87,199,.4)}
 .nav-toggle-btn svg{width:14px;height:14px;flex-shrink:0;transition:transform .18s ease}
 .nav-toggle-label{white-space:nowrap}
@@ -128,7 +130,7 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
   .tabbar.is-slim.nav-collapsed #tabbarInner{display:block}
 }
 .country-toggle{display:flex;font-family:'Spline Sans Mono',monospace;font-size:11.5px;border:1px solid rgba(20,40,63,.2);border-radius:3px}
-.ctbtn{padding:6px 13px;border:none;background:transparent;color:rgba(20,40,63,.55);cursor:pointer}
+.ctbtn{padding:6px 13px;border:none;background:transparent;color:rgba(20,40,63,.74);cursor:pointer}
 .ctbtn:first-child{border-right:1px solid rgba(20,40,63,.15)}
 .ctbtn.active{background:rgba(37,87,199,.15);color:var(--gold)}
 
@@ -141,7 +143,7 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
 .lab-home{padding:28px 4px 4px}
 .lab-home-head{margin-bottom:24px}
 .lab-home-head h2{font-size:27px;margin-bottom:7px}
-.lab-home-head .cap{font-size:13px;color:rgba(20,40,63,.6)}
+.lab-home-head .cap{font-size:13px;color:rgba(20,40,63,.74)}
 .lab-home-primary{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
 /* Four primary tools since Read the Company joined -- repeat(3) left it
    orphaned alone on a second row. 2x2 on mid widths, 1 column on phones. */
@@ -160,10 +162,10 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
 .tc-icon{width:46px;height:46px;color:#fff;background:var(--gold);border-radius:50% 50% 50% 4px;display:flex;align-items:center;justify-content:center;padding:11px;margin-bottom:14px;box-shadow:0 5px 16px rgba(37,87,199,.25);transition:transform .2s ease-out}
 .tc-icon svg{width:100%;height:100%}
 .lab-tool-card h3{font-size:18px;margin-bottom:8px;color:var(--paper)}
-.tc-blurb{font-size:12.5px;color:rgba(20,40,63,.6);line-height:1.55;flex:1;margin-bottom:14px}
+.tc-blurb{font-size:12.5px;color:rgba(20,40,63,.74);line-height:1.55;flex:1;margin-bottom:14px}
 .tc-cta{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--gold);display:flex;align-items:center;gap:5px}
 .tc-cta svg{width:12px;height:12px}
-.lab-home-secondary-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(37,87,199,.7);margin-bottom:10px}
+.lab-home-secondary-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(37,87,199,.95);margin-bottom:10px}
 .lab-home-secondary{display:flex;gap:10px;flex-wrap:wrap}
 /* These 7 used to be bare text pills -- no icon, no weight, nothing to
    catch the eye or hint at what each one does. A small coloured icon
@@ -231,7 +233,7 @@ main.enter{animation:mainEnter .3s ease-out}
    output column can reclaim the space, same as the "All tools" rail. The
    toggle button itself (emitted by panelHead(), first child of .panel)
    stays visible; everything else in the panel is hidden. */
-.panel-toggle-btn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.16);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(20,40,63,.5);flex-shrink:0;margin-bottom:12px;transition:background .15s,color .15s}
+.panel-toggle-btn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.16);background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(20,40,63,.74);flex-shrink:0;margin-bottom:12px;transition:background .15s,color .15s}
 .panel-toggle-btn:hover{background:rgba(37,87,199,.1);color:var(--gold)}
 .panel-toggle-btn svg{width:14px;height:14px;transition:transform .18s ease}
 .grid.panel-collapsed{grid-template-columns:44px 1fr;transition:grid-template-columns .18s ease}
@@ -251,7 +253,7 @@ main.enter{animation:mainEnter .3s ease-out}
    64px silently cropped them, so 2,00,000 read as "20000" in the box. */
 .field-num{width:92px !important;flex-shrink:0;background:rgba(20,40,63,.07);border:1px solid rgba(20,40,63,.2);border-radius:4px;padding:5px 6px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:11.5px;text-align:center}
 .field-num::-webkit-outer-spin-button,.field-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.field label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.6);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.field label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.74);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
 .field label b{color:var(--gold);font-weight:600}
 .field input[type=range]{width:100%;accent-color:var(--gold);height:20px}
 /* Custom slider thumb + track, matching goalden.html / goalden-door2.html.
@@ -272,7 +274,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .field input[type=number]{width:100%;background:rgba(20,40,63,.06);border:1px solid rgba(20,40,63,.16);border-radius:4px;padding:9px 11px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:13px}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .toggle-row{display:flex;gap:1px;margin-bottom:14px;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden}
-.tglbtn{flex:1;font-family:'Spline Sans Mono',monospace;font-size:10.5px;padding:9px 6px;border:none;border-right:1px solid rgba(20,40,63,.14);background:transparent;color:rgba(20,40,63,.55);cursor:pointer;text-align:center}
+.tglbtn{flex:1;font-family:'Spline Sans Mono',monospace;font-size:10.5px;padding:9px 6px;border:none;border-right:1px solid rgba(20,40,63,.14);background:transparent;color:rgba(20,40,63,.74);cursor:pointer;text-align:center}
 .tglbtn:last-child{border-right:none}
 .tglbtn.active{background:rgba(37,87,199,.16);color:var(--gold);font-weight:600}
 .divider{border:none;border-top:1px dashed rgba(20,40,63,.15);margin:18px 0}
@@ -291,10 +293,10 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stat{background:linear-gradient(135deg,rgba(37,87,199,.07),rgba(20,40,63,.03));border:1px solid rgba(20,40,63,.12);border-left:3px solid rgba(37,87,199,.4);border-radius:3px 15px 15px 15px;padding:17px 18px}
 .stat-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
 .stat-value{font-family:'Newsreader',serif;font-size:26px;font-weight:700;letter-spacing:-.01em;color:var(--paper)}
-.stat-sub{font-size:11.5px;color:rgba(20,40,63,.5);margin-top:4px}
+.stat-sub{font-size:11.5px;color:rgba(20,40,63,.74);margin-top:4px}
 .card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.13);border-radius:2px 2px 18px 18px;padding:22px}
 .card h4{font-size:15px;font-weight:600;margin-bottom:4px;color:var(--paper)}
-.card .cap{font-size:12px;color:rgba(20,40,63,.5);margin-bottom:14px}
+.card .cap{font-size:12px;color:#56698A;margin-bottom:14px}
 /* One .is-primary per tab: the card that IS the point of the screen (the
    map on Build a Portfolio, the mix output on Test Real Investments) gets
    lifted to solid white against the tinted default cards around it, so
@@ -315,7 +317,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
    number now". Plain data-tab-switch buttons -- attach()'s #main-scoped
    listener already binds these on every render, no extra wiring needed. */
 .next-step-card{margin-top:4px}
-.ns-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(20,40,63,.4);margin-bottom:10px}
+.ns-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(20,40,63,.74);margin-bottom:10px}
 .ns-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;background:rgba(37,87,199,.06);border:1px solid rgba(37,87,199,.22);border-radius:8px;padding:12px 14px;font-family:'Figtree',sans-serif;font-size:13px;color:var(--ink);cursor:pointer;transition:background .15s ease,border-color .15s ease}
 .ns-btn:hover{background:rgba(37,87,199,.13);border-color:rgba(37,87,199,.4)}
 .ns-btn + .ns-btn{margin-top:8px}
@@ -324,7 +326,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .panel-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:16px}
 .panel-head h3{margin-bottom:0;position:relative;padding-left:13px}
 .panel-head h3::before{content:'';position:absolute;left:0;top:2px;bottom:2px;width:3px;border-radius:2px;background:var(--gold)}
-.reset-tab-btn{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:rgba(20,40,63,.4);background:transparent;border:1px solid rgba(20,40,63,.15);border-radius:20px;padding:4px 10px;cursor:pointer;flex-shrink:0}
+.reset-tab-btn{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:rgba(20,40,63,.74);background:transparent;border:1px solid rgba(20,40,63,.15);border-radius:20px;padding:4px 10px;cursor:pointer;flex-shrink:0}
 .reset-tab-btn:hover{color:var(--gold);border-color:rgba(37,87,199,.4)}
 
 /* --- table --- */
@@ -337,7 +339,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
    possible change that fixes that. */
 .dtable tbody tr:nth-child(even):not(.shock):not(.negative) td{background:rgba(37,87,199,.035)}
 .dtable tr.shock td{background:rgba(160,58,34,.18);color:#7A2517}
-.dtable tr.negative td{color:#E8977A}
+.dtable tr.negative td{color:#9C4A2C}
 .table-scroll{max-height:340px;overflow-y:auto;border-radius:10px}
 
 /* --- episode chips --- */
@@ -351,21 +353,21 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .lab-inst-card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.1);border-radius:3px 12px 12px 12px;padding:13px 14px}
 .lab-inst-name{font-family:'Newsreader',serif;font-size:14px;color:var(--paper);line-height:1.3;margin-bottom:4px}
 .lab-inst-rate{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--gold);margin-bottom:6px}
-.lab-inst-note{font-size:11.5px;color:rgba(20,40,63,.55);line-height:1.5}
+.lab-inst-note{font-size:11.5px;color:rgba(20,40,63,.74);line-height:1.5}
 .lab-inst-flag{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;margin-bottom:6px}
 .lab-inst-card.flag-avoid{border-color:rgba(160,58,34,.4)}
 .lab-inst-card.flag-avoid .lab-inst-flag{background:rgba(160,58,34,.2);color:#7A2517}
 .lab-inst-card.flag-legacy{border-color:rgba(20,40,63,.15);opacity:.75}
-.lab-inst-card.flag-legacy .lab-inst-flag{background:rgba(20,40,63,.08);color:rgba(20,40,63,.6)}
+.lab-inst-card.flag-legacy .lab-inst-flag{background:rgba(20,40,63,.08);color:rgba(20,40,63,.74)}
 .lab-inst-card.flag-check .lab-inst-flag{background:rgba(37,87,199,.18);color:var(--gold)}
 
 /* --- efficient frontier chart --- */
 .fx-chart-wrap{position:relative}
 .echart{width:100%}
-.fx-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:11px;color:rgba(20,40,63,.55)}
+.fx-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:11px;color:rgba(20,40,63,.74)}
 .fx-legend span{display:flex;align-items:center;gap:6px}
 .fx-legend i{display:inline-block;width:16px;height:3px;flex-shrink:0}
-.risk-comp-legend{display:flex;flex-direction:column;gap:6px;margin-top:10px;font-size:11.5px;color:rgba(20,40,63,.6);line-height:1.5}
+.risk-comp-legend{display:flex;flex-direction:column;gap:6px;margin-top:10px;font-size:11.5px;color:rgba(20,40,63,.74);line-height:1.5}
 /* Risk contribution rows */
 /* Reusable open/close explainer, same mechanic as the toggles used
    elsewhere in this project (max-height transition + an .open class),
@@ -388,7 +390,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
    cluster accordions, the "go deeper" bundles below) -- these can run
    well past 600px of real content. */
 .explain-panel.open.tall{max-height:3200px}
-.explain-panel-inner{font-size:12px;color:rgba(20,40,63,.68);line-height:1.6;padding:8px 2px 4px}
+.explain-panel-inner{font-size:12px;color:rgba(20,40,63,.74);line-height:1.6;padding:8px 2px 4px}
 /* Cluster accordions and "go deeper" bundles hold real controls and
    nested .card blocks, not prose, so they get the app's normal type
    sizes and spacing back rather than the small prose defaults above. */
@@ -436,7 +438,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .fc-money-in{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.3);border-left:3px solid rgba(37,87,199,.65)}
 .fc-money-in .stat-value{color:var(--gold)}
 .fc-money-out{background:rgba(95,168,117,.12);border:1px solid rgba(95,168,117,.4);border-left:3px solid rgba(95,168,117,.7)}
-.fc-money-out .stat-value{color:#5FA875}
+.fc-money-out .stat-value{color:#256F55}
 .fc-action{width:100%;background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:10px;font-size:12px;cursor:pointer;font-family:'Spline Sans Mono',monospace;margin-bottom:10px;transition:background .15s}
 .fc-action:hover{background:rgba(37,87,199,.22)}
 .fc-dests{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
@@ -444,11 +446,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .fc-dest:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(20,40,63,.1)}
 .fc-dest-label{font-family:'Spline Sans Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-bottom:6px}
 .fc-dest-split{font-size:12.5px;font-weight:600;color:var(--paper);margin-bottom:4px;line-height:1.35}
-.fc-dest-nums{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6)}
+.fc-dest-nums{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.74)}
 .fc-dest-rec{border-color:rgba(37,87,199,.45);background:rgba(37,87,199,.06)}
 .fc-dest-rec .fc-dest-label{color:var(--gold)}
 .fc-dest.is-current{border-color:rgba(217,119,87,.6);box-shadow:inset 0 0 0 1px rgba(217,119,87,.3)}
-.fc-dest.is-current .fc-dest-label{color:#D97757}
+.fc-dest.is-current .fc-dest-label{color:#9C4A2C}
 @media(max-width:860px){.fc-dests{grid-template-columns:1fr}}
 .fc-diversify{background:rgba(37,87,199,.06);border:1px solid rgba(37,87,199,.25);border-left:3px solid rgba(37,87,199,.55);border-radius:2px 2px 10px 10px;padding:14px;margin-bottom:14px}
 .fc-diversify-stat{font-family:'Newsreader',serif;font-size:22px;font-weight:700;color:var(--gold);margin-bottom:6px}
@@ -456,35 +458,35 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 
 /* --- map card: reset/resample header, declutter toggles, held-cluster chips --- */
 .pf-map-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-.pf-map-btn{font-family:'Spline Sans Mono',monospace;font-size:10.5px;background:transparent;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.6);border-radius:3px;padding:8px 12px;cursor:pointer;transition:all .15s}
+.pf-map-btn{font-family:'Spline Sans Mono',monospace;font-size:10.5px;background:transparent;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.74);border-radius:3px;padding:8px 12px;cursor:pointer;transition:all .15s}
 .pf-map-btn:hover{background:rgba(20,40,63,.05);color:var(--paper)}
 .pf-declutter-row{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:12px}
 .pf-declutter-group{display:flex;align-items:center;gap:8px}
-.pf-declutter-label{font-family:'Spline Sans Mono',monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(20,40,63,.45)}
+.pf-declutter-label{font-family:'Spline Sans Mono',monospace;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:rgba(20,40,63,.74)}
 .pf-declutter-opts{display:flex;gap:1px;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden}
-.pf-declutter-opt{font-family:'Spline Sans Mono',monospace;font-size:10px;background:transparent;border:none;border-right:1px solid rgba(20,40,63,.14);color:rgba(20,40,63,.55);padding:6px 9px;cursor:pointer}
+.pf-declutter-opt{font-family:'Spline Sans Mono',monospace;font-size:10px;background:transparent;border:none;border-right:1px solid rgba(20,40,63,.14);color:rgba(20,40,63,.74);padding:6px 9px;cursor:pointer}
 .pf-declutter-opt:last-child{border-right:none}
 .pf-declutter-opt.active{background:rgba(37,87,199,.16);color:var(--gold);font-weight:600}
 .klass-chip-row{display:flex;flex-wrap:wrap;gap:6px}
-.klass-chip{font-family:'Spline Sans Mono',monospace;font-size:10.5px;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:20px;color:rgba(20,40,63,.6);padding:6px 11px;cursor:pointer;white-space:nowrap}
+.klass-chip{font-family:'Spline Sans Mono',monospace;font-size:10.5px;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);border-radius:20px;color:rgba(20,40,63,.74);padding:6px 11px;cursor:pointer;white-space:nowrap}
 .klass-chip.active{background:rgba(37,87,199,.16);border-color:rgba(37,87,199,.4);color:var(--gold);font-weight:600}
 .pf-cluster-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
-.pf-cluster-chip{font-family:'Spline Sans Mono',monospace;font-size:10px;padding:4px 9px;border-radius:20px;background:rgba(37,87,199,.07);border:1px solid rgba(37,87,199,.22);color:rgba(20,40,63,.6)}
+.pf-cluster-chip{font-family:'Spline Sans Mono',monospace;font-size:10px;padding:4px 9px;border-radius:20px;background:rgba(37,87,199,.07);border:1px solid rgba(37,87,199,.22);color:rgba(20,40,63,.74)}
 .pf-cluster-chip b{color:var(--gold);font-weight:600}
-.lab-gopdeeper-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(37,87,199,.65);margin:4px 0 -6px}
+.lab-gopdeeper-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(37,87,199,.95);margin:4px 0 -6px}
 .explain-panel-inner b{color:rgba(20,40,63,.9)}
 .stress-row{display:flex;flex-direction:column;gap:4px;padding:10px 0;border-bottom:1px solid rgba(20,40,63,.06)}
 .stress-row:last-child{border-bottom:none}
 .stress-label{font-size:13px;color:rgba(20,40,63,.85);font-weight:600}
-.stress-note{display:block;font-size:10.5px;color:rgba(20,40,63,.45);font-weight:400;margin-top:2px}
+.stress-note{display:block;font-size:10.5px;color:rgba(20,40,63,.74);font-weight:400;margin-top:2px}
 .stress-vals{display:flex;gap:14px;flex-wrap:wrap;font-family:'Spline Sans Mono',monospace;font-size:11.5px;margin-top:2px}
-.stress-mkt{color:rgba(20,40,63,.5)}
+.stress-mkt{color:rgba(20,40,63,.74)}
 .stress-port{font-weight:600}
-.stress-dollar{color:rgba(20,40,63,.6)}
+.stress-dollar{color:rgba(20,40,63,.74)}
 .pf-mode-toggle{display:flex;gap:6px;margin-bottom:14px}
-.pf-mode-btn{flex:1;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);color:rgba(20,40,63,.65);border-radius:2px 10px 10px 10px;padding:8px;font-size:12px;cursor:pointer;font-family:'Figtree',sans-serif;transition:all .15s}
+.pf-mode-btn{flex:1;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.16);color:rgba(20,40,63,.74);border-radius:2px 10px 10px 10px;padding:8px;font-size:12px;cursor:pointer;font-family:'Figtree',sans-serif;transition:all .15s}
 .pf-mode-btn.active{background:var(--gold);color:#fff;border-color:var(--gold);font-weight:600}
-.rc-legend{display:flex;gap:16px;margin-bottom:10px;font-size:11px;color:rgba(20,40,63,.5)}
+.rc-legend{display:flex;gap:16px;margin-bottom:10px;font-size:11px;color:rgba(20,40,63,.74)}
 .rc-legend span{display:flex;align-items:center;gap:5px}
 .rc-legend i{width:8px;height:8px;border-radius:2px;display:inline-block}
 .rc-row{display:grid;grid-template-columns:1fr 90px;gap:4px 10px;align-items:center;padding:6px 0;border-bottom:1px solid rgba(20,40,63,.06)}
@@ -496,14 +498,14 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .rc-money{background:#2557C7}
 .rc-risk{background:#D97757}
 .rc-risk-neg{background:#5FA875}
-.rc-vals{grid-column:2/3;grid-row:1/3;font-size:10.5px;color:rgba(20,40,63,.5);text-align:right;font-family:'Spline Sans Mono',monospace;line-height:1.4}
-.rc-flag-hot{color:#E8977A}
-.rc-flag-cool{color:#8FC79E}
+.rc-vals{grid-column:2/3;grid-row:1/3;font-size:10.5px;color:rgba(20,40,63,.74);text-align:right;font-family:'Spline Sans Mono',monospace;line-height:1.4}
+.rc-flag-hot{color:#9C4A2C}
+.rc-flag-cool{color:#256F55}
 .risk-comp-legend span{display:flex;align-items:flex-start;gap:8px}
 .risk-comp-legend i{display:inline-block;width:11px;height:11px;border-radius:2px;flex-shrink:0;margin-top:3px}
 
 /* --- info icon hover tooltip (for stat labels, term explanations) --- */
-.info-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.35);color:rgba(20,40,63,.55);font-size:9.5px;font-family:'Spline Sans Mono',monospace;font-style:normal;cursor:help;margin-left:5px;position:relative;flex-shrink:0}
+.info-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.35);color:rgba(20,40,63,.74);font-size:9.5px;font-family:'Spline Sans Mono',monospace;font-style:normal;cursor:help;margin-left:5px;position:relative;flex-shrink:0}
 .info-icon:hover{border-color:var(--gold);color:var(--gold)}
 .info-icon .ii-tip{display:none;position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#FFFFFF;border:1px solid rgba(37,87,199,.4);border-radius:3px 8px 8px 8px;padding:9px 12px;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:400;color:rgba(20,40,63,.85);width:220px;line-height:1.5;text-align:left;z-index:30;box-shadow:0 6px 18px rgba(20,40,63,.16);white-space:normal}
 .info-icon:hover .ii-tip{display:block}
@@ -517,13 +519,13 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 /* --- cluster-grouped portfolio sliders --- */
 .port-cluster{margin-bottom:0}
 .pf-total-banner{display:flex;align-items:baseline;justify-content:space-between;background:rgba(37,87,199,.1);border:1px solid rgba(37,87,199,.35);border-radius:8px;padding:10px 14px;margin-bottom:16px}
-.pf-total-banner .ttl-label{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.6);letter-spacing:.04em}
+.pf-total-banner .ttl-label{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.74);letter-spacing:.04em}
 .pf-total-banner .ttl-value{font-family:'Spline Sans Mono',monospace;font-size:16px;font-weight:600;color:var(--gold)}
-.port-asset-meta{display:block;font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(20,40,63,.42);font-weight:400;margin-top:2px;letter-spacing:.01em}
+.port-asset-meta{display:block;font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(20,40,63,.74);font-weight:400;margin-top:2px;letter-spacing:.01em}
 .port-pct-row{display:flex;align-items:baseline;gap:6px;margin:6px 0 5px}
 .port-pct-badge{font-family:'Spline Sans Mono',monospace;font-size:15px;font-weight:600;color:var(--paper)}
-.port-pct-of{font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(20,40,63,.4)}
-.epchip{font-family:'Spline Sans Mono',monospace;font-size:11px;padding:8px 8px;border-radius:2px;border:1px solid rgba(20,40,63,.16);background:rgba(20,40,63,.04);color:rgba(20,40,63,.7);cursor:pointer;text-align:center;line-height:1.5}
+.port-pct-of{font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(20,40,63,.74)}
+.epchip{font-family:'Spline Sans Mono',monospace;font-size:11px;padding:8px 8px;border-radius:2px;border:1px solid rgba(20,40,63,.16);background:rgba(20,40,63,.04);color:rgba(20,40,63,.74);cursor:pointer;text-align:center;line-height:1.5}
 .epchip.active{background:rgba(160,58,34,.25);border-color:var(--red);color:#7A2517}
 .epchip b{display:block;color:var(--paper);font-size:12px}
 
@@ -532,12 +534,12 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .dial-num{font-family:'Newsreader',serif;font-size:52px;font-weight:700;color:var(--gold)}
 .dial-bars{flex:1;display:flex;flex-direction:column;gap:8px}
 .dbar-row{display:flex;align-items:center;gap:10px;font-size:11.5px}
-.dbar-label{width:110px;font-family:'Spline Sans Mono',monospace;color:rgba(20,40,63,.6);flex-shrink:0}
+.dbar-label{width:110px;font-family:'Spline Sans Mono',monospace;color:rgba(20,40,63,.74);flex-shrink:0}
 .dbar-track{flex:1;height:7px;background:rgba(20,40,63,.1);border-radius:4px;overflow:hidden}
 .dbar-fill{height:100%;background:var(--gold);border-radius:4px}
 .dbar-val{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);width:34px;text-align:right}
 
-.gr-note{font-size:12.5px;color:rgba(20,40,63,.6);line-height:1.6;padding:12px 14px;background:rgba(20,40,63,.04);border-left:2px solid var(--gold);border-radius:0 8px 8px 0;margin-top:6px}
+.gr-note{font-size:12.5px;color:rgba(20,40,63,.74);line-height:1.6;padding:12px 14px;background:rgba(20,40,63,.04);border-left:2px solid var(--gold);border-radius:0 8px 8px 0;margin-top:6px}
 
 .fx-flow{display:flex;align-items:center;justify-content:center;gap:14px;margin:6px 0 18px;font-family:'Newsreader',serif;font-size:15px}
 .fx-arrow{color:var(--gold);font-size:20px}
@@ -578,9 +580,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .snap-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .snap-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.06em}
 .snap-figure{font-family:'Newsreader',serif;font-size:22px;font-weight:600;color:var(--paper)}
-.snap-sub{font-size:11px;color:rgba(20,40,63,.55);margin-top:4px}
-.snap-add{background:rgba(20,40,63,.04);border:1.5px dashed rgba(20,40,63,.2);border-radius:3px 14px 14px 14px;color:rgba(20,40,63,.55);font-family:'Figtree',sans-serif;font-size:13px;cursor:pointer;padding:14px}
-.gp-iconbtn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.16);background:rgba(20,40,63,.04);color:rgba(20,40,63,.5);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:5px;flex-shrink:0}
+.snap-sub{font-size:11px;color:rgba(20,40,63,.74);margin-top:4px}
+.snap-add{background:rgba(20,40,63,.04);border:1.5px dashed rgba(20,40,63,.2);border-radius:3px 14px 14px 14px;color:rgba(20,40,63,.74);font-family:'Figtree',sans-serif;font-size:13px;cursor:pointer;padding:14px}
+.gp-iconbtn{width:26px;height:26px;border-radius:6px;border:1px solid rgba(20,40,63,.16);background:rgba(20,40,63,.04);color:rgba(20,40,63,.74);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:5px;flex-shrink:0}
 .gp-iconbtn:hover{color:var(--paper)}
 .gp-iconbtn svg{width:100%;height:100%}
 
@@ -605,13 +607,13 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .live-chip-held{background:rgba(160,58,34,.08);border-color:rgba(160,58,34,.4)}
 .live-chip-held span:not(.live-chip-status){color:var(--red);text-decoration:line-through;text-decoration-color:rgba(160,58,34,.5)}
 @keyframes live-pulse{0%,100%{opacity:.3}50%{opacity:1}}
-.live-chip-x{background:none;border:none;color:rgba(20,40,63,.5);cursor:pointer;font-size:15px;line-height:1;padding:2px 3px}
+.live-chip-x{background:none;border:none;color:rgba(20,40,63,.74);cursor:pointer;font-size:15px;line-height:1;padding:2px 3px}
 .live-chip-x:hover{color:var(--red)}
 .live-freetext{display:flex;gap:8px;margin-top:10px}
 .live-freetext input{flex:1;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.18);border-radius:3px;padding:9px 11px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:12px;outline:none}
 .live-freetext button{background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:0 16px;font-family:'Spline Sans Mono',monospace;font-size:11.5px;cursor:pointer;white-space:nowrap}
 .live-error-box{background:rgba(160,58,34,.1);border-left:2px solid var(--red);border-radius:0 8px 8px 0;padding:10px 13px;font-size:12px;color:#7A2517;margin-top:8px;line-height:1.55}
-.live-empty{padding:30px 20px;text-align:center;color:rgba(20,40,63,.4);font-size:13px}
+.live-empty{padding:30px 20px;text-align:center;color:rgba(20,40,63,.74);font-size:13px}
 .live-inst-row{padding:12px 0;border-top:1px solid rgba(20,40,63,.08)}
 .live-inst-row:first-child{border-top:none;padding-top:0}
 .live-inst-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
@@ -619,7 +621,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .live-inst-name .cap{font-weight:400;margin-left:4px}
 .live-inst-cagr{font-family:'Spline Sans Mono',monospace;font-size:15px;color:var(--paper);white-space:nowrap}
 .live-inst-cagr .cap{font-size:10px;margin-left:2px}
-.live-inst-stats{display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;font-size:11.5px;color:rgba(20,40,63,.6)}
+.live-inst-stats{display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;font-size:11.5px;color:rgba(20,40,63,.74)}
 .live-inst-flags{margin-top:6px}
 .live-flag{font-size:11.5px;line-height:1.5;padding:6px 10px;border-radius:0 6px 6px 0;margin-top:4px}
 .live-flag-caution{background:rgba(201,154,69,.12);border-left:2px solid var(--warn);color:#8a6a1f}
@@ -627,7 +629,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .live-inst-held .live-inst-name,.live-inst-held .live-inst-cagr{opacity:.55}
 .live-wc-wrap{overflow-x:auto;margin-top:4px;border-radius:3px 14px 14px 14px;border:1px solid rgba(20,40,63,.1)}
 .live-wc-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:11.5px;white-space:nowrap}
-.live-wc-table th{text-align:right;padding:9px 12px;color:rgba(20,40,63,.45);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em;background:rgba(20,40,63,.04);position:sticky;top:0}
+.live-wc-table th{text-align:right;padding:9px 12px;color:rgba(20,40,63,.74);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em;background:rgba(20,40,63,.04);position:sticky;top:0}
 .live-wc-table th:first-child,.live-wc-table td:first-child{text-align:left}
 .live-wc-table td{text-align:right;padding:8px 12px;color:rgba(20,40,63,.75);border-top:1px solid rgba(20,40,63,.06);cursor:pointer}
 .live-wc-table tr:hover td{background:rgba(20,40,63,.05)}
@@ -635,7 +637,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .live-wc-table tr.wc-best td{background:rgba(37,87,199,.1)}
 .live-wc-badge{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;text-transform:uppercase;padding:2px 6px;border-radius:8px;margin-left:6px;vertical-align:middle}
 .live-wc-badge.best{background:rgba(37,87,199,.22);color:var(--gold)}
-.live-wc-badge.minvar{background:rgba(143,199,158,.18);color:#8FC79E}
+.live-wc-badge.minvar{background:rgba(143,199,158,.18);color:#256F55}
 
 /* --- Read the Company ("statements" tab) -----------------------------
    Renders once per mount (see the rendering note above initChart() and
@@ -675,7 +677,7 @@ body.stmt-page main{max-width:1600px}
    the content underneath. */
 .stmt-jumpnav{position:sticky;top:10px;z-index:30;display:flex;flex-wrap:wrap;gap:6px;background:#fff;border:1px solid rgba(20,40,63,.16);border-radius:14px;padding:10px 12px;box-shadow:0 2px 6px rgba(20,40,63,.06),0 10px 28px -18px rgba(20,40,63,.22);margin-bottom:0;transition:transform .22s ease,opacity .18s ease,box-shadow .18s ease}
 .stmt-jumpnav.sx-nav-hidden{transform:translateY(calc(-100% - 4px));opacity:0;pointer-events:none}
-.stmt-jumpnav button{font-family:'Spline Sans Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.01em;color:rgba(20,40,63,.65);background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.14);border-radius:16px;padding:7px 14px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s,border-color .12s}
+.stmt-jumpnav button{font-family:'Spline Sans Mono',monospace;font-size:11.5px;font-weight:600;letter-spacing:.01em;color:rgba(20,40,63,.74);background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.14);border-radius:16px;padding:7px 14px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s,border-color .12s}
 .stmt-jumpnav button:hover{background:rgba(37,87,199,.12);color:var(--gold);border-color:rgba(37,87,199,.4)}
 @media(max-width:860px){.stmt-jumpnav{overflow-x:auto;flex-wrap:nowrap;position:static}}
 
@@ -731,7 +733,7 @@ body.stmt-page main{max-width:1600px}
 .stmt-topbar-toggle{flex:1;display:flex;align-items:baseline;gap:12px;min-width:0;background:none;border:none;padding:10px 4px;cursor:pointer;text-align:left;font:inherit}
 .stmt-topbar-title{font-family:'Newsreader',serif;font-weight:600;font-size:15px;color:var(--ink2);flex-shrink:0}
 .stmt-topbar-current{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stmt-topbar-chevron{margin-left:auto;color:rgba(20,40,63,.4);font-size:12px;flex-shrink:0}
+.stmt-topbar-chevron{margin-left:auto;color:rgba(20,40,63,.74);font-size:12px;flex-shrink:0}
 .stmt-topbar-head .reset-tab-btn{flex-shrink:0}
 /* Explicit, visible affordance for reclaiming the tools rail's width --
    the sidebar's own collapse toggle (.nav-toggle-btn) already does this,
@@ -749,7 +751,7 @@ body.stmt-page main{max-width:1600px}
 .stmt-search-row input{flex:1;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.18);border-radius:3px;padding:9px 11px;font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--paper);outline:none;text-transform:uppercase}
 .stmt-search-row button{background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:3px;padding:0 16px;font-family:'Spline Sans Mono',monospace;font-size:11.5px;cursor:pointer}
 .stmt-recent{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.stmt-recent button{background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.14);border-radius:10px;padding:4px 10px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.65);cursor:pointer}
+.stmt-recent button{background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.14);border-radius:10px;padding:4px 10px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.74);cursor:pointer}
 .stmt-recent button:hover{border-color:var(--gold);color:var(--gold)}
 .stmt-compare-row{margin-top:14px;padding-top:14px;border-top:1px solid rgba(20,40,63,.1)}
 .stmt-compare-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin-bottom:7px}
@@ -759,10 +761,10 @@ body.stmt-page main{max-width:1600px}
 .stmt-ctrl-label{display:flex;flex-direction:column;gap:2px;font-size:13px;font-weight:600;color:var(--ink2)}
 .stmt-ctrl-hint{font-weight:400;font-size:11.5px;color:var(--dim);line-height:1.45;max-width:280px}
 .stmt-seg{display:inline-flex;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden;flex-shrink:0}
-.stmt-seg button{background:none;border:none;padding:5px 10px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);cursor:pointer;border-right:1px solid rgba(20,40,63,.12)}
+.stmt-seg button{background:none;border:none;padding:5px 10px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.74);cursor:pointer;border-right:1px solid rgba(20,40,63,.12)}
 .stmt-seg button:last-child{border-right:none}
 .stmt-seg button.active{background:rgba(37,87,199,.14);color:var(--gold);font-weight:600}
-.stmt-toggle-pill{background:none;border:1px solid rgba(20,40,63,.18);border-radius:12px;padding:5px 13px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);cursor:pointer;flex-shrink:0}
+.stmt-toggle-pill{background:none;border:1px solid rgba(20,40,63,.18);border-radius:12px;padding:5px 13px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.74);cursor:pointer;flex-shrink:0}
 .stmt-toggle-pill.active{background:rgba(37,87,199,.14);border-color:var(--gold);color:var(--gold);font-weight:600}
 
 .stmt-header-card{display:flex;flex-direction:column;gap:10px}
@@ -780,7 +782,7 @@ body.stmt-page main{max-width:1600px}
 .stmt-badge.standalone{background:rgba(201,154,69,.16);color:var(--warn)}
 .stmt-source-line{font-size:12px;color:var(--dim);margin-top:2px}
 .stmt-source-line a{color:var(--gold)}
-.stmt-sector-line{font-size:12.5px;color:rgba(20,40,63,.65)}
+.stmt-sector-line{font-size:12.5px;color:rgba(20,40,63,.74)}
 /* Stat tiles instead of divider-separated columns -- each one is its own
    small card, so the two that are actually clickable (they pin a
    companion-chip suggestion) read as buttons before you ever hover them,
@@ -813,19 +815,19 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-checklist-row{display:grid;grid-template-columns:30px 1fr auto 110px;gap:16px;align-items:center;padding:14px 12px;border-bottom:1px solid rgba(20,40,63,.09);font-size:13.5px;transition:background .12s ease}
 .stmt-checklist-row:nth-child(even){background:rgba(20,40,63,.02)}
 .stmt-checklist-row:hover{background:rgba(37,87,199,.05)}
-.stmt-checklist-row.unavailable{color:rgba(20,40,63,.42)}
+.stmt-checklist-row.unavailable{color:rgba(20,40,63,.74)}
 .stmt-checklist-id{font-family:'Spline Sans Mono',monospace;color:var(--dim);font-size:11.5px}
 .stmt-checklist-label{color:var(--ink2);line-height:1.4}
-.stmt-checklist-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;color:rgba(20,40,63,.72);white-space:nowrap}
-.stmt-checklist-state{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:rgba(20,40,63,.65);text-align:center;border:1px solid rgba(20,40,63,.18);background:rgba(20,40,63,.045);border-radius:10px;padding:4px 9px 4px 8px;white-space:nowrap}
-.stmt-checklist-glyph{font-size:9px;line-height:1;color:rgba(20,40,63,.5)}
+.stmt-checklist-value{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums;color:rgba(20,40,63,.74);white-space:nowrap}
+.stmt-checklist-state{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:rgba(20,40,63,.74);text-align:center;border:1px solid rgba(20,40,63,.18);background:rgba(20,40,63,.045);border-radius:10px;padding:4px 9px 4px 8px;white-space:nowrap}
+.stmt-checklist-glyph{font-size:9px;line-height:1;color:rgba(20,40,63,.74)}
 
 .stmt-depth-table{width:100%;border-collapse:collapse;margin-bottom:10px}
 .stmt-depth-table th,.stmt-depth-table td{padding:7px 10px;text-align:right;font-size:12.5px;border-bottom:1px solid rgba(20,40,63,.09)}
 .stmt-depth-table th:first-child,.stmt-depth-table td:first-child{text-align:left;color:var(--ink2);font-weight:600}
 .stmt-depth-table th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:600}
 .stmt-depth-cagr{font-family:'Spline Sans Mono',monospace;font-variant-numeric:tabular-nums}
-.stmt-depth-dash{color:rgba(20,40,63,.35)}
+.stmt-depth-dash{color:rgba(20,40,63,.74)}
 .stmt-depth-note{font-size:12px;color:var(--dim);line-height:1.55;margin-bottom:4px}
 .stmt-depth-refusal{background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.16);border-radius:3px 12px 12px 12px;padding:12px 16px;font-size:13px;color:rgba(20,40,63,.8);line-height:1.55;margin-top:14px}
 .stmt-depth-refusal b{display:block;color:var(--ink2);margin-bottom:4px;font-size:13.5px}
@@ -841,7 +843,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-chip:hover{border-color:rgba(37,87,199,.4);box-shadow:0 3px 10px -4px rgba(20,40,63,.25)}
 .stmt-chip-swatch{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .stmt-chip-gap{font-family:'Spline Sans Mono',monospace;color:var(--dim);white-space:nowrap}
-.stmt-chip button{background:none;border:none;cursor:pointer;color:rgba(20,40,63,.45);font-size:11.5px;padding:1px 3px;line-height:1;transition:color .12s}
+.stmt-chip button{background:none;border:none;cursor:pointer;color:rgba(20,40,63,.74);font-size:11.5px;padding:1px 3px;line-height:1;transition:color .12s}
 .stmt-chip button:hover{color:var(--red)}
 .stmt-chip-clear{background:none;border:1px dashed rgba(20,40,63,.32);border-radius:10px;color:var(--dim);font-size:11px;padding:5px 11px;cursor:pointer;flex-shrink:0;transition:border-color .12s,color .12s}
 .stmt-chip-clear:hover{border-color:var(--red);color:var(--red)}
@@ -857,7 +859,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 #stmtBenchCard.stmt-bench-pinned::-webkit-scrollbar{width:8px}
 #stmtBenchCard.stmt-bench-pinned::-webkit-scrollbar-thumb{background:rgba(20,40,63,.16);border-radius:4px}
 #stmtBenchCard.stmt-bench-pinned::-webkit-scrollbar-track{background:transparent}
-.stmt-bench-pin-btn{background:none;border:1px solid rgba(20,40,63,.2);border-radius:14px;padding:4px 11px;font-size:11.5px;font-family:'Spline Sans Mono',monospace;font-weight:600;color:rgba(20,40,63,.6);cursor:pointer;display:inline-flex;align-items:center;gap:5px;margin-left:auto;transition:border-color .12s,color .12s,background .12s}
+.stmt-bench-pin-btn{background:none;border:1px solid rgba(20,40,63,.2);border-radius:14px;padding:4px 11px;font-size:11.5px;font-family:'Spline Sans Mono',monospace;font-weight:600;color:rgba(20,40,63,.74);cursor:pointer;display:inline-flex;align-items:center;gap:5px;margin-left:auto;transition:border-color .12s,color .12s,background .12s}
 .stmt-bench-pin-btn:hover{border-color:var(--gold);color:var(--gold)}
 .stmt-bench-pin-btn.active{background:rgba(37,87,199,.12);border-color:var(--gold);color:var(--gold)}
 /* Pin acknowledgment: the freshly added chip pulses once, so the click
@@ -919,7 +921,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
   .stmt-card{break-inside:avoid-page}
 }
 
-.stmt-caption{font-size:13px;color:rgba(20,40,63,.7);margin-top:8px;line-height:1.55;font-style:italic}
+.stmt-caption{font-size:13px;color:rgba(20,40,63,.74);margin-top:8px;line-height:1.55;font-style:italic}
 
 .stmt-density-comfortable .stmt-table td,.stmt-density-comfortable .stmt-table th{padding-top:8px;padding-bottom:8px}
 .stmt-density-compact .stmt-table td,.stmt-density-compact .stmt-table th{padding-top:5px;padding-bottom:5px}
@@ -966,10 +968,10 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-table .stmt-dash{color:rgba(20,40,63,.28)}
 .stmt-rowlabel-inner{display:flex;align-items:center;gap:7px}
 .stmt-spark{flex-shrink:0;opacity:.7}
-.stmt-def-toggle{width:15px;height:15px;border-radius:50%;border:1px solid rgba(20,40,63,.32);background:none;color:rgba(20,40,63,.55);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:help;flex-shrink:0;line-height:1;padding:0;transition:background .12s,color .12s,border-color .12s}
+.stmt-def-toggle{width:15px;height:15px;border-radius:50%;border:1px solid rgba(20,40,63,.32);background:none;color:rgba(20,40,63,.74);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:help;flex-shrink:0;line-height:1;padding:0;transition:background .12s,color .12s,border-color .12s}
 .stmt-def-toggle:hover{background:var(--gold);color:#fff;border-color:var(--gold)}
-.stmt-def-row td{background:rgba(20,40,63,.03)!important;font-family:'Figtree',sans-serif;font-size:12px;color:rgba(20,40,63,.65);padding:9px 12px!important;cursor:default;text-align:left!important;white-space:normal}
-.stmt-compare-subrow td{background:rgba(20,40,63,.02);color:rgba(20,40,63,.5);font-size:11.5px;padding-top:3px;padding-bottom:5px;border-bottom:1px solid rgba(20,40,63,.06)}
+.stmt-def-row td{background:rgba(20,40,63,.03)!important;font-family:'Figtree',sans-serif;font-size:12px;color:rgba(20,40,63,.74);padding:9px 12px!important;cursor:default;text-align:left!important;white-space:normal}
+.stmt-compare-subrow td{background:rgba(20,40,63,.02);color:rgba(20,40,63,.74);font-size:11.5px;padding-top:3px;padding-bottom:5px;border-bottom:1px solid rgba(20,40,63,.06)}
 .stmt-compare-subrow td:first-child{padding-left:20px;font-style:italic}
 .stmt-bar-cell{position:relative}
 .stmt-bar-track{position:absolute;left:3px;right:3px;bottom:1px;height:6px}
@@ -1056,14 +1058,15 @@ echarts.registerTheme('goalden', {
   textStyle: { fontFamily: "'Spline Sans Mono', monospace", color: 'rgba(20,40,63,.75)' },
   title: { textStyle: { fontFamily: "'Newsreader', serif", color: '#14283F', fontWeight: 600 } },
   grid: { left: 44, right: 16, top: 16, bottom: 30, containLabel: true },
+  // Axis text at #56698A (about 4.7:1), not ink@.5 (3.0:1, below WCAG AA).
   categoryAxis: {
     axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } },
-    axisLabel: { color: 'rgba(20,40,63,.5)', fontSize: 10 },
+    axisLabel: { color: '#56698A', fontSize: 10.5 },
     splitLine: { show: false },
   },
   valueAxis: {
     axisLine: { show: false },
-    axisLabel: { color: 'rgba(20,40,63,.5)', fontSize: 10 },
+    axisLabel: { color: '#56698A', fontSize: 10.5 },
     splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } },
   },
   tooltip: {
@@ -1945,6 +1948,8 @@ function renderDrawdownChartOption(chartId, rows, c){
   const endVal=rows[n-1].closeBal;
   const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal));
   const endLabelColor = prematureDepletion ? '#E8977A' : '#8FC79E';
+  // Text needs the AA-contrast versions; the pastels stay for the marker dot.
+  const endLabelText_color = prematureDepletion ? '#9C4A2C' : '#256F55';
   const shockPoints = rows.map((r,i)=>(r.rate!==undefined && r.rate<-0.05) ? [i, r.closeBal] : null).filter(Boolean);
   const series=[
     { name:'Balance', type:'line', data:rows.map(r=>r.closeBal), showSymbol:false,
@@ -1955,7 +1960,7 @@ function renderDrawdownChartOption(chartId, rows, c){
         data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
         // Anchored inward at the chart's edges: centred on a point in the
         // last column, "Ends at ₹…" / "Reaches zero" ran off the right side.
-        label:{show:true, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endLabelColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:12}},
+        label:{show:true, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endLabelText_color, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:12}},
       z:2 },
   ];
   if(shockPoints.length) series.push({ name:'Shock year', type:'scatter', data:shockPoints, symbolSize:8, itemStyle:{color:'#E8977A'}, z:3,
@@ -2144,10 +2149,10 @@ function renderDDMCBody(res){
   const p10IsFail = mc.p10Detail.ranOut !== null;
   const p50IsFail = mc.p50Detail.ranOut !== null;
   const p10Html = p10IsFail
-    ? `<span style="color:#E8977A">Ran out, yr ${mc.p10Detail.ranOut}</span>`
-    : `<span style="color:#E8977A">${c.compact(mc.p10Detail.bal)}</span>`;
+    ? `<span style="color:#9C4A2C">Ran out, yr ${mc.p10Detail.ranOut}</span>`
+    : `<span style="color:#9C4A2C">${c.compact(mc.p10Detail.bal)}</span>`;
   const p50Html = p50IsFail
-    ? `<span style="color:#E8977A">Ran out, yr ${mc.p50Detail.ranOut}</span>`
+    ? `<span style="color:#9C4A2C">Ran out, yr ${mc.p50Detail.ranOut}</span>`
     : c.compact(mc.p50Detail.bal);
   // A red survival figure with no way out just scares people off. Find the
   // smallest corpus multiplier that gets THESE SAME simulated paths (same
@@ -2177,7 +2182,7 @@ function renderDDMCBody(res){
     }
   }
   const html=`<div class="stat-row" style="margin-top:10px">
-    <div class="stat"><div class="stat-label">Survives to age ${r.lifeExp}${infoIcon('Share of the 1,000 simulated paths that never hit zero before the plan ends. Below 100% means pure return-order randomness, not a wrong average, can still empty the pot.')}</div><div class="stat-value" style="color:${survPct>=90?'#8FC79E':survPct>=70?'#2557C7':'#E8977A'}">${survPct}%</div><div class="stat-sub">${mc.failCount} of ${mc.n} paths ran out${mc.medianRuinYear?`, typically by year ${mc.medianRuinYear}`:''}</div></div>
+    <div class="stat"><div class="stat-label">Survives to age ${r.lifeExp}${infoIcon('Share of the 1,000 simulated paths that never hit zero before the plan ends. Below 100% means pure return-order randomness, not a wrong average, can still empty the pot.')}</div><div class="stat-value" style="color:${survPct>=90?'#256F55':survPct>=70?'#2557C7':'#9C4A2C'}">${survPct}%</div><div class="stat-sub">${mc.failCount} of ${mc.n} paths ran out${mc.medianRuinYear?`, typically by year ${mc.medianRuinYear}`:''}</div></div>
     <div class="stat"><div class="stat-label">P10 outcome${infoIcon('The 10th-percentile path: 9 in 10 simulated paths did at least this well. If even this path ran out of money, the year shown is when, not a balance, since it never had one left.')}</div><div class="stat-value" style="font-size:22px">${p10Html}</div></div>
     <div class="stat"><div class="stat-label">P50 outcome${infoIcon('The median simulated path: half did better than this, half worse. If survival is below 50%, the typical path itself runs out, which is exactly what this is reporting.')}</div><div class="stat-value" style="font-size:22px">${p50Html}</div></div>
   </div>
@@ -2333,7 +2338,7 @@ function renderRetirement(){
       <div class="cap">Same withdrawals as the plan above. Only the year-to-year return varies. This corpus was sized to reach exactly zero if that return holds every year with no room to spare, so even modest volatility can knock the survival rate down hard: that fragility is the finding, not a glitch.</div>
       <div class="field"><label>Volatility of yearly returns${infoIcon('Standard deviation of the post-retirement return. At 0% every path is identical to the deterministic line above. Real diversified portfolios in the drawdown phase typically run somewhere around 8 to 15%.')} <b>${r.ddVol}%</b></label><input type="range" min="0" max="25" value="${r.ddVol}" data-k="ddVol"></div>
       <div id="ret-ddmc-body">${lastDDMCHtml||'<div class="gr-note">Computing the first 1,000 paths…</div>'}</div>
-      <button id="reseedDDBtn" style="width:100%;margin-top:10px;background:transparent;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.6);border-radius:8px;padding:9px;font-size:12px;cursor:pointer">Try a different seed</button>
+      <button id="reseedDDBtn" style="width:100%;margin-top:10px;background:transparent;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.74);border-radius:8px;padding:9px;font-size:12px;cursor:pointer">Try a different seed</button>
     </div>
 
     ${renderSnapshotBar(res)}
@@ -2454,7 +2459,7 @@ function renderSWP(){
     <div class="stat-row">
       <div class="stat"><div class="stat-label">Sustainable monthly draw${infoIcon('The largest starting withdrawal that, rising with inflation every year, empties the pot exactly at the end of the chosen period and not a year earlier. Anything higher and the money runs out before the deadline.')}</div><div class="stat-value">${c.fmt(Math.round(firstPay/12))}</div><div class="stat-sub">first month, then inflation-adjusted</div></div>
       <div class="stat"><div class="stat-label">Annual draw, year 1</div><div class="stat-value">${c.compact(firstPay)}</div></div>
-      <div class="stat"><div class="stat-label">Corpus lasts</div><div class="stat-value" style="${sim.ranOutYear?'color:#E8977A':''}">${sim.ranOutYear?sim.ranOutYear:s.years} yrs</div><div class="stat-sub">${sim.ranOutYear?`runs out ${s.years-sim.ranOutYear} years early`:(shockEp?'survives the shock':'exactly, by design')}</div></div>
+      <div class="stat"><div class="stat-label">Corpus lasts</div><div class="stat-value" style="${sim.ranOutYear?'color:#9C4A2C':''}">${sim.ranOutYear?sim.ranOutYear:s.years} yrs</div><div class="stat-sub">${sim.ranOutYear?`runs out ${s.years-sim.ranOutYear} years early`:(shockEp?'survives the shock':'exactly, by design')}</div></div>
     </div>
     <div class="card is-primary">
       <h4>Drawdown schedule${shockEp?` with ${shockEp.label} injected`:''}</h4>
@@ -2502,7 +2507,7 @@ function renderFX(){
     <div class="stat-row">
       <div class="stat"><div class="stat-label">Stayed home</div><div class="stat-value">${homeC.compact(res.domesticFV)}</div></div>
       <div class="stat"><div class="stat-label">Went abroad</div><div class="stat-value">${homeC.compact(res.crossBorderFV)}</div><div class="stat-sub">${res.foreignBeatsHome?'beats staying home':'loses to staying home'}</div></div>
-      <div class="stat"><div class="stat-label">Currency effect${infoIcon('The part of the final outcome caused purely by exchange-rate movement, separated from what the foreign market itself earned. Positive means the currency worked for you, negative means it ate into the market return.')}</div><div class="stat-value" style="color:${res.currencyEffect>=0?'#8FC79E':'#E8977A'}">${res.currencyEffect>=0?'+':''}${homeC.compact(res.currencyEffect)}</div><div class="stat-sub">${res.currencyEffect>=0?'tailwind':'drag'}</div></div>
+      <div class="stat"><div class="stat-label">Currency effect${infoIcon('The part of the final outcome caused purely by exchange-rate movement, separated from what the foreign market itself earned. Positive means the currency worked for you, negative means it ate into the market return.')}</div><div class="stat-value" style="color:${res.currencyEffect>=0?'#256F55':'#9C4A2C'}">${res.currencyEffect>=0?'+':''}${homeC.compact(res.currencyEffect)}</div><div class="stat-sub">${res.currencyEffect>=0?'tailwind':'drag'}</div></div>
     </div>
     <div class="card is-primary">
       <h4>The interesting fact</h4>
@@ -2585,7 +2590,7 @@ function frontierTakeawayHTML(currentPoint, sharpe, frontier, onJump){
   // Verdict colour is #5FA875 (on-frontier, good news) or #D97757 (gap,
   // room to improve) -- never --red, which this app reserves for actual
   // errors, not "you could be doing better."
-  const verdictColor = gap ? '#D97757' : '#5FA875';
+  const verdictColor = gap ? '#9C4A2C' : '#256F55'; // AA text tokens; the pastels (2.9:1 / 2.5:1) were unreadable as text
   const verdictText = gap
     ? `You're leaving <b style="color:${verdictColor}">${(gap.gapPct*100).toFixed(1)} points</b> of return on the table at this risk level.`
     : `This mix is already on the best line available &ndash; nothing here earns more for the risk you're taking.`;
@@ -2603,7 +2608,7 @@ function frontierTakeawayHTML(currentPoint, sharpe, frontier, onJump){
 
   const detail = `<div>This mix earns <b style="color:var(--paper)">${pct(currentPoint.ret)}</b> a year for <b style="color:var(--paper)">${pct(currentPoint.vol)}</b> risk &ndash; a <span class="term" data-def="Return earned per unit of risk, above a safe baseline (a bank FD). Higher is better: above 1 is generally good, above 2 very good, for a real portfolio over a full market cycle.">Sharpe ratio</span> of <b style="color:var(--gold)">${sharpe.toFixed(2)}</b>. In plain terms: for every extra point of risk this mix takes on above safe cash, it earns about ${sharpe.toFixed(2)} points of extra return.</div>
   <div style="margin-top:8px">${gap
-    ? `The blue line is the <i>most</i> return possible at each risk level. At this exact risk (${pct(currentPoint.vol)}), the best mix on it earns <b style="color:#8FC79E">${pct(gap.frontierRetHere)}</b> &ndash; <b style="color:#8FC79E">${(gap.gapPct*100).toFixed(1)} points more</b> than this mix, for the identical risk. Click any point on the blue line, or the button above, to move there.`
+    ? `The blue line is the <i>most</i> return possible at each risk level. At this exact risk (${pct(currentPoint.vol)}), the best mix on it earns <b style="color:#256F55">${pct(gap.frontierRetHere)}</b> &ndash; <b style="color:#256F55">${(gap.gapPct*100).toFixed(1)} points more</b> than this mix, for the identical risk. Click any point on the blue line, or the button above, to move there.`
     : `This mix already sits right on the blue line &ndash; for the risk being taken, it's already earning about as much as this combination can give.`}</div>`;
 
   return `<div class="fcard">
@@ -2889,10 +2894,10 @@ function renderJoint(){
           <label style="font-size:10px;color:var(--dim)">College in, yrs<br><input type="number" class="field-num" id="editStart" value="${ch.yearsToStart}" style="width:64px;margin-top:4px"></label>
           <label style="font-size:10px;color:var(--dim)">Course, yrs<br><input type="number" class="field-num" id="editDur" value="${ch.duration}" style="width:56px;margin-top:4px"></label>
         </div>
-        <div class="inline-error" id="editChildErr" style="font-size:11px;color:#E8977A;margin-bottom:8px"></div>
+        <div class="inline-error" id="editChildErr" style="font-size:11px;color:#9C4A2C;margin-bottom:8px"></div>
         <div style="display:flex;gap:8px">
           <button data-save-child="${i}" style="flex:1;background:rgba(37,87,199,.18);border:1px solid var(--gold);color:var(--gold);border-radius:6px;padding:7px;font-size:11.5px;cursor:pointer">Save</button>
-          <button data-cancel-child style="flex:1;background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.5);border-radius:6px;padding:7px;font-size:11.5px;cursor:pointer">Cancel</button>
+          <button data-cancel-child style="flex:1;background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.74);border-radius:6px;padding:7px;font-size:11.5px;cursor:pointer">Cancel</button>
         </div>
       </div>`;
     }
@@ -2902,8 +2907,8 @@ function renderJoint(){
         <div class="mono" style="font-size:10.5px;color:var(--dim)">${c.compact(ch.annualFeeToday)}/yr fee · college in ${ch.yearsToStart}yr · ${ch.duration}yr course</div>
       </div>
       <div style="display:flex;gap:6px">
-        <button data-edit-child="${i}" style="background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.5);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">edit</button>
-        ${j.children.length>1?`<button data-remove-child="${i}" style="background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.5);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">remove</button>`:''}
+        <button data-edit-child="${i}" style="background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.74);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">edit</button>
+        ${j.children.length>1?`<button data-remove-child="${i}" style="background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.74);border-radius:6px;padding:4px 9px;font-size:11px;cursor:pointer">remove</button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -2914,7 +2919,7 @@ function renderJoint(){
     ${advisorChipsHTML('joint')}
     <div class="section-label">Children (up to 3)</div>
     ${childRows}
-    ${j.children.length<3?`<button id="addChildBtn" style="width:100%;background:rgba(20,40,63,.06);border:1.5px dashed rgba(20,40,63,.2);border-radius:10px;padding:12px;color:rgba(20,40,63,.55);cursor:pointer;font-size:13px;margin-bottom:16px">+ Add a child</button>`:''}
+    ${j.children.length<3?`<button id="addChildBtn" style="width:100%;background:rgba(20,40,63,.06);border:1.5px dashed rgba(20,40,63,.2);border-radius:10px;padding:12px;color:rgba(20,40,63,.74);cursor:pointer;font-size:13px;margin-bottom:16px">+ Add a child</button>`:''}
     <hr class="divider">
     <div class="field"><label>Education inflation <b>${j.eduInflation}%</b></label><input type="range" min="4" max="16" step="0.5" value="${j.eduInflation}" data-k="eduInflation" data-tab="joint"></div>
     <div class="field"><label>Growth while saving <b>${j.preRate}%</b></label><input type="range" min="4" max="16" step="0.1" value="${j.preRate}" data-k="preRate" data-tab="joint"></div>
@@ -2925,7 +2930,7 @@ function renderJoint(){
     <div class="stat-row">
       <div class="stat"><div class="stat-label">One joint pot</div><div class="stat-value">${c.fmt(Math.round(joint.sip))}</div><div class="stat-sub">/yr &times; ${cmp.jointYears} yrs &middot; ${c.compact(cmp.jointTotal)} paid in total</div></div>
       <div class="stat"><div class="stat-label">Separate pots</div><div class="stat-value">${c.fmt(Math.round(separate))}</div><div class="stat-sub">${cmp.phases.map(ph=>`${c.compact(ph.amount)}/yr &times; ${ph.years} yrs`).join(', then ')} &middot; ${c.compact(cmp.sepTotal)} total</div></div>
-      <div class="stat"><div class="stat-label">Cheaper option${infoIcon("Compared on present value: every contribution discounted back to today at the growth rate, so money paid later counts for less than money paid now. Comparing the two yearly amounts directly is misleading, because the separate pots stop paying as each child starts college while the joint pot keeps going until the last one does.")}</div><div class="stat-value" style="color:${jointCheaper?'#5FA875':'#D97757'}">${jointCheaper?'Joint':'Separate'}</div><div class="stat-sub">by ${c.compact(pvGap)} in today's money</div></div>
+      <div class="stat"><div class="stat-label">Cheaper option${infoIcon("Compared on present value: every contribution discounted back to today at the growth rate, so money paid later counts for less than money paid now. Comparing the two yearly amounts directly is misleading, because the separate pots stop paying as each child starts college while the joint pot keeps going until the last one does.")}</div><div class="stat-value" style="color:${jointCheaper?'#256F55':'#9C4A2C'}">${jointCheaper?'Joint':'Separate'}</div><div class="stat-sub">by ${c.compact(pvGap)} in today's money</div></div>
     </div>
     <div class="card is-primary">
       <h4>Corpus timeline: tightest point${infoIcon('The year the balance comes closest to zero across the whole saving-and-spending timeline. The solver guarantees it never actually dips below zero at any point, not just at the end.')} is year ${joint.minYear}</h4>
@@ -2974,13 +2979,13 @@ function renderMC(){
       ${Object.entries(REGIME_PRESETS).map(([id,r])=>`<button class="tglbtn${m.regime===id?' active':''}" data-toggle="regime" data-val="${id}">${r.label}</button>`).join('')}
     </div>
     <div class="gr-note">${regime.note}. Seed ${m.seed}.${infoIcon('A seed pins down the random number generator, so the same 1,000 paths are reproduced exactly every time. Change the seed to draw a different, equally valid set of simulated futures.')} The same seed always reproduces the identical 1,000 paths, so this isn't randomly different every time you look at it.</div>
-    <button id="reseedBtn" style="width:100%;margin-top:10px;background:transparent;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.6);border-radius:8px;padding:9px;font-size:12px;cursor:pointer">Try a different seed</button>
+    <button id="reseedBtn" style="width:100%;margin-top:10px;background:transparent;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.74);border-radius:8px;padding:9px;font-size:12px;cursor:pointer">Try a different seed</button>
   </div>
   <div class="output">
     <div class="stat-row">
       <div class="stat"><div class="stat-label">Median outcome (P50)${infoIcon('The middle result of 1,000 simulated futures: half ended above this figure, half below. A more honest central estimate than a single deterministic number.')}</div><div class="stat-value">${c.compact(res.p50)}</div></div>
-      <div class="stat"><div class="stat-label">Worst-case band (P10)${infoIcon('9 in 10 simulated futures ended above this line. Treat it as a planning floor, not the absolute worst case, since real markets can do worse than any simulation.')}</div><div class="stat-value" style="color:#E8977A">${c.compact(res.p10)}</div></div>
-      <div class="stat"><div class="stat-label">Best-case band (P90)${infoIcon('Only 1 in 10 simulated futures ended above this line. Enjoy it if it happens, but never build the plan on it.')}</div><div class="stat-value" style="color:#8FC79E">${c.compact(res.p90)}</div></div>
+      <div class="stat"><div class="stat-label">Worst-case band (P10)${infoIcon('9 in 10 simulated futures ended above this line. Treat it as a planning floor, not the absolute worst case, since real markets can do worse than any simulation.')}</div><div class="stat-value" style="color:#9C4A2C">${c.compact(res.p10)}</div></div>
+      <div class="stat"><div class="stat-label">Best-case band (P90)${infoIcon('Only 1 in 10 simulated futures ended above this line. Enjoy it if it happens, but never build the plan on it.')}</div><div class="stat-value" style="color:#256F55">${c.compact(res.p90)}</div></div>
     </div>
     <div class="card is-primary">
       <h4>Fan chart: the range of outcomes, not just one number</h4>
@@ -2992,11 +2997,11 @@ function renderMC(){
       <div class="cap">Same contribution, same years. Only the regime differs</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px">
         <div>
-          <div class="mono" style="font-size:11px;color:#8FC79E;margin-bottom:6px">BULL RUN → ${c.compact(bull.p50)}</div>
+          <div class="mono" style="font-size:11px;color:#256F55;margin-bottom:6px">BULL RUN → ${c.compact(bull.p50)}</div>
           ${fanChart(bull.yearBands, 'mc-fan-bull', 150, regimeYMax)}
         </div>
         <div>
-          <div class="mono" style="font-size:11px;color:#E8977A;margin-bottom:6px">EXTENDED SLUMP → ${c.compact(bear.p50)}</div>
+          <div class="mono" style="font-size:11px;color:#9C4A2C;margin-bottom:6px">EXTENDED SLUMP → ${c.compact(bear.p50)}</div>
           ${fanChart(bear.yearBands, 'mc-fan-bear', 150, regimeYMax)}
         </div>
       </div>
@@ -3217,7 +3222,7 @@ function portfolioBlendHTML(d, assets, corr){
   const cur = bd.current;
   const retKept = bd.portRet>0 ? Math.max(0, cur.ret/bd.portRet*100) : 0;
   const volKept = bd.sigmaMix>0 ? cur.vol/bd.sigmaMix*100 : 0;
-  return `<div class="gr-note" style="margin-top:0">Correlation between your current mix and ${bd.safeAsset.name}: <b style="color:var(--gold)">${bd.rho.toFixed(2)}</b>. At <b style="color:var(--paper)">${(L.portfolio.blendPct)}%</b> parked in ${bd.safeAsset.name}, you'd keep <b style="color:#8FC79E">${retKept.toFixed(0)}%</b> of the return for <b style="color:#8FC79E">${volKept.toFixed(0)}%</b> of the risk.</div>
+  return `<div class="gr-note" style="margin-top:0">Correlation between your current mix and ${bd.safeAsset.name}: <b style="color:var(--gold)">${bd.rho.toFixed(2)}</b>. At <b style="color:var(--paper)">${(L.portfolio.blendPct)}%</b> parked in ${bd.safeAsset.name}, you'd keep <b style="color:#256F55">${retKept.toFixed(0)}%</b> of the return for <b style="color:#256F55">${volKept.toFixed(0)}%</b> of the risk.</div>
   <div class="table-scroll" style="margin-top:10px"><table class="dtable">
   <thead><tr><th>In ${bd.safeAsset.name}</th><th>In your mix</th><th>Return</th><th>Risk</th></tr></thead>
   <tbody>
@@ -3255,7 +3260,7 @@ function portfolioStatsHTML(d){
   const inf=pfInflation()/100;
   const real=realRate(d.portRet, inf);
   return `<div class="stat"><div class="stat-label">Expected return${infoIcon('The average yearly gain this mix would be expected to produce over the long run, based on the illustrative return assumptions for each building block. This is the nominal figure, before inflation.')}</div><div class="stat-value">${(d.portRet*100).toFixed(2)}%</div></div>
-  <div class="stat"><div class="stat-label">After ${pfInflation()}% inflation${infoIcon('The real return: what this mix earns in purchasing power once inflation is stripped out, using the exact Fisher relation rather than a simple subtraction. This is the rate your money actually grows in terms of what it can buy.')}</div><div class="stat-value" style="color:${real>0?'#8FC79E':'#E8977A'}">${(real*100).toFixed(2)}%</div><div class="stat-sub">${real>0?'growing in real terms':'losing purchasing power'}</div></div>
+  <div class="stat"><div class="stat-label">After ${pfInflation()}% inflation${infoIcon('The real return: what this mix earns in purchasing power once inflation is stripped out, using the exact Fisher relation rather than a simple subtraction. This is the rate your money actually grows in terms of what it can buy.')}</div><div class="stat-value" style="color:${real>0?'#256F55':'#9C4A2C'}">${(real*100).toFixed(2)}%</div><div class="stat-sub">${real>0?'growing in real terms':'losing purchasing power'}</div></div>
   <div class="stat"><div class="stat-label">Risk${infoIcon('How much the portfolio\'s value tends to bounce around year to year. Higher means bigger swings, both up and down, not just bigger losses.')}</div><div class="stat-value">${(d.decomp.totalVol*100).toFixed(2)}%</div></div>
   <div class="stat"><div class="stat-label">Beta${infoIcon('How much your portfolio moves when the overall market moves. 1.0 = moves with the market. Above 1.0 = bigger swings than the market. Below 1.0 = smaller swings. Near zero or negative = little relationship, sometimes moves the opposite way. Computed directly from the correlation structure, not a rough estimate.')}</div><div class="stat-value">${d.decomp.beta.toFixed(2)}</div><div class="stat-sub">${d.decomp.beta>1?'more volatile than the market':d.decomp.beta<1&&d.decomp.beta>0?'less volatile than the market':d.decomp.beta<=0?'moves opposite to / independent of the market':''}</div></div>`;
 }
@@ -3272,7 +3277,7 @@ function portfolioRiskBarHTML(d){
 function portfolioDiversifyHTML(d, assets){
   return `Your biggest single position is <b style="color:var(--paper)">${assets[d.topIdx].name}</b>. Holding <i>only</i> that would give ${(d.concRet*100).toFixed(1)}% return at ${(d.concVol*100).toFixed(1)}% risk, with <b style="color:var(--paper)">${(d.concentratedDecomp.unsystematicPct*100).toFixed(0)}%</b> of that risk being pure unsystematic, single-holding risk.
   Your actual mix gives up <b style="color:var(--paper)">${(d.retGiven*100).toFixed(1)} percentage points</b> of return
-  in exchange for <b style="color:${d.volSaved>0?'#8FC79E':'#E8977A'}">${d.volSaved>=0?(d.volSaved*100).toFixed(1)+' points less':(-d.volSaved*100).toFixed(1)+' points more'}</b> risk, and cuts unsystematic risk's share from ${(d.concentratedDecomp.unsystematicPct*100).toFixed(0)}% down to ${(d.decomp.unsystematicPct*100).toFixed(0)}%.
+  in exchange for <b style="color:${d.volSaved>0?'#256F55':'#9C4A2C'}">${d.volSaved>=0?(d.volSaved*100).toFixed(1)+' points less':(-d.volSaved*100).toFixed(1)+' points more'}</b> risk, and cuts unsystematic risk's share from ${(d.concentratedDecomp.unsystematicPct*100).toFixed(0)}% down to ${(d.decomp.unsystematicPct*100).toFixed(0)}%.
   ${d.volSaved>0 && d.retGiven < d.volSaved ? "That's the diversification trade working in your favour: you gave up less return than the risk you removed." : ''}
   This is <span class="term" data-def="Risk that comes from a specific holding or sector: a single company having a bad year, a single sector falling out of favour. Spreading across uncorrelated assets reduces or removes it.">unsystematic risk</span> being diversified away. It's the one kind of investment risk that's genuinely free to reduce: no expected return needs to be sacrificed to do it, only to eliminate the LAST bit of it entirely gets expensive.`;
 }
@@ -3288,7 +3293,7 @@ function portfolioRatiosHTML(d, c){
   return `<div class="stat"><div class="stat-label">Sharpe ratio${infoIcon('Return earned per unit of total risk, above a risk-free baseline (here, the same bank FD rate used elsewhere in this app). Higher is better. Above 1 is generally considered good, above 2 very good, for a real portfolio over a full market cycle.')}</div><div class="stat-value">${r.sharpe.toFixed(2)}</div>${advisorAskLink('Explain my Sharpe ratio')}</div>
   <div class="stat"><div class="stat-label">Sortino ratio${infoIcon('Like Sharpe, but only counts downside swings against you, not the upside ones. A mix with the same Sharpe but a higher Sortino has volatility that skews more toward good surprises than bad ones. Computed from the closed-form downside deviation for a normal distribution, not a simulation.')}</div><div class="stat-value">${sortinoDisplay}</div></div>
   <div class="stat"><div class="stat-label">Diversification ratio${infoIcon('The weighted average volatility of your holdings on their own, divided by your actual portfolio volatility. Always 1.0 or higher. The further above 1.0, the more real diversification benefit you are capturing from combining assets that do not move in lockstep.')}</div><div class="stat-value">${r.divRatio.toFixed(2)}</div></div>
-  <div class="stat"><div class="stat-label">Effective holdings${infoIcon('The inverse Herfindahl index of your weights: how many EQUALLY-weighted holdings this mix behaves like, in terms of concentration. You may hold 24 building blocks, but if one dominates the weights, this number will be much lower than 24, exposing concentration that a simple count would hide.')}</div><div class="stat-value">${r.effN.toFixed(1)}<span style="font-size:12px;color:rgba(20,40,63,.4)"> / ${d.w.length}</span></div></div>`;
+  <div class="stat"><div class="stat-label">Effective holdings${infoIcon('The inverse Herfindahl index of your weights: how many EQUALLY-weighted holdings this mix behaves like, in terms of concentration. You may hold 24 building blocks, but if one dominates the weights, this number will be much lower than 24, exposing concentration that a simple count would hide.')}</div><div class="stat-value">${r.effN.toFixed(1)}<span style="font-size:12px;color:rgba(20,40,63,.74)"> / ${d.w.length}</span></div></div>`;
 }
 function portfolioRiskContribHTML(d, assets, corr){
   const rc = riskContributions(d, corr);
@@ -3330,7 +3335,7 @@ function portfolioStressHTML(d, c){
       <div class="stress-label">${ep.label}<span class="stress-note">${ep.note}</span></div>
       <div class="stress-vals">
         <span class="stress-mkt">market ${(ep.rate*100).toFixed(0)}%</span>
-        <span class="stress-port" style="color:#E8977A">this mix &asymp; ${(portShock*100).toFixed(0)}%</span>
+        <span class="stress-port" style="color:#9C4A2C">this mix &asymp; ${(portShock*100).toFixed(0)}%</span>
         <span class="stress-dollar">${dollarImpact<0?'-':'+'}${c.compact(Math.abs(dollarImpact))} on ${c.compact(amt)}</span>
       </div>
     </div>`;
@@ -3340,8 +3345,8 @@ function portfolioStressHTML(d, c){
 }
 function portfolioTailRiskHTML(d){
   const t = portfolioTailRisk(d);
-  return `<div class="stat"><div class="stat-label">VaR, 1-in-20 year${infoIcon('Value at Risk, 95% confidence: in roughly 1 year out of 20, this mix would be expected to be down at least this much. It says nothing about how much worse the other 5% of years could get, only that a loss at least this size is the 1-in-20 threshold. Closed-form for a normal return distribution, verified against simulation before use.')}</div><div class="stat-value" style="color:#E8977A">-${(t.var95*100).toFixed(1)}%</div></div>
-  <div class="stat"><div class="stat-label">CVaR, average of those bad years${infoIcon('Conditional VaR (expected shortfall): averaged only across that worst-1-in-20 tail, not the whole distribution. This is always a bigger number than VaR, and answers the question VaR does not: given that you are already in a bad year, how bad does it tend to be.')}</div><div class="stat-value" style="color:#E8977A">-${(t.cvar95*100).toFixed(1)}%</div></div>`;
+  return `<div class="stat"><div class="stat-label">VaR, 1-in-20 year${infoIcon('Value at Risk, 95% confidence: in roughly 1 year out of 20, this mix would be expected to be down at least this much. It says nothing about how much worse the other 5% of years could get, only that a loss at least this size is the 1-in-20 threshold. Closed-form for a normal return distribution, verified against simulation before use.')}</div><div class="stat-value" style="color:#9C4A2C">-${(t.var95*100).toFixed(1)}%</div></div>
+  <div class="stat"><div class="stat-label">CVaR, average of those bad years${infoIcon('Conditional VaR (expected shortfall): averaged only across that worst-1-in-20 tail, not the whole distribution. This is always a bigger number than VaR, and answers the question VaR does not: given that you are already in a bad year, how bad does it tend to be.')}</div><div class="stat-value" style="color:#9C4A2C">-${(t.cvar95*100).toFixed(1)}%</div></div>`;
 }
 // Shared by the full render and the debounced live-update fast path, so
 // both build the identical cloud/frontier/assetPoints/currentPoint shape.
@@ -3412,8 +3417,8 @@ function portfolioMoneyHTML(d){
   const fdSubjectLine = sip
     ? `The same ${c.compact(base)}/month in a typical bank Fixed Deposit`
     : `The same ${c.compact(base)} in a typical bank Fixed Deposit`;
-  return `<div class="gr-note" style="margin-top:0">${subjectLine} <b style="color:var(--paper)">${c.compact(fv)}</b> on paper. In today's purchasing power, after ${pfInflation()}% inflation, it is really worth <b style="color:${real>0?'#8FC79E':'#E8977A'}">${c.compact(realFv)}</b>. The gap between those two numbers is what inflation quietly takes, and it is why the after-inflation return above, not the headline one, is the number to judge a mix by.</div>
-  <div class="gr-note" style="margin-top:8px;padding-top:10px;border-top:1px dashed rgba(20,40,63,.14)">${fdSubjectLine} (${(cfg().d.fdRate*100).toFixed(1)}%/yr) would instead reach <b style="color:#E8977A">${c.compact(fdFv)}</b> over those ${yrs} years${fdDiff>0?`, <b style="color:var(--paper)">${c.compact(fdDiff)}</b> less than this mix`:''}. FD interest is also fully taxed at your income slab every year, unlike long-term equity gains, which is not even reflected here.</div>`;
+  return `<div class="gr-note" style="margin-top:0">${subjectLine} <b style="color:var(--paper)">${c.compact(fv)}</b> on paper. In today's purchasing power, after ${pfInflation()}% inflation, it is really worth <b style="color:${real>0?'#256F55':'#9C4A2C'}">${c.compact(realFv)}</b>. The gap between those two numbers is what inflation quietly takes, and it is why the after-inflation return above, not the headline one, is the number to judge a mix by.</div>
+  <div class="gr-note" style="margin-top:8px;padding-top:10px;border-top:1px dashed rgba(20,40,63,.14)">${fdSubjectLine} (${(cfg().d.fdRate*100).toFixed(1)}%/yr) would instead reach <b style="color:#9C4A2C">${c.compact(fdFv)}</b> over those ${yrs} years${fdDiff>0?`, <b style="color:var(--paper)">${c.compact(fdDiff)}</b> less than this mix`:''}. FD interest is also fully taxed at your income slab every year, unlike long-term equity gains, which is not even reflected here.</div>`;
 }
 function updatePortfolioLive(){
   const c=cfg();
@@ -3517,7 +3522,7 @@ function renderPortfolio(){
         </div>
       </div>`;
     });
-    const header=`<span class="port-cluster-icon">${PORT_CLUSTER_ICONS[cl]}</span><span class="port-cluster-name">${PORT_CLUSTER_LABELS[cl]} <span style="color:rgba(20,40,63,.4);text-transform:none">(${idxs.length})</span></span><span class="port-cluster-total" data-cluster-total="${cl}">${clusterPct[cl]}%</span>`;
+    const header=`<span class="port-cluster-icon">${PORT_CLUSTER_ICONS[cl]}</span><span class="port-cluster-name">${PORT_CLUSTER_LABELS[cl]} <span style="color:rgba(20,40,63,.74);text-transform:none">(${idxs.length})</span></span><span class="port-cluster-total" data-cluster-total="${cl}">${clusterPct[cl]}%</span>`;
     sliders+=`<div class="port-cluster">${collapsibleSection('port-cluster-toggle', header, fields)}</div>`;
   });
 
@@ -3545,7 +3550,7 @@ function renderPortfolio(){
     <div class="stat-row" id="pf-stats" style="grid-template-columns:repeat(4,1fr)">${portfolioStatsHTML(d)}</div>
 
     <div class="card is-primary">
-      <h4>The risk-return map <span style="color:rgba(20,40,63,.4);font-weight:400;font-size:13px">(finance calls this curve the "efficient frontier")</span></h4>
+      <h4>The risk-return map <span style="color:rgba(20,40,63,.74);font-weight:400;font-size:13px">(finance calls this curve the "efficient frontier")</span></h4>
       <div class="cap">Each faint dot is one possible mix of these ${assets.length} building blocks. Higher up is more return; further right is more risk. The blue line traces the best return achievable at each risk level &ndash; your orange marker is where you actually stand right now. Hover any point, or click one, to try that mix.</div>
       <div class="pf-map-toolbar">
         <button class="pf-map-btn" id="pfResetBtn">Reset</button>
@@ -4780,7 +4785,7 @@ function liveTwoAssetHTML(items, rfPct){
   <div class="card">
     <h4>Weight: <b>${(w*100).toFixed(0)}% ${a.symbol}</b> / <b>${((1-w)*100).toFixed(0)}% ${b.symbol}</b></h4>
     <div class="slider-row"><input type="range" min="0" max="100" step="1" value="${L.live.weight}" data-live-weight></div>
-    <div class="gr-note" style="margin-top:10px">Best Sharpe ratio at <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> &middot; minimum risk at <b style="color:#8FC79E">${(wMinVar*100).toFixed(0)}% ${a.symbol}</b>.</div>
+    <div class="gr-note" style="margin-top:10px">Best Sharpe ratio at <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> &middot; minimum risk at <b style="color:#256F55">${(wMinVar*100).toFixed(0)}% ${a.symbol}</b>.</div>
   </div>
   <div class="card">
     <h4>Capital Allocation Line: risk-free + optimal portfolio${infoIcon('Blending the risk-free asset with the single best-Sharpe (tangency) mix of '+a.symbol+' and '+b.symbol+', at five leverage levels from all-cash to 2x.')}</h4>
