@@ -1847,3 +1847,61 @@ Changes made by Claude Code (Chief on the review board), each independently veri
   checks, flag rules) in statements-engine.js. Retirement fixes (age clamps,
   withdrawal timing, SWP float bug, joint-corpus claim, Monte Carlo median)
   are next for the Chief.
+
+## 2026-09-24 - Claude Code (cloud session, review-board loop, iteration 2)
+Changes made by Claude Code (Chief), from the D1 Retirement division's report. Each change was independently verified before commit.
+- goalden-lab.html `clampRetAges` (called from `calcRetLab`): retire age is
+  now at least age+1 and plan-to age at least retire+5, clamped in state so
+  the labels match the maths; slider minimums follow. Before, age 60 /
+  retire 50 showed "SIP -₹63,739 for -10 years". Verified: now retire
+  becomes 61 and the SIP is positive.
+- goalden-lab.html `drawdownWithShock` + `monteCarloDrawdown`: the
+  end-of-year ("ordinary") payment now carries one year's inflation, which
+  matches `corpusRequired`/`swpWithdrawal`. Before, an end-of-year plan
+  ended with about 27% of the corpus unspent while saying "reaches zero".
+  Also a ₹1 tolerance on "ran out" (float residue of -6.7e-8 made the
+  default SWP screen say "runs out 0 years early" in red). Verified: final
+  balance is exactly 0 in both timing modes for the Retirement Lab and SWP;
+  the SWP default now reads "20 yrs, exactly, by design".
+- goalden-lab.html Monte Carlo (`simYearReturn`): yearly returns are now
+  lognormal with the MEDIAN at the slider's rate, the same rate the
+  deterministic plan compounds at. Before, a normal draw around the
+  arithmetic mean made the typical path about sigma^2/2 slower than the
+  plan. Verified: median of 200k draws 9.05% vs 9%; zero-margin plan
+  survival is now 49% at both 5% and 12% volatility (was about 34-40%),
+  and vol=0 still collapses to the deterministic plan.
+- goalden-lab.html drawdown Monte Carlo: new "For 9-in-10 survival" line
+  giving the corpus multiplier and SIP that clear 90% in the same
+  simulated paths (bisection; survival is monotone in corpus). Verified in
+  5 scenarios: survival at the displayed multiplier is 90.1-90.9% and 0.01x
+  less falls below 90%. The multiplier is rounded UP (rounding down had
+  printed 1.42x, which re-tests at 89.9%).
+- goalden-lab.html fan charts: P90/median/P10 values printed at the right
+  edge (no hover needed), start labelled "Now" (a 20-year plan used to end
+  at "Yr 21"), edge labels no longer clipped ("r 1"), and the bull/bear
+  twin fans share one y-scale (a ₹1.53 Cr and a ₹82 L median used to be
+  drawn the same height). Verified by screenshot.
+- goalden-lab.html Joint Children Corpus: removed the false "Saved by
+  clubbing ₹30,181/yr". Yearly amounts cover different spans (separate pots
+  stop as each child starts college), so the tab now compares total paid
+  and present value (`jointVsSeparateComparison`). Defaults: joint ₹46.03 L
+  vs separate ₹37.57 L paid; present value ₹25.48 L vs ₹23.51 L, so
+  SEPARATE is cheaper by ₹1.97 L. Verified by an independent year-by-year
+  recount. The advisor tools (`advisorReadCurrentChart`,
+  `advisorGetResults`, `resultCanvasJoint`) repeated the false claim and
+  labelled the yearly SIP "/mo"; now fixed. The result fields were renamed
+  (jointYearlySIP etc.); no eval or server references the old names.
+- goalden-lab.html number boxes: 64px became 92px (₹2,00,000 displayed as
+  "20000"). Verified: all values fit.
+- goalden-lab.html drawdown chart: end label and x-axis edge labels no
+  longer clipped.
+- goalden.html + goalden-lab.html: "gold area/line" captions became "blue"
+  (the brand colour moved to #2557C7; captions described a colour not on
+  screen).
+- Known, not fixed yet: the 2008 shock applies the full -52% equity crash
+  to the whole retirement pot (D1-20: should scale by the equity share),
+  so shocked scenarios are harsher than a hybrid pot would see.
+- In progress (not in this commit): statements-engine.js (D3 implementer;
+  tests currently red on its unfinished work, 97/97 green on committed
+  code) and advisor.js / worker.js / local_server.py / goalden-door2.html
+  (D5 implementer).

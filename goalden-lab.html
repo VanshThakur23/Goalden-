@@ -243,7 +243,9 @@ main.enter{animation:mainEnter .3s ease-out}
 .field{margin-bottom:18px}
 .slider-row{display:flex;align-items:center;gap:10px}
 .slider-row input[type=range]{flex:1;accent-color:var(--gold);height:20px}
-.field-num{width:64px !important;flex-shrink:0;background:rgba(20,40,63,.07);border:1px solid rgba(20,40,63,.2);border-radius:4px;padding:5px 6px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:11.5px;text-align:center}
+/* 92px, not 64px: money fields hold 8-10 digit values (1 Cr = 10000000) and
+   64px silently cropped them, so 2,00,000 read as "20000" in the box. */
+.field-num{width:92px !important;flex-shrink:0;background:rgba(20,40,63,.07);border:1px solid rgba(20,40,63,.2);border-radius:4px;padding:5px 6px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:11.5px;text-align:center}
 .field-num::-webkit-outer-spin-button,.field-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .field label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.6);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
 .field label b{color:var(--gold);font-weight:600}
@@ -1129,19 +1131,32 @@ function swpWithdrawal(rate,years,corpus,due){
   if(due)f*=(1+rate);
   return corpus/f;
 }
+// Payment timing must match the annuity formula that sized the corpus
+// (corpusRequired / swpWithdrawal, real-rate annuity). For start-of-year
+// ("due") that's W, W(1+i), W(1+i)^2...; for end-of-year it's W(1+i),
+// W(1+i)^2... -- the year-k payment lands at time k, a full year of
+// inflation after the price level W is quoted at. This simulation used to
+// pay W (un-inflated) at the end of year 1 in both modes, so an end-of-year
+// plan finished with ~27% of the corpus unspent while the caption said it
+// "reaches exactly zero", and the SWP tab under-quoted the draw.
 function drawdownWithShock(opts, shockYear, shockReturn){
   const rows=[];let bal=opts.openingCorpus,w=opts.firstWithdrawal;let ranOutYear=null;
   for(let yr=1;yr<=opts.years;yr++){
     const rate=(yr===shockYear)?shockReturn:opts.nominalRate;
+    const pay=opts.due ? w : w*(1+opts.inflation);
     let close;
-    if(opts.due){const baw=bal-w;close=baw+baw*rate;}
-    else{close=(bal+bal*rate)-w;}
-    if(close<0&&ranOutYear===null)ranOutYear=yr;
-    rows.push({year:yr,openBal:bal,withdrawal:w,rate,closeBal:close});
+    if(opts.due){const baw=bal-pay;close=baw+baw*rate;}
+    else{close=(bal+bal*rate)-pay;}
+    // Same tolerance as monteCarloDrawdown: a plan built to land on exactly
+    // zero comes out a hair below it from floating-point rounding (-6.7e-8
+    // on the default SWP screen), which used to flag "runs out 0 years
+    // early" in red. Only a real, rupee-scale deficit counts as running out.
+    if(close<-1&&ranOutYear===null)ranOutYear=yr;
+    rows.push({year:yr,openBal:bal,withdrawal:pay,rate,closeBal:Math.abs(close)<1?0:close});
     bal=close;
     w*=(1+opts.inflation);
   }
-  return{rows,ranOutYear,finalBalance:bal};
+  return{rows,ranOutYear,finalBalance:Math.abs(bal)<1?0:bal};
 }
 
 /* =====================================================================
@@ -1159,6 +1174,18 @@ function mulberry32(seed){
   };
 }
 function gaussian(rng){const u1=rng()||1e-9,u2=rng();return Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);}
+// One simulated year's return. Lognormal, centred so the MEDIAN year
+// compounds at exactly the slider's rate -- the same rate every
+// deterministic figure on the page compounds at. Drawing normal returns
+// with the slider as the arithmetic mean made the typical path grow about
+// sigma^2/2 slower than the plan it was testing, so a plan built to land
+// on exactly zero showed ~34% survival purely from that mismatch, not
+// from any real risk. volatility=0 still collapses exactly to meanReturn.
+function simYearReturn(meanReturn, volatility, rng){
+  if(volatility===0) return meanReturn;
+  const s=volatility/(1+meanReturn);
+  return Math.exp(Math.log(1+meanReturn)+s*gaussian(rng))-1;
+}
 
 function monteCarloAccumulation({sip,meanReturn,volatility,years,due,seed,n}){
   const rng=mulberry32(seed);
@@ -1166,7 +1193,7 @@ function monteCarloAccumulation({sip,meanReturn,volatility,years,due,seed,n}){
   for(let sim=0;sim<n;sim++){
     let bal=0; const path=[0];
     for(let y=1;y<=years;y++){
-      const r=volatility===0?meanReturn:meanReturn+volatility*gaussian(rng);
+      const r=simYearReturn(meanReturn, volatility, rng);
       bal=due?(bal+sip)*(1+r):bal*(1+r)+sip;
       path.push(bal);
     }
@@ -1203,9 +1230,12 @@ function monteCarloDrawdown({openingCorpus,firstWithdrawal,inflation,meanReturn,
       // year still draws random volatility -- answering "does the plan
       // survive normal randomness on top of a specific historical crash?"
       // rather than treating the shock and the Monte Carlo as unrelated.
-      const r=(shockYear!=null && y===shockYear) ? shockReturn : (volatility===0?meanReturn:meanReturn+volatility*gaussian(rng));
+      const r=(shockYear!=null && y===shockYear) ? shockReturn : simYearReturn(meanReturn, volatility, rng);
+      // End-of-year payment carries one more year of inflation -- see
+      // drawdownWithShock's comment on matching the corpus formula.
+      const pay=due ? w : w*(1+inflation);
       let close;
-      if(due){const baw=bal-w;close=baw+baw*r;}else{close=(bal+bal*r)-w;}
+      if(due){const baw=bal-pay;close=baw+baw*r;}else{close=(bal+bal*r)-pay;}
       // A plan built to reach exactly zero can land a hair below it from
       // pure floating-point rounding (seen: -2.5e-7 on a multi-crore
       // balance). Only count it as ruin past a real, rupee-scale deficit.
@@ -1498,8 +1528,7 @@ function randomWeights(n, rng){
 
 /* =====================================================================
    JOINT CHILDREN EDUCATION CORPUS SOLVER (B-03)
-   Verified against three cases: gap-year saving (₹30,181/yr kept vs
-   separate corpora), mid-timeline binding constraint (never goes
+   Verified against: mid-timeline binding constraint (never goes
    negative even when the tightest point is mid-plan, not the end),
    and exact reduction to the standard single-goal engine when rates
    are held constant.
@@ -1542,6 +1571,34 @@ function separateCorporaTotal({children, eduInflation, preRate, parkRate}){
     total += r.sip;
   });
   return total;
+}
+
+// Fair joint-vs-separate comparison. Comparing the two YEARLY figures was
+// apples to oranges: each separate pot stops when its own child starts
+// college, while the joint SIP runs until the LAST child starts. On the
+// defaults the "separate ₹3.59 L/yr" only applies for 8 years (then
+// ₹1.48 L/yr for 6), so "saved ₹30,181/yr by clubbing" was not a saving at
+// all -- the joint pot costs more in total, largely because the whole
+// shared pot moves to the safer parking rate the moment the FIRST child is
+// near. Compare total rupees paid and their present value at the growth
+// rate instead (contributions land at the start of each year, as in the
+// solver).
+function jointVsSeparateComparison({children, eduInflation, preRate, parkRate, jointSip, sipStopYear}){
+  const horizon=Math.max(...children.map(ch=>ch.yearsToStart+ch.duration));
+  const sepSips=children.map(ch=>solveJointEducationCorpus({children:[ch], eduInflation, preRate, parkRate, sipStopYear:ch.yearsToStart, horizon:ch.yearsToStart+ch.duration}).sip);
+  let jointTotal=0, jointPV=0, sepTotal=0, sepPV=0;
+  const sepByYear=[];
+  for(let t=1;t<=horizon;t++){
+    const disc=Math.pow(1+preRate, t-1);
+    const jc = t<=sipStopYear ? jointSip : 0;
+    const sc = children.reduce((a,ch,i)=>a+(t<=ch.yearsToStart?sepSips[i]:0),0);
+    jointTotal+=jc; jointPV+=jc/disc; sepTotal+=sc; sepPV+=sc/disc;
+    sepByYear.push(sc);
+  }
+  // Collapse the separate schedule into "amount x years" phases for display.
+  const phases=[];
+  sepByYear.forEach(v=>{ if(v<=0) return; const last=phases[phases.length-1]; if(last && Math.abs(last.amount-v)<0.5) last.years++; else phases.push({amount:v, years:1}); });
+  return {jointTotal, jointPV, sepTotal, sepPV, phases, jointYears:sipStopYear};
 }
 
 
@@ -1886,7 +1943,9 @@ function renderDrawdownChartOption(chartId, rows, c){
       markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(20,40,63,.35)', type:'dashed'}, data:[{yAxis:0}]},
       markPoint:{symbol:'circle', symbolSize:9,
         data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
-        label:{show:true, formatter:()=>endLabelText, position:'top', color:endLabelColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:12}},
+        // Anchored inward at the chart's edges: centred on a point in the
+        // last column, "Ends at ₹…" / "Reaches zero" ran off the right side.
+        label:{show:true, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endLabelColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:12}},
       z:2 },
   ];
   if(shockPoints.length) series.push({ name:'Shock year', type:'scatter', data:shockPoints, symbolSize:8, itemStyle:{color:'#E8977A'}, z:3,
@@ -1894,7 +1953,7 @@ function renderDrawdownChartOption(chartId, rows, c){
   initChart(chartId, {
     grid:{left:4,right:4,top:28,bottom:24,containLabel:false},
     xAxis:{type:'category', data:rows.map((r,i)=>'Yr '+(r.year!==undefined?r.year:i+1)), boundaryGap:false,
-      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, color:'rgba(20,40,63,.4)', fontSize:11},
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, color:'rgba(20,40,63,.4)', fontSize:11, alignMinLabel:'left', alignMaxLabel:'right'},
       axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}},
     yAxis:{type:'value', show:false, min: Math.min(0, ...rows.map(r=>r.closeBal))},
     tooltip:{trigger:'axis', formatter(params){
@@ -1957,10 +2016,21 @@ function renderTwinFatesChartOption(chartId, rowsA, rowsB){
 /* =====================================================================
    TAB: RETIREMENT LAB
    ===================================================================== */
+// Ages are three independent sliders (plus advisor set_value), so any
+// order of edits can leave them inconsistent. Without this, age 60 /
+// retire 50 rendered "SIP -₹63,739 for -10 years", and a plan-to age below
+// the retirement age silently planned to retireAge+5 while the label kept
+// showing the smaller number. Clamped in STATE (not just in the maths) so
+// the slider labels always show the ages the numbers were computed from.
+function clampRetAges(r){
+  r.retireAge=Math.min(75, Math.max(r.retireAge, r.age+1));
+  r.lifeExp=Math.min(95, Math.max(r.lifeExp, r.retireAge+5));
+}
 function calcRetLab(){
   const c=cfg(), r=L.ret;
+  clampRetAges(r);
   const yrs=r.retireAge-r.age;
-  const drawYrs=Math.max(5, r.lifeExp-r.retireAge);
+  const drawYrs=r.lifeExp-r.retireAge;
   const infl=r.inflation/100, preR=r.preRate/100, postR=r.postRate/100;
   const rr=realRate(postR, infl);
   let expAtRet, corpus;
@@ -2033,11 +2103,39 @@ function renderDDMCBody(res){
   const p50Html = p50IsFail
     ? `<span style="color:#E8977A">Ran out, yr ${mc.p50Detail.ranOut}</span>`
     : c.compact(mc.p50Detail.bal);
+  // A red survival figure with no way out just scares people off. Find the
+  // smallest corpus multiplier that gets THESE SAME simulated paths (same
+  // seed, same volatility, same shock) to 90% survival, and the SIP that
+  // funds it. Bisection is valid because, path by path, a bigger starting
+  // pot with the same withdrawals can only last longer, so survival is
+  // monotone in the multiplier.
+  let marginHtml='';
+  if(survPct<90){
+    const survAt=k=>monteCarloDrawdown({openingCorpus:res.corpus*k, firstWithdrawal:res.expAtRet, inflation:r.inflation/100,
+      meanReturn:r.postRate/100, volatility:r.ddVol/100, years:res.drawYrs, due:r.due, seed:r.ddSeed, n:1000,
+      shockYear, shockReturn:shockEp?shockEp.rate:null}).survivalPct;
+    const kMax=2.5;
+    if(survAt(kMax)<0.9){
+      marginHtml=`<div class="gr-note" style="margin-top:10px">Even <b>${kMax}&times;</b> this corpus doesn't reach 9-in-10 survival at ${r.ddVol}% volatility${shockEp?' with this shock':''}. Lower the spending, retire later, or reduce volatility in retirement.</div>`;
+    } else {
+      let lo=1, hi=kMax;
+      for(let it=0; it<10; it++){ const mid=(lo+hi)/2; if(survAt(mid)>=0.9) hi=mid; else lo=mid; }
+      // Rounded UP to the 2dp that gets displayed, so the multiplier on
+      // screen is itself one that clears 90% (rounding down printed 1.42x
+      // for a threshold of 1.4219x, which re-tests at 89.9%).
+      const k=Math.ceil(hi*100)/100, target=res.corpus*k;
+      const mRate=effectiveMonthlyRate(r.preRate/100);
+      const existingFV=(r.existingSavings||0)*Math.pow(1+mRate, res.yrs*12);
+      const sip90=solveSIP(mRate, res.yrs*12, Math.max(0, target-existingFV), r.due);
+      marginHtml=`<div class="gr-note" style="margin-top:10px;border-left-color:#5FA875">For <b>9-in-10</b> survival in these same simulated markets: aim for <b>${c.compact(target)}</b> (${k.toFixed(2)}&times; the plan's corpus), which means a SIP of <b>${c.fmt(Math.round(sip90))}/mo</b> instead of ${c.fmt(Math.round(res.sip))}/mo.</div>`;
+    }
+  }
   const html=`<div class="stat-row" style="margin-top:10px">
     <div class="stat"><div class="stat-label">Survives to age ${r.lifeExp}${infoIcon('Share of the 1,000 simulated paths that never hit zero before the plan ends. Below 100% means pure return-order randomness, not a wrong average, can still empty the pot.')}</div><div class="stat-value" style="color:${survPct>=90?'#8FC79E':survPct>=70?'#2557C7':'#E8977A'}">${survPct}%</div><div class="stat-sub">${mc.failCount} of ${mc.n} paths ran out${mc.medianRuinYear?`, typically by year ${mc.medianRuinYear}`:''}</div></div>
     <div class="stat"><div class="stat-label">P10 outcome${infoIcon('The 10th-percentile path: 9 in 10 simulated paths did at least this well. If even this path ran out of money, the year shown is when, not a balance, since it never had one left.')}</div><div class="stat-value" style="font-size:22px">${p10Html}</div></div>
     <div class="stat"><div class="stat-label">P50 outcome${infoIcon('The median simulated path: half did better than this, half worse. If survival is below 50%, the typical path itself runs out, which is exactly what this is reporting.')}</div><div class="stat-value" style="font-size:22px">${p50Html}</div></div>
   </div>
+  ${marginHtml}
   <div class="cap" style="margin-top:10px">${shockEp?`With ${shockEp.label} forced into drawdown year ${shockYear} of every path, plus normal random volatility elsewhere. `:''}Fan of 1,000 simulated drawdown paths, seed ${r.ddSeed}</div>
   ${fanChart(mc.yearBands, 'ret-ddmc-fan')}`;
   lastDDMCHtml=html;
@@ -2076,7 +2174,7 @@ function renderRetirement(){
     <div class="section-label">You</div>
     <div class="field-row">
       <div class="field"><label>Age <b>${r.age}</b></label><input type="range" min="18" max="65" value="${r.age}" data-k="age"></div>
-      <div class="field"><label>Retire <b>${r.retireAge}</b></label><input type="range" min="45" max="75" value="${r.retireAge}" data-k="retireAge"></div>
+      <div class="field"><label>Retire <b>${r.retireAge}</b></label><input type="range" min="${Math.max(45, r.age+1)}" max="75" value="${r.retireAge}" data-k="retireAge"></div>
     </div>
     <div class="field"><label>Already saved for retirement${infoIcon('A starting balance in EPF, NPS, mutual funds, or anywhere else already earmarked for retirement. Assumed to keep compounding at the same rate as the new SIP below, so the two grow on one combined curve.')} <b>${c.compact(r.existingSavings)}</b></label><input type="range" min="0" max="${L.country==='IN'?20000000:400000}" step="${L.country==='IN'?50000:1000}" value="${r.existingSavings}" data-k="existingSavings"></div>
     <div class="section-label">Set the retirement target</div>
@@ -2102,7 +2200,7 @@ function renderRetirement(){
     <div class="field"><label>Inflation <b>${r.inflation}%</b></label><input type="range" min="2" max="12" step="0.1" value="${r.inflation}" data-k="inflation"></div>
     <div class="field"><label>Growth while saving${infoIcon('The yearly return assumed on your SIP during the working years. Higher-equity mixes justify a higher figure here; it is the rate your contributions compound at before retirement.')} <b>${r.preRate}%</b></label><input type="range" min="4" max="16" step="0.1" value="${r.preRate}" data-k="preRate"></div>
     <div class="field"><label>Growth after retirement${infoIcon('The return earned on the pot while it is being spent down. Usually set lower than the saving-phase rate, because retirees shift to safer, lower-return holdings.')} <b>${r.postRate}%</b></label><input type="range" min="3" max="14" step="0.1" value="${r.postRate}" data-k="postRate"></div>
-    <div class="field"><label>Plan to age <b>${r.lifeExp}</b></label><input type="range" min="70" max="95" value="${r.lifeExp}" data-k="lifeExp"></div>
+    <div class="field"><label>Plan to age <b>${r.lifeExp}</b></label><input type="range" min="${Math.max(70, r.retireAge+5)}" max="95" value="${r.lifeExp}" data-k="lifeExp"></div>
 
     <hr class="divider">
     <div class="section-label">Withdrawal timing${infoIcon('Start of year (annuity due) takes each withdrawal before that year has earned any growth, so a slightly larger pot is needed. End of year (ordinary annuity) lets the full balance grow first. Textbook retirement cases usually use annuity due.')}</div>
@@ -2185,7 +2283,7 @@ function renderRetirement(){
     `)}
 
     <div class="card">
-      <h4>Drawdown Monte Carlo: does the ORDER of returns matter?${infoIcon('The chart above assumes one fixed post-retirement return every single year. Real markets never behave that steadily. This runs 1,000 random drawdown paths with the same average return and lets volatility land differently in each one, which is the only way to see sequence-of-returns risk: two paths with an identical long-run average can still end in ruin or comfort depending purely on WHEN the bad years happen to fall.')}</h4>
+      <h4>Drawdown Monte Carlo: does the ORDER of returns matter?${infoIcon('The chart above assumes one fixed post-retirement return every single year. Real markets never behave that steadily. This runs 1,000 random drawdown paths whose typical (median) year earns the same return as the plan above, and lets volatility land differently in each one, which is the only way to see sequence-of-returns risk: two paths with an identical long-run average can still end in ruin or comfort depending purely on WHEN the bad years happen to fall.')}</h4>
       <div class="cap">Same withdrawals as the plan above. Only the year-to-year return varies. This corpus was sized to reach exactly zero if that return holds every year with no room to spare, so even modest volatility can knock the survival rate down hard: that fragility is the finding, not a glitch.</div>
       <div class="field"><label>Volatility of yearly returns${infoIcon('Standard deviation of the post-retirement return. At 0% every path is identical to the deterministic line above. Real diversified portfolios in the drawdown phase typically run somewhere around 8 to 15%.')} <b>${r.ddVol}%</b></label><input type="range" min="0" max="25" value="${r.ddVol}" data-k="ddVol"></div>
       <div id="ret-ddmc-body">${lastDDMCHtml||'<div class="gr-note">Computing the first 1,000 paths…</div>'}</div>
@@ -2285,6 +2383,9 @@ function renderSWP(){
   const shockYr = s.shock ? Math.min(s.shock.year, s.years) : -1;
   const sim=drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:infl, nominalRate:postR, years:s.years, due:s.due}, shockYr, shockEp?shockEp.rate:0);
   const rows=sim.rows;
+  // The draw actually paid in year 1 -- equals w for start-of-year timing,
+  // one year's inflation more for end-of-year (see drawdownWithShock).
+  const firstPay=rows.length?rows[0].withdrawal:w;
 
   return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
@@ -2305,8 +2406,8 @@ function renderSWP(){
   </div>
   <div class="output">
     <div class="stat-row">
-      <div class="stat"><div class="stat-label">Sustainable monthly draw${infoIcon('The largest starting withdrawal that, rising with inflation every year, empties the pot exactly at the end of the chosen period and not a year earlier. Anything higher and the money runs out before the deadline.')}</div><div class="stat-value">${c.fmt(Math.round(w/12))}</div><div class="stat-sub">first month, then inflation-adjusted</div></div>
-      <div class="stat"><div class="stat-label">Annual draw, year 1</div><div class="stat-value">${c.compact(w)}</div></div>
+      <div class="stat"><div class="stat-label">Sustainable monthly draw${infoIcon('The largest starting withdrawal that, rising with inflation every year, empties the pot exactly at the end of the chosen period and not a year earlier. Anything higher and the money runs out before the deadline.')}</div><div class="stat-value">${c.fmt(Math.round(firstPay/12))}</div><div class="stat-sub">first month, then inflation-adjusted</div></div>
+      <div class="stat"><div class="stat-label">Annual draw, year 1</div><div class="stat-value">${c.compact(firstPay)}</div></div>
       <div class="stat"><div class="stat-label">Corpus lasts</div><div class="stat-value" style="${sim.ranOutYear?'color:#E8977A':''}">${sim.ranOutYear?sim.ranOutYear:s.years} yrs</div><div class="stat-sub">${sim.ranOutYear?`runs out ${s.years-sim.ranOutYear} years early`:(shockEp?'survives the shock':'exactly, by design')}</div></div>
     </div>
     <div class="card is-primary">
@@ -2620,27 +2721,44 @@ function frontierChart(cloud, frontier, assetPoints, currentPoint, chartId, onPo
   </div>`;
 }
 
-function fanChart(yearBands, chartId, h){
+function fanChart(yearBands, chartId, h, yMax){
   if(h===undefined)h=240;
-  deferChartInit(()=>renderFanChartOption(chartId, yearBands));
+  deferChartInit(()=>renderFanChartOption(chartId, yearBands, yMax));
   return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
 }
 // Bands are two stacked area series each (an invisible base up to the low
 // bound, then a visible fill for low-to-high), a standard ECharts technique
-// for a shaded range that isn't anchored to zero — matches the original
-// hand-rolled polygon-band shape exactly, but now genuinely hoverable.
-function renderFanChartOption(chartId, yearBands){
+// for shaded ranges.
+// yMax: optional shared ceiling. The bull and bear fans sit side by side,
+// and with independent auto-scales a ₹1.43 Cr bull median and a ₹65 L bear
+// median were drawn at the same height -- the pair visually said "no
+// difference" when the difference was 2x.
+// Band values are printed at the right edge (P90 / median / P10), so the
+// outcome range is readable without hovering. yearBands[0] is the starting
+// point (year 0), so it's labelled "Now", not "Yr 1" -- which also made a
+// 20-year plan end at "Yr 21".
+function renderFanChartOption(chartId, yearBands, yMax){
   const c=cfg();
-  const n=yearBands.length;
+  const n=yearBands.length, last=yearBands[n-1];
+  const ends=[];
+  const pushEnd=(v,tag,color,weight)=>{
+    // Collapse duplicates (e.g. P10 and P50 both ran out at ₹0) into one label.
+    const dup=ends.find(e=>Math.abs(e.v-v)<=Math.max(1,Math.abs(v)*0.005));
+    if(dup){ dup.tag=dup.tag+' & '+tag; return; }
+    ends.push({v,tag,color,weight});
+  };
+  pushEnd(last.p90,'P90','rgba(20,40,63,.6)',500);
+  pushEnd(last.p50,'Median','#1E4FBE',700);
+  pushEnd(last.p10,'P10','#B85C3E',600);
   initChart(chartId, {
-    grid:{left:4,right:4,top:8,bottom:20,containLabel:false},
-    xAxis:{type:'category', data:yearBands.map((b,i)=>'Yr '+(i+1)), boundaryGap:false,
-      axisLabel:{color:'rgba(20,40,63,.4)', fontSize:10, interval:(idx)=>idx===0||idx===n-1},
+    grid:{left:4,right:4,top:18,bottom:20,containLabel:false},
+    xAxis:{type:'category', data:yearBands.map((b,i)=>i===0?'Now':'Yr '+i), boundaryGap:false,
+      axisLabel:{color:'rgba(20,40,63,.4)', fontSize:10, interval:(idx)=>idx===0||idx===n-1, alignMinLabel:'left', alignMaxLabel:'right'},
       axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}},
-    yAxis:{type:'value', show:false, min:0},
+    yAxis:{type:'value', show:false, min:0, max:yMax||null},
     tooltip:{trigger:'axis', formatter(params){
       const idx=params[0].dataIndex, b=yearBands[idx];
-      return `Year ${idx+1}<br/>P90: ${c.compact(b.p90)} &middot; P75: ${c.compact(b.p75)}<br/>P50: ${c.compact(b.p50)}<br/>P25: ${c.compact(b.p25)} &middot; P10: ${c.compact(b.p10)}`;
+      return `${idx===0?'Start':'Year '+idx}<br/>P90: ${c.compact(b.p90)} &middot; P75: ${c.compact(b.p75)}<br/>P50: ${c.compact(b.p50)}<br/>P25: ${c.compact(b.p25)} &middot; P10: ${c.compact(b.p10)}`;
     }},
     series:[
       { name:'base90', type:'line', stack:'s90', data:yearBands.map(b=>b.p10), showSymbol:false, lineStyle:{opacity:0}, tooltip:{show:false}, z:1 },
@@ -2648,6 +2766,12 @@ function renderFanChartOption(chartId, yearBands){
       { name:'base75', type:'line', stack:'s75', data:yearBands.map(b=>b.p25), showSymbol:false, lineStyle:{opacity:0}, tooltip:{show:false}, z:2 },
       { name:'P25-P75', type:'line', stack:'s75', data:yearBands.map(b=>b.p75-b.p25), showSymbol:false, lineStyle:{opacity:0}, areaStyle:{color:'rgba(37,87,199,.22)'}, tooltip:{show:false}, z:2 },
       { name:'Median', type:'line', data:yearBands.map(b=>b.p50), showSymbol:false, lineStyle:{color:'#2557C7', width:2}, z:3 },
+      { name:'Ends', type:'scatter', data:ends.map(e=>({value:[n-1,e.v], _e:e})), symbolSize:5, silent:true, tooltip:{show:false},
+        itemStyle:{color:'#2557C7'}, z:4,
+        label:{show:true, position:'left', distance:6, fontFamily:"'Spline Sans Mono',monospace", fontSize:10,
+          backgroundColor:'rgba(255,255,255,.8)', padding:[1,4], borderRadius:3,
+          formatter:p=>{ const e=ends[p.dataIndex]; return e.tag+' '+c.compact(e.v); }},
+        labelLayout:{moveOverlap:'shiftY'} },
     ],
   });
 }
@@ -2690,7 +2814,9 @@ function renderJoint(){
   const opts={children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, sipStopYear, horizon};
   const joint=solveJointEducationCorpus(opts);
   const separate=separateCorporaTotal({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR});
-  const saved=separate-joint.sip;
+  const cmp=jointVsSeparateComparison({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, jointSip:joint.sip, sipStopYear});
+  const jointCheaper = cmp.jointPV < cmp.sepPV;
+  const pvGap = Math.abs(cmp.sepPV-cmp.jointPV);
 
   const timelineRows=joint.rows;
   const timelineChart = jointTimelineChart(timelineRows, 'joint-timeline');
@@ -2738,9 +2864,9 @@ function renderJoint(){
   </div>
   <div class="output">
     <div class="stat-row">
-      <div class="stat"><div class="stat-label">Joint corpus SIP</div><div class="stat-value">${c.fmt(Math.round(joint.sip))}</div><div class="stat-sub">/yr, one pot</div></div>
-      <div class="stat"><div class="stat-label">Separate corpora would need</div><div class="stat-value">${c.fmt(Math.round(separate))}</div><div class="stat-sub">/yr, per-child silos</div></div>
-      <div class="stat"><div class="stat-label">Saved by clubbing${infoIcon('One shared pot lets the gap years between children keep compounding instead of sitting idle in separate silos, so the required yearly saving falls versus running one corpus per child.')}</div><div class="stat-value" style="color:#8FC79E">${c.fmt(Math.round(saved))}</div><div class="stat-sub">/yr</div></div>
+      <div class="stat"><div class="stat-label">One joint pot</div><div class="stat-value">${c.fmt(Math.round(joint.sip))}</div><div class="stat-sub">/yr &times; ${cmp.jointYears} yrs &middot; ${c.compact(cmp.jointTotal)} paid in total</div></div>
+      <div class="stat"><div class="stat-label">Separate pots</div><div class="stat-value">${c.fmt(Math.round(separate))}</div><div class="stat-sub">${cmp.phases.map(ph=>`${c.compact(ph.amount)}/yr &times; ${ph.years} yrs`).join(', then ')} &middot; ${c.compact(cmp.sepTotal)} total</div></div>
+      <div class="stat"><div class="stat-label">Cheaper option${infoIcon("Compared on present value: every contribution discounted back to today at the growth rate, so money paid later counts for less than money paid now. Comparing the two yearly amounts directly is misleading, because the separate pots stop paying as each child starts college while the joint pot keeps going until the last one does.")}</div><div class="stat-value" style="color:${jointCheaper?'#5FA875':'#D97757'}">${jointCheaper?'Joint':'Separate'}</div><div class="stat-sub">by ${c.compact(pvGap)} in today's money</div></div>
     </div>
     <div class="card is-primary">
       <h4>Corpus timeline: tightest point${infoIcon('The year the balance comes closest to zero across the whole saving-and-spending timeline. The solver guarantees it never actually dips below zero at any point, not just at the end.')} is year ${joint.minYear}</h4>
@@ -2750,7 +2876,8 @@ function renderJoint(){
     <div class="card">
       <h4>Why this differs from two separate corpora</h4>
       <div class="gr-note" style="margin-top:0">
-      Gap years between children compound untouched instead of sitting idle in two silos. Overlap years (both children in college at once) are the real stress test. The solver checks the balance never goes negative at <b style="color:var(--paper)">any</b> point in the timeline, not just at the end. The tightest year here is year ${joint.minYear}${joint.minYear<horizon?', mid-timeline, not the last year':''}, which a solver that only targets a zero terminal balance would have missed entirely.
+      A joint pot pays a smaller amount each year, but keeps paying until the last child starts college, and in this model the <i>whole</i> shared pot moves to the safer ${j.parkRate}% parking rate as soon as the first child is close. Separate pots pay more per year early on but stop as each child starts, and the younger child's money stays at ${j.preRate}% for longer. That is why the cheaper option can go either way: here it is <b style="color:var(--paper)">${jointCheaper?'the joint pot':'separate pots'}</b>, by ${c.compact(pvGap)} in today's money (${c.compact(cmp.jointTotal)} vs ${c.compact(cmp.sepTotal)} in raw rupees paid).
+      Overlap years (both children in college at once) are the real stress test. The solver checks the balance never goes negative at <b style="color:var(--paper)">any</b> point in the timeline, not just at the end.${joint.minYear<horizon?` The tightest year here is year ${joint.minYear}, mid-timeline, which a solver that only targets a zero final balance would have missed.`:''}
       </div>
     </div>
     ${nextStepCard([{q:'Check that the growth rate assumed here holds up against a real portfolio.', tab:'portfolio'}])}
@@ -2771,6 +2898,8 @@ function renderMC(){
   // Twin fates: bull vs bear side by side (C-07)
   const bull=monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*REGIME_PRESETS.bull.meanAdj, volatility:(m.volatility/100)*REGIME_PRESETS.bull.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
   const bear=monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*REGIME_PRESETS.bear.meanAdj, volatility:(m.volatility/100)*REGIME_PRESETS.bear.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
+  // One ceiling for both regime fans so their heights are comparable.
+  const regimeYMax=Math.max(...bull.yearBands.map(b=>b.p90), ...bear.yearBands.map(b=>b.p90))*1.05;
 
   return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
@@ -2796,7 +2925,7 @@ function renderMC(){
     </div>
     <div class="card is-primary">
       <h4>Fan chart: the range of outcomes, not just one number</h4>
-      <div class="cap">Gold line = median · dark band = 25th-75th percentile · light band = 10th-90th percentile</div>
+      <div class="cap">Blue line = median · dark band = 25th-75th percentile · light band = 10th-90th percentile</div>
       ${fanChart(res.yearBands, 'mc-fan')}
     </div>
     <div class="card">
@@ -2805,11 +2934,11 @@ function renderMC(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px">
         <div>
           <div class="mono" style="font-size:11px;color:#8FC79E;margin-bottom:6px">BULL RUN → ${c.compact(bull.p50)}</div>
-          ${fanChart(bull.yearBands, 'mc-fan-bull', 150)}
+          ${fanChart(bull.yearBands, 'mc-fan-bull', 150, regimeYMax)}
         </div>
         <div>
           <div class="mono" style="font-size:11px;color:#E8977A;margin-bottom:6px">EXTENDED SLUMP → ${c.compact(bear.p50)}</div>
-          ${fanChart(bear.yearBands, 'mc-fan-bear', 150)}
+          ${fanChart(bear.yearBands, 'mc-fan-bear', 150, regimeYMax)}
         </div>
       </div>
     </div>
@@ -8383,7 +8512,7 @@ function advisorReadCurrentChart() {
   if (tab === 'retirement') {
     const res = calcRetLab();
     return { ok:true, tool:'Retirement Lab', charts:[
-      { kind:'accumulation', title:'How the pot grows', xAxis:'years saving (0 → '+res.yrs+')', yAxis:'balance (ends at '+c.compact(res.corpus)+')', note:'gold area = growth earned; pale area = what was paid in', points:[{ label:'monthly SIP', value:c.fmt(Math.round(res.sip)) }, { label:'ending corpus', value:c.compact(res.corpus) }, { label:'today\'s money', value:c.compact(res.realCorpus) }] },
+      { kind:'accumulation', title:'How the pot grows', xAxis:'years saving (0 → '+res.yrs+')', yAxis:'balance (ends at '+c.compact(res.corpus)+')', note:'blue area = growth earned; pale area = what was paid in', points:[{ label:'monthly SIP', value:c.fmt(Math.round(res.sip)) }, { label:'ending corpus', value:c.compact(res.corpus) }, { label:'today\'s money', value:c.compact(res.realCorpus) }] },
       { kind:'drawdown', title:'How the pot gets spent', xAxis:'years after retirement (0 → '+res.drawYrs+')', yAxis:'balance (starts at '+c.compact(res.corpus)+')', note:'built to reach zero at the planned age '+L.ret.lifeExp, points: res.shockInfo ? [{ label:'shock', value:res.shockInfo.ep.label+' ('+(res.shockInfo.ep.rate*100).toFixed(0)+'%)' }, { label:'outcome', value: res.shockInfo.ranOutYear ? 'runs out in drawdown year '+res.shockInfo.ranOutYear : 'survives the shock' }] : [] },
     ] };
   }
@@ -8420,7 +8549,7 @@ function advisorReadCurrentChart() {
     const regime = REGIME_PRESETS[m.regime];
     const res = monteCarloAccumulation({sip:m.sip, meanReturn:(m.meanReturn/100)*regime.meanAdj, volatility:(m.volatility/100)*regime.volAdj, years:m.years, due:true, seed:m.seed, n:1000});
     return { ok:true, tool:'Monte Carlo', charts:[
-      { kind:'fan', title:'Range of possible outcomes', xAxis:'years (0 → '+m.years+')', yAxis:'balance', note:'1,000 simulated paths; gold line = median, bands = 25th–75th and 10th–90th percentiles', points:[{ label:'P10', value:c.compact(res.p10) }, { label:'P50', value:c.compact(res.p50) }, { label:'P90', value:c.compact(res.p90) }] },
+      { kind:'fan', title:'Range of possible outcomes', xAxis:'years (0 → '+m.years+')', yAxis:'balance', note:'1,000 simulated paths; blue line = median, bands = 25th–75th and 10th–90th percentiles', points:[{ label:'P10', value:c.compact(res.p10) }, { label:'P50', value:c.compact(res.p50) }, { label:'P90', value:c.compact(res.p90) }] },
     ] };
   }
   if (tab === 'stepup') {
@@ -8457,9 +8586,9 @@ function advisorReadCurrentChart() {
     const horizon = Math.max.apply(null, j.children.map(function (ch) { return ch.yearsToStart + ch.duration; }));
     const sipStopYear = Math.max.apply(null, j.children.map(function (ch) { return ch.yearsToStart; }));
     const joint = solveJointEducationCorpus({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, sipStopYear:sipStopYear, horizon:horizon});
-    const separate = separateCorporaTotal({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR});
+    const cmp = jointVsSeparateComparison({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, jointSip:joint.sip, sipStopYear:sipStopYear});
     return { ok:true, tool:'Joint Children Corpus', charts:[
-      { kind:'timeline', title:'One pool, two college timelines', xAxis:'years', yAxis:'balance', note:'fees drawn as each child reaches college', points:[{ label:'joint SIP', value:c.fmt(Math.round(joint.sip))+'/mo' }, { label:'separate SIPs', value:c.fmt(Math.round(separate))+'/mo' }, { label:'saved by pooling', value:c.fmt(Math.round(separate-joint.sip))+'/mo' }] },
+      { kind:'timeline', title:'One pool, two college timelines', xAxis:'years', yAxis:'balance', note:'fees drawn as each child reaches college; compare on present value, not the yearly amounts (separate pots stop paying earlier)', points:[{ label:'joint SIP', value:c.fmt(Math.round(joint.sip))+'/yr for '+cmp.jointYears+' yrs' }, { label:'separate pots', value:cmp.phases.map(function (ph) { return c.fmt(Math.round(ph.amount))+'/yr x '+ph.years+' yrs'; }).join(', then ') }, { label:'cheaper in present value', value:(cmp.jointPV<cmp.sepPV?'joint':'separate')+' by '+c.compact(Math.abs(cmp.sepPV-cmp.jointPV)) }] },
     ] };
   }
   if (tab === 'health') {
@@ -8545,8 +8674,12 @@ function advisorGetResults() {
     const sipStopYear = Math.max(...j.children.map(ch => ch.yearsToStart));
     const opts = {children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, sipStopYear, horizon};
     const joint = solveJointEducationCorpus(opts);
-    const separate = separateCorporaTotal({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR});
-    return { ok:true, result:{ tool:'Joint Children Corpus', children:j.children.length, jointMonthlySIP:Math.round(joint.sip), separateMonthlySIP:Math.round(separate), savedByPooling:Math.round(separate - joint.sip) } };
+    const cmp = jointVsSeparateComparison({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, jointSip:joint.sip, sipStopYear});
+    // Yearly, not monthly: the solver's SIP is an annual contribution (the
+    // old *MonthlySIP field names mislabelled it). No "saved by pooling"
+    // figure: the yearly amounts cover different spans, so their
+    // difference isn't a saving -- present value is the fair comparison.
+    return { ok:true, result:{ tool:'Joint Children Corpus', children:j.children.length, jointYearlySIP:Math.round(joint.sip), jointYears:cmp.jointYears, separatePhases:cmp.phases.map(ph=>({yearlySIP:Math.round(ph.amount), years:ph.years})), jointTotalPaid:Math.round(cmp.jointTotal), separateTotalPaid:Math.round(cmp.sepTotal), jointPresentValue:Math.round(cmp.jointPV), separatePresentValue:Math.round(cmp.sepPV), cheaperOption:cmp.jointPV<cmp.sepPV?'joint':'separate' } };
   }
   if (tab === 'mc') {
     const m = L.mc;
@@ -8729,12 +8862,12 @@ function resultCanvasJoint() {
   const sipStopYear = Math.max(...j.children.map(ch=>ch.yearsToStart));
   const opts = {children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, sipStopYear, horizon};
   const joint = solveJointEducationCorpus(opts);
-  const separate = separateCorporaTotal({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR});
+  const cmp = jointVsSeparateComparison({children:j.children, eduInflation:infl, preRate:preR, parkRate:parkR, jointSip:joint.sip, sipStopYear});
   return { ok:true, html:
     '<div class="stat-row">' +
-      '<div class="stat"><div class="stat-label">Joint SIP</div><div class="stat-value">'+c.fmt(Math.round(joint.sip))+'/mo</div></div>' +
-      '<div class="stat"><div class="stat-label">Separate SIPs</div><div class="stat-value">'+c.fmt(Math.round(separate))+'/mo</div></div>' +
-      '<div class="stat"><div class="stat-label">Saved by pooling</div><div class="stat-value">'+c.fmt(Math.round(separate - joint.sip))+'/mo</div></div>' +
+      '<div class="stat"><div class="stat-label">Joint pot</div><div class="stat-value">'+c.fmt(Math.round(joint.sip))+'/yr</div><div class="stat-sub">for '+cmp.jointYears+' yrs, '+c.compact(cmp.jointTotal)+' total</div></div>' +
+      '<div class="stat"><div class="stat-label">Separate pots</div><div class="stat-value">'+c.compact(cmp.sepTotal)+'</div><div class="stat-sub">total, '+cmp.phases.map(ph=>c.compact(ph.amount)+'/yr &times; '+ph.years+' yrs').join(', then ')+'</div></div>' +
+      '<div class="stat"><div class="stat-label">Cheaper (present value)</div><div class="stat-value">'+(cmp.jointPV<cmp.sepPV?'Joint':'Separate')+'</div><div class="stat-sub">by '+c.compact(Math.abs(cmp.sepPV-cmp.jointPV))+'</div></div>' +
     '</div>' +
     '<div class="card"><h4>One pool, two college timelines</h4>'+jointTimelineChart(joint.rows, 'cv-joint-timeline')+'</div>'
   };

@@ -1404,7 +1404,7 @@ function sResultsRetirement() {
     '<div class="assump-toggle detail-toggle" id="bt">'+caretSvg()+'See how we got this number: charts, allocation, comparisons</div>' +
     '<div class="assump-panel detail-panel" id="bp"><div class="assump-inner">' +
     '<div class="chart-card"><div class="chart-title">How the pot grows</div>' +
-    '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
+    '<div class="chart-caption">The blue area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
     mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' +
     '<div class="chart-card"><div class="chart-title">How the pot gets spent</div>' +
     '<div class="chart-caption">Built to last until age '+r.d.lifeExp+'</div>' +
@@ -1458,7 +1458,7 @@ function sResultsEducation() {
     '<div class="assump-toggle detail-toggle" id="bt">'+caretSvg()+'See how we got this number: charts, allocation, comparisons</div>' +
     '<div class="assump-panel detail-panel" id="bp"><div class="assump-inner">' +
     '<div class="chart-card"><div class="chart-title">How the college fund grows</div>' +
-    '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
+    '<div class="chart-caption">The blue area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
     mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' +
     '<div class="chart-card"><div class="chart-title">Fee you will pay each year of study</div>' +
     '<div class="chart-caption">Rises every year because education costs keep going up</div>' +
@@ -1509,7 +1509,7 @@ function sResultsGeneric() {
       '<div class="assump-panel detail-panel" id="bp"><div class="assump-inner">' +
       (r.accRows.length > 0 ?
         '<div class="chart-card"><div class="chart-title">How the fund grows</div>' +
-        '<div class="chart-caption">The gold area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
+        '<div class="chart-caption">The blue area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
         mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' : '') +
       (r.gap > 0 ? allocationCardHtml(r.preRate, r.d, rLabel) : '') +
       (r.gap > 0 ? fdComparisonCardHtml(r.sip, S.genYears, r.gap, r.d, c) : '') +
