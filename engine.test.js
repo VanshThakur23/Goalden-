@@ -1178,3 +1178,38 @@ test('cashFlowWaterfallOption: produces stacked bars + net line', () => {
   assert.ok(opt.series.some(s => s.name === 'CFO'), 'has CFO series');
   assert.ok(opt.series.some(s => s.name === 'Net Cash Flow'), 'has Net Cash Flow line');
 });
+
+test('generateFrontier: exact frontier dominates every sampled mix and every single asset', () => {
+  // 6 assets with a wide risk range -- the random-sample envelope used to
+  // undershoot badly here (single assets plotted above "the best line").
+  const returns = [0.035, 0.07, 0.09, 0.12, 0.14, 0.155];
+  const vols = [0.015, 0.05, 0.10, 0.16, 0.22, 0.28];
+  const corr = returns.map((_, i) => returns.map((__, j) => (i === j ? 1 : 0.3)));
+  const { cloud, frontier } = engine.generateFrontier(returns, vols, corr, 2000, 7);
+  const interp = (v) => {
+    for (let i = 0; i < frontier.length - 1; i++) {
+      const a = frontier[i], b = frontier[i + 1];
+      if (v >= a.vol && v <= b.vol) return a.ret + ((v - a.vol) / (b.vol - a.vol || 1)) * (b.ret - a.ret);
+    }
+    return null;
+  };
+  const pts = cloud.concat(returns.map((r, i) => ({ ret: r, vol: vols[i] })));
+  pts.forEach((p) => {
+    const f = interp(p.vol);
+    if (f != null) assert.ok(p.ret <= f + 1e-6, `point ${p.ret}@${p.vol} above frontier ${f}`);
+  });
+  const top = frontier[frontier.length - 1];
+  assert.ok(Math.abs(top.ret - 0.155) < 1e-9, 'frontier ends at the highest-return asset');
+  frontier.forEach((p) => {
+    assert.ok(Math.abs(p.w.reduce((a, b) => a + b, 0) - 1) < 1e-9, 'weights sum to 1');
+    p.w.forEach((x) => assert.ok(x >= 0, 'long-only'));
+  });
+  for (let i = 1; i < frontier.length; i++) assert.ok(frontier[i].ret > frontier[i - 1].ret, 'return rises with risk');
+});
+
+test('efficientFrontierExact: left end is the analytic 2-asset minimum-variance mix', () => {
+  const s1 = 0.2, s2 = 0.1, rho = 0.2;
+  const f = engine.efficientFrontierExact([0.12, 0.07], [s1, s2], [[1, rho], [rho, 1]], 40);
+  const wStar = (s2 * s2 - rho * s1 * s2) / (s1 * s1 + s2 * s2 - 2 * rho * s1 * s2);
+  assert.ok(Math.abs(f[0].w[0] - wStar) < 1e-5, `min-var weight ${f[0].w[0]} vs analytic ${wStar}`);
+});

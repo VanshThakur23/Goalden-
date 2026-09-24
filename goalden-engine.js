@@ -432,21 +432,148 @@ function randomWeights(n, rng){
   for(let i=0;i<n;i++) w.push(cuts[i+1]-cuts[i]);
   return w;
 }
+/* ---------------------------------------------------------------------
+   Exact long-only efficient frontier.
+   The random cloud alone CANNOT be used as the frontier: uniform weights
+   over N assets concentrate near an equal split as N grows, so with the
+   Lab's 24 building blocks the best-of-3000-samples "frontier" spanned
+   only 5.4-15.5% risk and topped out at 12.0% return, while the true
+   long-only frontier runs 1.7-28% risk up to 15.5%. Single assets plotted
+   ABOVE the line labelled "the best return possible", and frontierGap()
+   told Conservative/Aggressive presets they were already on it when they
+   were ~0.5 points below. The cloud stays (it's the visual "every mix you
+   could pick"); the line is now solved, not sampled.
+   Method: for a sweep of risk-aversion trade-offs lambda, minimise
+   w'Sigma w - lambda*mu'w over {w >= 0, sum w = 1} with accelerated
+   projected gradient (FISTA) and the sort-based simplex projection.
+   lambda=0 is exactly the minimum-variance mix; lambda -> inf is the
+   highest-return asset alone. Warm-started along the sweep, then gaps in
+   risk are bisected so points are evenly spread along the curve.
+   --------------------------------------------------------------------- */
+function projectToSimplex(v){
+  const u=v.slice().sort((a,b)=>b-a);
+  let css=0, theta=0;
+  for(let i=0;i<u.length;i++){ css+=u[i]; const t=(css-1)/(i+1); if(u[i]-t>0) theta=t; }
+  return v.map(x=>Math.max(0,x-theta));
+}
+function efficientFrontierExact(returns, vols, corr, targetPoints){
+  const n=returns.length;
+  if(n===0) return [];
+  targetPoints=targetPoints||40;
+  const S=[];
+  for(let i=0;i<n;i++){ S.push([]); for(let j=0;j<n;j++) S[i].push(vols[i]*vols[j]*corr[i][j]); }
+  // Lipschitz constant of the gradient 2*Sigma w, bounded by the max
+  // absolute row sum (>= largest eigenvalue).
+  let Lc=0; for(let i=0;i<n;i++){ let r=0; for(let j=0;j<n;j++) r+=Math.abs(S[i][j]); Lc=Math.max(Lc,r); }
+  Lc=Math.max(2*Lc,1e-12);
+  const pointOf=w=>({ w, ret:portfolioReturn(w,returns), vol:Math.sqrt(Math.max(0,portfolioVariance(w,vols,corr))) });
+  // Flat typed arrays + a reused sort buffer: this inner loop runs tens of
+  // thousands of times on a cold solve, and per-iteration array
+  // allocation was most of the cost.
+  const Sf=new Float64Array(n*n); for(let i=0;i<n;i++) for(let j=0;j<n;j++) Sf[i*n+j]=S[i][j];
+  const g=new Float64Array(n), z=new Float64Array(n), u=new Float64Array(n);
+  function projInPlace(v, out){
+    u.set(v); u.sort(); // ascending
+    let css=0, theta=0;
+    for(let k=n-1, i=0; k>=0; k--, i++){ css+=u[k]; const t=(css-1)/(i+1); if(u[k]-t>0) theta=t; }
+    for(let i=0;i<n;i++){ const r=v[i]-theta; out[i]=r>0?r:0; }
+  }
+  function solve(lambda, w0){
+    let x=Float64Array.from(w0), y=Float64Array.from(w0), xn=new Float64Array(n), t=1;
+    for(let k=0;k<1500;k++){
+      for(let i=0;i<n;i++){ let s=0; const row=i*n; for(let j=0;j<n;j++) s+=Sf[row+j]*y[j]; z[i]=y[i]-(2*s-lambda*returns[i])/Lc; }
+      projInPlace(z, xn);
+      const tn=(1+Math.sqrt(1+4*t*t))/2, mom=(t-1)/tn;
+      let diff=0;
+      for(let i=0;i<n;i++){ const d=xn[i]-x[i]; if(Math.abs(d)>diff) diff=Math.abs(d); y[i]=xn[i]+mom*d; }
+      const tmp=x; x=xn; xn=tmp; t=tn;
+      if(diff<1e-9) break;
+    }
+    return Array.from(x);
+  }
+  const eq=new Array(n).fill(1/n);
+  // Sweep: lambda=0 (min variance) plus a geometric grid wide enough to
+  // reach the max-return corner for any realistic return/variance scale.
+  const pts=[];
+  let prevW=solve(0,eq);
+  pts.push(Object.assign(pointOf(prevW),{lambda:0}));
+  for(let e=-4;e<=3;e+=0.25){
+    const lambda=Math.pow(10,e);
+    prevW=solve(lambda,prevW);
+    pts.push(Object.assign(pointOf(prevW),{lambda}));
+  }
+  // The highest-return asset alone is always the frontier's top end (ties
+  // broken toward lower risk).
+  let top=0;
+  for(let i=1;i<n;i++) if(returns[i]>returns[top]+1e-12 || (Math.abs(returns[i]-returns[top])<=1e-12 && vols[i]<vols[top])) top=i;
+  const corner=new Array(n).fill(0); corner[top]=1;
+  pts.push(Object.assign(pointOf(corner),{lambda:Infinity}));
+  // Bisect risk gaps wider than range/targetPoints so the line is evenly
+  // sampled along its length instead of bunching where lambda is dense.
+  const span=pts[pts.length-1].vol-pts[0].vol;
+  if(span>1e-9){
+    const maxGap=span/targetPoints;
+    for(let guard=0; guard<400; guard++){
+      pts.sort((a,b)=>a.vol-b.vol);
+      let gi=-1;
+      for(let i=0;i<pts.length-1;i++){
+        if(pts[i+1].vol-pts[i].vol>maxGap && isFinite(pts[i+1].lambda) && pts[i+1].lambda>pts[i].lambda*1.0001){ gi=i; break; }
+        if(pts[i+1].vol-pts[i].vol>maxGap && !isFinite(pts[i+1].lambda)){ gi=i; break; }
+      }
+      if(gi<0) break;
+      const a=pts[gi], b=pts[gi+1];
+      const lo=a.lambda>0?a.lambda:1e-6, hi=isFinite(b.lambda)?b.lambda:Math.max(lo*100,1e4);
+      const lambda=Math.sqrt(lo*hi);
+      if(!(lambda>a.lambda && lambda<hi)) break;
+      const w=solve(lambda,a.w);
+      const p=Object.assign(pointOf(w),{lambda});
+      if(Math.abs(p.vol-a.vol)<1e-9 && Math.abs(p.vol-b.vol)<1e-9) break;
+      pts.push(p);
+    }
+  }
+  pts.sort((a,b)=>a.vol-b.vol);
+  // Keep only strictly efficient points (return rises with risk) and drop
+  // near-duplicates; strip the internal lambda tag.
+  const out=[];
+  pts.forEach(p=>{
+    const last=out[out.length-1];
+    if(last && (p.vol-last.vol<1e-7 || p.ret<=last.ret+1e-10)) return;
+    out.push({w:p.w, ret:p.ret, vol:p.vol});
+  });
+  return out;
+}
+// Memoised: renderPortfolio() rebuilds on every slider tick, and the
+// assumptions (returns/vols/corr) almost never change between ticks --
+// only the user's own weights do, which the frontier doesn't depend on.
+const FRONTIER_CACHE = new Map();
 function generateFrontier(returns, vols, corr, n, seed){
+  const key=JSON.stringify([returns,vols,corr,n,seed]);
+  if(FRONTIER_CACHE.has(key)) return FRONTIER_CACHE.get(key);
   const rng=mulberry32(seed);
   const cloud=[];
   for(let i=0;i<n;i++){
     const w=randomWeights(returns.length, rng);
     cloud.push({ w, ret:portfolioReturn(w,returns), vol:Math.sqrt(portfolioVariance(w,vols,corr)) });
   }
-  const minV=Math.min(...cloud.map(p=>p.vol)), maxV=Math.max(...cloud.map(p=>p.vol));
-  const bins=40, binW=(maxV-minV)/bins;
-  const best=new Array(bins).fill(null);
-  cloud.forEach(p=>{
-    let b=Math.min(bins-1,Math.floor((p.vol-minV)/(binW||1)));
-    if(!best[b]||p.ret>best[b].ret) best[b]=p;
-  });
-  return { cloud, frontier:best.filter(Boolean).sort((a,b)=>a.vol-b.vol) };
+  let frontier=efficientFrontierExact(returns, vols, corr, 40);
+  if(frontier.length<2){
+    // Degenerate input (e.g. every asset has the same expected return):
+    // there's no rising curve to solve for, so fall back to the old
+    // best-return-per-risk-bin envelope of the cloud, which downstream
+    // chart and gap code already handles.
+    const minV=Math.min(...cloud.map(p=>p.vol)), maxV=Math.max(...cloud.map(p=>p.vol));
+    const bins=40, binW=(maxV-minV)/bins;
+    const best=new Array(bins).fill(null);
+    cloud.forEach(p=>{
+      let b=Math.min(bins-1,Math.floor((p.vol-minV)/(binW||1)));
+      if(!best[b]||p.ret>best[b].ret) best[b]=p;
+    });
+    frontier=best.filter(Boolean).sort((a,b)=>a.vol-b.vol);
+  }
+  const result={ cloud, frontier };
+  if(FRONTIER_CACHE.size>50) FRONTIER_CACHE.clear();
+  FRONTIER_CACHE.set(key,result);
+  return result;
 }
 function bestSharpePoint(frontier, rf){
   let best=null, bestSharpe=-Infinity;
@@ -710,6 +837,7 @@ if (typeof module !== 'undefined' && module.exports) {
     capitalAllocationLine, liveFrontierChartOption,
     barComparisonChartOption, radarComparisonChartOption,
     mulberry32, randomWeights, generateFrontier, bestSharpePoint, multiAssetFrontier,
+    projectToSimplex, efficientFrontierExact,
     bm25Tokenize, bm25Rank, filterToolsByQuery,
   };
 }

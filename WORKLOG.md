@@ -1807,3 +1807,43 @@ Changes made by Claude Code, committed on the user's explicit go-ahead this sess
   (chart values visible without hover is the top ask).
 - Known: this sandbox blocks Yahoo/MFAPI/screener egress. Testing used a
   scratchpad-only synthetic-price server (not in repo).
+
+## 2026-09-24 - Claude Code (cloud session, review-board loop, iteration 1b)
+Changes made by Claude Code (Chief on the review board), each independently verified before commit (Rule 0: no claim without a check).
+- goalden-engine.js: the efficient frontier is now SOLVED, not sampled. New
+  `efficientFrontierExact` (long-only mean-variance sweep, FISTA + simplex
+  projection) plus memoisation; `generateFrontier` keeps its signature and
+  return shape and still returns the random cloud for the background dots.
+  The old best-of-3000-random-mixes envelope covered only 5.4-15.5% risk
+  with 24 assets, so single funds plotted above "the best line" and
+  Conservative/Aggressive were told "already on the best line" while about
+  0.5 points below it.
+  Verified: India frontier 1.50%->28.00% risk, 6.51%->15.50% return (ends
+  on Liquid Fund / Small Cap Fund exactly); optimality-condition (KKT)
+  error at most 8.9e-7; 400,000 brute-force mixes per country, 0 beat the
+  line. Cold solve about 130ms once per country, then cached (0.1ms).
+- goalden-lab.html: removed the Lab's own shadowing copy of
+  `generateFrontier`, so Build a Portfolio, Test Real Investments and the
+  advisor tool all use the exact version.
+- goalden-lab.html `frontierGap`: a mix riskier than the frontier's top end
+  used to return null ("already on the best line"). It now reports the gap.
+- goalden-lab.html Test Real Investments: "Turn this into a savings plan"
+  now carries the compounded return (mu - sigma^2/2) to the Retirement tab
+  instead of the higher arithmetic one. Verified: carried value equals the
+  on-screen "Compounded equivalent" (9.0% with 2 instruments, 11.1% with 3).
+- goalden-lab.html risk-composition bar: the "all in your biggest holding"
+  marker was placed at the unsystematic share (the wrong end, label clipped
+  at x=0). It now sits at the concentrated mix's systematic share, with its
+  value in the label, aligned so it isn't clipped. Verified by screenshot.
+- goalden-lab.html Build a Portfolio frontier chart: YOUR MIX and BEST FOR
+  THE RISK now print return and risk on the chart (no hover needed), sit on
+  opposite sides so they can't collide, and asset labels hide on overlap.
+  Verified by screenshot.
+- engine.test.js: two new tests (frontier dominates every sampled mix and
+  every single asset, weights long-only and summing to 1; 2-asset left end
+  equals the analytic minimum-variance weight). 97/97 pass.
+- In progress (not in this commit): a D3 implementer agent is fixing the
+  Read the Company engine (waterfall chart, bonus-issue dilution, lender
+  checks, flag rules) in statements-engine.js. Retirement fixes (age clamps,
+  withdrawal timing, SWP float bug, joint-corpus claim, Monte Carlo median)
+  are next for the Chief.

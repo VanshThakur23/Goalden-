@@ -1489,22 +1489,12 @@ function randomWeights(n, rng){
   return w;
 }
 
-function generateFrontier(returns, vols, corr, n, seed){
-  const rng=mulberry32(seed);
-  const cloud=[];
-  for(let i=0;i<n;i++){
-    const w=randomWeights(returns.length, rng);
-    cloud.push({ w, ret:portfolioReturn(w,returns), vol:Math.sqrt(portfolioVariance(w,vols,corr)) });
-  }
-  const minV=Math.min(...cloud.map(p=>p.vol)), maxV=Math.max(...cloud.map(p=>p.vol));
-  const bins=40, binW=(maxV-minV)/bins;
-  const best=new Array(bins).fill(null);
-  cloud.forEach(p=>{
-    let b=Math.min(bins-1,Math.floor((p.vol-minV)/(binW||1)));
-    if(!best[b]||p.ret>best[b].ret) best[b]=p;
-  });
-  return { cloud, frontier:best.filter(Boolean).sort((a,b)=>a.vol-b.vol) };
-}
+// generateFrontier() is deliberately NOT redefined here any more: the
+// copy that used to live here shadowed goalden-engine.js's and was a pure
+// best-of-random-samples envelope, which badly undershot the real frontier
+// with 24 assets. The engine version solves the frontier exactly (see
+// efficientFrontierExact there) and memoises it, and every Lab call site
+// (Build a Portfolio, Test Real Investments, the advisor) now reaches it.
 
 /* =====================================================================
    JOINT CHILDREN EDUCATION CORPUS SOLVER (B-03)
@@ -2395,6 +2385,15 @@ function frontierGap(frontier, currentPoint){
       return null;
     }
   }
+  // Riskier than the frontier's top end (the single highest-return asset):
+  // that corner earns more for LESS risk, so this mix is strictly beaten.
+  // Returning null here used to print "already on the best line" for
+  // exactly the mixes that were furthest from it.
+  const top=frontier[frontier.length-1];
+  if(top && currentPoint.vol>top.vol){
+    const gapPct = top.ret - currentPoint.ret;
+    if(gapPct > 0.0015) return {frontierRetHere: top.ret, gapPct};
+  }
   return null;
 }
 // Same interpolation as frontierGap but unconditional (no "is this
@@ -2497,7 +2496,7 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf){
   const markLine = gap ? {
     silent:true, symbol:['none','none'],
     lineStyle:{color:'#14283F', type:'dashed', width:1.5, opacity:.6},
-    label:{formatter:`+${(gap.gapPct*100).toFixed(1)}% possible`, color:'#14283F', fontFamily:"'Spline Sans Mono',monospace", fontSize:10, position:'end'},
+    label:{formatter:`+${(gap.gapPct*100).toFixed(1)}% possible`, color:'#14283F', fontFamily:"'Spline Sans Mono',monospace", fontSize:10, fontWeight:700, position:'end', distance:6, backgroundColor:'rgba(255,255,255,.85)', padding:[2,4], borderRadius:3},
     data:[[{coord:[currentPoint.vol, currentPoint.ret]}, {coord:[currentPoint.vol, gap.frontierRetHere]}]],
   } : undefined;
   const pct=v=>(v*100).toFixed(2)+'%';
@@ -2543,7 +2542,7 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf){
     series:[
       { name:'Cloud', type:'scatter', data:cloud.map(p=>[p.vol,p.ret]), symbolSize:6,
         itemStyle:{color:'rgba(37,87,199,.14)'}, emphasis:{itemStyle:{color:'rgba(37,87,199,.6)'}}, z:1 },
-      { name:'Frontier', type:'line', data:frontier.map(p=>[p.vol,p.ret]), smooth:.3, symbol:'circle', symbolSize:6,
+      { name:'Frontier', type:'line', data:frontier.map(p=>[p.vol,p.ret]), smooth:.3, symbol:'circle', symbolSize:4,
         showSymbol:true, itemStyle:{color:'#2557C7'}, lineStyle:{color:'#2557C7', width:2.25},
         areaStyle:{color:{type:'linear', x:0,y:0,x2:0,y2:1, colorStops:[{offset:0,color:'rgba(37,87,199,.28)'},{offset:1,color:'rgba(37,87,199,0)'}]}},
         emphasis:{itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}}, z:2,
@@ -2554,13 +2553,30 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf){
         // Investments chart, which reuses this same option builder but
         // never applies the Portfolio tab's decluttering) always label --
         // showLabel is only ever explicitly set to false, never omitted-as-false.
-        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
+        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"},
+        // Asset labels yield to the two annotated markers below (higher z,
+        // laid out first) instead of printing on top of them.
+        labelLayout:{hideOverlap:true}, z:3 },
       ...(bestSharpe ? [{ name:'Best Sharpe', type:'scatter', data:[[bestSharpe.vol,bestSharpe.ret]], symbolSize:12,
         itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
-        label:{show:true, formatter:'BEST FOR THE RISK', position:'bottom', distance:8, color:'#14283F', fontWeight:700, fontSize:9, fontFamily:"'Spline Sans Mono',monospace"} }] : []),
+        // Values printed on the chart, not only in the tooltip: the whole
+        // point of this marker is "here's a better mix", and a reader who
+        // never hovers should still see what it earns and risks.
+        // Printed on the side AWAY from the user's own marker, so the two
+        // annotated boxes can't overlap each other.
+        label:{show:true, position:bestSharpe.vol<=currentPoint.vol?'left':'right', distance:10, fontFamily:"'Spline Sans Mono',monospace",
+          formatter:`{t|BEST FOR THE RISK}\n{v|${(bestSharpe.ret*100).toFixed(1)}% · ${(bestSharpe.vol*100).toFixed(1)}% risk}`,
+          backgroundColor:'rgba(255,255,255,.85)', padding:[3,5], borderRadius:3,
+          rich:{t:{color:'#14283F', fontWeight:700, fontSize:9}, v:{color:'rgba(20,40,63,.75)', fontSize:9.5, padding:[2,0,0,0]}}},
+        labelLayout:{moveOverlap:'shiftY'} }] : []),
       { name:'Current mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:18,
         itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, silent:true, z:4,
-        label:{show:true, formatter:'YOUR MIX', position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
+        // Below the ring when there's a gap arrow (its "+x% possible" label
+        // sits at the top end), so the two never print on each other.
+        label:{show:true, position:gap?'bottom':'left', distance:10, fontFamily:"'Spline Sans Mono',monospace",
+          formatter:`{t|YOUR MIX}\n{v|${(currentPoint.ret*100).toFixed(1)}% · ${(currentPoint.vol*100).toFixed(1)}% risk}`,
+          backgroundColor:'rgba(255,255,255,.85)', padding:[3,5], borderRadius:3,
+          rich:{t:{color:'#D97757', fontWeight:700, fontSize:10}, v:{color:'#B85C3E', fontSize:9.5, padding:[2,0,0,0]}}} },
       { name:'Current mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
         itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:4 },
     ],
@@ -2931,7 +2947,13 @@ function riskCompositionBar(decomp, concentratedDecomp, chartId, h){
 }
 function renderRiskBarOption(chartId, decomp, concentratedDecomp){
   const sysPct=decomp.systematicPct*100, unsysPct=decomp.unsystematicPct*100;
-  const markerPct=concentratedDecomp.unsystematicPct*100; // where 100%-in-top-holding would sit, for reference
+  // The bar is a 100% split: systematic share from the left, unsystematic
+  // filling the rest. The reference marker is where that split's BOUNDARY
+  // would sit if everything were in the biggest holding -- i.e. at the
+  // concentrated mix's systematic share. It used to be placed at the
+  // unsystematic share, which put it at the wrong end of the bar (x=0 for
+  // the default mix, label clipped off the left edge).
+  const markerPct=concentratedDecomp.systematicPct*100;
   initChart(chartId, {
     grid:{left:4,right:4,top:16,bottom:26,containLabel:false},
     xAxis:{type:'value', max:100, show:false},
@@ -2946,7 +2968,7 @@ function renderRiskBarOption(chartId, decomp, concentratedDecomp){
         itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#8FC79E'},{offset:1,color:'#5FA875'}]}, borderRadius:[3,0,0,3]},
         label:{show:sysPct>14, formatter:()=>sysPct.toFixed(0)+'%', color:'#FFFFFF', fontWeight:700, fontFamily:"'Spline Sans Mono',monospace", position:'inside'},
         markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'#14283F', type:'dashed', width:1.5},
-          label:{formatter:'if 100% in your biggest holding', position:'end', color:'rgba(20,40,63,.55)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"},
+          label:{formatter:`all in biggest holding: ${markerPct.toFixed(0)}% market`, position:'end', distance:3, align:markerPct>70?'right':(markerPct<30?'left':'center'), color:'rgba(20,40,63,.7)', fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"},
           data:[{xAxis:markerPct}]} },
       { name:'Unsystematic', type:'bar', stack:'risk', data:[unsysPct], barWidth:30,
         itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#E8977A'},{offset:1,color:'#D97757'}]}, borderRadius:[0,3,3,0]},
@@ -4655,9 +4677,14 @@ function liveOutputHTML(ready, rfPct){
   // Same "current mix" return the stat cards above already show (portfolioReturn
   // over either the two-asset slider weight or the selected multi-asset weights),
   // recomputed here so it can be carried into the Retirement tab's growth field.
+  // Carried as the COMPOUNDED rate (mu - sigma^2/2, the same
+  // "Compounded equivalent" the stat cards show), not the arithmetic
+  // expected return: the Retirement tab compounds whatever it's given
+  // year over year, so handing it the arithmetic figure overstated the
+  // projected corpus (19.2% vs 17.9% on a typical equity pair).
   const mixRet = isTwoAsset
-    ? (() => { const [a,b]=ready; const sa=L.live.data[a.key].stats, sb=L.live.data[b.key].stats; const w=L.live.weight/100; return portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]); })()
-    : (() => { let weights=L.live.selectedWeights; if(!weights||weights.length!==multiComputed.items.length) weights=multiComputed.items.map(()=>1/multiComputed.items.length); return portfolioReturn(weights, multiComputed.returns); })();
+    ? (() => { const [a,b]=ready; const sa=L.live.data[a.key].stats, sb=L.live.data[b.key].stats; const w=L.live.weight/100; const {corr}=computeCovarianceMatrix([sa,sb]); const r=portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]); const v=portfolioVariance([w,1-w],[sa.annualVol,sb.annualVol],corr); return r-v/2; })()
+    : (() => { let weights=L.live.selectedWeights; if(!weights||weights.length!==multiComputed.items.length) weights=multiComputed.items.map(()=>1/multiComputed.items.length); const r=portfolioReturn(weights, multiComputed.returns); const v=portfolioVariance(weights, multiComputed.vols, multiComputed.corr); return r-v/2; })();
   return errorBanner + (isTwoAsset ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(multiComputed, rfPct))
     + instrumentDropdown
     + explainDropdown('Why do you show two different return numbers?', `
