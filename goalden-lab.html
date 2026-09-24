@@ -188,7 +188,11 @@ main.enter{animation:mainEnter .3s ease-out}
    that side effect. */
 @keyframes mainEnter{from{opacity:0}to{opacity:1}}
 .grid{display:grid;grid-template-columns:340px 1fr;gap:26px;align-items:start}
-@media(max-width:860px){.grid{grid-template-columns:1fr}}
+/* minmax(0,1fr), not 1fr: a bare 1fr track is minmax(auto,1fr), which can't
+   shrink below its widest child's min-content -- a 3-across stat row or a
+   long unbroken button label pushed the whole page to 449-623px on a 412px
+   phone, so the browser zoomed out and clipped the edges. */
+@media(max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}.grid>*{min-width:0}}
 
 /* --- assumption panel --- */
 /* A colour-coded left edge marks this as the "controls" column at a
@@ -276,7 +280,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 
 /* --- output area --- */
 .output{display:flex;flex-direction:column;gap:18px}
-.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.stat-row>.stat{min-width:0;overflow-wrap:anywhere}
+@media(max-width:560px){.stat-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* A flat 1px border in one uniform grey read as barely-there -- a
    left-edge accent in the same blue as the rest of the app's emphasis
    colour gives every parameter box a clear "read me" edge, and a
@@ -709,7 +715,7 @@ body.stmt-page main{max-width:1600px}
 #stmtToLiveCard{grid-column:1/-1}
 .stmt-footer{grid-column:1/-1}
 @media(max-width:860px){
-  .stmt-main{grid-template-columns:1fr}
+  .stmt-main{grid-template-columns:minmax(0,1fr)}
   .stmt-main>*{grid-column:1/-1!important}
   #stmtNpCfoCard #stmtProfitCashChart{height:260px}
   #stmtWaterfallCard #stmtWaterfallChart{height:260px}
@@ -718,6 +724,9 @@ body.stmt-page main{max-width:1600px}
 
 .stmt-topbar{background:#fff;border:1px solid rgba(20,40,63,.07);border-radius:14px;box-shadow:0 1px 2px rgba(20,40,63,.04),0 10px 28px -18px rgba(20,40,63,.22)}
 .stmt-topbar-head{display:flex;align-items:center;gap:12px;padding:6px 8px 6px 16px}
+/* On a phone the title toggle plus three nowrap action buttons came to
+   ~513px in a 412px screen; let the buttons drop to their own line. */
+@media(max-width:560px){.stmt-topbar-head{flex-wrap:wrap;row-gap:4px}.stmt-topbar-head .stmt-topbar-toggle{flex-basis:100%}.stmt-shell>*{min-width:0}}
 .stmt-topbar-toggle{flex:1;display:flex;align-items:baseline;gap:12px;min-width:0;background:none;border:none;padding:10px 4px;cursor:pointer;text-align:left;font:inherit}
 .stmt-topbar-title{font-family:'Newsreader',serif;font-weight:600;font-size:15px;color:var(--ink2);flex-shrink:0}
 .stmt-topbar-current{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1965,6 +1974,16 @@ function renderDrawdownChartOption(chartId, rows, c){
   });
 }
 
+// Shared on-chart value tag: the owner's standing complaint was that
+// every number sat behind a hover, which also means nothing on a phone or
+// in a printed PDF. Dark AA text colours only -- the pastel series colours
+// (#8FC79E 1.8:1, #E8977A 2.2:1) are fills, never text.
+const CHART_TEXT={ink:'#14283F', blue:'#1E4FBE', good:'#256F55', bad:'#9C4A2C', muted:'#56698A'};
+function valueTag(text, color, position){
+  return {show:true, formatter:text, position:position||'left', distance:6, color:color||CHART_TEXT.ink,
+    fontFamily:"'Spline Sans Mono',monospace", fontSize:11, fontWeight:600,
+    backgroundColor:'rgba(255,255,255,.88)', padding:[2,5], borderRadius:3};
+}
 function mountainChart(rows, chartId, h){
   if(h===undefined)h=200;
   deferChartInit(()=>renderMountainChartOption(chartId, rows));
@@ -1972,20 +1991,32 @@ function mountainChart(rows, chartId, h){
 }
 function renderMountainChartOption(chartId, rows){
   const c=cfg();
+  const n=rows.length, last=rows[n-1]||{closeBal:0,contributed:0};
+  const growth=Math.max(0,last.closeBal-last.contributed);
+  const growthShare=last.closeBal>0?Math.round(growth/last.closeBal*100):0;
   initChart(chartId, {
-    grid:{left:4,right:4,top:8,bottom:4,containLabel:false},
-    xAxis:{type:'category', data:rows.map((r,i)=>r.year!==undefined?r.year:i+1), show:false, boundaryGap:false},
+    grid:{left:4,right:4,top:28,bottom:22,containLabel:false},
+    xAxis:{type:'category', data:rows.map((r,i)=>r.year!==undefined?r.year:i+1), boundaryGap:false,
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, formatter:v=>'Year '+v, color:CHART_TEXT.muted, fontSize:10.5, alignMinLabel:'left', alignMaxLabel:'right'},
+      axisLine:{show:false}, axisTick:{show:false}},
     yAxis:{type:'value', show:false, min:0},
     tooltip:{trigger:'axis', formatter(params){
       const grown=params.find(p=>p.seriesName==='Grows to'), contrib=params.find(p=>p.seriesName==='Contributed');
       return `Year ${grown.axisValueLabel}<br/>Grows to: ${c.compact(grown.value)}<br/>Contributed: ${c.compact(contrib?contrib.value:0)}`;
     }},
+    // What the pot ends at, what you put in, and how much of it is growth
+    // -- printed on the chart itself.
+    graphic:[{type:'text', left:4, top:4, style:{text:`Growth is ${growthShare}% of the final pot`, fill:CHART_TEXT.good, fontSize:11.5, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace"}}],
     series:[
       { name:'Contributed', type:'line', data:rows.map(r=>r.contributed), showSymbol:false,
-        lineStyle:{opacity:0}, areaStyle:{color:'rgba(20,40,63,.14)'}, z:1 },
+        lineStyle:{opacity:0}, areaStyle:{color:'rgba(20,40,63,.14)'}, z:1,
+        markPoint:n?{symbol:'circle', symbolSize:6, itemStyle:{color:CHART_TEXT.muted}, silent:true,
+          data:[{coord:[n-1,last.contributed]}], label:valueTag('You put in '+c.compact(last.contributed), CHART_TEXT.ink)}:undefined },
       { name:'Grows to', type:'line', data:rows.map(r=>r.closeBal), showSymbol:false,
         lineStyle:{color:'#2557C7', width:1.5},
-        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(37,87,199,.8)'},{offset:1,color:'rgba(37,87,199,.06)'}]}}, z:2 },
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(37,87,199,.8)'},{offset:1,color:'rgba(37,87,199,.06)'}]}}, z:2,
+        markPoint:n?{symbol:'circle', symbolSize:7, itemStyle:{color:'#2557C7'}, silent:true,
+          data:[{coord:[n-1,last.closeBal]}], label:valueTag('Grows to '+c.compact(last.closeBal), CHART_TEXT.blue)}:undefined },
     ],
   });
 }
@@ -1997,18 +2028,32 @@ function twinFatesChart(rowsA, rowsB, chartId, h){
 }
 function renderTwinFatesChartOption(chartId, rowsA, rowsB){
   const c=cfg();
+  // Callers pass accumulationSchedule()'s MONTHLY rows, which made the
+  // tooltip read "Year 360". Keep one point per year (each 12th month).
+  const yearly=rows=>rows.length>60 ? rows.filter((_,i)=>(i+1)%12===0) : rows;
+  const A=yearly(rowsA), B=yearly(rowsB), n=A.length;
+  // Where the step-up pot trails the flat one most: the real cost of
+  // starting smaller, which two converging curves otherwise hide.
+  let gapIdx=0, gap=0;
+  A.forEach((r,i)=>{ const g=r.closeBal-(B[i]?B[i].closeBal:0); if(g>gap){ gap=g; gapIdx=i; } });
   initChart(chartId, {
-    grid:{left:4,right:4,top:8,bottom:4,containLabel:false},
-    xAxis:{type:'category', data:rowsA.map((r,i)=>i+1), show:false, boundaryGap:false},
+    grid:{left:4,right:4,top:10,bottom:22,containLabel:false},
+    xAxis:{type:'category', data:A.map((r,i)=>i+1), boundaryGap:false,
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, formatter:v=>'Year '+v, color:CHART_TEXT.muted, fontSize:10.5, alignMinLabel:'left', alignMaxLabel:'right'},
+      axisLine:{show:false}, axisTick:{show:false}},
     yAxis:{type:'value', show:false},
     tooltip:{trigger:'axis', formatter(params){
       const a=params.find(p=>p.seriesName==='Flat SIP'), b=params.find(p=>p.seriesName==='Step-up SIP');
       return `Year ${a.axisValueLabel}<br/>Flat: ${c.compact(a.value)}<br/>Step-up: ${c.compact(b.value)}`;
     }},
     series:[
-      { name:'Flat SIP', type:'line', data:rowsA.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#E8977A', width:2},
-        markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(20,40,63,.3)', type:'dashed'}, data:[{yAxis:0}]}, z:2 },
-      { name:'Step-up SIP', type:'line', data:rowsB.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#8FC79E', width:2}, z:2 },
+      { name:'Flat SIP', type:'line', data:A.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#E8977A', width:2},
+        markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(20,40,63,.3)', type:'dashed'}, data:[{yAxis:0}]},
+        markPoint:(n && gap>0)?{symbol:'circle', symbolSize:6, itemStyle:{color:'#D97757'}, silent:true,
+          data:[{coord:[gapIdx, A[gapIdx].closeBal]}], label:valueTag(`Year ${gapIdx+1}: step-up pot ${c.compact(gap)} behind`, CHART_TEXT.bad, gapIdx>n*0.6?'left':'top')}:undefined, z:2 },
+      { name:'Step-up SIP', type:'line', data:B.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#5FA875', width:2}, z:2,
+        markPoint:n?{symbol:'circle', symbolSize:7, itemStyle:{color:'#256F55'}, silent:true,
+          data:[{coord:[n-1, B[n-1].closeBal]}], label:valueTag('Both reach '+c.compact(B[n-1].closeBal), CHART_TEXT.good)}:undefined },
     ],
   });
 }
@@ -2359,7 +2404,7 @@ function renderStepUp(){
     </div>
     <div class="card is-primary">
       <h4>Both reach the same target, at a different starting cost</h4>
-      <div class="cap">Red = flat SIP · Green = step-up SIP, rising ${s.stepUpPct}%/yr</div>
+      <div class="cap">Orange line = flat SIP · green line = step-up SIP, rising ${s.stepUpPct}%/yr</div>
       ${twinFatesChart(
         flatAcc.map(r=>({openBal:0,closeBal:r.closeBal})),
         stepAcc.map(r=>({openBal:0,closeBal:r.closeBal})),
@@ -2776,24 +2821,37 @@ function renderFanChartOption(chartId, yearBands, yMax){
   });
 }
 
-function jointTimelineChart(rows, chartId, h){
-  if(h===undefined)h=160;
-  deferChartInit(()=>renderJointTimelineChartOption(chartId, rows));
+function jointTimelineChart(rows, chartId, h, children){
+  if(h===undefined)h=180;
+  deferChartInit(()=>renderJointTimelineChartOption(chartId, rows, children));
   return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
 }
-function renderJointTimelineChartOption(chartId, rows){
+function renderJointTimelineChartOption(chartId, rows, children){
   const c=cfg();
+  const n=rows.length;
   const feePoints = rows.map((r,i)=>r.fees>0 ? [i, r.close] : null).filter(Boolean);
+  let peakIdx=0; rows.forEach((r,i)=>{ if(r.close>rows[peakIdx].close) peakIdx=i; });
+  // Each child's college years shaded and named, so "why does the balance
+  // fall here" is answered on the chart instead of in a tooltip.
+  const areas=(children||[]).map((ch,k)=>[{xAxis:ch.yearsToStart, name:'Child '+(k+1)+' in college',
+      itemStyle:{color:k%2?'rgba(217,119,87,.10)':'rgba(95,168,117,.12)'},
+      label:{color:k%2?CHART_TEXT.bad:CHART_TEXT.good, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace", position:'insideBottom'}},
+    {xAxis:Math.min(n-1, ch.yearsToStart+ch.duration-1)}]);
   const series=[
     { name:'Balance', type:'line', data:rows.map(r=>r.close), showSymbol:false,
       lineStyle:{color:'#2557C7', width:1.75},
-      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(37,87,199,.55)'},{offset:1,color:'rgba(37,87,199,.05)'}]}}, z:1 },
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(37,87,199,.55)'},{offset:1,color:'rgba(37,87,199,.05)'}]}}, z:1,
+      markArea:areas.length?{silent:true, data:areas}:undefined,
+      markPoint:n?{symbol:'circle', symbolSize:7, itemStyle:{color:'#2557C7'}, silent:true,
+        data:[{coord:[peakIdx, rows[peakIdx].close]}], label:valueTag('Peak '+c.compact(rows[peakIdx].close)+', yr '+(peakIdx+1), CHART_TEXT.blue, peakIdx>n*0.6?'left':(peakIdx<n*0.25?'right':'top'))}:undefined },
   ];
-  if(feePoints.length) series.push({ name:'Fee withdrawal', type:'scatter', data:feePoints, symbolSize:7, itemStyle:{color:'#E8977A'}, z:2,
+  if(feePoints.length) series.push({ name:'Fee withdrawal', type:'scatter', data:feePoints, symbolSize:7, itemStyle:{color:'#D97757'}, z:2,
     tooltip:{formatter:p=>`Fee withdrawal<br/>Balance: ${c.compact(p.value[1])}`} });
   initChart(chartId, {
-    grid:{left:4,right:4,top:8,bottom:4,containLabel:false},
-    xAxis:{type:'category', data:rows.map((r,i)=>i+1), show:false, boundaryGap:false},
+    grid:{left:4,right:4,top:22,bottom:22,containLabel:false},
+    xAxis:{type:'category', data:rows.map((r,i)=>i+1), boundaryGap:false,
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, formatter:v=>'Year '+v, color:CHART_TEXT.muted, fontSize:10.5, alignMinLabel:'left', alignMaxLabel:'right'},
+      axisLine:{show:false}, axisTick:{show:false}},
     yAxis:{type:'value', show:false, min:0},
     tooltip:{trigger:'axis', formatter(params){
       const p=params.find(pp=>pp.seriesName==='Balance')||params[0];
@@ -2819,7 +2877,7 @@ function renderJoint(){
   const pvGap = Math.abs(cmp.sepPV-cmp.jointPV);
 
   const timelineRows=joint.rows;
-  const timelineChart = jointTimelineChart(timelineRows, 'joint-timeline');
+  const timelineChart = jointTimelineChart(timelineRows, 'joint-timeline', 200, j.children);
 
   const childRows = j.children.map((ch,i)=>{
     if(j.editingChild===i){
@@ -4372,7 +4430,25 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
   const volTol=(Math.max(...vols)-Math.min(...vols))*0.04 || 0.001;
   const retTol=(Math.max(...rets)-Math.min(...rets))*0.04 || 0.001;
   const near=(p,q)=>Math.abs(p.vol-q.vol)<volTol && Math.abs(p.ret-q.ret)<retTol;
-  const showSafest = minVarPoint && !near(minVarPoint,tangencyPoint) && !assetPoints.some(ap=>near(minVarPoint,{vol:ap.vol,ret:ap.ret}));
+  // Also suppressed when it sits on YOUR MIX -- "your mix" starts at the
+  // safest mix, and the SAFEST label used to print on top of its ring.
+  const showSafest = minVarPoint && !near(minVarPoint,tangencyPoint) && !near(minVarPoint,currentPoint) && !assetPoints.some(ap=>near(minVarPoint,{vol:ap.vol,ret:ap.ret}));
+  // Values printed on the markers, not only in tooltips (same convention
+  // as the Build a Portfolio chart). Labels go on opposite sides of the two
+  // key markers so they can't collide.
+  const rv=p=>`${(p.ret*100).toFixed(1)}% · ${(p.vol*100).toFixed(1)}% risk`;
+  const [labA,labB]=assetPoints.map(a=>a.label);
+  const tanSplit = (typeof tangencyPoint.w==='number' && labA && labB) ? `\n{s|${Math.round(tangencyPoint.w*100)}% ${labA} / ${100-Math.round(tangencyPoint.w*100)}% ${labB}}` : '';
+  const tanLeft = tangencyPoint.vol<=currentPoint.vol;
+  // Placement: SAFEST is the left-most point of the curve, so its label
+  // always goes left. BEST BALANCE goes on the side away from YOUR MIX.
+  // YOUR MIX goes right -- or below when BEST BALANCE's label is also on
+  // the right at nearly the same height.
+  const retSpan=(Math.max(...rets, currentPoint.ret, tangencyPoint.ret)-Math.min(...rets, cal[0]?cal[0].ret:0))||0.01;
+  const yourPos = (!tanLeft && Math.abs(tangencyPoint.ret-currentPoint.ret)<retSpan*0.18) ? 'bottom' : 'right';
+  // SAFEST is the curve's left-most tip, so its label goes further left,
+  // into empty space; a semi-transparent box keeps any line underneath visible.
+  const boxed={backgroundColor:'rgba(255,255,255,.6)', padding:[3,5], borderRadius:3, fontFamily:"'Spline Sans Mono',monospace"};
   // capitalAllocationLine() always starts its sweep at leverage 0, i.e.
   // cal[0] is exactly {vol:0, ret:rf} -- reading it back out here instead
   // of threading a separate rf argument through the whole call chain.
@@ -4415,23 +4491,23 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         lineStyle:{color:'#14283F', width:1.5, type:'dashed'}, z:1 },
       { name:'Risk-free', type:'scatter', data:[[rfPoint.vol,rfPoint.ret]], symbolSize:8,
         itemStyle:{color:'#14283F', borderColor:'#14283F', borderWidth:1}, z:4,
-        label:{show:true, formatter:`RISK-FREE ${(rfPoint.ret*100).toFixed(1)}%`, position:'right', distance:8, color:'rgba(20,40,63,.6)', fontWeight:700, fontSize:8.5, fontFamily:"'Spline Sans Mono',monospace"} },
+        label:{show:true, formatter:`RISK-FREE ${(rfPoint.ret*100).toFixed(1)}%`, position:'right', distance:8, color:'#56698A', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
         itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1},
         // Points built without a showLabel flag (e.g. the Test Real
         // Investments chart, which reuses this same option builder but
         // never applies the Portfolio tab's decluttering) always label --
         // showLabel is only ever explicitly set to false, never omitted-as-false.
-        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
+        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? `${ap.label} ${(ap.ret*100).toFixed(1)}%` : ''; }, position:'top', color:'#56698A', fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{hideOverlap:true}, z:3 },
       { name:'Tangency', type:'scatter', data:[[tangencyPoint.vol,tangencyPoint.ret]], symbolSize:11,
         itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
-        label:{show:true, formatter:'BEST BALANCE', position:'bottom', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} },
+        label:Object.assign({show:true, position:tanLeft?'left':'right', distance:10, formatter:`{t|BEST BALANCE}\n{v|${rv(tangencyPoint)}}${tanSplit}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:9.5}, v:{color:'#14283F', fontSize:9.5, padding:[2,0,0,0]}, s:{color:'#56698A', fontSize:9, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
       ...(showSafest ? [{ name:'Safest', type:'scatter', data:[[minVarPoint.vol,minVarPoint.ret]], symbolSize:10,
         itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1.5}, z:4,
-        label:{show:true, formatter:'SAFEST', position:'top', distance:9, color:'#14283F', fontWeight:700, fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"} }] : []),
+        label:Object.assign({show:true, position:'left', distance:10, formatter:`{t|SAFEST}\n{v|${rv(minVarPoint)}}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:9.5}, v:{color:'#14283F', fontSize:9.5, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} }] : []),
       { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
         itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, z:5,
-        label:{show:true, formatter:'YOUR MIX', position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
+        label:Object.assign({show:true, position:yourPos, distance:12, formatter:`{t|YOUR MIX}\n{v|${rv(currentPoint)}}`, rich:{t:{color:'#9C4A2C', fontWeight:700, fontSize:10}, v:{color:'#9C4A2C', fontSize:9.5, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
       { name:'Your mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
         itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:5 },
     ],
@@ -4696,7 +4772,7 @@ function liveTwoAssetHTML(items, rfPct){
   <div class="card is-primary">
     <h4>${a.symbol} / ${b.symbol}${infoIcon('Every point on the blue curve is one weight split between these two instruments, swept from 100% '+b.symbol+' to 100% '+a.symbol+'. The dashed line is the Capital Allocation Line: the risk-free rate blended with the best-Sharpe (tangency) mix, extended past 100% to show what borrowing at the risk-free rate to lever up would do.')}</h4>
     <div class="cap">Annualised from ${sa.n} and ${sb.n} real daily observations. Higher up is more return, further right is more risk.</div>
-    ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'live-frontier-echart', onLiveFrontierPick, `${(w*100).toFixed(0)}% ${a.symbol} / ${((1-w)*100).toFixed(0)}% ${b.symbol}`, {vol:minVarVol,ret:minVarRet})}
+    ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet,w:wTan}, 'live-frontier-echart', onLiveFrontierPick, `${(w*100).toFixed(0)}% ${a.symbol} / ${((1-w)*100).toFixed(0)}% ${b.symbol}`, {vol:minVarVol,ret:minVarRet})}
     <div class="gr-note" style="margin-top:10px">${liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentSharpe, wTan, tanVol, tanRet, rf, w, wMinVar, sa.annualReturn, sa.annualVol, sb.annualReturn, sb.annualVol)}</div>
     ${advisorAskLink('Explain this chart to me')}
   </div>
@@ -8790,7 +8866,7 @@ function resultCanvasLiveFrontier() {
       { label:a.symbol, fullLabel:L.live.data[a.key].label, vol:sa.annualVol, ret:sa.annualReturn },
       { label:b.symbol, fullLabel:L.live.data[b.key].label, vol:sb.annualVol, ret:sb.annualReturn },
     ];
-    return { ok:true, html: liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet}, 'cv-live-frontier', onLiveFrontierPick, (w*100).toFixed(0)+'% '+a.symbol+' / '+((1-w)*100).toFixed(0)+'% '+b.symbol, {vol:minVarVol,ret:minVarRet}) };
+    return { ok:true, html: liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet,w:wTan}, 'cv-live-frontier', onLiveFrontierPick, (w*100).toFixed(0)+'% '+a.symbol+' / '+((1-w)*100).toFixed(0)+'% '+b.symbol, {vol:minVarVol,ret:minVarRet}) };
   }
   const lm = liveComputeMulti();
   const assetPoints = lm.items.map((it,i)=>({ vol:lm.vols[i], ret:lm.returns[i], label:it.symbol, fullLabel:L.live.data[it.key].label }));
@@ -8869,7 +8945,7 @@ function resultCanvasJoint() {
       '<div class="stat"><div class="stat-label">Separate pots</div><div class="stat-value">'+c.compact(cmp.sepTotal)+'</div><div class="stat-sub">total, '+cmp.phases.map(ph=>c.compact(ph.amount)+'/yr &times; '+ph.years+' yrs').join(', then ')+'</div></div>' +
       '<div class="stat"><div class="stat-label">Cheaper (present value)</div><div class="stat-value">'+(cmp.jointPV<cmp.sepPV?'Joint':'Separate')+'</div><div class="stat-sub">by '+c.compact(Math.abs(cmp.sepPV-cmp.jointPV))+'</div></div>' +
     '</div>' +
-    '<div class="card"><h4>One pool, two college timelines</h4>'+jointTimelineChart(joint.rows, 'cv-joint-timeline')+'</div>'
+    '<div class="card"><h4>One pool, two college timelines</h4>'+jointTimelineChart(joint.rows, 'cv-joint-timeline', 180, j.children)+'</div>'
   };
 }
 function resultCanvasHealth() {

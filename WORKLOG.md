@@ -1905,3 +1905,35 @@ Changes made by Claude Code (Chief), from the D1 Retirement division's report. E
   tests currently red on its unfinished work, 97/97 green on committed
   code) and advisor.js / worker.js / local_server.py / goalden-door2.html
   (D5 implementer).
+
+## 2026-09-24 - Claude Code (cloud session, review-board loop, iteration 3)
+Changes made by Claude Code (Chief), from the D4 Visual/Data-Viz division's report. Each change was verified.
+- goalden-lab.html mobile layout: `.grid` used `1fr` on phones, which can't
+  shrink below its widest child's min-content, so at 412px the page was
+  449px (Retirement), 623px (Portfolio), 1554px (Read the Company) and
+  phones zoomed out. Now `minmax(0,1fr)`, `.stat-row` goes to 2 columns
+  under 560px, and the Read the Company top bar wraps its buttons.
+  Verified: Pixel 7 emulation, all 12 tabs now exactly 412px wide.
+- goalden-lab.html charts that showed numbers only on hover now print them:
+  - Growth ("mountain") chart: final pot, what you put in, and "growth is
+    N% of the final pot", plus year labels. Checked: ₹3.71 Cr vs ₹64.20 L
+    gives 83%.
+  - Step-up twin fates: "Both reach ₹X" plus the year and size of the
+    biggest gap. Monthly rows are bucketed to years; the tooltip used to
+    say "Year 360".
+  - Joint timeline: peak balance (₹47.52 L, year 14, checked against the
+    solver's rows) and shaded, named college years for each child (fee
+    years 9-12 and 15-18 match the solver).
+  - Test Real Investments 2-asset chart: YOUR MIX, BEST BALANCE (with the
+    split, e.g. "99% RELIANCE.NS / 1% TCS.NS") and SAFEST show return and
+    risk. SAFEST no longer prints on top of YOUR MIX. Asset labels show
+    their return. Chart text is at least 10px. Checked: YOUR MIX at a 90/10
+    weight = 0.9 x 14.6% + 0.1 x 6.8% = 13.8%, as labelled.
+- New shared helpers `CHART_TEXT` (AA-contrast text colours) and
+  `valueTag()`; pastel series colours are now fill-only on these charts.
+- Step-up caption now names the series by line colour correctly (was
+  "Red/Green" for orange/green lines).
+- Remaining from D4: AA text tokens app-wide (D4-04/06), print CSS
+  (D4-05), porting the value labels to Levels 1/2 (goalden.html,
+  goalden-door2.html), the radar-chart veto (D4-09), the step-up
+  contribution-path chart and the FX bridge (D4-12/13).
