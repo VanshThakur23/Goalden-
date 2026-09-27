@@ -253,6 +253,10 @@ main.enter{animation:mainEnter .3s ease-out}
   .grid.panel-collapsed > .panel{padding:12px 20px}
 }
 .panel h3{font-size:16px;font-weight:600;color:var(--paper);margin-bottom:16px}
+/* .cap had rules inside .card and the home header but none inside a
+   .panel, so panel captions (Build a Portfolio, Test Real Investments)
+   fell back to the browser's 16px and outweighed the panel's own h3. */
+.panel .cap{font-size:12.5px;line-height:1.55;color:rgba(20,40,63,.74)}
 .field{margin-bottom:18px}
 .slider-row{display:flex;align-items:center;gap:10px}
 .slider-row input[type=range]{flex:1;accent-color:var(--gold);height:20px}
@@ -531,7 +535,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .pf-total-banner{display:flex;align-items:baseline;justify-content:space-between;background:rgba(37,87,199,.1);border:1px solid rgba(37,87,199,.35);border-radius:8px;padding:10px 14px;margin-bottom:16px}
 .pf-total-banner .ttl-label{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.74);letter-spacing:.04em}
 .pf-total-banner .ttl-value{font-family:'Spline Sans Mono',monospace;font-size:16px;font-weight:600;color:var(--gold)}
-.port-asset-meta{display:block;font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(20,40,63,.74);font-weight:400;margin-top:2px;letter-spacing:.01em}
+.port-asset-meta{display:block;font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(20,40,63,.74);font-weight:400;margin-top:2px;letter-spacing:.01em;text-transform:none;line-height:1.45}
+/* .field label is a flex row (name left, value right), which put this
+   "display:block" meta line BESIDE the fund name as a squeezed second
+   column, overflowing the panel. A column label keeps it underneath. */
+.field label.port-asset-label{flex-direction:column;justify-content:flex-start}
 .port-pct-row{display:flex;align-items:baseline;gap:6px;margin:6px 0 5px}
 .port-pct-badge{font-family:'Spline Sans Mono',monospace;font-size:15px;font-weight:600;color:var(--paper)}
 .port-pct-of{font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(20,40,63,.74)}
@@ -1383,13 +1391,18 @@ const REGIME_PRESETS = {
 // the rest of Goalden — deliberately NOT any specific AMC scheme's live
 // performance, because this app has no market data feed and pretending
 // otherwise would be a bigger honesty problem than the loss of precision.
+// Actively managed categories get the index's return, not more: over 10
+// years most active funds trail their benchmark after fees (SPIVA India,
+// mid-2026: above 70% in every category, 80.5% for ELSS). Assuming a
+// manager edge here would quietly tilt every "best mix" toward active funds.
+const ACTIVE_FUND_NOTE='Set equal to the Nifty 50 index fund, not higher: over 10 years, more than 70% of active Indian equity funds in every category trailed their benchmark after fees, and 80.5% of ELSS funds did (S&P SPIVA India, mid-2026).';
 const PORTFOLIO_ASSETS_IN = [
   // Growth equity
   {id:'nifty50',  name:'Nifty 50 Index Fund',          cluster:'growth', ret:0.12,  vol:0.18, beta:1.00},
   {id:'next50',   name:'Nifty Next 50 Index Fund',     cluster:'growth', ret:0.135, vol:0.22, beta:1.10},
-  {id:'flexicap', name:'Flexi Cap Fund',               cluster:'growth', ret:0.125, vol:0.19, beta:1.00},
-  {id:'multicap', name:'Multi Cap Fund',               cluster:'growth', ret:0.13,  vol:0.20, beta:1.05},
-  {id:'elss',     name:'ELSS Tax Saver Fund',          cluster:'growth', ret:0.125, vol:0.19, beta:1.00},
+  {id:'flexicap', name:'Flexi Cap Fund',               cluster:'growth', ret:0.12,  vol:0.19, beta:1.00, note:ACTIVE_FUND_NOTE, tag:'same as the index: no manager edge assumed'},
+  {id:'multicap', name:'Multi Cap Fund',               cluster:'growth', ret:0.13,  vol:0.20, beta:1.05, tag:'above the index only for its mid/small-cap risk', note:'Above the Nifty 50 only because SEBI requires at least 25% each in mid and small caps, which carry more risk. No fund-manager skill is assumed.'},
+  {id:'elss',     name:'ELSS Tax Saver Fund',          cluster:'growth', ret:0.12,  vol:0.19, beta:1.00, note:ACTIVE_FUND_NOTE, tag:'same as the index: no manager edge assumed'},
   {id:'mid',      name:'Mid Cap Fund (Midcap 150)',    cluster:'growth', ret:0.14,  vol:0.22, beta:1.15},
   {id:'small',    name:'Small Cap Fund (Smallcap 250)',cluster:'growth', ret:0.155, vol:0.28, beta:1.30},
   // Income-oriented equity
@@ -3670,7 +3683,7 @@ function renderPortfolio(){
     idxs.forEach(i=>{
       const a=assets[i];
       fields+=`<div class="field">
-        <label>${a.name}<span class="port-asset-meta">typically ${(a.ret*100).toFixed(1)}%/yr${infoIcon('The illustrative long-run expected return for this building block, same figure used everywhere else in Goalden. This is what actually moves your overall expected return when you drag its bar.')} &middot; ${(a.vol*100).toFixed(0)}% volatility, how much a bad year here typically swings</span></label>
+        <label class="port-asset-label">${a.name}<span class="port-asset-meta">typically ${(a.ret*100).toFixed(1)}%/yr${infoIcon('The illustrative long-run expected return for this building block, same figure used everywhere else in Goalden. This is what actually moves your overall expected return when you drag its bar.'+(a.note?' '+a.note:''))} &middot; ${(a.vol*100).toFixed(0)}% volatility, how much a bad year here typically swings${a.tag?` &middot; <i>${a.tag}</i>`:''}</span></label>
         <div class="port-pct-row"><span class="port-pct-badge" data-pf-label="${i}">${pct[i]}%</span><span class="port-pct-of">of your total portfolio</span></div>
         <div class="slider-row">
           <input type="range" min="0" max="100" value="${rawW[i]}" data-portidx="${i}">

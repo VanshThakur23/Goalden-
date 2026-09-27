@@ -2483,3 +2483,26 @@ Changes made by Claude Code (Chief). D4-15 and D4-19 from the Visual division.
   Screenshots taken at 1400px and 412px (portfolio, live frontier, growth,
   engine frontier), compared before and after. Tests 111/111, smokes 11/11,
   all 12 Lab tabs render with no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 30: no assumed fund-manager edge)
+Changes made by Claude Code (Chief). D2-14 from the Portfolio division, plus two
+layout bugs found while checking it.
+- goalden-lab.html Build a Portfolio: Flexi Cap and ELSS funds now assume
+  12.0%/yr, the same as the Nifty 50 index fund (they were 12.5%). S&P's
+  SPIVA India mid-2026 scorecard: over 10 years, more than 70% of active
+  funds in every category trailed their benchmark after fees, and 80.5% of
+  ELSS funds did (checked on spglobal.com). Multi Cap stays at 13%: SEBI
+  requires 25% each in mid and small caps, so the extra return is for
+  extra risk, not manager skill. Each row says so on screen ("same as the
+  index: no manager edge assumed"), and the info tooltip cites the source.
+  Effect on preset expected returns: conservative 9.34% -> 9.32%,
+  balanced 10.68% -> 10.63%, aggressive 12.07% -> 11.98%.
+- Panel captions (Build a Portfolio, Test Real Investments) had no font
+  rule inside .panel, so they rendered at the browser's 16px, bigger than
+  the panel title. They are now 12.5px.
+- Fund rows: the description line was meant to sit under the fund name,
+  but the label's flex layout put it beside the name as a squeezed second
+  column that overflowed the panel. Now it stacks underneath.
+- Verified: preset returns recomputed from the page before and after; the
+  tags were read back from the DOM; screenshots at 1400px and 412px.
+  Tests 111/111, smokes 11/11, evals 9/9 (mock), all 12 Lab tabs render with no errors.
