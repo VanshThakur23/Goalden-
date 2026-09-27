@@ -2373,3 +2373,18 @@ Changes made by Claude Code (Chief). D3-16 from the Company Analysis division.
   companies, tests 110/110, smokes 11/11.
 - Noted for later (pre-existing): indexed Bench mode can produce extreme
   values for series with a small or negative base year (dividend payout %).
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 23: indexed Bench)
+Changes made by Claude Code (Chief). Pre-existing bug found while verifying iteration 22.
+- statements-engine.js `benchChartOption`: the indexed view divided by each
+  series' first value, which exploded or flipped sign when that value was
+  negative or near zero (VEDL dividend payout % indexed to -4,400). Each
+  series now indexes from its first positive value that is at least 10% of
+  the series' typical size. A series with no such year is left out of the
+  indexed view and listed in `__notIndexed`; the Lab caption names it and
+  points to the Actual scale. The caption now says each series is indexed
+  at its own first meaningful year (it claimed one common base year).
+- Verified: VEDL range is now -27..430 (was down to -4,400); new unit test
+  (a tiny first value uses the next meaningful base; an all-negative series
+  is excluded and reported). Tests 111/111, smokes 11/11, no errors on six
+  companies.

@@ -1486,3 +1486,17 @@ test('dupontSeries: factors multiply to ROE, and ROE matches screener where repo
   const at = stmt.dupontAttribution(ds[ds.length - 6], ds[ds.length - 1]);
   assert.ok(Math.abs(at.parts.reduce((a, p) => a + p.v, 0) - at.total) < 1e-12);
 });
+
+test('benchChartOption: indexed view never divides by a negative or near-zero base', () => {
+  const pins = [
+    { label: 'A', series: [{ year: 2020, value: 1 }, { year: 2021, value: 40 }, { year: 2022, value: 50 }, { year: 2023, value: 60 }] },
+    { label: 'B', series: [{ year: 2020, value: -5 }, { year: 2021, value: -2 }, { year: 2022, value: -8 }, { year: 2023, value: -1 }] },
+  ];
+  const o = stmt.benchChartOption(pins, true);
+  // A: 1 is under 10% of its typical size, so the base is 40 (FY21), not 1.
+  const a = o.series[0].data.filter((v) => v != null);
+  assert.deepStrictEqual(a.map((v) => Math.round(v)), [3, 100, 125, 150]);
+  // B never has a positive base: excluded from the indexed view and reported.
+  assert.ok(o.series[1].data.every((v) => v == null));
+  assert.deepStrictEqual(o.__notIndexed, ['B']);
+});

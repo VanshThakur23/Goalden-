@@ -776,12 +776,21 @@ const SERIES_PALETTE = [
 function benchChartOption(pins, indexed) {
   const allSeries = pins.flatMap((p) => [p.series, p.compareSeries || []]);
   const allYears = Array.from(new Set(allSeries.flat().map((s) => s.year))).sort((a, b) => a - b);
+  // Index base = the first year that is positive AND at least 10% of the
+  // series' typical size. The plain first value broke on a negative or
+  // near-zero start (VEDL dividend payout indexed to -4,400). A series with
+  // no usable base is left out of the indexed view (listed in
+  // __notIndexed) instead of being drawn as nonsense.
+  const notIndexed = [];
   const indexBase = (series) => {
     if (!indexed) return null;
-    const firstVal = series.find((s) => s.value != null);
-    return firstVal ? firstVal.value : null;
+    const vals = series.map((s) => s.value).filter((v) => v != null);
+    const typical = median(vals.map(Math.abs));
+    const pt = series.find((s) => s.value != null && s.value > 0 && s.value >= 0.1 * typical);
+    return pt ? pt.value : NaN;
   };
-  const seriesFor = (points, base) => {
+  const seriesFor = (points, base, name) => {
+    if (indexed && Number.isNaN(base)) { notIndexed.push(name); return allYears.map(() => null); }
     const byYear = new Map(points.map((s) => [s.year, s.value]));
     return allYears.map((y) => {
       const v = byYear.has(y) ? byYear.get(y) : null;
@@ -809,13 +818,13 @@ function benchChartOption(pins, indexed) {
   pins.forEach((pin, i) => {
     const style = SERIES_PALETTE[i % SERIES_PALETTE.length];
     series.push(Object.assign({
-      name: pin.label, type: 'bar', data: seriesFor(pin.series, indexBase(pin.series)),
+      name: pin.label, type: 'bar', data: seriesFor(pin.series, indexBase(pin.series), pin.label),
       itemStyle: { color: style.color },
     }, endLabel(pin.series, style.color, pin.label)));
     if (pin.compareSeries && pin.compareSeries.length) {
       series.push(Object.assign({
         name: (pin.compareLabel || 'Compare') + ' — ' + pin.label, type: 'bar',
-        data: seriesFor(pin.compareSeries, indexBase(pin.compareSeries)),
+        data: seriesFor(pin.compareSeries, indexBase(pin.compareSeries), (pin.compareLabel || 'Compare') + ' ' + pin.label),
         itemStyle: { color: style.color, opacity: 0.45 },
       }, endLabel(pin.compareSeries, style.color, pin.label)));
     }
@@ -831,6 +840,7 @@ function benchChartOption(pins, indexed) {
     // data-period value (a plain fiscal year, e.g. 2023) into the dataIndex
     // this chart's category axis actually uses (e.g. "FY23").
     __years: allYears,
+    __notIndexed: notIndexed,
   };
 }
 

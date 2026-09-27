@@ -6917,7 +6917,7 @@ function benchCaptionText(pins, indexed, focusYear){
   const minY = years.length?Math.min(...years):null, maxY=years.length?Math.max(...years):null;
   const rangeTxt = (minY!=null && maxY!=null) ? `FY${minY}–FY${maxY}` : '';
   return indexed
-    ? `Indexed to 100 at ${minY!=null?'FY'+minY:'the earliest common year'} so lines are comparable regardless of scale, ${rangeTxt}: ${list}.`
+    ? `Each series indexed to 100 at its first meaningful year (the first positive value of reasonable size), so shapes compare regardless of scale, ${rangeTxt}: ${list}.`
     : `Actual reported values, ${rangeTxt}: ${list}.`;
 }
 // Hover tooltip for the default (over-time) Bench chart: the row's real
@@ -6994,7 +6994,8 @@ function updateBenchChart(){
   // so a data-period hover value can't address a dataIndex on it the same
   // way -- cross-highlight only applies to the default over-time view.
   stmtChartYears.bench = s.focusYear==null ? (option.__years||[]) : [];
-  if(capEl) capEl.textContent = benchCaptionText(pins, s.indexed, s.focusYear);
+  if(capEl) capEl.textContent = benchCaptionText(pins, s.indexed, s.focusYear)
+    + (option.__notIndexed && option.__notIndexed.length ? ' Not shown indexed (no positive starting year to index from): '+option.__notIndexed.join(', ')+'. Switch the scale to Actual to see '+(option.__notIndexed.length>1?'them':'it')+'.' : '');
 }
 function renderDivergenceParts(){
   const result = computeStatementsDivergence();
