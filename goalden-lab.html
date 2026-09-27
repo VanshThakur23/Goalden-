@@ -913,6 +913,11 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-flag-card .sfc-detail{color:rgba(20,40,63,.74);font-size:12.5px}
 .stmt-flag-card .sfc-cta{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:#1E4FBE;margin-top:2px}
 @media print{.stmt-flag-card .sfc-cta{display:none}}
+.stmt-watch{margin-top:12px}
+.stmt-watch-head{font-family:'Spline Sans Mono',monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#56698A;display:flex;align-items:center}
+.stmt-watch-card{background:rgba(20,40,63,.03);border-color:rgba(20,40,63,.16);border-left-color:#56698A}
+.stmt-watch-card:hover,.stmt-watch-card:focus-visible{background:rgba(20,40,63,.07)}
+.stmt-watch-card .sfc-year{color:#56698A;border-color:rgba(20,40,63,.25)}
 .stmt-tick{position:absolute;top:0;width:3px;height:14px;border-radius:2px;background:var(--red);cursor:pointer;transform:translateX(-50%)}
 .stmt-tick:hover{height:20px}
 .stmt-checksummary{font-size:12px;color:var(--dim);margin-top:6px;font-family:'Spline Sans Mono',monospace}
@@ -6588,7 +6593,7 @@ function statementsOpenFlag(flagKey){
   const ruleId=flagKey.slice(0,sep), year=parseInt(flagKey.slice(sep+1));
   const div = computeStatementsDivergence();
   if(!div) return;
-  const flag = div.flags.find(f=>f.ruleId===ruleId && f.year===year);
+  const flag = div.flags.find(f=>f.ruleId===ruleId && f.year===year) || (div.watch||[]).find(f=>f.ruleId===ruleId && f.year===year);
   if(!flag) return;
   // Keep the over-time view (switching to a one-year bar chart hid the
   // multi-year trend the warning is about) and shade the rule's window.
@@ -7128,7 +7133,9 @@ function renderDivergenceParts(){
   // strip -- using it here (not the shown/capped count) is what makes
   // notApplicable + clear + fired sum to checksRun exactly, so the line
   // never claims a total it can't account for.
-  const moreNote = result.fired>shown ? (shown===0 ? ' (each a one-year blip, not shown: a flag has to persist before it is raised)' : ` (${shown} shown below${result.flagsTotal>shown?', '+(result.flagsTotal-shown)+' more past the cap':''})`) : '';
+  const nWatch = (result.watch||[]).length;
+  const watchNote = nWatch ? `, ${nWatch} new in the latest year to watch` : '';
+  const moreNote = result.fired>shown ? (shown===0 ? (nWatch ? ` (${nWatch} new in the latest year, listed below to watch; any others are one-year blips, since a flag has to persist before it is raised)` : ' (each a one-year blip, not shown: a flag has to persist before it is raised)') : ` (${shown} shown below${result.flagsTotal>shown?', '+(result.flagsTotal-shown)+' more past the cap':''}${watchNote})`) : '';
   const summary = `${result.checksRun} checks run &middot; ${result.notApplicable} not applicable for this reporting format &middot; ${result.fired} observation${result.fired===1?'':'s'}${moreNote} &middot; ${result.clear} no observation`;
   // Each warning as a readable card. The ticks alone were 3px marks whose
   // text lived only in a hover tooltip (nothing on a phone or in print),
@@ -7138,7 +7145,13 @@ function renderDivergenceParts(){
       <span class="sfc-year">FY${String(f.year).slice(-2)}</span>
       <span class="sfc-body"><b>${advisorAttr(f.message)}</b>${f.detail && f.detail!==f.message ? `<span class="sfc-detail">${advisorAttr(f.detail)}</span>` : ''}<span class="sfc-cta">Show the evidence on the Bench &rarr;</span></span>
     </button>`).join('')}</div>` : '';
-  return {tickRow:ticks, summary, cards};
+  // Latest-year first sightings: muted, and labelled as not-yet-a-flag, so
+  // they read as "watch this" rather than a confirmed pattern.
+  const watch = (result.watch||[]).length ? `<div class="stmt-watch"><div class="stmt-watch-head">New in the latest year: watch${infoIcon('These checks fired for the first time in the most recent year. A flag normally has to show up two years running before it is raised, so a one-year blip is not treated as a pattern. That rule would hide a brand-new problem until next year, so first sightings are listed here instead.')}</div><div class="stmt-flag-cards">${result.watch.map(f=>`<button class="stmt-flag-card stmt-watch-card" data-stmt-flag="${advisorAttr(f.ruleId+'|'+f.year)}">
+      <span class="sfc-year">FY${String(f.year).slice(-2)}</span>
+      <span class="sfc-body"><b>${advisorAttr(f.message)}</b>${f.detail && f.detail!==f.message ? `<span class="sfc-detail">${advisorAttr(f.detail)}</span>` : ''}<span class="sfc-cta">Show the evidence on the Bench &rarr;</span></span>
+    </button>`).join('')}</div></div>` : '';
+  return {tickRow:ticks, summary, cards:cards+watch};
 }
 function renderFlagDetailHTML(){
   const flag = L.statements._focusedFlag;
@@ -8246,6 +8259,7 @@ function advisorStatementsState(){
     pins:s.pins, focusYear:s.focusYear,
     checkSummary: div?{checksRun:div.checksRun,notApplicable:div.notApplicable,observations:div.fired,shownOnBench:div.flags.length,noObservation:div.clear}:null,
     flags: div?div.flags:[],
+    newThisYearWatch: div?(div.watch||[]):[],
   };
 }
 // Tool results must say what actually happened: pin_row used to TOGGLE

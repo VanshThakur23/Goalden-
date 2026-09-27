@@ -697,6 +697,14 @@ function detectCyclical(profitLoss, schema) {
 // returning both the visible flags and the counts the check-summary line needs.
 function evaluateDivergenceRules(bundle) {
   const flags = [];
+  // First-time observations in the LATEST year. The persistence gate below
+  // keeps one-year blips off the flag list, which is right for past years
+  // (a blip that cleared was noise) -- but for the latest year it means a
+  // brand-new problem can never show until next year's filing (HINDALCO
+  // FY26: inventory days 111 -> 156 and a dividend above free cash flow,
+  // both invisible). These go on a separate, muted "watch" list, not the
+  // flag list, and don't count toward the 3-flag cap.
+  const watch = [];
   let notApplicable = 0, clear = 0, fired = 0;
   const schema = bundle.schema || classifySchema(bundle.profitLoss);
   DIVERGENCE_RULES.forEach((rule) => {
@@ -709,6 +717,8 @@ function evaluateDivergenceRules(bundle) {
       const prev = results[i - 1];
       if (prev && prev.status === 'fired') {
         flags.push({ ruleId: rule.id, year: r.year, message: r.message, detail: r.detail, note: discontinuityNote(r.year), materiality: r.materiality || 0 });
+      } else if (i === results.length - 1) {
+        watch.push({ ruleId: rule.id, year: r.year, message: r.message, detail: r.detail, note: discontinuityNote(r.year), materiality: r.materiality || 0, watch: true });
       }
       fired++;
     });
@@ -751,6 +761,7 @@ function evaluateDivergenceRules(bundle) {
     flags: collapsed.slice(0, 3),
     flagsTotal: collapsed.length,
     allFlags: collapsed, // every visible-eligible flag, ranked; checklistQualityGate reads this
+    watch: watch.sort((a, b) => (b.materiality || 0) - (a.materiality || 0)),
     cyclical,
   };
 }

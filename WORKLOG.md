@@ -2548,3 +2548,25 @@ Changes made by Claude Code (Chief). D1-16 from the Retirement division.
   ₹4.72 Cr -> ₹5.24 Cr, SIP ₹22,684 -> ₹25,205. SWP: ₹53,620 withdrawn,
   ₹48,258 spend (x0.9). The advisor rejects 80%. Tests 111/111, smokes
   11/11, evals 9/9 (mock), all 12 Lab tabs render with no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 33: new-this-year watch list)
+Changes made by Claude Code (Chief). D3-19 from the Company division.
+- statements-engine.js evaluateDivergenceRules returns `watch`: checks
+  that fire for the FIRST time in the latest year. A flag still has to
+  persist two years before it is raised, which is right for past years.
+  But for the latest year that rule hid brand-new problems until the next
+  filing. Watch items don't count toward the 3-flag cap and are never
+  also flags.
+- goalden-lab.html Read the Company: a muted "New in the latest year:
+  watch" row under the flag cards, with an info note on why these are not
+  flags yet. Clicking one pins the evidence and shades its window, the same
+  as a flag card. The checks summary counts them. The advisor's statements
+  summary includes them (newThisYearWatch).
+- HINDALCO FY26 now shows inventory days 111 -> 156 and a Rs 1,071 Cr
+  dividend against Rs -19,508 Cr free cash flow with borrowings up
+  Rs 33,523 Cr. Before, it showed nothing for FY26.
+- Verified: a separate script scanning each rule's last result on all 6
+  fixtures found the same set (HINDALCO only). New engine test (112/112).
+  Checked in the browser at 1400px and 412px, including the click-through
+  and the TCS/VEDL summaries. Smokes 11/11, evals 9/9 (mock), all 12 Lab
+  tabs render with no errors.

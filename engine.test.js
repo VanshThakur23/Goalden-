@@ -1503,3 +1503,13 @@ test('benchChartOption: indexed view never divides by a negative or near-zero ba
   assert.ok(o.series[1].data.every((v) => v == null));
   assert.deepStrictEqual(o.__notIndexed, ['B']);
 });
+
+test('statements-engine: a check that fires for the first time in the latest year goes on the watch list, not the flag list', () => {
+  const r = stmt.evaluateDivergenceRules(loadFinancials('HINDALCO'));
+  const watch = r.watch.map((w) => w.ruleId + '@' + w.year).sort();
+  assert.deepStrictEqual(watch, ['DIVIDEND_EXCEEDS_FCF@2026', 'INVENTORY_BUILD@2026']);
+  // Watch items are first sightings: never also a (persistent) flag.
+  assert.ok(r.allFlags.every((f) => !(f.year === 2026 && ['DIVIDEND_EXCEEDS_FCF', 'INVENTORY_BUILD'].includes(f.ruleId))));
+  // A company with nothing new in its latest year has an empty watch list.
+  assert.deepStrictEqual(stmt.evaluateDivergenceRules(loadFinancials('TCS')).watch, []);
+});
