@@ -529,7 +529,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .port-pct-badge{font-family:'Spline Sans Mono',monospace;font-size:15px;font-weight:600;color:var(--paper)}
 .port-pct-of{font-family:'Spline Sans Mono',monospace;font-size:10px;color:rgba(20,40,63,.74)}
 .epchip{font-family:'Spline Sans Mono',monospace;font-size:11px;padding:8px 8px;border-radius:2px;border:1px solid rgba(20,40,63,.16);background:rgba(20,40,63,.04);color:rgba(20,40,63,.74);cursor:pointer;text-align:center;line-height:1.5}
-.epchip.active{background:rgba(160,58,34,.25);border-color:var(--red);color:#7A2517}
+/* Chips are <button>s (keyboard-reachable) and the selected one is the app's
+   selection blue, not the danger red that made "No shock" look like an error. */
+.epchip{width:100%}
+.epchip.active{background:rgba(37,87,199,.14);border-color:var(--gold);color:#1E4FBE;box-shadow:inset 0 0 0 1px var(--gold)}
+.epchip:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .epchip b{display:block;color:var(--paper);font-size:12px}
 
 /* --- health score --- */
@@ -2342,8 +2346,8 @@ function renderRetirement(){
     <hr class="divider">
     <div class="section-label">Stress test: inject a historical shock${infoIcon('Drops a real one-year historical market fall into a chosen year of the spending-down phase, then re-runs the whole timeline to see whether the pot still lasts to the planned age.')}</div>
     <div class="episode-grid">
-      <div class="epchip${!r.shock?' active':''}" data-shock="none"><b>No shock</b>baseline plan</div>
-      ${c.episodes.map(ep=>`<div class="epchip${r.shock&&r.shock.epId===ep.id?' active':''}" data-shock="${ep.id}"><b>${ep.label}</b>${(ep.rate*100).toFixed(0)}% in one year</div>`).join('')}
+      <button type="button" class="epchip${!r.shock?' active':''}" data-shock="none"><b>No shock</b>baseline plan</button>
+      ${c.episodes.map(ep=>`<button type="button" class="epchip${r.shock&&r.shock.epId===ep.id?' active':''}" data-shock="${ep.id}"><b>${ep.label}</b>${(ep.rate*100).toFixed(0)}% in one year</button>`).join('')}
     </div>
     ${r.shock?`<div class="field"><label>Shock hits in drawdown year <b>${r.shock.year}</b></label><input type="range" min="1" max="${res.drawYrs}" value="${r.shock.year}" data-k="shockYear"></div>
     <div class="field"><label>Equity share of the pot${infoIcon('Only the equity part of a retirement pot takes the historical index crash; the rest earns the normal debt return that year. Many retirees hold 30-50% in equity.')} <b>${r.shockEquity==null?40:r.shockEquity}%</b></label><input type="range" min="0" max="100" step="5" value="${r.shockEquity==null?40:r.shockEquity}" data-k="shockEquity"></div>
@@ -2539,8 +2543,8 @@ function renderSWP(){
     <hr class="divider">
     <div class="section-label">Stress test: inject a historical shock${infoIcon('Drops a real one-year historical market fall into a chosen year of the withdrawal phase, then re-runs the whole timeline to see how many years the money actually lasts. The withdrawal amount stays fixed at the baseline plan, which is exactly what makes the shock dangerous.')}</div>
     <div class="episode-grid">
-      <div class="epchip${!s.shock?' active':''}" data-swpshock="none"><b>No shock</b>baseline plan</div>
-      ${c.episodes.map(ep=>`<div class="epchip${s.shock&&s.shock.epId===ep.id?' active':''}" data-swpshock="${ep.id}"><b>${ep.label}</b>${(ep.rate*100).toFixed(0)}% in one year</div>`).join('')}
+      <button type="button" class="epchip${!s.shock?' active':''}" data-swpshock="none"><b>No shock</b>baseline plan</button>
+      ${c.episodes.map(ep=>`<button type="button" class="epchip${s.shock&&s.shock.epId===ep.id?' active':''}" data-swpshock="${ep.id}"><b>${ep.label}</b>${(ep.rate*100).toFixed(0)}% in one year</button>`).join('')}
     </div>
     ${s.shock?`<div class="field"><label>Shock hits in year <b>${shockYr}</b></label><input type="range" min="1" max="${s.years}" value="${shockYr}" data-k="swpShockYear" data-tab="swp"></div>
     <div class="field"><label>Equity share of the pot${infoIcon('Only the equity part of the corpus takes the historical index crash; the rest earns the normal debt return that year.')} <b>${s.shockEquity==null?40:s.shockEquity}%</b></label><input type="range" min="0" max="100" step="5" value="${s.shockEquity==null?40:s.shockEquity}" data-k="shockEquity" data-tab="swp"></div>
@@ -3214,8 +3218,8 @@ function renderInstruments(){
       <span class="term" data-def="A target-maturity fund's price drifting back toward its redemption value as the maturity date approaches, which is why holding it to maturity locks in the yield.">pulls to par</span>
     </div>
     <div class="episode-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr));margin-bottom:18px">
-      <div class="epchip${L.instCategory==='all'?' active':''}" data-instcat="all"><b>All categories</b>${totalCount} total</div>
-      ${catKeys.map(k=>`<div class="epchip${L.instCategory===k?' active':''}" data-instcat="${k}"><b>${CATEGORY_LABELS[k]||k}</b>${li[k].length} items</div>`).join('')}
+      <button type="button" class="epchip${L.instCategory==='all'?' active':''}" data-instcat="all"><b>All categories</b>${totalCount} total</button>
+      ${catKeys.map(k=>`<button type="button" class="epchip${L.instCategory===k?' active':''}" data-instcat="${k}"><b>${CATEGORY_LABELS[k]||k}</b>${li[k].length} items</button>`).join('')}
     </div>
 
     <div id="inst-cards">${cards}</div>

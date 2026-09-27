@@ -2348,3 +2348,14 @@ Changes made by Claude Code (Chief). D1-20 from the Retirement division.
   the two-across Age/Retire sliders; boxes in `.field-row` are 56px (the
   sliders are now 73px, slightly wider than originally).
 - Checks: tests 110/110, smokes 11/11, evals 9/9, no page errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 21: chip buttons)
+Changes made by Claude Code (Chief). D4-10 from the Visual division.
+- goalden-lab.html: the scenario and category chips (Retirement and SWP
+  shock pickers, Instrument Explorer categories) are <button>s instead of
+  clickable <div>s, so they're keyboard-reachable, with a focus ring. The
+  selected chip uses the app's selection blue instead of danger red (which
+  made "No shock" / "All categories" read as errors).
+- Verified: Enter on a focused chip selects it (SWP 2008); font and size
+  unchanged; category click still filters; contrast 0 on the three tabs;
+  tests 110/110; smokes 11/11.
