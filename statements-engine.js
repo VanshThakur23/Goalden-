@@ -1926,6 +1926,53 @@ function marginBridgeOption(profitLoss, schema, yearsBack) {
   };
 }
 
+/* ---------------------------------------------------------------------
+   DuPont: ROE = net margin x asset turnover x leverage.
+   "Is this return on equity high because the business is profitable, or
+   because it borrows a lot?" -- the question a retail investor can't
+   answer from one ROE number. Balance-sheet items are AVERAGES of opening
+   and closing (standard practice; year-end balances overstate turnover for
+   a growing company). Because the same averages are used throughout, the
+   three factors multiply to ROE exactly. Works for lenders too (their
+   "margin" is on revenue and turnover is tiny; leverage is the story).
+   Equity = Equity Capital + Reserves (shareholders' funds). Consolidated
+   net profit includes minority interest, so for groups with large
+   minority stakes (VEDL) ROE here reads a little high.
+   --------------------------------------------------------------------- */
+function dupontSeries(bundle) {
+  const pl = bundle.profitLoss, bs = bundle.balanceSheet;
+  if (!pl || !bs) return [];
+  const topLabel = fySeries(pl, 'Sales').length ? 'Sales' : 'Revenue';
+  const byYear = (sec, label) => { const m = new Map(); fySeries(sec, label).forEach((p) => { if (p.value != null) m.set(p.year, p.value); }); return m; };
+  const np = byYear(pl, 'Net Profit'), top = byYear(pl, topLabel), ta = byYear(bs, 'Total Assets');
+  const eqc = byYear(bs, 'Equity Capital'), res = byYear(bs, 'Reserves');
+  const equity = (y) => (eqc.has(y) && res.has(y)) ? eqc.get(y) + res.get(y) : null;
+  const avg = (m, y) => (m.has(y) ? (m.has(y - 1) ? (m.get(y) + m.get(y - 1)) / 2 : m.get(y)) : null);
+  const avgEq = (y) => { const a = equity(y), b = equity(y - 1); return a == null ? null : (b == null ? a : (a + b) / 2); };
+  const out = [];
+  [...np.keys()].sort((a, b) => a - b).forEach((y) => {
+    const n = np.get(y), t = top.get(y), A = avg(ta, y), E = avgEq(y);
+    if (n == null || !(t > 0) || !(A > 0) || !(E > 0)) return;
+    const margin = n / t, turnover = t / A, leverage = A / E;
+    out.push({ year: y, margin, turnover, leverage, roe: margin * turnover * leverage, averaged: ta.has(y - 1) && equity(y - 1) != null });
+  });
+  return out;
+}
+// Which factor moved ROE most between two years. Log split:
+// ln(ROE1/ROE0) = ln(m1/m0) + ln(t1/t0) + ln(l1/l0), exactly. Only defined
+// when all factors are positive at both ends (a loss year has no ratio).
+function dupontAttribution(a, b) {
+  if (!a || !b || !(a.margin > 0 && b.margin > 0)) return null;
+  const parts = [
+    { key: 'margin', label: 'profit margin', v: Math.log(b.margin / a.margin) },
+    { key: 'turnover', label: 'asset turnover', v: Math.log(b.turnover / a.turnover) },
+    { key: 'leverage', label: 'leverage', v: Math.log(b.leverage / a.leverage) },
+  ];
+  const total = Math.log(b.roe / a.roe);
+  const main = parts.slice().sort((x, y) => Math.abs(y.v) - Math.abs(x.v))[0];
+  return { parts, total, main };
+}
+
 function advisorEscapeSafe(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
 }
@@ -1944,7 +1991,7 @@ const api = {
   compoundingChecklist, checklistQualityGate,
   stmtExploreCatalog, alignFyPairs, pctOfSalesSeries,
   growthChartOption, cashFlowWaterfallOption, companionMapFor,
-  marginBridgeData, marginBridgeOption,
+  marginBridgeData, marginBridgeOption, dupontSeries, dupontAttribution,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

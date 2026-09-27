@@ -2226,3 +2226,24 @@ Changes made by Claude Code (Chief). D2 visualization ideas 1-2 (retail pain poi
   matches the tile. No page errors across weight changes and tab switches;
   the phone layout holds 412px; tests 109/109, smokes 11/11. (Sandbox
   prices are synthetic; the arithmetic is what was checked.)
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 14: DuPont ROE)
+Changes made by Claude Code (Chief). D3 visualization idea 3.
+- statements-engine.js `dupontSeries` / `dupontAttribution`: ROE = net margin
+  x asset turnover x leverage, on AVERAGE opening/closing balances (equity =
+  Equity Capital + Reserves), so the factors multiply to ROE exactly.
+  Attribution splits the change between two years with logs (the parts sum
+  exactly to ln(ROE1/ROE0)) and names the biggest driver.
+- goalden-lab.html Read the Company, Analysis zone: new card "What drives the
+  return on equity": four tiles (margin × turnover × leverage = ROE, each
+  with the value 5 years earlier), a plain-language line ("ROE rose from
+  38.2% to 49.0% between FY21 and FY26, mostly because of higher asset
+  turnover"; it adds a risk note when the rise came from leverage, and
+  handles loss years), and a labelled ROE-by-year bar chart. Lender-aware
+  tooltips. Caveat shown: consolidated profit includes the minority share,
+  so ROE reads high for groups like VEDL.
+- Verified independently against screener's own reported ROE %: HDFC Bank
+  17.5/15.0/14.3 vs 17/14/14, Bajaj Finance 22.1/19.4/18.4 vs 22/19/18
+  (now a test, within 1.5 pts over 5 years). Identity holds to 1e-12 on all
+  six companies. TCS tiles: 18.5% × 1.57 × 1.68 = 49.0%. No errors on any
+  company; phone width 412px; contrast audit 0; tests 110/110; smokes 11/11.

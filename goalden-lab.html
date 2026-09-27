@@ -717,6 +717,11 @@ body.stmt-page main{max-width:1600px}
 #stmtWaterfallCard #stmtWaterfallChart{height:300px}
 #stmtTables{grid-column:1/-1}
 #stmtBridgeCard{grid-column:1/-1}
+#stmtDupontCard{grid-column:1/-1}
+.dupont-row{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin:6px 0 10px}
+.dupont-row .stat{flex:1 1 140px;min-width:0}
+.dupont-op{align-self:center;font-family:'Newsreader',serif;font-size:24px;color:#52647F;padding:0 2px}
+@media(max-width:560px){.dupont-op{display:none}}
 #stmtDepth{grid-column:1/-1;box-shadow:0 1px 2px rgba(20,40,63,.03)}
 #stmtChecklist{grid-column:1/-1;box-shadow:0 1px 2px rgba(20,40,63,.03)}
 #stmtToLiveCard{grid-column:1/-1}
@@ -6167,6 +6172,11 @@ function renderStatementsShell(){
       <div class="cap" id="stmtBridgeCap" style="margin-bottom:6px">Each step is a reported line. The final bar is exactly the reported net profit.</div>
       <div id="stmtBridgeChart" style="height:340px"></div>
     </div>
+    <div class="stmt-card" id="stmtDupontCard">
+      <div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="12" r="2.5"/><circle cx="12" cy="12" r="2.5"/><circle cx="18" cy="12" r="2.5"/><path d="M8.5 12h1M14.5 12h1"/></svg>What drives the return on equity</div>
+      <div id="stmtDupontBody"></div>
+      <div id="stmtDupontChart" style="height:210px"></div>
+    </div>
     <div class="stmt-card" id="stmtDepth"></div>
     <div class="stmt-card" id="stmtChecklist"></div>
     <div class="stmt-card" id="stmtToLiveCard" style="text-align:center">
@@ -7598,6 +7608,52 @@ function updateStatementsUI(){
     } else if(d && d.status==='ready'){
       disposeChart('stmtBridgeChart'); brEl.innerHTML='<div class="cap" style="padding:14px">Not available for this reporting format.</div>';
     } else { disposeChart('stmtBridgeChart'); brEl.innerHTML=''; }
+  }
+  // DuPont: ROE = margin x turnover x leverage, latest vs 5 years back.
+  const dpBody=document.getElementById('stmtDupontBody');
+  if(dpBody){
+    const d=L.statements.data[L.statements.primary];
+    const ds=(d && d.status==='ready') ? dupontSeries(d.result) : [];
+    if(ds.length>=2){
+      const now=ds[ds.length-1], then=ds.find(x=>x.year===now.year-5)||ds[0];
+      const pct=v=>(v*100).toFixed(1)+'%', x=v=>v.toFixed(2)+'x', fy=y=>'FY'+String(y).slice(-2);
+      const tile=(lab,vNow,vThen,fmt,tip)=>`<div class="stat"><div class="stat-label">${lab}${infoIcon(tip)}</div><div class="stat-value" style="font-size:24px">${fmt(vNow)}</div><div class="stat-sub">${fy(then.year)}: ${fmt(vThen)}</div></div>`;
+      const at=dupontAttribution(then, now);
+      const lender=d.result.schema==='financial';
+      let why='';
+      if(at && Math.abs(at.total)>0.02){
+        const dir=at.total>0?'rose':'fell', fdir=at.main.v>0?'higher':'lower';
+        why=`ROE ${dir} from <b>${pct(then.roe)}</b> to <b>${pct(now.roe)}</b> between ${fy(then.year)} and ${fy(now.year)}, mostly because of <b>${fdir} ${at.main.label}</b>.`
+          + (at.main.key==='leverage' && at.main.v>0 ? ' Returns that rise through borrowing rather than margins carry more risk.' : '');
+      } else if(at){
+        why=`ROE has been broadly steady: ${pct(then.roe)} in ${fy(then.year)}, ${pct(now.roe)} in ${fy(now.year)}.`;
+      } else {
+        why=`ROE was ${pct(now.roe)} in ${fy(now.year)}. The ${fy(then.year)} comparison isn't meaningful because the company made a loss then.`;
+      }
+      dpBody.innerHTML=`<div class="dupont-row">
+        ${tile('Profit margin', now.margin, then.margin, pct, 'Net profit as a share of '+(lender?'revenue':'sales')+': how much of each rupee sold ends up as profit.')}
+        <span class="dupont-op">&times;</span>
+        ${tile('Asset turnover', now.turnover, then.turnover, x, lender?'Revenue per rupee of assets. Tiny for any lender: its assets are the loans it makes.':'Sales per rupee of assets: how hard the business works what it owns.')}
+        <span class="dupont-op">&times;</span>
+        ${tile('Leverage', now.leverage, then.leverage, x, 'Assets per rupee of shareholders\u2019 money. Above 1 means the rest is funded by borrowing and other liabilities'+(lender?' (for a bank, mostly deposits).':'.'))}
+        <span class="dupont-op">=</span>
+        ${tile('Return on equity', now.roe, then.roe, pct, 'Net profit per rupee of shareholders\u2019 money (average of opening and closing equity). The three boxes multiply to exactly this.')}
+      </div>
+      <div class="gr-note" style="margin-top:0">${why} Figures use consolidated profit, which includes minority shareholders\u2019 share, so ROE can read high for groups with large minority stakes.</div>`;
+      const yrs=ds.map(p=>fy(p.year));
+      initChart('stmtDupontChart', {
+        grid:{left:8,right:16,top:26,bottom:22,containLabel:true},
+        xAxis:{type:'category', data:yrs, axisTick:{show:false}, axisLabel:{color:'#56698A'}},
+        yAxis:{type:'value', axisLabel:{formatter:v=>v+'%', color:'#56698A'}, splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}},
+        tooltip:{trigger:'axis', confine:true, formatter:ps=>{ const p=ds[ps[0].dataIndex]; return `${fy(p.year)}<br/>ROE ${pct(p.roe)} = ${pct(p.margin)} &times; ${x(p.turnover)} &times; ${x(p.leverage)}`; }},
+        series:[{ type:'bar', name:'ROE', data:ds.map(p=>+(p.roe*100).toFixed(1)), barMaxWidth:34,
+          itemStyle:{color:p=>ds[p.dataIndex].roe<0?'#D97757':'#2557C7', borderRadius:[3,3,0,0]},
+          label:{show:true, position:'top', formatter:p=>p.value.toFixed(0)+'%', fontSize:10, color:'#14283F', fontFamily:"'Spline Sans Mono',monospace"} }],
+        graphic:[{type:'text', left:8, top:2, style:{text:'Return on equity each year', fill:'#56698A', fontSize:11, fontFamily:"'Spline Sans Mono',monospace"}}],
+      });
+    } else if(d && d.status==='ready'){
+      dpBody.innerHTML='<div class="cap" style="padding:8px 0">Not enough balance-sheet history to break down ROE for this company.</div>'; disposeChart('stmtDupontChart');
+    } else { dpBody.innerHTML=''; disposeChart('stmtDupontChart'); }
   }
   buildStatementsHighlightCSS();
   const toLiveBtn=document.getElementById('stmtToLiveBtn'); if(toLiveBtn) toLiveBtn.textContent = 'Add '+(L.statements.primary||'\u2014')+' to Test Real Investments';

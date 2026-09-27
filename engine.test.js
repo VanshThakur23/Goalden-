@@ -1466,3 +1466,23 @@ test('marginBridge: "where ₹100 of sales went" reconciles exactly to reported 
   assert.strictEqual(t.__now.npPer100.toFixed(1), '18.5');
   assert.strictEqual(t.__then.year, t.__now.year - 5);
 });
+
+test('dupontSeries: factors multiply to ROE, and ROE matches screener where reported', () => {
+  for (const sym of ['TCS', 'HDFCBANK', 'BAJFINANCE', 'HINDALCO', 'PAYTM', 'VEDL']) {
+    const ds = stmt.dupontSeries(loadFinancials(sym));
+    assert.ok(ds.length >= 5, sym + ': enough years');
+    ds.forEach((p) => assert.ok(Math.abs(p.margin * p.turnover * p.leverage - p.roe) < 1e-12, sym + ' FY' + p.year + ': identity'));
+  }
+  // Independent check against screener's own ROE % row (lenders carry it).
+  for (const sym of ['HDFCBANK', 'BAJFINANCE']) {
+    const b = loadFinancials(sym);
+    const reported = new Map(stmt.fySeries(b.ratios, 'ROE %').filter((p) => p.value != null).map((p) => [p.year, p.value]));
+    const ours = stmt.dupontSeries(b).filter((p) => p.averaged && reported.has(p.year));
+    assert.ok(ours.length >= 5, sym + ': overlapping years');
+    ours.slice(-5).forEach((p) => assert.ok(Math.abs(p.roe * 100 - reported.get(p.year)) < 1.5, sym + ' FY' + p.year + ': ' + (p.roe * 100).toFixed(1) + ' vs screener ' + reported.get(p.year)));
+  }
+  // Attribution parts sum exactly to the log ROE change.
+  const ds = stmt.dupontSeries(loadFinancials('TCS'));
+  const at = stmt.dupontAttribution(ds[ds.length - 6], ds[ds.length - 1]);
+  assert.ok(Math.abs(at.parts.reduce((a, p) => a + p.v, 0) - at.total) < 1e-12);
+});
