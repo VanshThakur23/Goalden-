@@ -270,7 +270,10 @@ test('radarComparisonChartOption: 3 indicators, 4 data points (2 assets + 2 mixe
   const tangency = { ret: 0.19, vol: 0.22, sharpe: 0.65 };
   const opt = engine.radarComparisonChartOption(assetPoints, minVariance, tangency, 0.065);
   assert.strictEqual(opt.radar.indicator.length, 3);
-  assert.deepStrictEqual(opt.radar.indicator.map((i) => i.name), ['Return', 'Risk', 'Sharpe']);
+  // "Risk" became "Steadiness (lower risk)" so outward is better on every axis.
+  assert.deepStrictEqual(opt.radar.indicator.map((i) => i.name), ['Return', 'Steadiness\n(lower risk)', 'Sharpe']);
+  // The riskier asset (A, 25% vol) must sit further IN on steadiness than B (18%).
+  assert.ok(opt.series[0].data[0].value[1] < opt.series[0].data[1].value[1], 'riskier asset is less steady');
   assert.strictEqual(opt.series[0].data.length, 4, 'asset A, asset B, safest mix, best balance');
   assert.strictEqual(opt.series[0].data[0].name, 'A');
   assert.strictEqual(opt.series[0].data[2].name, 'Safest mix');

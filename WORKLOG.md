@@ -2408,3 +2408,19 @@ Changes made by Claude Code (Chief). D1-15 from the Retirement division.
 - Verified: the health check's ran-out year equals a direct calcRetLab run
   (18 at 40% equity, 10 at 100%); the user's own shock setting is restored
   afterwards; tests 111/111, smokes 11/11, evals 9/9, contrast 0, no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 25: radar veto resolved)
+Changes made by Claude Code (Chief). D4-09 (Visual division veto).
+- goalden-engine.js `radarComparisonChartOption` (used by Levels 1/2's
+  compare_portfolio chart panel and briefing): outward is now better on
+  every axis. "Risk" became "Steadiness (lower risk)" = 1 - vol/maxVol, so
+  a riskier asset no longer bulges outward like a better one; the tooltip
+  still shows the real return/risk/Sharpe and says "further out is better".
+  Negative Sharpe sits at the centre; asset 1 and "Safest mix" no longer
+  share a colour; axis/legend text uses AA colours. The enum value 'radar'
+  and the function signature are unchanged (advisor tool contract).
+- engine.test.js: the test pinning the old "Risk" axis name is updated and
+  now also asserts the riskier asset sits further in on steadiness.
+- Checks: tests 111/111, smokes 11/11, evals 9/9; rendered and checked
+  (RELIANCE vs TCS: TCS, lower return and higher risk, is the smallest
+  shape).

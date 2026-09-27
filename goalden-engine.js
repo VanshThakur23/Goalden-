@@ -720,6 +720,13 @@ function barComparisonChartOption(assetPoints){
     ],
   };
 }
+// Radar where OUTWARD IS ALWAYS BETTER on every axis. The old version put
+// raw "Risk" on an axis beside Return and Sharpe, so a riskier asset
+// bulged outward exactly like a better one and the shapes read backwards
+// (Visual review's veto). Risk is shown as "Steadiness" (1 - vol/maxVol);
+// the tooltip still gives the real risk figure. Sharpe below zero sits at
+// the centre (a radar can't draw negative values). Asset 1 and "Safest
+// mix" no longer share a colour.
 function radarComparisonChartOption(assetPoints, minVariance, tangency, riskFreeRate){
   const rf = riskFreeRate || 0;
   const sharpeOf = function(ret, vol){ return vol > 0 ? (ret - rf) / vol : 0; };
@@ -727,27 +734,31 @@ function radarComparisonChartOption(assetPoints, minVariance, tangency, riskFree
   const rets = assetPoints.map(function(a){ return a.ret; }).concat([minVariance.ret, tangency.ret]);
   const vols = assetPoints.map(function(a){ return a.vol; }).concat([minVariance.vol, tangency.vol]);
   const sharpes = assetSharpes.concat([minVariance.sharpe, tangency.sharpe]).filter(function(s){ return isFinite(s); });
-  const maxRet = Math.max.apply(null, rets) * 1.2 || 0.01;
-  const maxVol = Math.max.apply(null, vols) * 1.2 || 0.01;
-  const maxSharpe = (sharpes.length ? Math.max.apply(null, sharpes.map(Math.abs)) : 1) * 1.2 || 1;
+  const maxRet = Math.max(Math.max.apply(null, rets) * 1.2, 0.01);
+  const maxVol = Math.max.apply(null, vols) * 1.15 || 0.01;
+  const maxSharpe = Math.max(sharpes.length ? Math.max.apply(null, sharpes) * 1.2 : 1, 0.1);
   const indicator = [
     { name:'Return', max:maxRet },
-    { name:'Risk', max:maxVol },
+    { name:'Steadiness\n(lower risk)', max:1 },
     { name:'Sharpe', max:maxSharpe },
   ];
-  const point = function(ret, vol, sharpe){ return [ret, vol, isFinite(sharpe) ? sharpe : 0]; };
-  const colors = ['#8FC79E', '#2557C7', '#14283F', '#D97757'];
+  const point = function(ret, vol, sharpe){ return [Math.max(0, ret), Math.max(0, 1 - vol / maxVol), isFinite(sharpe) ? Math.max(0, sharpe) : 0]; };
+  const colors = ['#5FA875', '#2557C7', '#D97757', '#946514'];
+  const raw = [];
   const data = assetPoints.map(function(a, i){
+    raw.push([a.ret, a.vol, assetSharpes[i]]);
     return { name:a.label, value:point(a.ret, a.vol, assetSharpes[i]), itemStyle:{color:colors[i % colors.length]} };
   });
-  data.push({ name:'Safest mix', value:point(minVariance.ret, minVariance.vol, minVariance.sharpe), itemStyle:{color:'#8FC79E'}, lineStyle:{type:'dashed'} });
+  raw.push([minVariance.ret, minVariance.vol, minVariance.sharpe]);
+  data.push({ name:'Safest mix', value:point(minVariance.ret, minVariance.vol, minVariance.sharpe), itemStyle:{color:'#52647F'}, lineStyle:{type:'dashed'} });
+  raw.push([tangency.ret, tangency.vol, tangency.sharpe]);
   data.push({ name:'Best balance', value:point(tangency.ret, tangency.vol, tangency.sharpe), itemStyle:{color:'#14283F'}, lineStyle:{type:'dashed'} });
   return {
     animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
-    legend:{top:0, textStyle:{fontSize:9.5,color:'rgba(20,40,63,.6)',fontFamily:"'Spline Sans Mono',monospace"}},
+    legend:{top:0, textStyle:{fontSize:10.5,color:'#56698A',fontFamily:"'Spline Sans Mono',monospace"}},
     tooltip:{trigger:'item', confine:true, textStyle:{fontFamily:"'Figtree',sans-serif", fontSize:12},
-      formatter:function(p){ const v=p.value; return `<b>${p.name}</b><br/>Return: ${(v[0]*100).toFixed(2)}% &nbsp; Risk: ${(v[1]*100).toFixed(2)}% &nbsp; Sharpe: ${v[2].toFixed(2)}`; }},
-    radar:{indicator:indicator, radius:'62%', splitLine:{lineStyle:{color:'rgba(20,40,63,.08)'}}, axisName:{fontSize:10.5,color:'rgba(20,40,63,.6)'}},
+      formatter:function(p){ const v=raw[p.dataIndex] || [0,0,0]; return '<b>'+p.name+'</b><br/>Return: '+(v[0]*100).toFixed(2)+'% &nbsp; Risk: '+(v[1]*100).toFixed(2)+'% &nbsp; Sharpe: '+(isFinite(v[2])?v[2].toFixed(2):'n/a')+'<br/><span style="color:#56698A">Further out is better on every axis.</span>'; }},
+    radar:{indicator:indicator, radius:'60%', splitLine:{lineStyle:{color:'rgba(20,40,63,.08)'}}, axisName:{fontSize:10.5,color:'#56698A'}},
     series:[{ type:'radar', data:data, symbolSize:5, lineStyle:{width:2}, areaStyle:{opacity:.08} }],
   };
 }
