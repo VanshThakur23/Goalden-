@@ -140,7 +140,8 @@ body.advisor-docked{transition:padding-right .25s ease}
 .briefing-verified{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:rgba(20,40,63,.5);padding:6px 10px;border:1px solid rgba(95,168,117,.35);border-radius:6px;background:rgba(95,168,117,.08);display:inline-block;margin-bottom:16px}
 .briefing-footer{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;padding-top:16px;border-top:1px solid rgba(20,40,63,.1)}
 .briefing-footer button{background:var(--gold);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-family:'Figtree',sans-serif;font-weight:600;font-size:13.5px;cursor:pointer}
-@media print{#advisorFab,#advisorPanel,#resultCanvas{display:none!important}#briefing{position:static;display:block!important;background:#fff}#briefingHead .rc-btns{display:none!important}}
+/* Print the briefing only when it is open: forcing it visible regardless added an empty "Briefing" heading to every page's printout. */
+@media print{#advisorFab,#advisorPanel,#resultCanvas{display:none!important}#briefing:not(.open){display:none!important}#briefing.open{position:static;display:block!important;background:#fff}#briefingHead .rc-btns{display:none!important}}
 .advisor-chips{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 10px}
 .advisor-chip{background:rgba(37,87,199,.08);border:1px solid rgba(37,87,199,.25);color:var(--gold);border-radius:999px;padding:5px 12px;font-family:'Figtree',sans-serif;font-size:12px;cursor:pointer;transition:background .15s ease}
 .advisor-chip:hover{background:rgba(37,87,199,.16)}

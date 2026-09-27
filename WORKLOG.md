@@ -2147,3 +2147,21 @@ Changes made by Claude Code (Chief). Ports of the Lab's D4 visual fixes to the o
 - Checks: engine.test.js 109/109, 11/11 smoke files, agent evals 9/9
   (mock), chat end-to-end on 3 pages with no errors, all Lab tabs error-free,
   phone width 412px holds.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 10: print)
+Changes made by Claude Code (Chief). D4-05 from the Visual division.
+- advisor.js print CSS: the briefing prints only when it is open. It used
+  to be forced visible, adding an empty "Briefing" heading to every
+  printout on all four pages.
+- goalden-lab.html print CSS: `.table-scroll` / `.schedule-scroll` uncapped
+  on paper (year-by-year tables were cut off at about year 10 by the 340px
+  scroll box).
+- goalden-lab.html `beforeprint`: the print header gets an "Inputs: ..."
+  line built from the current tab's slider labels and active toggles
+  (info-icon text and descriptions stripped), because the inputs panel is
+  hidden on paper and a printout had no record of what produced it.
+  Example: "Inputs: You have a corpus of ₹1.00 Cr · Draw for 20 years ·
+  Growth during drawdown 9% · Inflation-adjust withdrawals by 6%".
+- Verified under emulated print media: the briefing is display:none when
+  closed, table heights match their full content, and the inputs line is
+  correct on 8 tabs; a PDF was generated without errors; smoke tests pass.

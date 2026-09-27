@@ -562,6 +562,10 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
      every panel open and hide the now-pointless toggle pill instead. */
   .explain-panel{max-height:none !important;overflow:visible !important}
   .explain-toggle{display:none !important}
+  /* Year-by-year tables scroll inside a 340px box on screen; on paper that
+     box cut every table off at about year 10. */
+  .table-scroll,.schedule-scroll{max-height:none !important;overflow:visible !important}
+  .print-header .pa{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:#333;margin-top:8px;line-height:1.6}
 }
 .print-header{display:none}
 .print-btn{position:fixed;bottom:26px;right:92px;background:var(--gold);color:#fff;border:none;border-radius:24px;padding:12px 18px;font-family:'Figtree',sans-serif;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 6px 20px rgba(37,87,199,.35);z-index:50;display:flex;align-items:center;gap:8px;transition:transform .15s ease,box-shadow .15s ease}
@@ -5252,6 +5256,24 @@ function render(){
   persistLabState();
 }
 
+// The inputs panel is hidden in print, so a printout showed results with
+// no record of what produced them. Just before printing, copy the current
+// tab's slider/toggle labels (the exact text on screen) into the header.
+window.addEventListener('beforeprint', ()=>{
+  const head=document.getElementById('printHeader'); if(!head) return;
+  let pa=head.querySelector('.pa'); if(!pa){ pa=document.createElement('div'); pa.className='pa'; head.appendChild(pa); }
+  // textContent of a clone minus the info-icon tooltips: innerText picked up
+  // the icon's "i" and the CSS uppercase ("RETIREMENT I ₹0").
+  const clean=el=>{ const c=el.cloneNode(true); c.querySelectorAll('.info-icon').forEach(x=>x.remove()); c.querySelectorAll('br').forEach(x=>x.replaceWith(' ')); return c.textContent.replace(/\s+/g,' ').trim(); };
+  // "Name value": the label's own text plus its bold value. Labels without a
+  // bold value (e.g. Build a Portfolio's per-fund descriptions) are skipped
+  // -- the chart and holdings already print those.
+  const field=l=>{ if(!l.querySelector('b')) return ''; const c=l.cloneNode(true); c.querySelectorAll('.info-icon, span').forEach(x=>x.remove()); return c.textContent.replace(/\s+/g,' ').trim(); };
+  const bits=[...document.querySelectorAll('#main .panel .field > label')].map(field).filter(Boolean);
+  const toggles=[...document.querySelectorAll('#main .panel .tglbtn.active')].map(clean);
+  const all=bits.concat(toggles);
+  pa.textContent = all.length ? 'Inputs: '+all.join(' \u00b7 ') : '';
+});
 function attach(){
   // Scoped to #main, not document-wide: #tabbarInner's own [data-tab-switch]
   // buttons bind their own listener inside renderTabs(), only on the
