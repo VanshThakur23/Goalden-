@@ -7802,8 +7802,20 @@ function advisorStatementsState(){
     flags: div?div.flags:[],
   };
 }
+// Tool results must say what actually happened: pin_row used to TOGGLE
+// (so pinning an already-pinned row unpinned it while reporting ok), and
+// accepted rows that don't exist ("Totally Made Up Row" came back ok:true).
+const STMT_TOOL_SECTIONS=['profitLoss','balanceSheet','cashFlow','ratios','quarterly','shareholding'];
 function advisorStatementsPinRow(section,label){
   if(!section||!label) return {ok:false,error:'Missing section or label.'};
+  if(STMT_TOOL_SECTIONS.indexOf(section)<0) return {ok:false,error:'Unknown section "'+section+'". Use one of: '+STMT_TOOL_SECTIONS.join(', ')+'.'};
+  const b=statementsBundle(L.statements.primary);
+  if(!b) return {ok:false,error:'No company loaded yet. Call set_company first.'};
+  if(!b[section] || !findRow(b[section], label)){
+    const have=b[section] ? b[section].rows.map(r=>r.label) : [];
+    return {ok:false,error:'"'+label+'" is not a row in '+section+' for '+L.statements.primary+'.'+(have.length?' Rows available: '+have.join(', ')+'.':'')};
+  }
+  if(L.statements.pins.some(p=>p.section===section&&p.label===label)) return {ok:true, alreadyPinned:true, pins:L.statements.pins};
   statementsTogglePin(section,label);
   return {ok:true, pins:L.statements.pins};
 }
@@ -7826,12 +7838,26 @@ function advisorStatementsSetCompare(symbol){
   return {ok:true, symbol: symbol?String(symbol).toUpperCase():null};
 }
 function advisorStatementsFocusYear(year){
+  if(year){
+    const b=statementsBundle(L.statements.primary);
+    const years=b&&b.profitLoss ? b.profitLoss.periods.filter(p=>p.type==='fy').map(p=>p.year) : [];
+    if(!years.length) return {ok:false,error:'No company loaded yet. Call set_company first.'};
+    if(years.indexOf(Number(year))<0) return {ok:false,error:'FY'+year+' is not in '+L.statements.primary+"'s reported years (FY"+Math.min(...years)+'-FY'+Math.max(...years)+').'};
+    year=Number(year);
+  }
   if(year && year!==L.statements.focusYear){ L.statements.focusYear=null; statementsFocusYear(year); }
   else { L.statements.focusYear=year||null; updateStatementsUI(); }
   return {ok:true, focusYear:L.statements.focusYear};
 }
 function advisorStatementsOpenDefinition(label){
   if(!label) return {ok:false,error:'Missing label.'};
+  // Known definition, or at least a real row on the loaded company; anything
+  // else ("Flux capacitor") is an error, not a generic definition.
+  if(!ROW_DEFINITIONS[label]){
+    const b=statementsBundle(L.statements.primary);
+    const exists=b && STMT_TOOL_SECTIONS.some(sec=>b[sec] && findRow(b[sec], label));
+    if(!exists) return {ok:false,error:'No statement row or definition called "'+label+'".'};
+  }
   return {ok:true, label, definition: rowDefinitionText(label)};
 }
 function advisorStatementsExplainBench(){
@@ -8676,6 +8702,16 @@ function advisorCompareLive() {
 // ---- B3: Monte Carlo + stress testing ----
 function advisorRunMonteCarlo(overrides) {
   const m = L.mc;
+  // Validate before simulating: sip:'abc' / years:-5 used to return ok:true
+  // with every percentile at 0.
+  const o = overrides || {};
+  const bad = [];
+  const num = (k, lo, hi) => { if (o[k] == null) return; const v = Number(o[k]); if (!isFinite(v) || v < lo || v > hi) bad.push(k+' must be a number from '+lo+' to '+hi); else o[k] = v; };
+  num('sip', 0, 1e9); num('years', 1, 60); num('meanReturn', -20, 40); num('volatility', 0, 80); num('seed', 0, 1e9);
+  if (o.years != null && Math.round(o.years) !== o.years) bad.push('years must be a whole number');
+  if (o.regime != null && !REGIME_PRESETS[o.regime]) bad.push('regime must be one of: '+Object.keys(REGIME_PRESETS).join(', '));
+  if (bad.length) return { ok:false, error: bad.join('; ') + '.' };
+  overrides = o;
   const regimeKey = (overrides && overrides.regime) || m.regime;
   const regime = REGIME_PRESETS[regimeKey] || REGIME_PRESETS.normal;
   const sip = (overrides && overrides.sip != null) ? overrides.sip : m.sip;
@@ -8690,8 +8726,11 @@ function advisorRunMonteCarlo(overrides) {
 function advisorStressTest(scenario) {
   if (!L.country) return { ok:false, error:'Need a country first.' };
   const c = cfg();
-  const s = String(scenario || '').toLowerCase();
-  const ep = c.episodes.find(e => e.id === s || (e.label || '').toLowerCase().includes(s));
+  const s = String(scenario || '').trim().toLowerCase();
+  // An empty string "matched" every label via includes(''), silently picking
+  // 2008. Exact id first; a label substring only if it's a real word.
+  if (!s) return { ok:false, error:'Name a scenario. Valid: '+c.episodes.map(e=>e.id).join(', ') };
+  const ep = c.episodes.find(e => e.id === s) || (s.length >= 3 ? c.episodes.find(e => (e.label || '').toLowerCase().includes(s)) : null);
   if (!ep) return { ok:false, error:'Unknown scenario "'+scenario+'". Valid: '+c.episodes.map(e=>e.id).join(', ') };
   const saved = L.ret.shock;
   L.ret.shock = { epId: ep.id, year: 1 };
@@ -8713,6 +8752,28 @@ function advisorStressTest(scenario) {
 // pixels). The model uses this to explain the user's ACTUAL chart, not a
 // textbook definition of it.
 function advisorReadCurrentChart() {
+  // Read the Company has five charts but used to fall through to "no chart
+  // to explain". Summarised from the same engine functions the page draws
+  // with, so the advisor quotes exactly what's on screen. Checked before the
+  // country gate: this tab is India-only and doesn't use the country toggle.
+  if (L.tab === 'statements') {
+    const sym = L.statements.primary, b = statementsBundle(sym);
+    if (!b) return { ok:false, error:'No company loaded yet. Call set_company first.' };
+    const pl = b.profitLoss, cf = b.cashFlow, charts = [];
+    const br = pl ? marginBridgeOption(pl, b.schema, 5) : null;
+    if (br) charts.push({ kind:'bridge', title: br.graphic[0].style.text, xAxis:'steps from '+br.__now.baseLabel.toLowerCase()+' to net profit', yAxis:'rupees per ₹100', note:'each step is a reported line; second figure is the same step five years earlier',
+      points: br.__now.steps.map((st,i) => { const f = v => (v <= -0.05 ? '−' : '') + '₹' + Math.abs(v).toFixed(1); return { label: st.label, value: f(st.value) + (br.__then && br.__then.steps[i] ? ' (FY'+String(br.__then.year).slice(-2)+': '+f(br.__then.steps[i].value)+')' : '') }; }) });
+    const np = pl ? fySeries(pl,'Net Profit') : [], cfo = cf ? fySeries(cf,'Cash from Operating Activity') : [];
+    if (np.length >= 2 && cfo.length >= 2 && b.schema !== 'financial') charts.push({ kind:'profit-vs-cash', title:'Net profit vs cash from operations', xAxis:'fiscal year', yAxis:'₹ Cr', note: profitVsCashCaption(np, cfo) });
+    if (cf) { const last = s2 => { const v = fySeries(cf, s2).filter(p => p.value != null); return v.length ? v[v.length-1] : null; };
+      const o = last('Cash from Operating Activity'), i2 = last('Cash from Investing Activity'), f = last('Cash from Financing Activity'), n = last('Net Cash Flow');
+      if (o) charts.push({ kind:'cash-flow', title:'Where the cash came from and went, FY'+o.year, xAxis:'fiscal year', yAxis:'₹ Cr', note:'operations up, investing and financing usually down; the dot is the net change',
+        points:[{label:'operations', value:'₹'+Math.round(o.value).toLocaleString('en-IN')+' Cr'}, {label:'investing', value: i2 ? '₹'+Math.round(i2.value).toLocaleString('en-IN')+' Cr' : '—'}, {label:'financing', value: f ? '₹'+Math.round(f.value).toLocaleString('en-IN')+' Cr' : '—'}, {label:'net change in cash', value: n ? '₹'+Math.round(n.value).toLocaleString('en-IN')+' Cr' : '—'}] }); }
+    if (pl) { const g1 = growthSummary(fySeries(pl, salesLabelFor(b))), g2 = growthSummary(np), pc = v => v == null ? 'n/a' : (v*100).toFixed(1)+'%';
+      charts.push({ kind:'growth', title:'Growth rates (CAGR)', xAxis:'window', yAxis:'% per year', note:'', points:[{label:salesLabelFor(b)+' 10y/5y/3y', value:[g1.y10,g1.y5,g1.y3].map(pc).join(' / ')}, {label:'Net profit 10y/5y/3y', value:[g2.y10,g2.y5,g2.y3].map(pc).join(' / ')}] }); }
+    if (L.statements.pins.length) charts.push({ kind:'bench', title:'Pinned rows on the Bench', xAxis:'fiscal year', yAxis: L.statements.benchScale === 'actual' ? 'reported values' : 'indexed to 100', note:'', points: L.statements.pins.map(p => ({ label: p.label, value: p.section })) });
+    return { ok:true, tool:'Read the Company', company: sym, charts };
+  }
   if (!L.country) return { ok:false, error:'Ask the user to pick a country first.' };
   const c = cfg();
   const tab = L.tab;

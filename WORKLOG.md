@@ -2165,3 +2165,25 @@ Changes made by Claude Code (Chief). D4-05 from the Visual division.
 - Verified under emulated print media: the briefing is display:none when
   closed, table heights match their full content, and the inputs line is
   correct on 8 tabs; a PDF was generated without errors; smoke tests pass.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 11: advisor tool honesty in the Lab)
+Changes made by Claude Code (Chief). D5-08 / D5-09 from the AI/Reliability division.
+- `pin_row`: validates the section and that the row exists on the loaded
+  company (error lists the available rows), and re-pinning is a no-op
+  (`alreadyPinned`). Before, it toggled, so "pin Sales" on a pinned row
+  unpinned it while reporting ok, and made-up rows returned ok.
+- `open_definition`: unknown labels ("Flux capacitor") return an error
+  instead of a generic definition. `focus_year`: years outside the
+  company's reported range return an error (FY1850 used to be ok).
+- `run_monte_carlo`: numeric range checks on sip/years/meanReturn/
+  volatility/seed and a regime whitelist (sip:'abc', years:-5 returned ok
+  with all percentiles 0). `stress_test`: an empty name no longer matches
+  every label (it silently picked 2008); exact id first, label substring
+  only for 3+ characters.
+- `read_current_chart` on Read the Company summarises the ₹100 bridge,
+  profit vs cash (non-lenders), latest cash-flow split, growth CAGRs and
+  pinned rows, using the same engine functions the page draws with (it
+  used to say the tab had no chart).
+- Verified: 15 direct tool calls (valid and invalid) return the expected
+  ok/error; "explain this chart" on Read the Company in mock mode answers
+  from the bridge headline; engine tests 109/109, smokes 11/11, evals 9/9.
