@@ -882,6 +882,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 
 .stmt-divergence-strip{margin-top:14px;padding-top:12px;border-top:1px solid rgba(20,40,63,.1)}
 .stmt-tickrow{position:relative;height:22px}
+.live-plan-badge{display:inline-block;margin-left:8px;font-family:'Spline Sans Mono',monospace;font-size:10px;color:#946514;background:rgba(201,154,69,.12);border:1px solid rgba(201,154,69,.35);border-radius:4px;padding:1px 6px;vertical-align:1px}
 .stmt-flag-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px}
 .stmt-flag-card{display:flex;gap:12px;align-items:flex-start;text-align:left;font:inherit;cursor:pointer;background:rgba(160,58,34,.05);border:1px solid rgba(160,58,34,.22);border-left:3px solid var(--red);border-radius:3px 10px 10px 3px;padding:10px 12px;color:#14283F}
 .stmt-flag-card:hover,.stmt-flag-card:focus-visible{background:rgba(160,58,34,.09);outline:none}
@@ -4504,7 +4505,7 @@ function liveWindowNoteHTML(items){
   const curNote = cur.length>1 ? ` <b style="color:#9C4A2C">Mixed currencies (${cur.join(' and ')}):</b> returns are each in their own currency, with no exchange-rate conversion, so the mix return and the risk-free comparison are approximate.` : '';
   return w.tooShort
     ? `<div class="gr-note" style="border-left-color:#9C4A2C">These instruments overlap for less than about six months (${fmt(w.start)} to ${fmt(w.end)}), too short to compare fairly, so each is shown over its own history. Treat the frontier as rough.${curNote}</div>`
-    : `<div class="gr-note">Compared over the same dates for every instrument: <b>${fmt(w.start)} to ${fmt(w.end)}</b> (${w.years.toFixed(1)} years), the period they all have data for.${curNote}</div>`;
+    : `<div class="gr-note">Compared over the same dates for every instrument: <b>${fmt(w.start)} to ${fmt(w.end)}</b> (${w.years.toFixed(1)} years), the period they all have data for. The "best" mixes below are the best <i>for this past window</i>; the pick-list is today's index members, so companies that failed and left the index aren't in it. Treat them as a description of the past, not a forecast.${curNote}</div>`;
 }
 // "What would ₹1 lakh have become, and how bad did it get?" -- the two
 // questions a retail investor actually asks of a backtest, which the
@@ -4631,11 +4632,21 @@ function liveFundResultsHTML(){
   if(!live.search) return `<div class="cap" style="padding:8px 2px">Type a fund name or category, e.g. "gilt" or "banking".</div>`;
   if(!live.fundResults.length) return `<div class="cap" style="padding:8px 2px">No matches for "${live.search}".</div>`;
   const already=new Set(live.items.map(it=>it.key));
-  return live.fundResults.map(r=>{
+  // Plan type matters for the numbers: IDCW (dividend-payout) NAVs drop at
+  // every payout, so their price history understates the total return;
+  // Regular plans carry roughly 1%/yr more cost than Direct. Direct + Growth
+  // is the like-for-like choice, so it's listed first and the others are
+  // labelled.
+  const planOf=n=>{ const t=(n||'').toLowerCase(); return { idcw:/idcw|dividend|payout/.test(t), regular:/regular/.test(t) && !/direct/.test(t) }; };
+  const ranked=live.fundResults.slice().sort((a,b)=>{ const pa=planOf(a.schemeName), pb=planOf(b.schemeName); return (pa.idcw+pa.regular)-(pb.idcw+pb.regular); });
+  return ranked.map(r=>{
     const key='MF'+r.schemeCode;
     const disabled=already.has(key);
+    const pl=planOf(r.schemeName);
+    const badges=(pl.idcw?'<span class="live-plan-badge" title="Payouts are not reinvested, so this NAV history understates the fund\u2019s total return.">IDCW: return understated</span>':'')
+      +(pl.regular?'<span class="live-plan-badge" title="Regular plans pay distributor commission: roughly 1% a year more cost than the Direct plan of the same fund.">Regular: about 1%/yr more cost</span>':'');
     return `<button class="live-result-btn"${disabled?' disabled style="opacity:.35;cursor:default"':` data-live-add-fund="${r.schemeCode}" data-live-add-name="${(r.schemeName||'').replace(/"/g,'&quot;')}"`}>
-      <span>${r.schemeName}${disabled?' <span class="cap" style="font-size:10.5px">(added)</span>':''}</span>
+      <span>${r.schemeName}${badges}${disabled?' <span class="cap" style="font-size:10.5px">(added)</span>':''}</span>
     </button>`;
   }).join('');
 }
@@ -4769,7 +4780,7 @@ function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoi
     <div class="fx-legend">
       <span><i style="background:#2557C7"></i>The frontier: every possible split</span>
       <span><i style="border:2px solid #14283F;background:#14283F;border-radius:50%"></i>Risk-free rate (${rfPct}%) &middot; 0% risk by definition, where the dashed line starts</span>
-      <span><i style="border-top:2px dashed rgba(20,40,63,.9);background:transparent"></i>Capital Allocation Line: the risk-free rate blended with Best Balance, extended for leverage</span>
+      <span><i style="border-top:2px dashed rgba(20,40,63,.9);background:transparent"></i>Capital Allocation Line: the risk-free rate blended with Best Balance, from all cash to fully invested</span>
       <span><i style="background:#8FC79E;border-radius:50%"></i>Each instrument alone</span>
       <span><i style="border:2px solid #14283F;background:#14283F"></i>Best balance of risk and reward</span>
       <span><i style="border:2px solid #D97757;background:transparent"></i>Your mix &middot; hover for detail, click the curve to move it</span>
@@ -4813,7 +4824,9 @@ function liveCombinationsTable(points, a, b, rf, currentW){
 // financing extra tangency exposure at the risk-free rate) suits a
 // risk-seeking one — same framing as the worksheet's own notes.
 function liveCalTable(rf, tanRet, tanVol, aSym, bSym, wTan){
-  const levels=[0, 0.5, 1, 1.5, 2];
+  // All-cash to fully invested. Rows above 100% (borrowing at the FD rate to
+  // buy more) were dropped: a retail investor can't borrow at that rate.
+  const levels=[0, 0.25, 0.5, 0.75, 1];
   return `<div class="live-wc-wrap"><table class="live-wc-table">
     <thead><tr><th>Optimal portfolio</th><th>Risk-free</th><th>Return</th><th>Risk</th></tr></thead>
     <tbody>
@@ -4823,7 +4836,7 @@ function liveCalTable(rf, tanRet, tanVol, aSym, bSym, wTan){
     }).join('')}
     </tbody>
   </table></div>
-  <div class="gr-note" style="margin-top:8px">At 100% optimal portfolio, all money sits in the <b style="color:var(--paper)">${(wTan*100).toFixed(0)}% ${aSym} / ${((1-wTan)*100).toFixed(0)}% ${bSym}</b> mix. Below 100% is <b>lending</b> &ndash; some money parked at the risk-free rate, the safer side. Above 100% is <b>borrowing</b> at the risk-free rate to buy more of the optimal portfolio &ndash; leveraged, for a risk-seeking investor.</div>`;
+  <div class="gr-note" style="margin-top:8px">At 100% optimal portfolio, all money sits in the <b style="color:var(--paper)">${(wTan*100).toFixed(0)}% ${aSym} / ${((1-wTan)*100).toFixed(0)}% ${bSym}</b> mix. Below 100%, the rest sits at the risk-free rate: less risk, less return, along a straight line. The textbook line continues past 100% by borrowing at the risk-free rate, which individual investors can't do, so it stops here.</div>`;
 }
 function liveMultiCombinationsTable(frontier, items, rf, currentVol){
   let bestIdx=0, bestSharpe=-Infinity, minVarIdx=0, minVar=Infinity;
@@ -4993,7 +5006,9 @@ function liveTwoAssetHTML(items, rfPct){
   const wTan=tangencyWeightTwoAsset(sa.annualReturn, sb.annualReturn, sa.annualVol, sb.annualVol, c12, rf);
   const tanRet=portfolioReturn([wTan,1-wTan],[sa.annualReturn,sb.annualReturn]);
   const tanVol=Math.sqrt(portfolioVariance([wTan,1-wTan],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
-  const cal=capitalAllocationLine(rf, tanRet, tanVol, 2);
+  // Stops at 1x: beyond 100% the line assumes borrowing at the risk-free
+  // (FD) rate, which no retail investor can do.
+  const cal=capitalAllocationLine(rf, tanRet, tanVol, 1);
   const w=L.live.weight/100;
   const currentRet=portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]);
   const currentVol=Math.sqrt(portfolioVariance([w,1-w],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
@@ -5024,7 +5039,7 @@ function liveTwoAssetHTML(items, rfPct){
     <div class="gr-note" style="margin-top:10px">Best Sharpe ratio at <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> &middot; minimum risk at <b style="color:#256F55">${(wMinVar*100).toFixed(0)}% ${a.symbol}</b>.</div>
   </div>
   <div class="card">
-    <h4>Capital Allocation Line: risk-free + optimal portfolio${infoIcon('Blending the risk-free asset with the single best-Sharpe (tangency) mix of '+a.symbol+' and '+b.symbol+', at five leverage levels from all-cash to 2x.')}</h4>
+    <h4>Capital Allocation Line: risk-free + optimal portfolio${infoIcon('Blending the risk-free asset with the single best-Sharpe (tangency) mix of '+a.symbol+' and '+b.symbol+', from all cash to fully invested, in five steps.')}</h4>
     ${collapsibleSection('', 'Show the table', liveCalTable(rf, tanRet, tanVol, a.symbol, b.symbol, wTan))}
   </div>
   <div class="card">
@@ -9316,7 +9331,7 @@ function resultCanvasLiveFrontier() {
     const wTan = tangencyWeightTwoAsset(sa.annualReturn, sb.annualReturn, sa.annualVol, sb.annualVol, c12, rf);
     const tanRet = portfolioReturn([wTan,1-wTan],[sa.annualReturn,sb.annualReturn]);
     const tanVol = Math.sqrt(portfolioVariance([wTan,1-wTan],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
-    const cal = capitalAllocationLine(rf, tanRet, tanVol, 2);
+    const cal = capitalAllocationLine(rf, tanRet, tanVol, 1);
     const w = L.live.weight/100;
     const currentVol = Math.sqrt(portfolioVariance([w,1-w],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
     const currentRet = portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]);

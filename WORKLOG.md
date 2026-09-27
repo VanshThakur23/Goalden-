@@ -2314,3 +2314,17 @@ Changes made by Claude Code (Chief). D3-13 / D3-14 from the Company Analysis div
   every above/below-median bar was invisible (now 82px, verified).
 - Checks: YoY and vs-median values verified on Hindalco, TCS and Paytm; no
   errors on six companies; phone width 412px; tests 110/110; smokes 11/11.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 19: Test Real Investments honesty)
+Changes made by Claude Code (Chief). D2-10 / D2-11 / D2-12 from the Portfolio division.
+- Capital Allocation Line stops at 100% invested (chart, advisor summary,
+  table 0/25/50/75/100%). It extended to 2x, i.e. borrowing at the FD rate,
+  which individual investors can't do; copy and legend updated to say so.
+  Verified: the line's last point equals the tangency point (23.56% risk).
+- Fund search: Direct + Growth plans listed first; IDCW plans badged
+  "return understated" (payouts are not reinvested in the NAV history) and
+  Regular plans badged "about 1%/yr more cost". Verified with a sample list.
+- The shared-window note now says the "best" mixes are best for that past
+  window and that the pick-list is today's index members (survivorship), so
+  results describe the past, not a forecast.
+- Checks: tests 110/110, smokes 11/11, evals 9/9, contrast 0, no errors.
