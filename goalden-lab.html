@@ -1652,7 +1652,7 @@ function fxCompare({principal, direction, homeReturn, foreignReturn, depreciatio
    ===================================================================== */
 const C = {
   IN:{code:'IN',sym:'₹',name:'India',
-    d:{inflation:.06,debt:.07,hybrid:.10,equity:.12,postRet:.09,lifeExp:78,fdRate:.065},
+    d:{inflation:.06,debt:.07,hybrid:.10,equity:.12,postRet:.09,lifeExp:85,fdRate:.065},
     fmt(a,dp){if(dp===undefined)dp=0;const s=a<0?'-':'';a=Math.abs(a);const[i,d]=a.toFixed(dp).split('.');const l3=i.slice(-3),r=i.slice(0,-3);return s+'₹'+(r?r.replace(/\B(?=(\d{2})+(?!\d))/g,',')+',':'')+l3+(dp>0?'.'+d:'')},
     compact(a){const x=Math.abs(a);if(x>=1e7)return(a<0?'-':'')+'₹'+(x/1e7).toFixed(2)+' Cr';if(x>=1e5)return(a<0?'-':'')+'₹'+(x/1e5).toFixed(2)+' L';return this.fmt(a)},
     episodes:[
@@ -1720,7 +1720,7 @@ const C = {
       ],
     }},
   US:{code:'US',sym:'$',name:'United States',
-    d:{inflation:.025,debt:.045,hybrid:.07,equity:.09,postRet:.06,lifeExp:82,fdRate:.04},
+    d:{inflation:.025,debt:.045,hybrid:.07,equity:.09,postRet:.06,lifeExp:90,fdRate:.04},
     fmt(a,dp){if(dp===undefined)dp=0;const s=a<0?'-':'';a=Math.abs(a);const[i,d]=a.toFixed(dp).split('.');return s+'$'+i.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(dp>0?'.'+d:'')},
     compact(a){const x=Math.abs(a);if(x>=1e6)return(a<0?'-':'')+'$'+(x/1e6).toFixed(2)+'M';if(x>=1e3)return(a<0?'-':'')+'$'+(x/1e3).toFixed(2)+'K';return this.fmt(a)},
     episodes:[
@@ -1765,7 +1765,10 @@ const FX_DEPRECIATION_DEFAULT = 0.04; // INR/USD, verified Jul 2026
 const L = {
   country:'IN', tab:'home', navCollapsed:false, panelCollapsed:false, headerCollapsed:false,
   ret:{ age:30, retireAge:60, monthlyExpense:50000, lifestyleFactor:75,
-        preRate:10, postRate:9, inflation:6, lifeExp:78, due:true, realTerms:false, shock:null,
+        // Plan to 85, not 78: 78 is roughly the MEDIAN lifespan for a 60-year-old,
+        // so about half of people would outlive a plan built to it. Planning
+        // past the average is the standard way to cover longevity risk.
+        preRate:10, postRate:9, inflation:6, lifeExp:85, due:true, realTerms:false, shock:null,
         corpusMode:'expenses', customCorpus:30000000, customBasis:'future',
         existingSavings:0, ddVol:12, ddSeed:7 },
   step:{ corpus:37083320, years:30, preRate:10, stepUpPct:8 },

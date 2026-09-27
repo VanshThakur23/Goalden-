@@ -395,7 +395,7 @@ function drawdownSchedule(opts){const rows=[];let bal=opts.openingCorpus;let w=o
    ===================================================================== */
 const C = {
   IN:{code:'IN',name:'India',sym:'₹',
-    d:{inflation:.06,eduInflation:.10,debt:.07,hybrid:.10,equity:.12,postRet:.09,lifeExp:78,fdRate:.065},
+    d:{inflation:.06,eduInflation:.10,debt:.07,hybrid:.10,equity:.12,postRet:.09,lifeExp:85,fdRate:.065},
     goalInflation:{house:.075,car:.05,wedding:.07,travel:.05},
     expChips:[25000,50000,75000,100000],feeChips:[50000,100000,200000,500000],
     amtChips:[500000,1000000,2500000,5000000],yrChips:[3,5,7,10,15],
@@ -428,7 +428,7 @@ const C = {
     fmt(a,dp){if(dp===undefined)dp=0;const s=a<0?'-':'';a=Math.abs(a);const[i,d]=a.toFixed(dp).split('.');const l3=i.slice(-3),r=i.slice(0,-3);return s+'₹'+(r?r.replace(/\B(?=(\d{2})+(?!\d))/g,',')+',':'')+l3+(dp>0?'.'+d:'')},
     compact(a){const x=Math.abs(a);if(x>=1e7)return'₹'+(x/1e7).toFixed(1)+' Cr';if(x>=1e5)return'₹'+(x/1e5).toFixed(1)+' L';return this.fmt(a)}},
   US:{code:'US',name:'United States',sym:'$',
-    d:{inflation:.025,eduInflation:.05,debt:.045,hybrid:.07,equity:.09,postRet:.06,lifeExp:82,fdRate:.04},
+    d:{inflation:.025,eduInflation:.05,debt:.045,hybrid:.07,equity:.09,postRet:.06,lifeExp:90,fdRate:.04},
     goalInflation:{house:.04,car:.03,wedding:.04,travel:.03},
     expChips:[2000,4000,6000,10000],feeChips:[10000,20000,40000,60000],
     amtChips:[50000,100000,250000,500000],yrChips:[3,5,7,10,15],

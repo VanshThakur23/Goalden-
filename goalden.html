@@ -368,7 +368,9 @@ function drawdownSchedule(opts) {
 const C = {
   IN: {
     code:'IN', flag:'🇮🇳', name:'India', sym:'₹',
-    d: { inflation:.06, eduInflation:.10, debt:.07, hybrid:.10, equity:.12, postRet:.09, lifeExp:78, fdRate:.065 },
+    // lifeExp is the PLANNING age, set past median lifespan (about 78 IN /
+    // 82 US for a 60-year-old) so roughly half of users don't outlive the plan.
+    d: { inflation:.06, eduInflation:.10, debt:.07, hybrid:.10, equity:.12, postRet:.09, lifeExp:85, fdRate:.065 },
     goalInflation: { house:.075, car:.05, wedding:.07, travel:.05 },
     expChips: [25000, 50000, 100000, 200000],
     feeChips: [50000, 100000, 200000, 500000],
@@ -394,7 +396,7 @@ const C = {
   },
   US: {
     code:'US', flag:'🇺🇸', name:'United States', sym:'$',
-    d: { inflation:.025, eduInflation:.05, debt:.045, hybrid:.07, equity:.09, postRet:.06, lifeExp:82, fdRate:.04 },
+    d: { inflation:.025, eduInflation:.05, debt:.045, hybrid:.07, equity:.09, postRet:.06, lifeExp:90, fdRate:.04 },
     goalInflation: { house:.04, car:.03, wedding:.04, travel:.03 },
     expChips: [2000, 4000, 6000, 10000],
     feeChips: [10000, 20000, 40000, 60000],
@@ -1418,7 +1420,7 @@ function sResultsRetirement() {
       '<div class="as">Your existing '+c.compact(r.existing)+', left to grow at "'+rLabel+'", is already projected to more than cover the pot by age '+S.retireAge+'.</div></div>'
     : '<div class="action-card"><div class="al">Put away, starting now</div>' +
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
-      '<div class="as">For '+r.yrs+' years at "'+rLabel+'". Pot ready by age '+S.retireAge+', lasts to '+r.d.lifeExp+'.</div></div>';
+      '<div class="as">For '+r.yrs+' years at "'+rLabel+'". Pot ready by age '+S.retireAge+', lasts to '+r.d.lifeExp+', deliberately past average lifespan so you are unlikely to outlive it.</div></div>';
   return '<div class="result-scroll">' + advisorChipsHTML() +
     '<div class="result-intro">Good news: this is a solvable problem. Here is exactly what it takes.</div>' +
     '<div class="edit-row">' +

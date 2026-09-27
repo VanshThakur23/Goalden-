@@ -2187,3 +2187,20 @@ Changes made by Claude Code (Chief). D5-08 / D5-09 from the AI/Reliability divis
 - Verified: 15 direct tool calls (valid and invalid) return the expected
   ok/error; "explain this chart" on Read the Company in mock mode answers
   from the bridge headline; engine tests 109/109, smokes 11/11, evals 9/9.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 12: planning age)
+Changes made by Claude Code (Chief). D1-07 from the Retirement division.
+- Default planning ("plan to") age raised from 78 to 85 (India) and from 82
+  to 90 (US) in goalden.html, goalden-door2.html and goalden-lab.html (the
+  C configs plus the Lab's L.ret default). 78 and 82 are roughly the MEDIAN
+  remaining lifespan for a 60-year-old, so about half of users would
+  outlive a plan built to them; planning past the average is the standard
+  way to cover longevity risk. Level 1 now says so next to the number
+  ("lasts to 85, deliberately past average lifespan so you are unlikely to
+  outlive it").
+- VISIBLE EFFECT: every default retirement headline rises, e.g. Level 1
+  ₹3.7 Cr -> ₹4.7 Cr and the Lab SIP ₹17,835 -> ₹22,684/month on default
+  inputs. The Lab slider (70-95) still lets anyone choose a different age.
+- agent-evals/runner.js ground-truth CONFIG mirrors the new defaults (it
+  recomputes expected figures independently and failed until updated).
+  Checks: evals 9/9, engine tests 109/109, smokes 11/11.

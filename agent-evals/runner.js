@@ -34,8 +34,8 @@ const BASE = (function () { const i = ARGS.indexOf('--base'); return i >= 0 ? AR
 // The math is done by goalden-engine.js's functions below — never hardcoded.
 // ---------------------------------------------------------------------------
 const CONFIG = {
-  IN: { inflation: 0.06, eduInflation: 0.10, debt: 0.07, hybrid: 0.10, equity: 0.12, postRet: 0.09, lifeExp: 78, fdRate: 0.065 },
-  US: { inflation: 0.025, eduInflation: 0.05, debt: 0.045, hybrid: 0.07, equity: 0.09, postRet: 0.06, lifeExp: 82, fdRate: 0.04 },
+  IN: { inflation: 0.06, eduInflation: 0.10, debt: 0.07, hybrid: 0.10, equity: 0.12, postRet: 0.09, lifeExp: 85, fdRate: 0.065 },
+  US: { inflation: 0.025, eduInflation: 0.05, debt: 0.045, hybrid: 0.07, equity: 0.09, postRet: 0.06, lifeExp: 90, fdRate: 0.04 },
 };
 const RISK_ALLOC = {
   cautious: { eq: 0.25, de: 0.60, hy: 0.15 },
