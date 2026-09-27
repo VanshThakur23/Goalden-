@@ -251,6 +251,9 @@ main.enter{animation:mainEnter .3s ease-out}
 .slider-row input[type=range]{flex:1;accent-color:var(--gold);height:20px}
 /* 92px, not 64px: money fields hold 8-10 digit values (1 Cr = 10000000) and
    64px silently cropped them, so 2,00,000 read as "20000" in the box. */
+/* Two-across rows (Age / Retire) hold 2-digit values; the 92px money
+   width squeezed their sliders to stubs. */
+.field-row .field-num{width:56px !important}
 .field-num{width:92px !important;flex-shrink:0;background:rgba(20,40,63,.07);border:1px solid rgba(20,40,63,.2);border-radius:4px;padding:5px 6px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:11.5px;text-align:center}
 .field-num::-webkit-outer-spin-button,.field-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .field label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.74);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
@@ -1190,6 +1193,15 @@ function swpWithdrawal(rate,years,corpus,due){
 // pay W (un-inflated) at the end of year 1 in both modes, so an end-of-year
 // plan finished with ~27% of the corpus unspent while the caption said it
 // "reaches exactly zero", and the SWP tab under-quoted the draw.
+// What a historical crash does to a RETIREMENT pot in its shock year. The
+// episodes are equity-index falls (Sensex -52% in 2008), but a retirement
+// pot is usually part debt. Applying the full index fall to the whole pot
+// made every shocked plan fail, even at 2.5x the corpus. The equity share
+// takes the crash; the rest earns the normal debt return that year.
+function shockPotReturn(ep, equityPct){
+  const eq = (equityPct==null ? 40 : equityPct)/100;
+  return eq*ep.rate + (1-eq)*cfg().d.debt;
+}
 function drawdownWithShock(opts, shockYear, shockReturn){
   const rows=[];let bal=opts.openingCorpus,w=opts.firstWithdrawal;let ranOutYear=null;
   for(let yr=1;yr<=opts.years;yr++){
@@ -1794,11 +1806,11 @@ const L = {
         // Plan to 85, not 78: 78 is roughly the MEDIAN lifespan for a 60-year-old,
         // so about half of people would outlive a plan built to it. Planning
         // past the average is the standard way to cover longevity risk.
-        preRate:10, postRate:9, inflation:6, lifeExp:85, due:true, realTerms:false, shock:null,
+        preRate:10, postRate:9, inflation:6, lifeExp:85, due:true, realTerms:false, shock:null, shockEquity:40,
         corpusMode:'expenses', customCorpus:30000000, customBasis:'future',
         existingSavings:0, ddVol:12, ddSeed:7 },
   step:{ corpus:37083320, years:30, preRate:10, stepUpPct:8 },
-  swp:{ corpus:10000000, years:20, postRate:9, inflation:6, due:true, shock:null },
+  swp:{ corpus:10000000, years:20, postRate:9, inflation:6, due:true, shock:null, shockEquity:40 },
   fx:{ principal:1000000, direction:'investingAbroad', homeReturn:12, foreignReturn:9, deprec:4, years:10 },
   joint:{
     children:[
@@ -2172,7 +2184,7 @@ function calcRetLab(){
   let ddRows, shockInfo=null;
   if(r.shock){
     const ep=c.episodes.find(e=>e.id===r.shock.epId);
-    const res=drawdownWithShock({openingCorpus:corpus, firstWithdrawal:expAtRet, inflation:infl, nominalRate:postR, years:drawYrs, due:r.due}, r.shock.year, ep.rate);
+    const res=drawdownWithShock({openingCorpus:corpus, firstWithdrawal:expAtRet, inflation:infl, nominalRate:postR, years:drawYrs, due:r.due}, r.shock.year, shockPotReturn(ep, r.shockEquity));
     ddRows=res.rows;
     shockInfo={ep, ranOutYear:res.ranOutYear, finalBalance:res.finalBalance};
   } else {
@@ -2198,7 +2210,7 @@ function renderDDMCBody(res){
   const shockYear = shockEp ? Math.min(r.shock.year, res.drawYrs) : null;
   const mc=monteCarloDrawdown({openingCorpus:res.corpus, firstWithdrawal:res.expAtRet, inflation:r.inflation/100,
     meanReturn:r.postRate/100, volatility:r.ddVol/100, years:res.drawYrs, due:r.due, seed:r.ddSeed, n:1000,
-    shockYear, shockReturn:shockEp?shockEp.rate:null});
+    shockYear, shockReturn:shockEp?shockPotReturn(shockEp, r.shockEquity):null});
   const survPct=Math.round(mc.survivalPct*100);
   // A zero-margin corpus (the plan is deliberately sized to reach exactly
   // zero with no buffer) means P10 and, very often, P50 too represent a
@@ -2225,7 +2237,7 @@ function renderDDMCBody(res){
   if(survPct<90){
     const survAt=k=>monteCarloDrawdown({openingCorpus:res.corpus*k, firstWithdrawal:res.expAtRet, inflation:r.inflation/100,
       meanReturn:r.postRate/100, volatility:r.ddVol/100, years:res.drawYrs, due:r.due, seed:r.ddSeed, n:1000,
-      shockYear, shockReturn:shockEp?shockEp.rate:null}).survivalPct;
+      shockYear, shockReturn:shockEp?shockPotReturn(shockEp, r.shockEquity):null}).survivalPct;
     const kMax=2.5;
     if(survAt(kMax)<0.9){
       marginHtml=`<div class="gr-note" style="margin-top:10px">Even <b>${kMax}&times;</b> this corpus doesn't reach 9-in-10 survival at ${r.ddVol}% volatility${shockEp?' with this shock':''}. Lower the spending, retire later, or reduce volatility in retirement.</div>`;
@@ -2333,7 +2345,9 @@ function renderRetirement(){
       <div class="epchip${!r.shock?' active':''}" data-shock="none"><b>No shock</b>baseline plan</div>
       ${c.episodes.map(ep=>`<div class="epchip${r.shock&&r.shock.epId===ep.id?' active':''}" data-shock="${ep.id}"><b>${ep.label}</b>${(ep.rate*100).toFixed(0)}% in one year</div>`).join('')}
     </div>
-    ${r.shock?`<div class="field"><label>Shock hits in drawdown year <b>${r.shock.year}</b></label><input type="range" min="1" max="${res.drawYrs}" value="${r.shock.year}" data-k="shockYear"></div>`:''}
+    ${r.shock?`<div class="field"><label>Shock hits in drawdown year <b>${r.shock.year}</b></label><input type="range" min="1" max="${res.drawYrs}" value="${r.shock.year}" data-k="shockYear"></div>
+    <div class="field"><label>Equity share of the pot${infoIcon('Only the equity part of a retirement pot takes the historical index crash; the rest earns the normal debt return that year. Many retirees hold 30-50% in equity.')} <b>${r.shockEquity==null?40:r.shockEquity}%</b></label><input type="range" min="0" max="100" step="5" value="${r.shockEquity==null?40:r.shockEquity}" data-k="shockEquity"></div>
+    <div class="gr-note" style="margin-top:-6px">In the shock year the pot returns ${(shockPotReturn(c.episodes.find(e=>e.id===r.shock.epId), r.shockEquity)*100).toFixed(1)}%, not the full index move.</div>`:''}
   </div>
 
   <div class="output">
@@ -2508,7 +2522,7 @@ function renderSWP(){
   const w=swpWithdrawal(rr, s.years, s.corpus, s.due);
   const shockEp = s.shock ? c.episodes.find(e=>e.id===s.shock.epId) : null;
   const shockYr = s.shock ? Math.min(s.shock.year, s.years) : -1;
-  const sim=drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:infl, nominalRate:postR, years:s.years, due:s.due}, shockYr, shockEp?shockEp.rate:0);
+  const sim=drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:infl, nominalRate:postR, years:s.years, due:s.due}, shockYr, shockEp?shockPotReturn(shockEp, s.shockEquity):0);
   const rows=sim.rows;
   // The draw actually paid in year 1 -- equals w for start-of-year timing,
   // one year's inflation more for end-of-year (see drawdownWithShock).
@@ -2528,7 +2542,9 @@ function renderSWP(){
       <div class="epchip${!s.shock?' active':''}" data-swpshock="none"><b>No shock</b>baseline plan</div>
       ${c.episodes.map(ep=>`<div class="epchip${s.shock&&s.shock.epId===ep.id?' active':''}" data-swpshock="${ep.id}"><b>${ep.label}</b>${(ep.rate*100).toFixed(0)}% in one year</div>`).join('')}
     </div>
-    ${s.shock?`<div class="field"><label>Shock hits in year <b>${shockYr}</b></label><input type="range" min="1" max="${s.years}" value="${shockYr}" data-k="swpShockYear" data-tab="swp"></div>`:''}
+    ${s.shock?`<div class="field"><label>Shock hits in year <b>${shockYr}</b></label><input type="range" min="1" max="${s.years}" value="${shockYr}" data-k="swpShockYear" data-tab="swp"></div>
+    <div class="field"><label>Equity share of the pot${infoIcon('Only the equity part of the corpus takes the historical index crash; the rest earns the normal debt return that year.')} <b>${s.shockEquity==null?40:s.shockEquity}%</b></label><input type="range" min="0" max="100" step="5" value="${s.shockEquity==null?40:s.shockEquity}" data-k="shockEquity" data-tab="swp"></div>
+    <div class="gr-note" style="margin-top:-6px">In the shock year the corpus returns ${(shockPotReturn(shockEp, s.shockEquity)*100).toFixed(1)}%, not the full index move.</div>`:''}
     <div class="gr-note">The reverse of a goal calculator: instead of "how much do I need," this asks "how much can I safely take out."</div>
   </div>
   <div class="output">
@@ -9023,6 +9039,8 @@ function advisorStressTest(scenario) {
   return { ok:true, result: {
     scenario: ep.label,
     shockReturnPct: +(ep.rate*100).toFixed(1),
+    potReturnInShockYearPct: +(shockPotReturn(ep, L.ret.shockEquity)*100).toFixed(1),
+    equitySharePct: L.ret.shockEquity==null?40:L.ret.shockEquity,
     corpus: Math.round(res.corpus),
     monthlySIP: Math.round(res.sip),
     ranOutYear: res.shockInfo ? res.shockInfo.ranOutYear : null,
@@ -9119,7 +9137,7 @@ function advisorReadCurrentChart() {
     const rr = realRate(s.postRate/100, s.inflation/100);
     const w = swpWithdrawal(rr, s.years, s.corpus, s.due);
     const shockEp = s.shock ? c.episodes.find(function (e) { return e.id === s.shock.epId; }) : null;
-    const sim = drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:s.inflation/100, nominalRate:s.postRate/100, years:s.years, due:s.due}, shockEp ? Math.min(s.shock.year, s.years) : -1, shockEp ? shockEp.rate : 0);
+    const sim = drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:s.inflation/100, nominalRate:s.postRate/100, years:s.years, due:s.due}, shockEp ? Math.min(s.shock.year, s.years) : -1, shockEp ? shockPotReturn(shockEp, s.shockEquity) : 0);
     return { ok:true, tool:'Sustainable Withdrawal', charts:[
       { kind:'drawdown', title:'Can the corpus fund the withdrawal?', xAxis:'years (0 → '+s.years+')', yAxis:'balance (starts '+c.compact(s.corpus)+')', note:'built to reach zero at the end; a shock may cut it short', points:[{ label:'sustainable monthly draw', value:c.fmt(Math.round(w/12)) }, { label:'lasts', value:(sim.ranOutYear || s.years)+' years' }] },
     ] };
@@ -9211,7 +9229,7 @@ function advisorGetResults() {
     const rr = realRate(s.postRate/100, s.inflation/100);
     const w = swpWithdrawal(rr, s.years, s.corpus, s.due);
     const shockEp = s.shock ? c.episodes.find(e => e.id === s.shock.epId) : null;
-    const sim = drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:s.inflation/100, nominalRate:s.postRate/100, years:s.years, due:s.due}, shockEp ? Math.min(s.shock.year, s.years) : -1, shockEp ? shockEp.rate : 0);
+    const sim = drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:s.inflation/100, nominalRate:s.postRate/100, years:s.years, due:s.due}, shockEp ? Math.min(s.shock.year, s.years) : -1, shockEp ? shockPotReturn(shockEp, s.shockEquity) : 0);
     return { ok:true, result:{ tool:'Sustainable Withdrawal', corpus:s.corpus, years:s.years, annualWithdrawalYear1:Math.round(w), monthlyWithdrawalYear1:Math.round(w/12), lastsYears:sim.ranOutYear || s.years, ranOutEarly:!!sim.ranOutYear } };
   }
   if (tab === 'fx') {
@@ -9385,7 +9403,7 @@ function resultCanvasSWP() {
   const rr = realRate(s.postRate/100, s.inflation/100);
   const w = swpWithdrawal(rr, s.years, s.corpus, s.due);
   const shockEp = s.shock ? c.episodes.find(e=>e.id===s.shock.epId) : null;
-  const sim = drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:s.inflation/100, nominalRate:s.postRate/100, years:s.years, due:s.due}, shockEp ? Math.min(s.shock.year, s.years) : -1, shockEp ? shockEp.rate : 0);
+  const sim = drawdownWithShock({openingCorpus:s.corpus, firstWithdrawal:w, inflation:s.inflation/100, nominalRate:s.postRate/100, years:s.years, due:s.due}, shockEp ? Math.min(s.shock.year, s.years) : -1, shockEp ? shockPotReturn(shockEp, s.shockEquity) : 0);
   return { ok:true, html:
     '<div class="stat-row">' +
       '<div class="stat"><div class="stat-label">Sustainable monthly draw</div><div class="stat-value">'+c.fmt(Math.round(w/12))+'</div></div>' +
@@ -9482,7 +9500,7 @@ function briefingStress() {
   const res = calcRetLab();
   L.ret.shock = saved;
   const survived = !!(res.shockInfo && !res.shockInfo.ranOutYear);
-  return { ok:true, html: '<div class="card"><h4>Against the ' + ep.label + ' (' + (ep.rate*100).toFixed(0) + '% in one year)</h4>' +
+  return { ok:true, html: '<div class="card"><h4>Against the ' + ep.label + ' (' + (ep.rate*100).toFixed(0) + '% for equities; ' + (shockPotReturn(ep, L.ret.shockEquity)*100).toFixed(1) + '% for a pot ' + (L.ret.shockEquity==null?40:L.ret.shockEquity) + '% in equities)</h4>' +
     '<div class="stat-row">' +
     '<div class="stat"><div class="stat-label">Outcome</div><div class="stat-value" style="color:' + (survived ? '#256F55' : '#9C4A2C') + '">' + (survived ? 'Survives' : 'Runs out in drawdown year ' + res.shockInfo.ranOutYear) + '</div></div>' +
     '<div class="stat"><div class="stat-label">Monthly SIP</div><div class="stat-value">' + c.fmt(Math.round(res.sip)) + '</div></div>' +

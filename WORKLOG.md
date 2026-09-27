@@ -2328,3 +2328,23 @@ Changes made by Claude Code (Chief). D2-10 / D2-11 / D2-12 from the Portfolio di
   window and that the pick-list is today's index members (survivorship), so
   results describe the past, not a forecast.
 - Checks: tests 110/110, smokes 11/11, evals 9/9, contrast 0, no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 20: realistic stress tests)
+Changes made by Claude Code (Chief). D1-20 from the Retirement division.
+- goalden-lab.html `shockPotReturn(ep, equityPct)`: historical shocks are
+  equity-index falls (Sensex -52% in 2008), but they were applied to the
+  WHOLE retirement pot. Now the equity share takes the crash and the rest
+  earns the normal debt return (7% IN). New "Equity share of the pot"
+  slider (default 40%) with a one-line readout ("In the shock year the pot
+  returns -16.6%"), on Retirement and Sustainable Withdrawal. It applies to
+  the deterministic drawdown, the drawdown Monte Carlo, the 9-in-10 line,
+  SWP, the advisor's stress_test (which also reports
+  potReturnInShockYearPct / equitySharePct) and the printed briefing.
+- Effect (default plan, 2008 in year 2, 12% vol): before, "even 2.5x the
+  corpus doesn't reach 9-in-10"; now 1.91x at 40% equity (1.51x at 0%).
+  100% equity reproduces the old behaviour exactly. Checked:
+  0.4 x -52% + 0.6 x 7% = -16.6%.
+- Regression fix: widening the number boxes to 92px (iteration 2) squeezed
+  the two-across Age/Retire sliders; boxes in `.field-row` are 56px (the
+  sliders are now 73px, slightly wider than originally).
+- Checks: tests 110/110, smokes 11/11, evals 9/9, no page errors.
