@@ -5946,6 +5946,7 @@ function attach(){
   document.querySelectorAll('[data-stmt-open]').forEach(el=>{
     el.addEventListener('click',()=>{
       L.statements.primary=el.dataset.stmtOpen.toUpperCase();
+      L.statements.flagWindow=null;
       statementsShellMounted=false; // force a fresh mount for the new symbol
       L.tab='statements';
       render();
@@ -6395,7 +6396,7 @@ function statementsSetPrimary(symbol){
   if(!sym) return;
   const changed = sym!==L.statements.primary;
   L.statements.primary=sym;
-  if(changed){ L.statements.pins=[]; L.statements.focusYear=null; L.statements._focusedFlag=null; L.statements.companionFocus=null; L.statements.checklistDismissed=false; }
+  if(changed){ L.statements.pins=[]; L.statements.focusYear=null; L.statements.flagWindow=null; L.statements._focusedFlag=null; L.statements.companionFocus=null; L.statements.checklistDismissed=false; }
   L.statements.search='';
   addRecentTicker(sym);
   const input=document.getElementById('stmtSearchInput'); if(input) input.value='';
@@ -6461,6 +6462,7 @@ function statementsTogglePin(section,label){
   }
 }
 function statementsFocusYear(year){
+  L.statements.flagWindow = null;
   L.statements.focusYear = (year===L.statements.focusYear) ? null : year;
   updateStatementsUI();
 }
@@ -6475,7 +6477,10 @@ function statementsOpenFlag(flagKey){
   if(!div) return;
   const flag = div.flags.find(f=>f.ruleId===ruleId && f.year===year);
   if(!flag) return;
-  L.statements.focusYear = year;
+  // Keep the over-time view (switching to a one-year bar chart hid the
+  // multi-year trend the warning is about) and shade the rule's window.
+  L.statements.focusYear = null;
+  L.statements.flagWindow = {from: year-3, to: year};
   (FLAG_PIN_MAP[ruleId]||[]).forEach(p=>{
     if(!L.statements.pins.some(x=>x.section===p.section && x.label===p.label)){
       L.statements.pins.push(p);
@@ -6973,6 +6978,17 @@ function updateBenchChart(){
   const pins = s.pins.map(statementsPinSeries);
   const option = s.focusYear!=null ? benchChartOptionAtYear(pins, s.focusYear) : benchChartOption(pins, s.indexed);
   option.tooltip = s.focusYear!=null ? benchTooltipAtYear(pins) : benchTooltipOverTime(pins);
+  // A clicked warning shades the years its rule looked at, on the
+  // over-time view, so the trend behind the warning stays visible.
+  if(s.focusYear==null && s.flagWindow && option.__years && option.series && option.series[0]){
+    const ys=option.__years, cats=(option.xAxis && option.xAxis.data) || [];
+    const i0=ys.findIndex(y=>y>=s.flagWindow.from), i1=ys.map(y=>y<=s.flagWindow.to).lastIndexOf(true);
+    if(i0>=0 && i1>=i0 && cats[i0]!=null && cats[i1]!=null){
+      option.series[0].markArea={silent:true, itemStyle:{color:'rgba(160,58,34,.08)', borderColor:'rgba(160,58,34,.35)', borderWidth:1},
+        label:{show:true, position:'insideTop', color:'#9C4A2C', fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace", formatter:'Flagged: FY'+String(s.flagWindow.to).slice(-2)},
+        data:[[{xAxis:cats[i0]},{xAxis:cats[i1]}]]};
+    }
+  }
   initChart('stmtBenchChart', option);
   // Bar-at-a-year mode re-keys the x-axis to pin labels, not fiscal years,
   // so a data-period hover value can't address a dataIndex on it the same

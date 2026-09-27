@@ -2359,3 +2359,17 @@ Changes made by Claude Code (Chief). D4-10 from the Visual division.
 - Verified: Enter on a focused chip selects it (SWP 2008); font and size
   unchanged; category click still filters; contrast 0 on the three tabs;
   tests 110/110; smokes 11/11.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 22: flag click keeps the trend)
+Changes made by Claude Code (Chief). D3-16 from the Company Analysis division.
+- goalden-lab.html `statementsOpenFlag`: clicking a warning (tick or card) no
+  longer switches the Bench to a one-year bar view (which hid the
+  three-year trend the rule is about). It keeps the over-time chart, pins
+  the evidence rows as before, and shades the rule's window
+  (flagged year - 3 to flagged year) with a "Flagged: FYxx" label.
+  The window clears on focusing a year or changing company.
+- Verified on VEDL (FY24 dividend flag): focusYear stays null, markArea
+  covers FY21-FY24, the evidence rows are pinned, no errors on six
+  companies, tests 110/110, smokes 11/11.
+- Noted for later (pre-existing): indexed Bench mode can produce extreme
+  values for series with a small or negative base year (dividend payout %).
