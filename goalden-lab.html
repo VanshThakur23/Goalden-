@@ -3356,8 +3356,8 @@ function portfolioTailRiskHTML(d){
 // cloud/assetPoints from this one function, the indices the chart shows
 // and the indices a click resolves to can never drift apart.
 function computePortfolioFrontierData(d, assets, corr){
-  // The frontier line is always derived from the full 3000-point cloud,
-  // via the 40 volatility bins inside generateFrontier() -- never from
+  // The frontier line is solved exactly by generateFrontier()
+  // (goalden-engine.js), independent of the cloud -- never from
   // whatever subset ends up on screen below. Thinning the display can
   // only ever declutter the dots, never bend the blue line itself.
   const {cloud: fullCloud, frontier} = generateFrontier(d.returns, d.vols, corr, 3000, L.portfolio.seed);
@@ -4351,10 +4351,57 @@ async function liveRunFundSearch(){
   L.live.fundSearching=false;
   const el=document.getElementById('liveFundResults'); if(el){ el.innerHTML=liveFundResultsHTML(); wireLiveResultButtons(el); }
 }
+// Every comparison (frontier, correlation, mix return, the advisor's
+// numbers) must be computed over ONE shared date window. Yahoo returns 10
+// years, MFAPI a fund's whole history since launch, and nothing trimmed
+// them: each instrument's return/volatility came from its own window while
+// the pairwise covariance used only the overlapping dates. That mixes
+// periods (the same asset measured over different windows read -2.3% vs
+// +10.8%) and can produce correlations above 1 (1.93 seen) or a negative
+// portfolio variance. Here every ready instrument is cut to
+// [latest start, earliest end] and re-analysed on exactly those dates.
+// Per-instrument cards keep each instrument's own full history.
+const LIVE_WINDOW_CACHE = new Map();
+function liveCommonWindow(items){
+  const ds=items.map(it=>L.live.data[it.key]);
+  const start=ds.map(d=>d.prices[0].date).sort().pop();
+  const end=ds.map(d=>d.prices[d.prices.length-1].date).sort()[0];
+  return {start, end};
+}
+function liveWindowStats(items){
+  if(!items.length) return {stats:[], window:null};
+  const win=liveCommonWindow(items);
+  const key=items.map(it=>it.key+':'+L.live.data[it.key].prices.length).join('|')+'|'+win.start+'|'+win.end;
+  if(LIVE_WINDOW_CACHE.has(key)) return LIVE_WINDOW_CACHE.get(key);
+  let tooShort=false;
+  const stats=items.map(it=>{
+    const d=L.live.data[it.key];
+    const cut=d.prices.filter(p=>p.date>=win.start && p.date<=win.end);
+    // Under ~6 months of overlap the statistics are noise; fall back to the
+    // full histories and say so on screen rather than print fake precision.
+    if(cut.length<120){ tooShort=true; return d.stats; }
+    return computeReturnStats(cut, it.type==='fund');
+  });
+  const years=(new Date(win.end)-new Date(win.start))/(365.25*24*3600*1000);
+  const res={stats, window:Object.assign({}, win, {years, tooShort})};
+  if(LIVE_WINDOW_CACHE.size>40) LIVE_WINDOW_CACHE.clear();
+  LIVE_WINDOW_CACHE.set(key,res);
+  return res;
+}
+function liveWindowNoteHTML(items){
+  const {window:w}=liveWindowStats(items);
+  if(!w) return '';
+  const fmt=d=>new Date(d).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+  const cur=[...new Set(items.map(it=>L.live.data[it.key].currency||'INR'))];
+  const curNote = cur.length>1 ? ` <b style="color:#9C4A2C">Mixed currencies (${cur.join(' and ')}):</b> returns are each in their own currency, with no exchange-rate conversion, so the mix return and the risk-free comparison are approximate.` : '';
+  return w.tooShort
+    ? `<div class="gr-note" style="border-left-color:#9C4A2C">These instruments overlap for less than about six months (${fmt(w.start)} to ${fmt(w.end)}), too short to compare fairly, so each is shown over its own history. Treat the frontier as rough.${curNote}</div>`
+    : `<div class="gr-note">Compared over the same dates for every instrument: <b>${fmt(w.start)} to ${fmt(w.end)}</b> (${w.years.toFixed(1)} years), the period they all have data for.${curNote}</div>`;
+}
 function onLiveFrontierPick(w){ L.live.weight=Math.round(w*100); render(); }
 function liveComputeMulti(){
   const items=liveReadyItems();
-  const stats=items.map(it=>L.live.data[it.key].stats);
+  const stats=liveWindowStats(items).stats;
   const returns=stats.map(s=>s.annualReturn), vols=stats.map(s=>s.annualVol);
   const {corr}=computeCovarianceMatrix(stats);
   const {cloud,frontier}=generateFrontier(returns, vols, corr, 3000, L.live.seed);
@@ -4749,7 +4796,7 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
 function liveTwoAssetHTML(items, rfPct){
   const rf=rfPct/100;
   const [a,b]=items;
-  const sa=L.live.data[a.key].stats, sb=L.live.data[b.key].stats;
+  const [sa,sb]=liveWindowStats(items).stats;
   const {corr}=computeCovarianceMatrix([sa,sb]);
   const c12=corr[0][1];
   const frontier=twoAssetFrontier(sa.annualReturn, sb.annualReturn, sa.annualVol, sb.annualVol, c12);
@@ -4769,7 +4816,7 @@ function liveTwoAssetHTML(items, rfPct){
   const compoundedApprox = currentRet - (currentVol*currentVol)/2;
   const minVarRet=portfolioReturn([wMinVar,1-wMinVar],[sa.annualReturn,sb.annualReturn]);
   const minVarVol=Math.sqrt(portfolioVariance([wMinVar,1-wMinVar],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
-  return `<div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
+  return `${liveWindowNoteHTML(items)}<div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
     <div class="stat"><div class="stat-label">Correlation</div><div class="stat-value">${c12.toFixed(2)}</div>${advisorAskLink('What does this correlation mean?')}</div>
     <div class="stat"><div class="stat-label">Your mix return</div><div class="stat-value">${(currentRet*100).toFixed(1)}%</div></div>
     <div class="stat"><div class="stat-label">Your mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
@@ -4777,7 +4824,7 @@ function liveTwoAssetHTML(items, rfPct){
   </div>
   <div class="card is-primary">
     <h4>${a.symbol} / ${b.symbol}${infoIcon('Every point on the blue curve is one weight split between these two instruments, swept from 100% '+b.symbol+' to 100% '+a.symbol+'. The dashed line is the Capital Allocation Line: the risk-free rate blended with the best-Sharpe (tangency) mix, extended past 100% to show what borrowing at the risk-free rate to lever up would do.')}</h4>
-    <div class="cap">Annualised from ${sa.n} and ${sb.n} real daily observations. Higher up is more return, further right is more risk.</div>
+    <div class="cap">Annualised from ${Math.min(sa.n,sb.n).toLocaleString()} daily observations over the shared window. Higher up is more return, further right is more risk.</div>
     ${liveFrontierChart(frontier, assetPoints, {vol:currentVol,ret:currentRet}, cal, {vol:tanVol,ret:tanRet,w:wTan}, 'live-frontier-echart', onLiveFrontierPick, `${(w*100).toFixed(0)}% ${a.symbol} / ${((1-w)*100).toFixed(0)}% ${b.symbol}`, {vol:minVarVol,ret:minVarRet})}
     <div class="gr-note" style="margin-top:10px">${liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentSharpe, wTan, tanVol, tanRet, rf, w, wMinVar, sa.annualReturn, sa.annualVol, sb.annualReturn, sb.annualVol)}</div>
     ${advisorAskLink('Explain this chart to me')}
@@ -4817,15 +4864,15 @@ function liveMultiAssetHTML(computed, rfPct){
   const lowPt = frontier[0];
   const hiPt = frontier.reduce((best,p)=> (!best || p.ret>best.ret) ? p : best, null);
   const rangeLine = (lowPt && hiPt && hiPt.vol > lowPt.vol + 0.0005 && hiPt.ret > lowPt.ret + 0.0005) ? `<div class="gr-note" style="margin-top:10px">Moving up the efficient part of this frontier, from the lowest-risk mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(lowPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(lowPt.ret)} for ${pct(lowPt.vol)} risk &ndash; up to the highest-return mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(hiPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(hiPt.ret)} for ${pct(hiPt.vol)} risk &ndash; both return and risk magnify together. Taking more risk on this line always buys more expected return; there's no way to get one without the other.</div>` : '';
-  return `<div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
+  return `${liveWindowNoteHTML(items)}<div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
     <div class="stat"><div class="stat-label">Instruments</div><div class="stat-value">${items.length}</div></div>
     <div class="stat"><div class="stat-label">Selected mix return</div><div class="stat-value">${(currentPoint.ret*100).toFixed(1)}%</div></div>
     <div class="stat"><div class="stat-label">Selected mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
     <div class="stat"><div class="stat-label">Compounded equivalent${infoIcon('An approximation of what this mix would actually compound to over time: expected return minus half the variance (μ − σ²/2). A quick read on how much the expected-return figure overstates real growth for a mix this volatile.')}</div><div class="stat-value">${(compoundedApprox*100).toFixed(1)}%</div></div>
   </div>
   <div class="card is-primary">
-    <h4>Simulated frontier${infoIcon('With 3 or more instruments there is no single sweepable weight, so this samples 3,000 random weight combinations (seeded, so it repeats identically) and keeps the best-return mix at each risk level — the same technique Build a Portfolio uses.')}</h4>
-    <div class="cap">Annualised from real daily prices: ${items.map(it=>it.symbol).join(', ')}. Higher up is more return, further right is more risk &ndash; the blue line is the best you could have done at each risk level, and your orange marker is where this exact mix actually sits.</div>
+    <h4>Efficient frontier${infoIcon('The faint dots are 3,000 random weight combinations (seeded, so they repeat identically), to show the range of mixes you could hold. The blue line is solved exactly: for each risk level it is the long-only mix with the highest possible return, the same method Build a Portfolio uses.')}</h4>
+    <div class="cap">Annualised from real daily prices over the shared window: ${items.map(it=>it.symbol).join(', ')}. Higher up is more return, further right is more risk &ndash; the blue line is the best you could have done at each risk level, and your orange marker is where this exact mix actually sits.</div>
     ${frontierChart(cloud, frontier, assetPoints, currentPoint, 'live-multi-frontier-echart', onLiveMultiFrontierPick, rf)}
     <div class="gr-note" style="margin-top:10px">${frontierTakeawayHTML(currentPoint, currentSharpe, frontier, onLiveMultiFrontierPick)}</div>
     ${moneyLine}
@@ -4894,7 +4941,7 @@ function liveOutputHTML(ready, rfPct){
   // year over year, so handing it the arithmetic figure overstated the
   // projected corpus (19.2% vs 17.9% on a typical equity pair).
   const mixRet = isTwoAsset
-    ? (() => { const [a,b]=ready; const sa=L.live.data[a.key].stats, sb=L.live.data[b.key].stats; const w=L.live.weight/100; const {corr}=computeCovarianceMatrix([sa,sb]); const r=portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]); const v=portfolioVariance([w,1-w],[sa.annualVol,sb.annualVol],corr); return r-v/2; })()
+    ? (() => { const [sa,sb]=liveWindowStats(ready).stats; const w=L.live.weight/100; const {corr}=computeCovarianceMatrix([sa,sb]); const r=portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]); const v=portfolioVariance([w,1-w],[sa.annualVol,sb.annualVol],corr); return r-v/2; })()
     : (() => { let weights=L.live.selectedWeights; if(!weights||weights.length!==multiComputed.items.length) weights=multiComputed.items.map(()=>1/multiComputed.items.length); const r=portfolioReturn(weights, multiComputed.returns); const v=portfolioVariance(weights, multiComputed.vols, multiComputed.corr); return r-v/2; })();
   return errorBanner + (isTwoAsset ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(multiComputed, rfPct))
     + instrumentDropdown
@@ -8040,7 +8087,7 @@ Assumptions (per country): India (₹): inflation 6%, debt 7%, hybrid 10%, equit
 Key concepts the user may ask about: efficient frontier, Monte Carlo, sequence-of-returns risk, volatility, risk/return trade-off, glide path, annuity-due withdrawals.
 
 Portfolio math (Build a Portfolio / Test Real Investments):
-- Efficient frontier: the curve of mixes that give the most expected return for a given risk (or least risk for a given return). This app generates it by sampling thousands of random weight combinations, computing each one's return and volatility from the asset returns and the correlation matrix, and keeping only the non-dominated (best) points. A mix below the frontier is taking risk without being paid for it.
+- Efficient frontier: the curve of mixes that give the most expected return for a given risk (or least risk for a given return). This app solves it exactly: for each risk level it finds the long-only mix with the highest expected return, using the asset returns, volatilities and correlation matrix. The faint dots are thousands of random mixes, shown for context. A mix below the frontier is taking risk without being paid for it.
 - Correlation matrix: how each pair of assets moves together, on a scale of -1 to +1. Here it is built from cluster-level correlations (assets in the same style cluster move closely, equity is still correlated with equity, debt is largely independent of equity, gold is a near-zero hedge). Positive correlation reduces diversification; near-zero/negative correlation is what lowers portfolio risk.
 - Tangency portfolio / Best Balance: the single mix on the frontier with the highest Sharpe ratio (return above the risk-free rate per unit of risk). The Capital Allocation Line (CAL) is a straight line from the risk-free rate through this point; blending risk-free cash with the tangency mix gives the best risk/return trade-off available.
 - Risk-free rate: the safe baseline the Sharpe ratio and CAL use. It defaults to the country's FD rate (India ~6.5%, US ~4%) and can be overridden in Test Real Investments.
@@ -8208,7 +8255,7 @@ function advisorExplainMetric(metric) {
   if (m === 'correlation') {
     const items = liveReadyItems();
     if (items.length < 2) return { ok:false, error:'Correlation needs at least two loaded instruments in Test Real Investments.' };
-    const stats = items.map(function (it) { return L.live.data[it.key].stats; });
+    const stats = liveWindowStats(items).stats;
     const cov = computeCovarianceMatrix(stats);
     const c12 = cov.corr[0][1];
     const phrase = c12 > 0.5 ? 'move together strongly' : c12 > 0.2 ? 'move together moderately' : c12 > -0.2 ? 'are largely independent' : 'tend to move opposite each other';
@@ -8285,7 +8332,7 @@ function advisorExplainInstrument(symbol) {
   const idx = items.indexOf(item);
   let corrNote = '';
   if (items.length > 1 && idx !== -1) {
-    const stats = items.map(function (x) { return L.live.data[x.key].stats; });
+    const stats = liveWindowStats(items).stats;
     const cov = computeCovarianceMatrix(stats);
     const pairs = items.filter(function (x) { return x.key !== item.key; }).map(function (o) { return o.symbol+': '+cov.corr[idx][items.indexOf(o)].toFixed(2); }).join(', ');
     corrNote = ' Correlation with the rest: '+pairs+'.';
@@ -8555,7 +8602,7 @@ function advisorCompareLive() {
   const items = liveReadyItems();
   if (items.length < 2) return { ok:false, error:'Need at least two loaded instruments — add them via add_instrument first.' };
   const rf = liveDefaultRf() / 100;
-  const stats = items.map(it => L.live.data[it.key].stats);
+  const stats = liveWindowStats(items).stats;
   const holdings = items.map((it, i) => ({
     symbol: it.symbol,
     label: L.live.data[it.key].label || it.symbol,
@@ -8663,7 +8710,7 @@ function advisorReadCurrentChart() {
     const items = liveReadyItems();
     if (items.length < 2) return { ok:false, error:'The user needs to add at least two instruments in Test Real Investments first.' };
     const rf = liveDefaultRf() / 100;
-    const stats = items.map(function (it) { return L.live.data[it.key].stats; });
+    const stats = liveWindowStats(items).stats;
     const returns = stats.map(function (s) { return s.annualReturn; });
     const vols = stats.map(function (s) { return s.annualVol; });
     const points = items.map(function (it, i) { return { label: it.symbol, value:'return '+(returns[i]*100).toFixed(1)+'%, risk '+(vols[i]*100).toFixed(1)+'%' }; });
@@ -8902,7 +8949,7 @@ function resultCanvasLiveFrontier() {
   const rf = liveDefaultRf() / 100;
   if (items.length === 2) {
     const [a, b] = items;
-    const sa = L.live.data[a.key].stats, sb = L.live.data[b.key].stats;
+    const [sa, sb] = liveWindowStats(items).stats;
     const { corr } = computeCovarianceMatrix([sa, sb]);
     const c12 = corr[0][1];
     const frontier = twoAssetFrontier(sa.annualReturn, sb.annualReturn, sa.annualVol, sb.annualVol, c12);

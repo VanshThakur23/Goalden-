@@ -2084,3 +2084,35 @@ Changes made by Claude Code (Chief), D4-04/D4-06 from the Visual division.
   effective background, large-text threshold 3:1) went from 11-169
   failures per tab to 0 on all 12 Lab tabs; screenshot checked; no page
   errors. Not yet applied to goalden.html / goalden-door2.html / index.html.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 8: Test Real Investments date window)
+Changes made by Claude Code (Chief). D2-03, a critical-severity finding from the Portfolio division.
+- goalden-lab.html `liveWindowStats` / `liveCommonWindow`: every comparison
+  in Test Real Investments (two-instrument and multi-instrument views,
+  frontier, correlation, mix return, the hand-off to Retirement, and all
+  five advisor tool paths) now uses statistics computed over ONE shared
+  date window: [latest start, earliest end] across the chosen instruments.
+  Before, each instrument's return and volatility came from its own window
+  (Yahoo: 10 years; MFAPI: since fund launch) while covariance used only
+  the overlap, so the same asset could read -2.3% vs +10.8% and
+  correlations could exceed 1.
+  Verified with a test-only symbol that serves the last 2 years of another
+  symbol's series: old correlation 1.034 (impossible) and returns 6.8% vs
+  11.6% for the identical asset; now correlation 1.00 and 11.6% for both.
+  Cached per instrument set; per-instrument cards keep full histories.
+- A note above the results names the shared window ("Sept 2024 to Sept 2026,
+  2.0 years"). It warns when the overlap is under about 6 months (it then
+  falls back to full histories and says so), and when instruments are in
+  different currencies (no FX conversion yet; D2-04 still open).
+- The multi-instrument chart title changed from "Simulated frontier" to
+  "Efficient frontier", with an info text explaining that the line is
+  solved exactly and the dots are random mixes. The advisor's built-in
+  "Efficient frontier" explanation and a stale code comment were updated
+  to match.
+- Left as is: Levels 1/2 `compare_portfolio` still tags 3-4-instrument
+  results 'sampled-frontier' and says the weights are approximate. The
+  line is now exact, but the best-balance point is still chosen from a grid
+  of frontier points, and the tag is part of the advisor tool contract.
+- Checks: engine.test.js 109/109, all 11 smoke files pass, compounded
+  hand-off still matches the on-screen figure, advisor chart/results tools
+  run on a 3-instrument set, no page errors on any Lab tab.
