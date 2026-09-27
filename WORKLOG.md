@@ -2462,3 +2462,24 @@ Changes made by Claude Code (Chief). D2-05 from the Portfolio division.
   On mock RELIANCE.NS + AAPL + INFY.NS (independent series) both stay ~0
   (0.008 / 0.038), as they should. Tests 111/111, smokes 11/11, all 12 Lab
   tabs render with no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 29: Lab home grid + chart text floor)
+Changes made by Claude Code (Chief). D4-15 and D4-19 from the Visual division.
+- goalden-lab.html home: the 7 "More tools" are an aligned grid
+  (auto-fill, min 250px) instead of a wrapping pill row that left Plan
+  Health alone on the last line. Each chip shows a one-line description
+  on screen; before, it was only in a hover tooltip, which touch users
+  never see. The 4th main card gets its own corner cut, like cards 1-3.
+- Chart text floor: no chart label or tick is below 10px any more, in the
+  Lab, Level 1 (fee bars), goalden-engine.js (the Level 1/2 briefing
+  frontier) and statements-engine.js. Named markers (BEST BALANCE, SAFEST,
+  YOUR MIX, RISK-FREE) are 11px. The exception is the Build a Portfolio
+  markers, which are 10px, because at 11px the best-mix box ran into the
+  y-axis ticks. That box now hangs above-left of its marker and is clamped
+  inside the chart. On a phone the old box printed over the axis; now it is
+  fully visible, though it still sits close to "+x% possible". Engine
+  SAFEST and BEST BALANCE labels shift apart when the two points sit close.
+- Verified: grep shows no fontSize under 10 across all pages and engines.
+  Screenshots taken at 1400px and 412px (portfolio, live frontier, growth,
+  engine frontier), compared before and after. Tests 111/111, smokes 11/11,
+  all 12 Lab tabs render with no errors.

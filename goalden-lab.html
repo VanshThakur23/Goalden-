@@ -159,6 +159,7 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
 .lab-tool-card.tilting::after{opacity:1}
 .lab-tool-card:nth-child(2){border-radius:22px 3px 22px 22px}
 .lab-tool-card:nth-child(3){border-radius:22px 22px 3px 22px}
+.lab-tool-card:nth-child(4){border-radius:22px 22px 22px 3px}
 .tc-icon{width:46px;height:46px;color:#fff;background:var(--gold);border-radius:50% 50% 50% 4px;display:flex;align-items:center;justify-content:center;padding:11px;margin-bottom:14px;box-shadow:0 5px 16px rgba(37,87,199,.25);transition:transform .2s ease-out}
 .tc-icon svg{width:100%;height:100%}
 .lab-tool-card h3{font-size:18px;margin-bottom:8px;color:var(--paper)}
@@ -166,18 +167,24 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
 .tc-cta{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--gold);display:flex;align-items:center;gap:5px}
 .tc-cta svg{width:12px;height:12px}
 .lab-home-secondary-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(37,87,199,.95);margin-bottom:10px}
-.lab-home-secondary{display:flex;gap:10px;flex-wrap:wrap}
+.lab-home-secondary{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+/* A wrapping flex row left "Plan Health" orphaned on its own line; an
+   auto-fill grid keeps the chips in aligned columns at every width. The
+   one-line blurb (.ltc-blurb) used to live only in title=, i.e. hover-only,
+   which touch users never see. */
 /* These 7 used to be bare text pills -- no icon, no weight, nothing to
    catch the eye or hint at what each one does. A small coloured icon
    blob (same treatment as the 3 primary cards' .tc-icon, just smaller)
    plus a bold label gives each one a real "gist" at a glance, and the
    native title= tooltip surfaces the same one-line blurb the primary
    cards show inline, without needing the extra vertical space here. */
-.lab-tool-chip{display:flex;align-items:center;gap:9px;background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.15);border-radius:24px;padding:8px 16px 8px 8px;cursor:pointer;color:inherit;font-family:'Figtree',sans-serif;transition:background .18s ease,border-color .18s ease,transform .18s ease}
+.lab-tool-chip{display:flex;align-items:center;gap:10px;text-align:left;min-width:0;background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.15);border-radius:18px;padding:10px 14px 10px 10px;cursor:pointer;color:inherit;font-family:'Figtree',sans-serif;transition:background .18s ease,border-color .18s ease,transform .18s ease}
 .lab-tool-chip:hover{background:rgba(37,87,199,.09);border-color:rgba(37,87,199,.45);transform:translateY(-1px)}
 .ltc-icon{width:28px;height:28px;flex-shrink:0;color:#fff;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;padding:6px;box-shadow:0 3px 8px rgba(37,87,199,.28)}
 .ltc-icon svg{width:100%;height:100%}
 .ltc-label{font-size:13.5px;font-weight:600;color:var(--paper)}
+.ltc-text{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ltc-blurb{font-size:11.5px;line-height:1.4;color:rgba(20,40,63,.74);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
 main{padding:24px 28px 60px;max-width:1180px;margin:0 auto}
 main.enter{animation:mainEnter .3s ease-out}
@@ -2843,7 +2850,7 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf){
         // Investments chart, which reuses this same option builder but
         // never applies the Portfolio tab's decluttering) always label --
         // showLabel is only ever explicitly set to false, never omitted-as-false.
-        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"},
+        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:10, fontFamily:"'Spline Sans Mono',monospace"},
         // Asset labels yield to the two annotated markers below (higher z,
         // laid out first) instead of printing on top of them.
         labelLayout:{hideOverlap:true}, z:3 },
@@ -2854,11 +2861,20 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf){
         // never hovers should still see what it earns and risks.
         // Printed on the side AWAY from the user's own marker, so the two
         // annotated boxes can't overlap each other.
-        label:{show:true, position:bestSharpe.vol<=currentPoint.vol?'left':'right', distance:10, fontFamily:"'Spline Sans Mono',monospace",
+        // On the left it hangs up-and-left from the point (box's bottom-right
+        // corner at the marker) rather than vertically centred: the best mix
+        // often sits near the y-axis, and a centred box ran into the tick
+        // labels. Above-left is the empty wedge over the frontier's low end.
+        // 10px, not 11px: the value line is the widest thing in that wedge.
+        label:Object.assign({show:true, distance:10, fontFamily:"'Spline Sans Mono',monospace",
           formatter:`{t|BEST FOR THE RISK}\n{v|${(bestSharpe.ret*100).toFixed(1)}% · ${(bestSharpe.vol*100).toFixed(1)}% risk}`,
           backgroundColor:'rgba(255,255,255,.85)', padding:[3,5], borderRadius:3,
-          rich:{t:{color:'#14283F', fontWeight:700, fontSize:9}, v:{color:'rgba(20,40,63,.75)', fontSize:9.5, padding:[2,0,0,0]}}},
-        labelLayout:{moveOverlap:'shiftY'} }] : []),
+          rich:{t:{color:'#14283F', fontWeight:700, fontSize:10}, v:{color:'rgba(20,40,63,.75)', fontSize:10, padding:[2,0,0,0]}}},
+          bestSharpe.vol<=currentPoint.vol ? {position:[-2,-2], align:'right', verticalAlign:'bottom'} : {position:'right'}),
+        // On a phone-width chart the box can still start left of the canvas;
+        // nudge it right so it is never cut off (it sits above the marker, so
+        // sliding over the marker's column covers nothing).
+        labelLayout:p=>({moveOverlap:'shiftY', dx: p.labelRect.x<40 ? 40-p.labelRect.x : 0}) }] : []),
       { name:'Current mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:18,
         itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, silent:true, z:4,
         // Below the ring when there's a gap arrow (its "+x% possible" label
@@ -2866,7 +2882,7 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf){
         label:{show:true, position:gap?'bottom':'left', distance:10, fontFamily:"'Spline Sans Mono',monospace",
           formatter:`{t|YOUR MIX}\n{v|${(currentPoint.ret*100).toFixed(1)}% · ${(currentPoint.vol*100).toFixed(1)}% risk}`,
           backgroundColor:'rgba(255,255,255,.85)', padding:[3,5], borderRadius:3,
-          rich:{t:{color:'#D97757', fontWeight:700, fontSize:10}, v:{color:'#B85C3E', fontSize:9.5, padding:[2,0,0,0]}}} },
+          rich:{t:{color:'#D97757', fontWeight:700, fontSize:10}, v:{color:'#B85C3E', fontSize:10, padding:[2,0,0,0]}}} },
       { name:'Current mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
         itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:4 },
     ],
@@ -3301,7 +3317,7 @@ function renderRiskBarOption(chartId, decomp, concentratedDecomp){
         itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#8FC79E'},{offset:1,color:'#5FA875'}]}, borderRadius:[3,0,0,3]},
         label:{show:sysPct>14, formatter:()=>sysPct.toFixed(0)+'%', color:'#FFFFFF', fontWeight:700, fontFamily:"'Spline Sans Mono',monospace", position:'inside'},
         markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'#14283F', type:'dashed', width:1.5},
-          label:{formatter:`all in biggest holding: ${markerPct.toFixed(0)}% market`, position:'end', distance:3, align:markerPct>70?'right':(markerPct<30?'left':'center'), color:'rgba(20,40,63,.7)', fontSize:9.5, fontFamily:"'Spline Sans Mono',monospace"},
+          label:{formatter:`all in biggest holding: ${markerPct.toFixed(0)}% market`, position:'end', distance:3, align:markerPct>70?'right':(markerPct<30?'left':'center'), color:'rgba(20,40,63,.7)', fontSize:10, fontFamily:"'Spline Sans Mono',monospace"},
           data:[{xAxis:markerPct}]} },
       { name:'Unsystematic', type:'bar', stack:'risk', data:[unsysPct], barWidth:30,
         itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#E8977A'},{offset:1,color:'#D97757'}]}, borderRadius:[0,3,3,0]},
@@ -4818,13 +4834,13 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? `${ap.label} ${(ap.ret*100).toFixed(1)}%` : ''; }, position:'top', color:'#56698A', fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{hideOverlap:true}, z:3 },
       { name:'Tangency', type:'scatter', data:[[tangencyPoint.vol,tangencyPoint.ret]], symbolSize:11,
         itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
-        label:Object.assign({show:true, position:tanLeft?'left':'right', distance:10, formatter:`{t|BEST BALANCE}\n{v|${rv(tangencyPoint)}}${tanSplit}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:9.5}, v:{color:'#14283F', fontSize:9.5, padding:[2,0,0,0]}, s:{color:'#56698A', fontSize:9, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
+        label:Object.assign({show:true, position:tanLeft?'left':'right', distance:10, formatter:`{t|BEST BALANCE}\n{v|${rv(tangencyPoint)}}${tanSplit}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:11}, v:{color:'#14283F', fontSize:11, padding:[2,0,0,0]}, s:{color:'#56698A', fontSize:10, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
       ...(showSafest ? [{ name:'Safest', type:'scatter', data:[[minVarPoint.vol,minVarPoint.ret]], symbolSize:10,
         itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1.5}, z:4,
-        label:Object.assign({show:true, position:'left', distance:10, formatter:`{t|SAFEST}\n{v|${rv(minVarPoint)}}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:9.5}, v:{color:'#14283F', fontSize:9.5, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} }] : []),
+        label:Object.assign({show:true, position:'left', distance:10, formatter:`{t|SAFEST}\n{v|${rv(minVarPoint)}}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:11}, v:{color:'#14283F', fontSize:11, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} }] : []),
       { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
         itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, z:5,
-        label:Object.assign({show:true, position:yourPos, distance:12, formatter:`{t|YOUR MIX}\n{v|${rv(currentPoint)}}`, rich:{t:{color:'#9C4A2C', fontWeight:700, fontSize:10}, v:{color:'#9C4A2C', fontSize:9.5, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
+        label:Object.assign({show:true, position:yourPos, distance:12, formatter:`{t|YOUR MIX}\n{v|${rv(currentPoint)}}`, rich:{t:{color:'#9C4A2C', fontWeight:700, fontSize:11}, v:{color:'#9C4A2C', fontSize:11, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
       { name:'Your mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
         itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:5 },
     ],
@@ -5312,19 +5328,19 @@ const TABS=[
     blurb:'Pick real stocks, ETFs or funds and see how mixing them would actually have performed - real risk, real return, real history.'},
   {id:'statements', label:'Read the Company', primary:true, icon:ICON_STATEMENTS,
     blurb:"Read one company's real reported numbers, put any part of them beside another company's, and see the things that don't add up."},
-  {id:'stepup', label:'Step-Up SIP', icon:ICON_STEPUP,
+  {id:'stepup', short:'A SIP that rises with your income each year.', label:'Step-Up SIP', icon:ICON_STEPUP,
     blurb:'Model a SIP that grows with your income every year, not a flat amount forever.'},
-  {id:'swp', label:'Sustainable Withdrawal', icon:ICON_SWP,
+  {id:'swp', short:'Will a corpus fund a fixed withdrawal long enough?', label:'Sustainable Withdrawal', icon:ICON_SWP,
     blurb:'Check whether a retirement corpus can actually fund a fixed withdrawal for as long as you need it to.'},
-  {id:'fx', label:'Cross-Border', icon:ICON_FX,
+  {id:'fx', short:'What currency moves do to India-US returns.', label:'Cross-Border', icon:ICON_FX,
     blurb:'See what currency movement does to real returns when you invest across India and the US.'},
-  {id:'joint', label:'Joint Children Corpus', icon:ICON_JOINT,
+  {id:'joint', short:'Several children’s education from one pool.', label:'Joint Children Corpus', icon:ICON_JOINT,
     blurb:'Plan overlapping education costs for more than one child from a single pool of savings.'},
-  {id:'mc', label:'Monte Carlo', icon:ICON_MC,
+  {id:'mc', short:'Thousands of random markets: how often the plan works.', label:'Monte Carlo', icon:ICON_MC,
     blurb:'Run thousands of randomised market paths to see how likely a plan is to actually work, not just its average outcome.'},
-  {id:'instruments', label:'Instrument Explorer', icon:ICON_INSTRUMENTS,
+  {id:'instruments', short:'Return and risk assumptions per fund category.', label:'Instrument Explorer', icon:ICON_INSTRUMENTS,
     blurb:"Look up any bundled fund category's return and risk assumptions side by side."},
-  {id:'health', label:'Plan Health', icon:ICON_HEALTH,
+  {id:'health', short:'Savings, emergency fund and cover, scored.', label:'Plan Health', icon:ICON_HEALTH,
     blurb:'A quick score on whether your current savings, emergency fund and protection are actually in shape.'},
 ];
 function renderHome(){
@@ -5346,7 +5362,7 @@ function renderHome(){
     <div class="lab-home-secondary">
       ${secondary.map(t=>`<button class="lab-tool-chip" data-tab-switch="${t.id}" title="${t.blurb||''}">
         <span class="ltc-icon">${t.icon||''}</span>
-        <span class="ltc-label">${t.label}</span>
+        <span class="ltc-text"><span class="ltc-label">${t.label}</span><span class="ltc-blurb">${t.short||t.blurb||''}</span></span>
       </button>`).join('')}
     </div>
   </div>`;
@@ -7459,7 +7475,7 @@ function stmtExploreUpdateChart(){
     series:[{ type:'scatter', data:pairsRaw.map(function(p){ return [p.x,p.y]; }), symbolSize:12,
       itemStyle:{color:'#2557C7',opacity:.85,borderColor:'#fff',borderWidth:1},
       label:{show:pairsRaw.length<=14, formatter:function(p){ const d=pairsRaw[p.dataIndex]; return d?('FY'+d.year):''; },
-        position:'top', fontSize:9.5, color:'rgba(20,40,63,.62)', fontFamily:"'Spline Sans Mono',monospace"} }]
+        position:'top', fontSize:10, color:'rgba(20,40,63,.62)', fontFamily:"'Spline Sans Mono',monospace"} }]
   });
   if(chipsEl) chipsEl.innerHTML='<div class="sx-series-chip"><span class="sw" style="background:#2557C7"></span>Each point is one fiscal year ('+pairsRaw.length+' years, labeled)</div>';
   if(capEl) capEl.textContent='FY'+pairsRaw[0].year+'\u2013FY'+pairsRaw[pairsRaw.length-1].year+', '+pairsRaw.length+' common years. X: '+xDef.label+stmtExploreUnitSuffix(xDef.label)+' ('+xDef.sym+'). Y: '+yDef.label+stmtExploreUnitSuffix(yDef.label)+' ('+yDef.sym+').';

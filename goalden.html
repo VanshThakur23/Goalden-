@@ -848,12 +848,12 @@ function renderFeeBarChartOption(chartId, feeYears){
   initChart(chartId, {
     grid:{left:2,right:2,top:22,bottom:20,containLabel:false},
     xAxis:{type:'category', data:feeYears.map((f,i)=>'Yr '+(i+1)),
-      axisLabel:{color:'rgba(20,40,63,.5)', fontSize:9}, axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}},
+      axisLabel:{color:'rgba(20,40,63,.5)', fontSize:10}, axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}},
     yAxis:{type:'value', show:false, min:0},
     tooltip:{trigger:'item', formatter:p=>`${p.name}<br/>${c.compact(p.value)}`},
     series:[{ type:'bar', data:feeYears.map(f=>({value:f, itemStyle:{color:'#2557C7', opacity:0.5+0.5*f/maxFee}})), barWidth:'60%',
       itemStyle:{borderRadius:[3,3,0,0]},
-      label:{show:true, position:'top', formatter:p=>c.compact(p.value), color:'rgba(20,40,63,.8)', fontSize:9, fontFamily:'monospace'} }],
+      label:{show:true, position:'top', formatter:p=>c.compact(p.value), color:'rgba(20,40,63,.8)', fontSize:10, fontFamily:'monospace'} }],
   });
 }
 /* =====================================================================

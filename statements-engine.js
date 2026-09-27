@@ -1767,7 +1767,7 @@ function cashFlowWaterfallOption(cfoSeries, cfiSeries, cffSeries, ncfSeries) {
         name: 'Net cash flow', type: 'scatter', data: ncf, symbol: 'circle', symbolSize: 9, z: 10,
         itemStyle: { color: '#2557C7', borderColor: '#fff', borderWidth: 1.5 },
         // White halo so the number stays legible where it sits on a bar.
-        label: { show: true, position: 'top', distance: 5, fontSize: 9.5, fontWeight: 600, color: '#2557C7', textBorderColor: '#fff', textBorderWidth: 2,
+        label: { show: true, position: 'top', distance: 5, fontSize: 10, fontWeight: 600, color: '#2557C7', textBorderColor: '#fff', textBorderWidth: 2,
           formatter: (p) => formatCroreCompact(Array.isArray(p.value) ? p.value[1] : p.value) },
         // On a narrow (phone-width) chart twelve labels can't all fit; drop
         // the ones that would collide rather than print them on each other.
