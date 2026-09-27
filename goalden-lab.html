@@ -1848,9 +1848,9 @@ const L = {
         // past the average is the standard way to cover longevity risk.
         preRate:10, postRate:9, inflation:6, lifeExp:85, due:true, realTerms:false, shock:null, shockEquity:40,
         corpusMode:'expenses', customCorpus:30000000, customBasis:'future',
-        existingSavings:0, ddVol:12, ddSeed:7 },
+        existingSavings:0, ddVol:12, ddSeed:7, withdrawTax:0 },
   step:{ corpus:37083320, years:30, preRate:10, stepUpPct:8 },
-  swp:{ corpus:10000000, years:20, postRate:9, inflation:6, due:true, shock:null, shockEquity:40 },
+  swp:{ corpus:10000000, years:20, postRate:9, inflation:6, due:true, shock:null, shockEquity:40, withdrawTax:0 },
   fx:{ principal:1000000, direction:'investingAbroad', homeReturn:12, foreignReturn:9, deprec:4, years:10 },
   joint:{
     children:[
@@ -2190,6 +2190,13 @@ function clampRetAges(r){
   r.retireAge=Math.min(75, Math.max(r.retireAge, r.age+1));
   r.lifeExp=Math.min(95, Math.max(r.lifeExp, r.retireAge+5));
 }
+// Tax on withdrawals, as an effective rate on the whole amount taken out.
+// Every figure used to be pre-tax: in India long-term equity gains above
+// ₹1.25 L a year are taxed at 12.5% and debt-fund gains at your slab rate,
+// and only the GAINS part of a withdrawal is taxed -- so the effective rate
+// on the full withdrawal is usually well below the headline rate. Capped at
+// 50% so the gross-up (spend / (1 - t)) can't explode.
+function withdrawTaxRate(o){ return Math.min(0.5, Math.max(0, (o.withdrawTax||0)/100)); }
 function calcRetLab(){
   const c=cfg(), r=L.ret;
   clampRetAges(r);
@@ -2197,7 +2204,11 @@ function calcRetLab(){
   const drawYrs=r.lifeExp-r.retireAge;
   const infl=r.inflation/100, preR=r.preRate/100, postR=r.postRate/100;
   const rr=realRate(postR, infl);
-  let expAtRet, corpus;
+  const tax=withdrawTaxRate(r);
+  // expAtRet is what you get to SPEND; grossW is what leaves the pot (the
+  // spend plus tax on it). Corpus, drawdown and Monte Carlo all run on
+  // grossW -- the spending figure is only ever the after-tax part.
+  let expAtRet, grossW, corpus;
   if(r.corpusMode==='custom'){
     // The person names the pot; the plan solves backwards from it.
     // If they typed the amount in today's money, inflate it to the
@@ -2205,10 +2216,12 @@ function calcRetLab(){
     corpus = r.customBasis==='today' ? r.customCorpus*Math.pow(1+infl, yrs) : r.customCorpus;
     // What that pot sustainably supports: the same inverse-annuity used
     // by the Sustainable Withdrawal tab, so both tabs agree by construction.
-    expAtRet = swpWithdrawal(rr, drawYrs, corpus, r.due);
+    grossW = swpWithdrawal(rr, drawYrs, corpus, r.due);
+    expAtRet = grossW*(1-tax);
   } else {
     expAtRet=inflateExpense(r.monthlyExpense*12, [{rate:infl, years:yrs}], r.lifestyleFactor/100);
-    corpus=corpusRequired(rr, drawYrs, expAtRet, r.due);
+    grossW = expAtRet/(1-tax);
+    corpus=corpusRequired(rr, drawYrs, grossW, r.due);
   }
   const mRate=effectiveMonthlyRate(preR);
   // Existing savings assumed to keep compounding at the same rate as the
@@ -2224,15 +2237,15 @@ function calcRetLab(){
   let ddRows, shockInfo=null;
   if(r.shock){
     const ep=c.episodes.find(e=>e.id===r.shock.epId);
-    const res=drawdownWithShock({openingCorpus:corpus, firstWithdrawal:expAtRet, inflation:infl, nominalRate:postR, years:drawYrs, due:r.due}, r.shock.year, shockPotReturn(ep, r.shockEquity));
+    const res=drawdownWithShock({openingCorpus:corpus, firstWithdrawal:grossW, inflation:infl, nominalRate:postR, years:drawYrs, due:r.due}, r.shock.year, shockPotReturn(ep, r.shockEquity));
     ddRows=res.rows;
     shockInfo={ep, ranOutYear:res.ranOutYear, finalBalance:res.finalBalance};
   } else {
-    const res=drawdownWithShock({openingCorpus:corpus, firstWithdrawal:expAtRet, inflation:infl, nominalRate:postR, years:drawYrs, due:r.due}, -1, 0);
+    const res=drawdownWithShock({openingCorpus:corpus, firstWithdrawal:grossW, inflation:infl, nominalRate:postR, years:drawYrs, due:r.due}, -1, 0);
     ddRows=res.rows;
   }
 
-  return {yrs, drawYrs, expAtRet, corpus, sip, realCorpus, accRows, ddRows, shockInfo, existing, existingFV, gapCorpus};
+  return {yrs, drawYrs, expAtRet, grossW, tax, corpus, sip, realCorpus, accRows, ddRows, shockInfo, existing, existingFV, gapCorpus};
 }
 
 // The drawdown Monte Carlo simulates 1,000 paths over the full spending
@@ -2248,7 +2261,7 @@ function renderDDMCBody(res){
   const r=L.ret, c=cfg();
   const shockEp = r.shock ? c.episodes.find(e=>e.id===r.shock.epId) : null;
   const shockYear = shockEp ? Math.min(r.shock.year, res.drawYrs) : null;
-  const mc=monteCarloDrawdown({openingCorpus:res.corpus, firstWithdrawal:res.expAtRet, inflation:r.inflation/100,
+  const mc=monteCarloDrawdown({openingCorpus:res.corpus, firstWithdrawal:res.grossW, inflation:r.inflation/100,
     meanReturn:r.postRate/100, volatility:r.ddVol/100, years:res.drawYrs, due:r.due, seed:r.ddSeed, n:1000,
     shockYear, shockReturn:shockEp?shockPotReturn(shockEp, r.shockEquity):null});
   const survPct=Math.round(mc.survivalPct*100);
@@ -2275,7 +2288,7 @@ function renderDDMCBody(res){
   // monotone in the multiplier.
   let marginHtml='';
   if(survPct<90){
-    const survAt=k=>monteCarloDrawdown({openingCorpus:res.corpus*k, firstWithdrawal:res.expAtRet, inflation:r.inflation/100,
+    const survAt=k=>monteCarloDrawdown({openingCorpus:res.corpus*k, firstWithdrawal:res.grossW, inflation:r.inflation/100,
       meanReturn:r.postRate/100, volatility:r.ddVol/100, years:res.drawYrs, due:r.due, seed:r.ddSeed, n:1000,
       shockYear, shockReturn:shockEp?shockPotReturn(shockEp, r.shockEquity):null}).survivalPct;
     const kMax=2.5;
@@ -2365,6 +2378,8 @@ function renderRetirement(){
     <div class="field"><label>Growth while saving${infoIcon('The yearly return assumed on your SIP during the working years. Higher-equity mixes justify a higher figure here; it is the rate your contributions compound at before retirement.')} <b>${r.preRate}%</b></label><input type="range" min="4" max="16" step="0.1" value="${r.preRate}" data-k="preRate"></div>
     <div class="field"><label>Growth after retirement${infoIcon('The return earned on the pot while it is being spent down. Usually set lower than the saving-phase rate, because retirees shift to safer, lower-return holdings.')} <b>${r.postRate}%</b></label><input type="range" min="3" max="14" step="0.1" value="${r.postRate}" data-k="postRate"></div>
     <div class="field"><label>Plan to age <b>${r.lifeExp}</b></label><input type="range" min="${Math.max(70, r.retireAge+5)}" max="95" value="${r.lifeExp}" data-k="lifeExp"></div>
+    <div class="field"><label>Tax on withdrawals${infoIcon('Tax on each withdrawal, as an effective rate on the whole amount you take out. In India, long-term equity gains above ₹1.25 L a year are taxed at 12.5% and debt-fund gains at your income slab, and only the gains part of a withdrawal is taxed, so the effective rate is usually well below the headline rate. 0% shows figures before tax.')} <b>${r.withdrawTax||0}%</b></label><input type="range" min="0" max="30" step="0.5" value="${r.withdrawTax||0}" data-k="withdrawTax"></div>
+    ${res.tax>0?`<div class="gr-note" style="margin-top:-6px">To spend ${c.compact(res.expAtRet)} in the first year of retirement you withdraw ${c.compact(res.grossW)}; ${c.compact(res.grossW-res.expAtRet)} goes to tax. The pot is sized for the withdrawal.</div>`:`<div class="gr-note" style="margin-top:-6px">At 0% every figure here is before tax.</div>`}
 
     <hr class="divider">
     <div class="section-label">Withdrawal timing${infoIcon('Start of year (annuity due) takes each withdrawal before that year has earned any growth, so a slightly larger pot is needed. End of year (ordinary annuity) lets the full balance grow first. Textbook retirement cases usually use annuity due.')}</div>
@@ -2395,7 +2410,7 @@ function renderRetirement(){
       ${custom?`
       <div class="stat"><div class="stat-label">Your target pot${infoIcon('The figure you set, converted to its value on the day you retire if you entered it in current purchasing power.')}</div><div class="stat-value">${c.compact(dispCorpus)}</div><div class="stat-sub">${dispLabel}</div></div>
       <div class="stat"><div class="stat-label">Monthly SIP</div><div class="stat-value">${c.fmt(Math.round(res.sip))}</div><div class="stat-sub">${res.existing>0?`covers the gap after ${c.compact(res.existing)} grows to ${c.compact(Math.round(res.existingFV))}`:`for ${res.yrs} years`}</div></div>
-      <div class="stat"><div class="stat-label">Supports spending of${infoIcon('The largest first-year withdrawal this pot can sustain, rising with inflation every year and lasting exactly to the planned age. Same inverse-annuity math as the Sustainable Withdrawal tab.')}</div><div class="stat-value">${c.fmt(Math.round(res.expAtRet/12))}/mo</div><div class="stat-sub">about ${c.fmt(Math.round(todayDraw))}/mo in current purchasing power, to age ${r.lifeExp}</div></div>
+      <div class="stat"><div class="stat-label">Supports spending of${infoIcon('The largest first-year spending this pot can sustain, rising with inflation every year and lasting exactly to the planned age, after the tax-on-withdrawals rate set on the left. Same inverse-annuity math as the Sustainable Withdrawal tab.')}</div><div class="stat-value">${c.fmt(Math.round(res.expAtRet/12))}/mo</div><div class="stat-sub">about ${c.fmt(Math.round(todayDraw))}/mo in current purchasing power, to age ${r.lifeExp}</div></div>
       `:`
       <div class="stat"><div class="stat-label">Corpus needed${infoIcon('The lump sum required on the day you retire so that withdrawals, rising with inflation, last exactly to your planned age.')}</div><div class="stat-value">${c.compact(dispCorpus)}</div><div class="stat-sub">${dispLabel}</div>${advisorAskLink('Explain this corpus number to me')}</div>
       <div class="stat"><div class="stat-label">Monthly SIP</div><div class="stat-value">${c.fmt(Math.round(res.sip))}</div><div class="stat-sub">${res.existing>0?`covers the gap after ${c.compact(res.existing)} grows to ${c.compact(Math.round(res.existingFV))}`:`for ${res.yrs} years`}</div></div>
@@ -2576,6 +2591,9 @@ function renderSWP(){
   // The draw actually paid in year 1 -- equals w for start-of-year timing,
   // one year's inflation more for end-of-year (see drawdownWithShock).
   const firstPay=rows.length?rows[0].withdrawal:w;
+  // The pot pays out the gross withdrawal whatever the tax rate; tax only
+  // changes how much of it you get to spend.
+  const swpTax=withdrawTaxRate(s);
 
   return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
@@ -2585,6 +2603,7 @@ function renderSWP(){
     <div class="field"><label>Draw for <b>${s.years}</b> years</label><input type="range" min="5" max="40" value="${s.years}" data-k="years" data-tab="swp"></div>
     <div class="field"><label>Growth during drawdown <b>${s.postRate}%</b></label><input type="range" min="3" max="14" step="0.1" value="${s.postRate}" data-k="postRate" data-tab="swp"></div>
     <div class="field"><label>Inflation-adjust withdrawals by${infoIcon('Each year the withdrawal grows by this rate, so your purchasing power stays level instead of quietly eroding through the drawdown years.')} <b>${s.inflation}%</b></label><input type="range" min="2" max="12" step="0.1" value="${s.inflation}" data-k="inflation" data-tab="swp"></div>
+    <div class="field"><label>Tax on withdrawals${infoIcon('Tax on each withdrawal, as an effective rate on the whole amount you take out. In India, long-term equity gains above ₹1.25 L a year are taxed at 12.5% and debt-fund gains at your income slab, and only the gains part of a withdrawal is taxed, so the effective rate is usually well below the headline rate. 0% shows figures before tax.')} <b>${s.withdrawTax||0}%</b></label><input type="range" min="0" max="30" step="0.5" value="${s.withdrawTax||0}" data-k="withdrawTax" data-tab="swp"></div>
     <hr class="divider">
     <div class="section-label">Stress test: inject a historical shock${infoIcon('Drops a real one-year historical market fall into a chosen year of the withdrawal phase, then re-runs the whole timeline to see how many years the money actually lasts. The withdrawal amount stays fixed at the baseline plan, which is exactly what makes the shock dangerous.')}</div>
     <div class="episode-grid">
@@ -2598,8 +2617,8 @@ function renderSWP(){
   </div>
   <div class="output">
     <div class="stat-row">
-      <div class="stat"><div class="stat-label">Sustainable monthly draw${infoIcon('The largest starting withdrawal that, rising with inflation every year, empties the pot exactly at the end of the chosen period and not a year earlier. Anything higher and the money runs out before the deadline.')}</div><div class="stat-value">${c.fmt(Math.round(firstPay/12))}</div><div class="stat-sub">first month, then inflation-adjusted</div></div>
-      <div class="stat"><div class="stat-label">Annual draw, year 1</div><div class="stat-value">${c.compact(firstPay)}</div></div>
+      <div class="stat"><div class="stat-label">Sustainable monthly draw${infoIcon('The largest starting withdrawal that, rising with inflation every year, empties the pot exactly at the end of the chosen period and not a year earlier. Anything higher and the money runs out before the deadline.')}</div><div class="stat-value">${c.fmt(Math.round(firstPay*(1-swpTax)/12))}</div><div class="stat-sub">${swpTax>0?`to spend after ${(swpTax*100).toFixed(1).replace(/\.0$/,'')}% tax; ${c.fmt(Math.round(firstPay/12))} withdrawn`:'first month, then inflation-adjusted'}</div></div>
+      <div class="stat"><div class="stat-label">Annual draw, year 1</div><div class="stat-value">${c.compact(firstPay)}</div>${swpTax>0?`<div class="stat-sub">withdrawn, before tax</div>`:''}</div>
       <div class="stat"><div class="stat-label">Corpus lasts</div><div class="stat-value" style="${sim.ranOutYear?'color:#9C4A2C':''}">${sim.ranOutYear?sim.ranOutYear:s.years} yrs</div><div class="stat-sub">${sim.ranOutYear?`runs out ${s.years-sim.ranOutYear} years early`:(shockEp?'survives the shock':'exactly, by design')}</div></div>
     </div>
     <div class="card is-primary">
@@ -8516,6 +8535,7 @@ const ADVISOR_FIELDS = {
   'ret.inflation': { path:['ret','inflation'], type:'number', min:2, max:12, desc:'Inflation %.' },
   'ret.lifeExp': { path:['ret','lifeExp'], type:'integer', min:70, max:95, desc:'Planning age (70-95).' },
   'ret.ddVol': { path:['ret','ddVol'], type:'integer', min:0, max:25, desc:'Drawdown volatility %.' },
+  'ret.withdrawTax': { path:['ret','withdrawTax'], type:'number', min:0, max:30, desc:'Effective tax % on retirement withdrawals (0 = figures before tax).' },
   'step.corpus': { path:['step','corpus'], type:'integer', min:1000000, max:100000000, desc:'Target corpus for the step-up SIP.' },
   'step.years': { path:['step','years'], type:'integer', min:5, max:40, desc:'Years to invest.' },
   'step.preRate': { path:['step','preRate'], type:'number', min:4, max:16, desc:'Expected growth %.' },
@@ -8524,6 +8544,7 @@ const ADVISOR_FIELDS = {
   'swp.years': { path:['swp','years'], type:'integer', min:5, max:40, desc:'Years to draw.' },
   'swp.postRate': { path:['swp','postRate'], type:'number', min:3, max:14, desc:'Growth during drawdown %.' },
   'swp.inflation': { path:['swp','inflation'], type:'number', min:2, max:12, desc:'Withdrawal inflation %.' },
+  'swp.withdrawTax': { path:['swp','withdrawTax'], type:'number', min:0, max:30, desc:'Effective tax % on withdrawals (0 = before tax).' },
   'fx.principal': { path:['fx','principal'], type:'integer', min:1000, max:10000000, desc:'Amount invested.' },
   'fx.homeReturn': { path:['fx','homeReturn'], type:'number', min:3, max:16, desc:'Home market return %.' },
   'fx.foreignReturn': { path:['fx','foreignReturn'], type:'number', min:3, max:16, desc:'Foreign market return %.' },

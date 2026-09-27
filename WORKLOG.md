@@ -2526,3 +2526,25 @@ Changes made by Claude Code (Chief). D2-13 from the Portfolio division.
 - Also: the panel caption said "SEBI categories" in US mode; it is now
   country-aware.
 - Tests 111/111, smokes 11/11, evals 9/9 (mock), all 12 Lab tabs render with no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 32: tax on withdrawals)
+Changes made by Claude Code (Chief). D1-16 from the Retirement division.
+- goalden-lab.html Retirement Lab: new "Tax on withdrawals" slider (0-30%,
+  default 0 so every existing figure is unchanged). It is an effective
+  rate on the whole withdrawal. The info tooltip explains why that is below
+  the headline rate: in India only the gains part is taxed, equity LTCG at
+  12.5% above ₹1.25 L, debt at slab. With tax t, the plan withdraws
+  spend/(1-t), and the corpus, SIP, drawdown chart and drawdown Monte Carlo
+  all run on that gross withdrawal. A note under the slider shows spend vs
+  withdrawn vs tax. In "I know my number" mode the pot stays fixed and
+  "Supports spending of" becomes the after-tax figure.
+- Sustainable Withdrawal: the same slider. "Sustainable monthly draw"
+  shows the after-tax spend plus the gross amount withdrawn; year-1 draw is
+  labelled "withdrawn, before tax". The pot's lifespan is unchanged by tax.
+- Advisor: ret.withdrawTax and swp.withdrawTax are settable (0-30).
+- Verified: at 0% the corpus, SIP and spend match the previous commit
+  exactly in 3 configs (start/end timing, custom pot). At 10%, corpus and
+  SIP scale by exactly 1/0.9, and the drawdown ends at 0. In the browser:
+  ₹4.72 Cr -> ₹5.24 Cr, SIP ₹22,684 -> ₹25,205. SWP: ₹53,620 withdrawn,
+  ₹48,258 spend (x0.9). The advisor rejects 80%. Tests 111/111, smokes
+  11/11, evals 9/9 (mock), all 12 Lab tabs render with no errors.
