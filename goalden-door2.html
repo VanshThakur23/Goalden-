@@ -2,17 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Goalden — your full plan</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600;6..72,700&family=Figtree:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="vendor/echarts.min.js"></script>
 <style>
+/* Muted text uses ink at .74 opacity (about 4.6:1). The older .4-.6
+   opacities came out at 2.2-4.0:1, below WCAG AA's 4.5:1; pastel series
+   colours are fill-only, text uses #256F55 / #9C4A2C. Same pass as the Lab. */
 :root{
   /* White + shades of blue (Track C repalette) -- see goalden-lab.html's
      :root comment for the full rationale; same recipe applied here. */
   --bg:#F5F8FC; --ink:#14283F;--ink2:#1B3A63;--paper:#14283F;--card:#FFFFFF;
-  --gold:#2557C7;--red:#A03A22;--dim:#5E7290;--ok:#2E8B6F;
+  --gold:#2557C7;--red:#A03A22;--dim:#52647F;--ok:#22705A;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%}
@@ -25,7 +28,7 @@ h1,h2,h3{line-height:1.25}
 /* --- chrome --- */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 8px;flex-shrink:0}
 .brand{font-family:'Newsreader',serif;font-weight:700;font-size:18px;color:var(--gold);text-decoration:none;display:inline-block}
-.brand span{font-weight:400;font-style:italic;font-size:13px;color:rgba(20,40,63,.6);margin-left:6px}
+.brand span{font-weight:400;font-style:italic;font-size:13px;color:rgba(20,40,63,.74);margin-left:6px}
 .backbtn{width:34px;height:34px;border-radius:50%;border:1px solid rgba(20,40,63,.2);background:transparent;color:var(--paper);font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s}
 .assumpbtn{width:30px;height:30px;border-radius:50%;border:1px solid rgba(37,87,199,.5);background:rgba(37,87,199,.12);color:var(--gold);font-family:'Newsreader',serif;font-style:italic;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s}
 .assumpbtn.show{opacity:1;pointer-events:auto}
@@ -52,7 +55,7 @@ h1,h2,h3{line-height:1.25}
 /* --- typography --- */
 .eyebrow{font-family:'Spline Sans Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:9px}
 .qtitle{font-family:'Newsreader',serif;font-weight:600;font-size:clamp(20px,6.5vw,28px);line-height:1.2;color:var(--paper);margin-bottom:7px}
-.qsub{font-size:13.5px;color:rgba(20,40,63,.6);margin-bottom:20px;line-height:1.5;max-width:38ch}
+.qsub{font-size:13.5px;color:rgba(20,40,63,.74);margin-bottom:20px;line-height:1.5;max-width:38ch}
 .qbody{flex:1;display:flex;flex-direction:column;justify-content:safe center;gap:11px;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
 /* A batched question screen (renderQGroup) stacks 2-3 of these inside one
    .qbody -- smaller than .qtitle since there's more than one per screen now,
@@ -106,7 +109,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .chip{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--paper);background:rgba(20,40,63,.08);border:1px solid rgba(20,40,63,.16);padding:8px 13px;border-radius:3px;cursor:pointer;transition:all .14s}
 .chip:active{transform:scale(.95)}
 .chip.sel{background:var(--gold);border-color:var(--gold);color:#fff}
-.err{color:#E8977A;font-size:12px;font-family:'Spline Sans Mono',monospace;min-height:16px;margin-top:8px}
+.err{color:#9C4A2C;font-size:12px;font-family:'Spline Sans Mono',monospace;min-height:16px;margin-top:8px}
 
 /* --- two-column form --- */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -118,7 +121,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .cta{width:100%;background:var(--gold);color:#fff;border:none;border-radius:9px;font-family:'Figtree',sans-serif;font-weight:700;font-size:15.5px;padding:16px;cursor:pointer;transition:transform .12s,opacity .2s}
 .cta:active{transform:scale(.98)}
 .cta:disabled{opacity:.3;pointer-events:none}
-.cta-ghost{width:100%;background:transparent;color:rgba(20,40,63,.5);border:1px solid rgba(20,40,63,.15);border-radius:13px;font-family:'Figtree',sans-serif;font-size:14px;padding:12px;cursor:pointer;margin-top:10px;transition:opacity .15s}
+.cta-ghost{width:100%;background:transparent;color:rgba(20,40,63,.74);border:1px solid rgba(20,40,63,.15);border-radius:13px;font-family:'Figtree',sans-serif;font-size:14px;padding:12px;cursor:pointer;margin-top:10px;transition:opacity .15s}
 
 /* --- profile reveal --- */
 .profile-card{border-radius:3px 20px 20px 20px;padding:24px;margin-bottom:20px;position:relative;overflow:hidden}
@@ -128,17 +131,17 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .pc-moderate        {background:rgba(37,87,199,.08);border:1.5px solid #2557C7}
 .pc-mod_aggressive  {background:rgba(155,124,58,.12);border:1.5px solid #9B7C3A}
 .pc-aggressive      {background:rgba(160,58,34,.08);border:1.5px solid #A03A22}
-.pc-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(20,40,63,.65);margin-bottom:6px}
+.pc-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(20,40,63,.74);margin-bottom:6px}
 .pc-name{font-family:'Newsreader',serif;font-weight:700;font-size:28px;color:var(--paper);margin-bottom:4px}
 .pc-tagline{font-family:'Newsreader',serif;font-size:15px;font-style:italic;color:rgba(20,40,63,.75);margin-bottom:14px}
-.pc-desc{font-size:13.5px;color:rgba(20,40,63,.7);line-height:1.55}
+.pc-desc{font-size:13.5px;color:rgba(20,40,63,.74);line-height:1.55}
 .score-row{display:flex;gap:0;margin-bottom:18px}
 .score-block{flex:1;padding:14px 16px;background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.1);text-align:center}
 .score-block:first-child{border-radius:12px 0 0 12px;border-right:none}
 .score-block:last-child{border-radius:0 12px 12px 0}
 .score-num{font-family:'Newsreader',serif;font-size:30px;font-weight:700;color:var(--gold);display:block}
 .score-sub{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
-.lower-note{font-size:12.5px;color:rgba(20,40,63,.55);background:rgba(20,40,63,.05);border-radius:8px;padding:10px 12px;margin-bottom:18px;border-left:2px solid var(--gold);line-height:1.5}
+.lower-note{font-size:12.5px;color:rgba(20,40,63,.74);background:rgba(20,40,63,.05);border-radius:8px;padding:10px 12px;margin-bottom:18px;border-left:2px solid var(--gold);line-height:1.5}
 
 /* --- term chips --- */
 .term{border-bottom:1px dashed rgba(37,87,199,.65);cursor:pointer;position:relative;display:inline}
@@ -149,7 +152,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .goal-hub{display:flex;flex-direction:column;gap:11px}
 .goal-pill{background:rgba(20,40,63,.06);border:1.5px solid rgba(20,40,63,.13);border-radius:4px 14px 14px 14px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .gp-actions{display:flex;gap:6px;flex-shrink:0}
-.gp-iconbtn{width:30px;height:30px;border-radius:8px;border:1px solid rgba(20,40,63,.16);background:rgba(20,40,63,.04);color:rgba(20,40,63,.5);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:6px;transition:all .15s}
+.gp-iconbtn{width:30px;height:30px;border-radius:8px;border:1px solid rgba(20,40,63,.16);background:rgba(20,40,63,.04);color:rgba(20,40,63,.74);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:6px;transition:all .15s}
 .gp-iconbtn:hover{color:var(--paper);border-color:rgba(20,40,63,.3)}
 .gp-iconbtn svg{width:100%;height:100%}
 .goal-pill.done{border-color:var(--ok)}
@@ -157,7 +160,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .gp-left .gp-tag{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);margin-top:2px}
 .gp-right{font-family:'Newsreader',serif;font-size:16px;color:var(--gold);font-weight:600;text-align:right}
 .gp-right .gp-sip{font-size:12px;color:var(--dim);display:block;margin-top:1px}
-.add-goal-btn{background:rgba(20,40,63,.06);border:1.5px dashed rgba(20,40,63,.2);border-radius:13px;padding:15px;text-align:center;cursor:pointer;font-size:14px;color:rgba(20,40,63,.55);transition:all .15s}
+.add-goal-btn{background:rgba(20,40,63,.06);border:1.5px dashed rgba(20,40,63,.2);border-radius:13px;padding:15px;text-align:center;cursor:pointer;font-size:14px;color:rgba(20,40,63,.74);transition:all .15s}
 .add-goal-btn:active{transform:scale(.98)}
 
 /* --- goal type mini grid --- */
@@ -186,41 +189,41 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .case-hero{padding:8px 0 20px;text-align:center}
 .case-eyebrow{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
 .case-title{font-family:'Newsreader',serif;font-size:23px;color:var(--paper);line-height:1.3;margin-bottom:10px}
-.case-sub{font-size:13.5px;color:rgba(20,40,63,.65);line-height:1.55;max-width:44ch;margin:0 auto}
+.case-sub{font-size:13.5px;color:rgba(20,40,63,.74);line-height:1.55;max-width:44ch;margin:0 auto}
 .case-section{background:rgba(20,40,63,.045);border:1px solid rgba(20,40,63,.12);border-radius:2px 16px 16px 16px;padding:20px 18px;margin-bottom:16px}
 .case-section h4{font-family:'Newsreader',serif;font-size:17px;color:var(--paper);margin-bottom:6px;line-height:1.3}
-.case-section .case-cap{font-size:12.5px;color:rgba(20,40,63,.6);line-height:1.5;margin-bottom:14px}
+.case-section .case-cap{font-size:12.5px;color:rgba(20,40,63,.74);line-height:1.5;margin-bottom:14px}
 .race-legend{display:flex;gap:14px;justify-content:center;margin:8px 0 14px;flex-wrap:wrap}
-.race-legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(20,40,63,.6);font-family:'Spline Sans Mono',monospace}
+.race-legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace}
 .race-legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
 .race-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
 .race-stat{background:rgba(20,40,63,.05);border-radius:3px 10px 10px 10px;padding:11px 9px;text-align:center}
-.race-stat .rs-label{font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;color:rgba(20,40,63,.5);margin-bottom:5px}
+.race-stat .rs-label{font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;color:rgba(20,40,63,.74);margin-bottom:5px}
 .race-stat .rs-val{font-family:'Newsreader',serif;font-size:16px;font-weight:600}
 .case-slider-row{margin:14px 0 6px}
-.case-slider-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:rgba(20,40,63,.7);margin-bottom:8px}
+.case-slider-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:rgba(20,40,63,.74);margin-bottom:8px}
 .case-slider-label b{color:var(--gold);font-family:'Spline Sans Mono',monospace}
 .case-callout{background:rgba(232,151,122,.1);border:1px solid rgba(232,151,122,.3);border-radius:3px 12px 12px 12px;padding:12px 14px;margin-top:10px;font-size:12.5px;line-height:1.5;color:rgba(20,40,63,.85)}
 .case-callout.good{background:rgba(143,199,142,.1);border-color:rgba(143,199,142,.3)}
 .holdbar-track{display:flex;height:26px;border-radius:3px;overflow:hidden;margin:12px 0 6px}
 .holdbar-seg{transition:width .2s ease}
-.holdbar-legend{display:flex;justify-content:space-between;font-size:11px;color:rgba(20,40,63,.5);font-family:'Spline Sans Mono',monospace}
+.holdbar-legend{display:flex;justify-content:space-between;font-size:11px;color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace}
 .growth-chain{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:14px 0;font-size:12.5px}
 .growth-chain .gc-node{background:rgba(37,87,199,.12);border:1px solid rgba(37,87,199,.3);border-radius:3px 9px 9px 9px;padding:7px 11px;color:rgba(20,40,63,.85)}
-.growth-chain .gc-arrow{color:rgba(20,40,63,.35);font-size:14px}
+.growth-chain .gc-arrow{color:rgba(20,40,63,.74);font-size:14px}
 .compare-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
 .compare-card{background:rgba(20,40,63,.05);border-radius:3px 10px 10px 10px;padding:12px}
-.compare-card .cc-label{font-family:'Spline Sans Mono',monospace;font-size:9.5px;color:rgba(20,40,63,.5);margin-bottom:5px}
+.compare-card .cc-label{font-family:'Spline Sans Mono',monospace;font-size:9.5px;color:rgba(20,40,63,.74);margin-bottom:5px}
 .compare-card .cc-val{font-family:'Newsreader',serif;font-size:15px;font-weight:600;color:var(--paper);margin-bottom:3px}
-.compare-card .cc-note{font-size:11px;color:rgba(20,40,63,.5);line-height:1.4}
+.compare-card .cc-note{font-size:11px;color:rgba(20,40,63,.74);line-height:1.4}
 .case-back-row{padding:16px 0 8px;text-align:center}
-.case-back-row button{background:none;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.7);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
-.term-i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.4);color:rgba(20,40,63,.6);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:pointer;position:relative;margin-left:2px;vertical-align:middle}
+.case-back-row button{background:none;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
+.term-i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.4);color:rgba(20,40,63,.74);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:pointer;position:relative;margin-left:2px;vertical-align:middle}
 .term-i-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--card);border:1px solid rgba(37,87,199,.3);box-shadow:0 8px 20px rgba(20,40,63,.14);border-radius:9px;padding:9px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:20;pointer-events:none;width:220px;line-height:1.45;font-family:'Figtree',sans-serif;font-weight:400;text-align:left;white-space:normal}
 .section-head{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:20px 0 10px}
 .goal-row{display:flex;justify-content:space-between;align-items:flex-start;padding:13px 15px;background:rgba(20,40,63,.05);border-radius:3px 13px 13px 13px;margin-bottom:0}
 .goal-row-wrap{margin-bottom:10px}
-.inst-toggle{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.45);padding:8px 15px 4px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.inst-toggle{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.74);padding:8px 15px 4px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
 .inst-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
 .inst-panel.open{max-height:900px}
 /* #bp (growth chart + FD comparison + allocation, on the plan screen) holds
@@ -232,12 +235,12 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .inst-card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.12);border-radius:3px 10px 10px 10px;padding:11px 12px}
 .inst-name{font-family:'Newsreader',serif;font-size:13.5px;color:var(--paper);line-height:1.3;margin-bottom:3px}
 .inst-rate{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--gold);margin-bottom:5px}
-.inst-why{font-size:11px;color:rgba(20,40,63,.55);line-height:1.4}
+.inst-why{font-size:11px;color:rgba(20,40,63,.74);line-height:1.4}
 .inst-risk{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:2px 7px 7px 7px;margin-bottom:6px}
-.inst-risk.low{background:rgba(61,122,79,.18);color:#8FC79E}
+.inst-risk.low{background:rgba(61,122,79,.18);color:#256F55}
 .inst-risk.mod{background:rgba(37,87,199,.18);color:var(--gold)}
-.inst-risk.high{background:rgba(160,58,34,.18);color:#E8977A}
-.inst-note{font-size:12px;color:rgba(20,40,63,.6);line-height:1.6;padding:10px 12px;margin:8px 2px 2px;background:rgba(20,40,63,.04);border-left:2px solid rgba(20,40,63,.2);border-radius:0 8px 8px 0}
+.inst-risk.high{background:rgba(160,58,34,.18);color:#9C4A2C}
+.inst-note{font-size:12px;color:rgba(20,40,63,.74);line-height:1.6;padding:10px 12px;margin:8px 2px 2px;background:rgba(20,40,63,.04);border-left:2px solid rgba(20,40,63,.2);border-radius:0 8px 8px 0}
 .inst-note.warn{border-left-color:var(--gold);background:rgba(37,87,199,.08)}
 .inst-note.stretch{border-left-color:#8FC79E;background:rgba(61,122,79,.1)}
 .inst-note b{color:var(--paper)}
@@ -255,19 +258,19 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .pt-value{font-family:'Newsreader',serif;font-size:17px;font-weight:600;color:var(--paper)}
 .gap-card{background:rgba(20,40,63,.05);border:1px solid rgba(37,87,199,.3);border-left:3px solid var(--gold);border-radius:11px;padding:14px;margin:12px 0}
 .gap-card h4{font-family:'Newsreader',serif;font-size:15px;color:var(--paper);margin-bottom:8px}
-.gap-card p{font-size:13px;color:rgba(20,40,63,.7);line-height:1.55}
+.gap-card p{font-size:13px;color:rgba(20,40,63,.74);line-height:1.55}
 .rate-badge{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:10px;background:rgba(37,87,199,.18);border:1px solid rgba(37,87,199,.35);border-radius:4px;padding:2px 7px;color:var(--gold);margin-left:6px}
-.assump-toggle{font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:rgba(20,40,63,.45);text-align:center;padding:10px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;margin-top:6px}
+.assump-toggle{font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:rgba(20,40,63,.74);text-align:center;padding:10px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px;margin-top:6px}
 .schedule-table{width:100%;border-collapse:collapse;font-family:'Spline Sans Mono',monospace;font-size:10.5px}
-.schedule-table th{text-align:right;padding:6px 6px;color:rgba(20,40,63,.45);font-weight:500;border-bottom:1px solid rgba(20,40,63,.15)}
+.schedule-table th{text-align:right;padding:6px 6px;color:rgba(20,40,63,.74);font-weight:500;border-bottom:1px solid rgba(20,40,63,.15)}
 .schedule-table th:first-child,.schedule-table td:first-child{text-align:left}
-.schedule-table td{text-align:right;padding:5px 6px;color:rgba(20,40,63,.7);border-bottom:1px solid rgba(20,40,63,.06)}
+.schedule-table td{text-align:right;padding:5px 6px;color:rgba(20,40,63,.74);border-bottom:1px solid rgba(20,40,63,.06)}
 .schedule-scroll{max-height:260px;overflow-y:auto;border-radius:8px;margin:6px 0 4px}
 .tog-caret{display:inline-block;vertical-align:-1px;margin-right:6px;transition:transform .25s ease}
 .inst-toggle.open .tog-caret{transform:rotate(180deg)}
 .assump-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
 .assump-panel.open{max-height:600px}
-.assump-inner{padding:4px 2px 16px;font-size:12px;color:rgba(20,40,63,.6);line-height:1.75}
+.assump-inner{padding:4px 2px 16px;font-size:12px;color:rgba(20,40,63,.74);line-height:1.75}
 .assump-inner b{color:var(--paper)}
 /* Advanced per-goal allocation override -- see advGoalAllocControl(). */
 .adv-toggle{display:inline-flex;align-items:center;gap:5px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--gold);cursor:pointer;margin:10px 2px 4px;text-align:left}
@@ -277,22 +280,22 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .adv-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
 .adv-panel.open{max-height:220px}
 .adv-inner{background:rgba(37,87,199,.05);border:1px solid rgba(37,87,199,.16);border-radius:3px 12px 12px 12px;padding:14px 16px;margin:4px 2px 10px}
-.adv-label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.6);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
+.adv-label{display:flex;justify-content:space-between;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.74);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px}
 .adv-label b{color:var(--gold);font-family:'Newsreader',serif;font-size:13px;text-transform:none;letter-spacing:0}
 .adv-inner input[type=range]{width:100%;height:20px}
-.adv-preview{font-size:12px;color:rgba(20,40,63,.65);margin:10px 0}
+.adv-preview{font-size:12px;color:rgba(20,40,63,.74);margin:10px 0}
 .adv-preview b{color:var(--paper)}
 .adv-btn-row{display:flex;gap:8px;margin-top:4px}
 .adv-btn-row button{font-family:'Figtree',sans-serif;font-size:12px;font-weight:600;padding:8px 14px;border-radius:3px 9px 9px 9px;cursor:pointer;border:none;background:var(--gold);color:#fff;transition:transform .15s ease}
 .adv-btn-row button:hover{transform:translateY(-1px)}
-.adv-btn-row button.adv-btn-ghost{background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.6);font-weight:500}
+.adv-btn-row button.adv-btn-ghost{background:transparent;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.74);font-weight:500}
 .restart-row{padding:8px 0 28px;text-align:center}
-.restart-row button{background:none;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.6);font-family:'Spline Sans Mono',monospace;font-size:11.5px;padding:10px 20px;border-radius:3px;cursor:pointer}
+.restart-row button{background:none;border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace;font-size:11.5px;padding:10px 20px;border-radius:3px;cursor:pointer}
 .save-row{display:flex;gap:10px;margin-top:22px}
 .save-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(20,40,63,.06);border:1px solid rgba(20,40,63,.18);color:rgba(20,40,63,.75);font-family:'Figtree',sans-serif;font-size:13px;font-weight:500;padding:12px;border-radius:6px 12px 12px 12px;cursor:pointer;transition:all .15s}
 .save-btn:hover{background:rgba(20,40,63,.1);color:var(--paper)}
 .save-btn svg{width:16px;height:16px;flex-shrink:0}
-.save-note{font-size:11.5px;color:rgba(20,40,63,.45);text-align:center;padding:10px 20px 0;line-height:1.5}
+.save-note{font-size:11.5px;color:rgba(20,40,63,.74);text-align:center;padding:10px 20px 0;line-height:1.5}
 /* Cap only the chart itself, not the surrounding layout: charts were
    designed and tuned around a ~380-480px column, so uncapped they grow to
    fill however wide the card happens to be (600px+ on a real desktop
@@ -300,7 +303,10 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
    the page stays genuinely full-width -- this was the actual fix needed,
    not shrinking the whole app into a narrow column, which is worse: it
    leaves most of a normal monitor empty and looks broken. */
-.echart{width:100%;max-width:480px;margin:0 auto}
+.echart{width:100%;max-width:760px;margin:0 auto}
+/* 760px, up from 480px: at 480 the charts filled about a third of a desktop
+   results card. Still capped, per the note above, so they never stretch
+   across a whole wide monitor. */
 .gr-chart-card{background:rgba(20,40,63,.035);border:1px solid rgba(20,40,63,.09);border-radius:10px;padding:10px 10px 4px;margin-top:8px}
 .gr-chart-cap{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);padding:0 2px 6px}
 .gr-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -352,15 +358,23 @@ function initChart(id, option, optsOverride){
   const dom = document.getElementById(id);
   if(!dom) return null;
   let entry = chartInstances[id];
-  if(entry && entry.dom !== dom){ entry.inst.dispose(); entry = null; }
+  if(entry && entry.dom !== dom){ if(entry.ro) entry.ro.disconnect(); entry.inst.dispose(); entry = null; }
   if(!entry){
     const inst = echarts.init(dom, 'goalden', Object.assign({renderer:'svg'}, optsOverride));
     entry = chartInstances[id] = { inst, dom };
+    // ECharts' SVG renderer measures its container once, at init. A chart
+    // created while its card is still laying out (a section opening, a
+    // grid settling) kept that first width forever -- plots stopped ~90px
+    // short of the card edge. Re-measure whenever THIS container resizes.
+    if(typeof ResizeObserver!=='undefined'){
+      let t; const ro=new ResizeObserver(()=>{ clearTimeout(t); t=setTimeout(()=>{ try{ if(!inst.isDisposed() && dom.isConnected) inst.resize(); }catch(e){} }, 60); });
+      ro.observe(dom); entry.ro=ro;
+    }
   }
   entry.inst.setOption(option, true);
   return entry.inst;
 }
-function disposeChart(id){ if(chartInstances[id]){ chartInstances[id].inst.dispose(); delete chartInstances[id]; } }
+function disposeChart(id){ if(chartInstances[id]){ if(chartInstances[id].ro) chartInstances[id].ro.disconnect(); chartInstances[id].inst.dispose(); delete chartInstances[id]; } }
 function deferChartInit(fn){ setTimeout(fn, 0); }
 
 /* =====================================================================
@@ -371,7 +385,9 @@ function deferChartInit(fn){ setTimeout(fn, 0); }
 // mountainChart() labels each point "Year N" from its raw array index -- feeding it
 // accumulationSchedule()'s rows directly (one row per MONTH, since callers pass
 // years:yrs*12) mislabels month 109 as "Year 109". Bucket to yearly first.
-function yearlyMountainRows(monthlyRows){const rows=[];for(let m=0;m<monthlyRows.length;m+=12){rows.push({closeBal:monthlyRows[Math.min(m+11,monthlyRows.length-1)].closeBal});}return rows}
+// Carries `contributed` (when the monthly rows have it) so the growth chart can
+// show what was paid in versus what grew, as in Level 1 and the Lab.
+function yearlyMountainRows(monthlyRows){const rows=[];for(let m=0;m<monthlyRows.length;m+=12){const r=monthlyRows[Math.min(m+11,monthlyRows.length-1)];rows.push({closeBal:r.closeBal,contributed:r.contributed});}return rows}
 function drawdownSchedule(opts){const rows=[];let bal=opts.openingCorpus;let w=opts.firstWithdrawal;for(let yr=1;yr<=opts.years;yr++){let close;if(opts.due){const baw=bal-w;close=baw+baw*opts.nominalRate;}else{close=(bal+bal*opts.nominalRate)-w;}rows.push({year:yr,openBal:bal,withdrawal:w,closeBal:Math.max(0,close)});bal=close;w*=(1+opts.inflation);}return rows}
 
 /* =====================================================================
@@ -628,9 +644,9 @@ function sCase() {
     ${raceChart(racePath, goldPath, fdPath, 'case-race')}
     <div class="race-legend"><span><i style="background:#8FC79E"></i>${name}</span><span><i style="background:#2557C7"></i>Gold</span><span><i style="background:#E8977A"></i>Bank FD</span></div>
     <div class="race-stats">
-      <div class="race-stat"><div class="rs-label">${name}</div><div class="rs-val" style="color:#8FC79E">${c.compact(marketFinal)}</div></div>
+      <div class="race-stat"><div class="rs-label">${name}</div><div class="rs-val" style="color:#256F55">${c.compact(marketFinal)}</div></div>
       <div class="race-stat"><div class="rs-label">GOLD</div><div class="rs-val" style="color:var(--gold)">${c.compact(goldFinal)}</div></div>
-      <div class="race-stat"><div class="rs-label">BANK FD</div><div class="rs-val" style="color:#E8977A">${c.compact(fdFinal)}</div></div>
+      <div class="race-stat"><div class="rs-label">BANK FD</div><div class="rs-val" style="color:#9C4A2C">${c.compact(fdFinal)}</div></div>
     </div>
     <div class="case-cap" style="margin-bottom:0">${firstYear} to ${lastYear}, ${nYears} years. ${name} figure uses the real annual return each year, compounded, not an average smoothed into a straight line ${infoIconD1('Source: '+(G.country==='US'?'a compiled S&P 500 annual-return series, 1928-2015 price return, 2016-2024 total return with dividends reinvested.':'a compiled Sensex fiscal-year (April-April) return series, freefincal.com, 1979-80 through 2022-23, sourced from BSE closing values.'))}. Gold: ${(GOLD_RATE[G.country]*100).toFixed(1)}%/yr, ${G.country==='US'?'NYU Stern (Damodaran) historical dataset, 1928-2024.':'RBI Handbook of Statistics gold price data, 42-year CAGR to April 2026.'} FD: ${(c.d.fdRate*100).toFixed(1)}%/yr, a typical current multi-year bank rate held constant for illustration, which is generous to the FD since real FD rates have varied a lot across these decades.</div>
   </div>
@@ -669,8 +685,8 @@ function sCase() {
     </div>
     <div class="case-cap">This is also exactly why a Fixed Deposit quietly loses, even though it feels "safe": it pays you a fixed rupee amount that has no claim on any of that growth.</div>
     <div class="compare-row">
-      <div class="compare-card"><div class="cc-label">FD, AFTER INFLATION</div><div class="cc-val" style="color:${fdReal>0?'#8FC79E':'#E8977A'}">${(fdReal*100).toFixed(1)}%/yr</div><div class="cc-note">Before tax is even taken out</div></div>
-      <div class="compare-card"><div class="cc-label">FD, AFTER TAX &amp; INFLATION</div><div class="cc-val" style="color:${fdAfterTaxReal>0?'#8FC79E':'#E8977A'}">${(fdAfterTaxReal*100).toFixed(1)}%/yr</div><div class="cc-note">At a representative 30% slab, taxed every year regardless of whether you touch the money</div></div>
+      <div class="compare-card"><div class="cc-label">FD, AFTER INFLATION</div><div class="cc-val" style="color:${fdReal>0?'#256F55':'#9C4A2C'}">${(fdReal*100).toFixed(1)}%/yr</div><div class="cc-note">Before tax is even taken out</div></div>
+      <div class="compare-card"><div class="cc-label">FD, AFTER TAX &amp; INFLATION</div><div class="cc-val" style="color:${fdAfterTaxReal>0?'#256F55':'#9C4A2C'}">${(fdAfterTaxReal*100).toFixed(1)}%/yr</div><div class="cc-note">At a representative 30% slab, taxed every year regardless of whether you touch the money</div></div>
     </div>
     <div class="case-cap" style="margin-bottom:0">The "safety" of an FD is real (you will never see the number go down) &ndash; but the purchasing power sitting behind that number can still shrink every single year, silently, which a glance at the account balance will never show you.</div>
   </div>
@@ -680,7 +696,7 @@ function sCase() {
     <div class="case-cap">Real estate isn't a bad asset. It's a fair comparison, including the parts that don't fit neatly into a percentage.</div>
     <div class="compare-row">
       <div class="compare-card"><div class="cc-label">${G.country==='US'?'US HOUSING, LONG-RUN':'INDIAN HOUSING, LONG-RUN'}</div><div class="cc-val">${(hRange[0]*100).toFixed(1)}&ndash;${(hRange[1]*100).toFixed(1)}%/yr</div><div class="cc-note">Nominal, before rent/costs. Varies enormously by city and property &ndash; a wide range on purpose, not false precision.</div></div>
-      <div class="compare-card"><div class="cc-label">${name.toUpperCase()}, SAME WINDOW</div><div class="cc-val" style="color:#8FC79E">${(fullSeriesCAGR(series)*100).toFixed(1)}%/yr</div><div class="cc-note">${nYears} years, real data, shown above</div></div>
+      <div class="compare-card"><div class="cc-label">${name.toUpperCase()}, SAME WINDOW</div><div class="cc-val" style="color:#256F55">${(fullSeriesCAGR(series)*100).toFixed(1)}%/yr</div><div class="cc-note">${nYears} years, real data, shown above</div></div>
     </div>
     <div class="case-cap" style="margin-bottom:0">What a percentage doesn't show: buying and selling a house costs 5-10% in fees and stamp duty each way; it's one asset in one city, no diversification at all; you can't sell one bedroom if you need part of the money; and it takes work (tenants, repairs, vacancy) that a fund doesn't. None of that makes property a bad choice &ndash; it makes it a different kind of asset, with its own real tradeoffs, not a simple "better or worse" than equity.</div>
   </div>
@@ -705,7 +721,7 @@ function renderTimeMachine(startIdx){
   const gained = finalVal > raceAmt;
   return timeMachineChart(path, 'case-timemachine') +
     `<div class="case-callout ${gained?'good':''}">
-    ${c.compact(raceAmt)} invested at the start of <b>${series[startIdx].y-1}</b>, held ${tmYears} years through a ${(worstYearInPath.r*100).toFixed(0)}% single worst year (${worstYearInPath.y}), became <b style="color:${gained?'#8FC79E':'#E8977A'}">${c.compact(finalVal)}</b> by ${series[startIdx+tmYears-1].y}.
+    ${c.compact(raceAmt)} invested at the start of <b>${series[startIdx].y-1}</b>, held ${tmYears} years through a ${(worstYearInPath.r*100).toFixed(0)}% single worst year (${worstYearInPath.y}), became <b style="color:${gained?'#256F55':'#9C4A2C'}">${c.compact(finalVal)}</b> by ${series[startIdx+tmYears-1].y}.
   </div>`;
 }
 function updateRiskShrinkMarker(selectedYears){
@@ -727,7 +743,7 @@ function renderHoldResult(years){
   </div>
   <div class="holdbar-legend"><span>${100-pct}% ended with more money</span><span>${pct}% ended with less</span></div>
   <div class="case-callout ${pct===0?'good':''}" style="margin-top:12px">
-    Across ${w.length} real ${years}-year windows in the data, the worst one still averaged <b style="color:${worst.cagr>0?'#8FC79E':'#E8977A'}">${(worst.cagr*100).toFixed(1)}%/yr</b>${pct===0?', and none of them lost money.':'.'}
+    Across ${w.length} real ${years}-year windows in the data, the worst one still averaged <b style="color:${worst.cagr>0?'#256F55':'#9C4A2C'}">${(worst.cagr*100).toFixed(1)}%/yr</b>${pct===0?', and none of them lost money.':'.'}
   </div>`;
 }
 function attachCaseHandlers(){
@@ -1119,24 +1135,44 @@ function allocationLegend(eq, de, hy){
   const rows=[{pct:eq,color:'#2557C7',label:'Equity'},{pct:de,color:'#2D6E6E',label:'Debt'},{pct:hy,color:'#8FC79E',label:'Hybrid'}].filter(s=>s.pct>0.001);
   return rows.map(s=>`<div class="alloc-row"><span class="alloc-dot" style="background:${s.color}"></span><span class="alloc-name">${s.label}</span><span class="alloc-pct">${Math.round(s.pct*100)}%</span></div>`).join('');
 }
+// On-chart value tag (same convention as the Lab): numbers printed on the
+// chart itself, not only in hover tooltips that phones and printouts never
+// show. Dark AA text colours only; pastel series colours are fills.
+const CHART_TEXT={ink:'#14283F', blue:'#1E4FBE', good:'#256F55', bad:'#9C4A2C', muted:'#56698A'};
+function valueTag(text, color, position){
+  return {show:true, formatter:text, position:position||'left', distance:6, color:color||CHART_TEXT.ink,
+    fontFamily:"'Spline Sans Mono',monospace", fontSize:10.5, fontWeight:600,
+    backgroundColor:'rgba(255,255,255,.88)', padding:[2,5], borderRadius:3};
+}
 function mountainChart(rows, uid){
   if(!rows||!rows.length)return'';
   const chartId = 'chart-mountain'+(uid!==undefined?'-'+uid:'');
   deferChartInit(()=>renderMountainChartOption(chartId, rows));
-  return `<div id="${chartId}" class="echart" style="height:120px"></div>`;
+  return `<div id="${chartId}" class="echart" style="height:170px"></div>`;
 }
 function renderMountainChartOption(chartId, rows){
   const c = cfg();
+  const n=rows.length, last=rows[n-1]||{closeBal:0};
+  const hasContrib = last.contributed!=null;
+  const growthShare = hasContrib && last.closeBal>0 ? Math.round(Math.max(0,last.closeBal-last.contributed)/last.closeBal*100) : null;
+  const series=[];
+  if(hasContrib) series.push({ name:'Contributed', type:'line', data:rows.map(r=>r.contributed), showSymbol:false, lineStyle:{opacity:0}, areaStyle:{color:'rgba(20,40,63,.16)'}, z:1,
+    markPoint:{symbol:'circle', symbolSize:5, silent:true, itemStyle:{color:CHART_TEXT.muted}, data:[{coord:[n-1,last.contributed]}], label:valueTag('You put in '+c.compact(last.contributed), CHART_TEXT.ink)} });
+  series.push({ name:'Grows to', type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#2557C7', width:1.5},
+    areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(37,87,199,.85)'},{offset:1,color:'rgba(37,87,199,.08)'}]}}, z:2,
+    markPoint:{symbol:'circle', symbolSize:6, silent:true, itemStyle:{color:'#2557C7'}, data:[{coord:[n-1,last.closeBal]}], label:valueTag('Grows to '+c.compact(last.closeBal), CHART_TEXT.blue)} });
   initChart(chartId, {
-    grid:{left:2,right:2,top:8,bottom:2,containLabel:false},
-    xAxis:{type:'category', data:rows.map((r,i)=>i+1), show:false, boundaryGap:false},
+    grid:{left:2,right:2,top:growthShare!=null?24:12,bottom:20,containLabel:false},
+    xAxis:{type:'category', data:rows.map((r,i)=>i+1), boundaryGap:false,
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, formatter:v=>'Year '+v, color:CHART_TEXT.muted, fontSize:10, alignMinLabel:'left', alignMaxLabel:'right'},
+      axisLine:{show:false}, axisTick:{show:false}},
     yAxis:{type:'value', show:false, min:0},
     tooltip:{trigger:'axis', formatter(params){
-      const p=params[0];
-      return `Year ${p.axisValueLabel}<br/>Balance: ${c.compact(p.value)}`;
+      const grown=params.find(p=>p.seriesName==='Grows to'), contrib=params.find(p=>p.seriesName==='Contributed');
+      return `Year ${grown.axisValueLabel}<br/>Grows to: ${c.compact(grown.value)}`+(contrib?`<br/>Contributed: ${c.compact(contrib.value)}`:'');
     }},
-    series:[{ type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#2557C7', width:1.5},
-      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(37,87,199,.8)'},{offset:1,color:'rgba(37,87,199,.06)'}]}} }],
+    graphic: growthShare!=null ? [{type:'text', left:2, top:2, style:{text:'Growth is '+growthShare+'% of the final pot', fill:CHART_TEXT.good, fontSize:11, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace"}}] : [],
+    series,
   });
 }
 // A bare filled shape with no readable numbers isn't information, it's
@@ -1163,22 +1199,23 @@ function renderPotChartOption(chartId, rows, c){
   const endVal = rows[n-1].closeBal;
   const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal));
   const endLabelColor = prematureDepletion ? '#E8977A' : '#8FC79E';
+  const endTextColor = prematureDepletion ? CHART_TEXT.bad : CHART_TEXT.good; // AA text; the dot keeps the pastel
   initChart(chartId, {
     grid:{left:2,right:2,top:26,bottom:20,containLabel:false},
     xAxis:{type:'category', data:rows.map((r,i)=>'Yr '+(r.year!==undefined?r.year:i+1)), boundaryGap:false,
-      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, color:'rgba(20,40,63,.4)', fontSize:8.5},
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, color:CHART_TEXT.muted, fontSize:10, alignMinLabel:'left', alignMaxLabel:'right'},
       axisLine:{show:false}, axisTick:{show:false}, splitLine:{show:false}},
     yAxis:{type:'value', show:false, min:0},
     tooltip:{trigger:'axis', formatter(params){
       const p=params[0];
       return `${p.axisValueLabel}<br/>Balance: ${fmt(p.value)}`;
     }},
-    graphic:[{type:'text', left:2, top:2, style:{text:'Starts at '+fmt(startVal), fill:'rgba(20,40,63,.55)', fontSize:9, fontFamily:"'Spline Sans Mono',monospace"}}],
+    graphic:[{type:'text', left:2, top:2, style:{text:'Starts at '+fmt(startVal), fill:CHART_TEXT.muted, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace"}}],
     series:[
       { type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#8FC79E', width:1.4},
         areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(61,122,79,.65)'},{offset:1,color:'rgba(61,122,79,.05)'}]}},
         markPoint:{symbol:'circle', symbolSize:7, data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
-          label:{show:true, formatter:()=>endLabelText, position:'top', color:endLabelColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:9}} },
+          label:{show:true, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endTextColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:10.5}} },
     ],
   });
 }
@@ -1272,7 +1309,7 @@ function renderProfile(){
     <div class="pc-tagline">${b.tagline}</div>
     <div class="pc-desc">${b.desc}</div>
   </div>
-  <div style="font-size:12.5px;color:rgba(20,40,63,.55);padding:0 2px 4px;line-height:1.6">
+  <div style="font-size:12.5px;color:rgba(20,40,63,.74);padding:0 2px 4px;line-height:1.6">
     Based on this profile, your investments will target roughly <strong style="color:var(--gold)">${blendedRate}% per year</strong> on average. That comes from a blend of equity, debt, and hybrid based on your ${b.eq*100}% / ${b.de*100}% / ${b.hy*100}% allocation mix. Short-horizon goals will automatically use a safer rate.
   </div>
   </div>
@@ -1566,7 +1603,7 @@ function ddToggleBlock(g,i,c){
   <thead><tr><th>Year</th><th>Start of year</th><th>You withdraw</th><th>Growth earned</th><th>End of year</th></tr></thead><tbody>
   ${rows.map(r=>`<tr><td>${r.year}</td><td>${c.compact(r.openBal)}</td><td>${c.compact(r.withdrawal)}</td><td>${c.compact(Math.max(0,r.closeBal-r.openBal+r.withdrawal))}</td><td>${c.compact(r.closeBal)}</td></tr>`).join('')}
   </tbody></table></div>
-  <div style="font-size:11px;color:rgba(20,40,63,.4);padding:2px 2px 10px;line-height:1.5">Withdrawals rise with inflation each year. Built to last to age ${d.lifeExp}, reaching zero by design, not by accident.</div>
+  <div style="font-size:11px;color:rgba(20,40,63,.74);padding:2px 2px 10px;line-height:1.5">Withdrawals rise with inflation each year. Built to last to age ${d.lifeExp}, reaching zero by design, not by accident.</div>
   ${advGoalAllocControl(g,i)}
   </div>`;
 }
@@ -1574,7 +1611,7 @@ function eduPhaseToggleBlock(g,i){
   const d=cfg().d;
   const caret='<svg class="tog-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
   return `<div class="inst-toggle" id="dd-${i}">${caret}How the pot behaves during the study years</div>
-  <div class="inst-panel" id="ddp-${i}"><div style="font-size:12px;color:rgba(20,40,63,.6);line-height:1.6;padding:8px 2px 4px">While fees are being paid out over ${g.duration||4} years, the remaining balance is assumed to earn <b style="color:var(--paper)">${(g.postGoalRate*100).toFixed(1)}%</b> (a safer parking rate) rather than staying at full growth -- that is why the corpus needed is larger than simply adding up the fees.</div>
+  <div class="inst-panel" id="ddp-${i}"><div style="font-size:12px;color:rgba(20,40,63,.74);line-height:1.6;padding:8px 2px 4px">While fees are being paid out over ${g.duration||4} years, the remaining balance is assumed to earn <b style="color:var(--paper)">${(g.postGoalRate*100).toFixed(1)}%</b> (a safer parking rate) rather than staying at full growth -- that is why the corpus needed is larger than simply adding up the fees.</div>
   ${advGoalAllocControl(g,i)}
   </div>`;
 }
@@ -1642,7 +1679,7 @@ function renderPlan(){
       <div class="gr-note" style="margin-top:0">A typical multi-year bank FD, around ${(cfg().d.fdRate*100).toFixed(1)}%/yr. FD interest is also fully taxed at your income slab every year, unlike long-term equity gains, which this comparison does not even account for.</div>
       <div class="alloc-return-row" style="margin-top:12px">
         <div><div class="alloc-return-label">Your plan</div><div class="alloc-return-value">${c.compact(combinedActual)}</div></div>
-        <div><div class="alloc-return-label">Same money in an FD</div><div class="alloc-return-value" style="color:#E8977A">${c.compact(fdFinal)}</div></div>
+        <div><div class="alloc-return-label">Same money in an FD</div><div class="alloc-return-value" style="color:#9C4A2C">${c.compact(fdFinal)}</div></div>
       </div>
       <div class="gr-note" style="margin-top:10px">Over ${topGoal.years} years, staying in a Fixed Deposit would leave you short by <b style="color:var(--paper)">${c.compact(fdDiff)}</b>, purely from the difference in return.</div>
     </div>`;
@@ -1659,7 +1696,7 @@ function renderPlan(){
     <div class="alloc-flex">${allocationDonut(baseAlloc.eq, baseAlloc.de, baseAlloc.hy)}<div class="alloc-legend">${allocationLegend(baseAlloc.eq, baseAlloc.de, baseAlloc.hy)}</div></div>
     <div class="alloc-return-row">
       <div><div class="alloc-return-label">Expected return</div><div class="alloc-return-value">${(baseRate*100).toFixed(1)}%</div></div>
-      <div><div class="alloc-return-label">After ${(cfg().d.inflation*100).toFixed(0)}% inflation</div><div class="alloc-return-value" style="color:${baseReal>0?'#8FC79E':'#E8977A'}">${(baseReal*100).toFixed(1)}%</div></div>
+      <div><div class="alloc-return-label">After ${(cfg().d.inflation*100).toFixed(0)}% inflation</div><div class="alloc-return-value" style="color:${baseReal>0?'#256F55':'#9C4A2C'}">${(baseReal*100).toFixed(1)}%</div></div>
     </div>
     <div class="gr-note" style="margin-top:10px">This is your full profile's own mix. Goals with a shorter horizon than your profile can safely support are scaled down individually above, not by changing this baseline.</div>
   </div>`;
@@ -1987,7 +2024,7 @@ function renderFrontierChart(chartType){
     head.appendChild(titleBox);
     const close = document.createElement('button');
     close.textContent = '✕';
-    close.style.cssText = 'position:absolute;top:0;right:0;background:none;border:none;font-size:16px;cursor:pointer;color:rgba(20,40,63,.5);line-height:1;padding:2px 4px;';
+    close.style.cssText = 'position:absolute;top:0;right:0;background:none;border:none;font-size:16px;cursor:pointer;color:rgba(20,40,63,.74);line-height:1;padding:2px 4px;';
     close.addEventListener('click', function(){ panel.remove(); });
     head.appendChild(close);
     panel.appendChild(head);
@@ -1998,7 +2035,7 @@ function renderFrontierChart(chartType){
     makeDraggable(panel, head);
     document.body.appendChild(panel);
   }
-  document.getElementById('advisor-frontier-title').innerHTML = '<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:16px;color:#14283F">' + FRONTIER_CHART_TITLES[type] + '</div><div style="font-family:\'Spline Sans Mono\',monospace;font-size:10px;color:rgba(20,40,63,.5)">' + d.assetPoints.map(function(ap){ return ap.label; }).join(' vs ') + '</div>';
+  document.getElementById('advisor-frontier-title').innerHTML = '<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:16px;color:#14283F">' + FRONTIER_CHART_TITLES[type] + '</div><div style="font-family:\'Spline Sans Mono\',monospace;font-size:10px;color:rgba(20,40,63,.74)">' + d.assetPoints.map(function(ap){ return ap.label; }).join(' vs ') + '</div>';
   const opt = type === 'bar' ? barComparisonChartOption(d.assetPoints)
     : type === 'radar' ? radarComparisonChartOption(d.assetPoints, d.minVariance, d.tangency, d.riskFree)
     : liveFrontierChartOption(d.frontier, d.assetPoints, d.currentPoint, d.cal, d.tangencyPoint, d.currentMixLabel, d.minVarPoint);
@@ -2598,7 +2635,7 @@ function resultCanvasAlloc() {
   return '<div class="alloc-card"><div class="section-head">Your '+b.name+' profile, as an allocation</div>' +
     '<div class="alloc-flex">'+allocationDonut(b.eq, b.de, b.hy, 'cv-alloc')+'<div class="alloc-legend">'+allocationLegend(b.eq, b.de, b.hy)+'</div></div>' +
     '<div class="alloc-return-row"><div><div class="alloc-return-label">Expected return</div><div class="alloc-return-value">'+(baseRate*100).toFixed(1)+'%</div></div>' +
-    '<div><div class="alloc-return-label">After '+(c.d.inflation*100).toFixed(0)+'% inflation</div><div class="alloc-return-value" style="color:'+(baseReal>0?'#8FC79E':'#E8977A')+'">'+(baseReal*100).toFixed(1)+'%</div></div></div></div>';
+    '<div><div class="alloc-return-label">After '+(c.d.inflation*100).toFixed(0)+'% inflation</div><div class="alloc-return-value" style="color:'+(baseReal>0?'#256F55':'#9C4A2C')+'">'+(baseReal*100).toFixed(1)+'%</div></div></div></div>';
 }
 function resultCanvasProfile() {
   if (!G.bucket) return '<div class="gr-note">Complete the risk questionnaire to see your profile.</div>';

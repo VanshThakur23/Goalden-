@@ -2116,3 +2116,34 @@ Changes made by Claude Code (Chief). D2-03, a critical-severity finding from the
 - Checks: engine.test.js 109/109, all 11 smoke files pass, compounded
   hand-off still matches the on-screen figure, advisor chart/results tools
   run on a 3-instrument set, no page errors on any Lab tab.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 9: Levels 1/2 + landing page)
+Changes made by Claude Code (Chief). Ports of the Lab's D4 visual fixes to the other pages.
+- goalden.html + goalden-door2.html growth ("how the pot grows") charts now
+  print the final pot, what you put in, and "growth is N% of the final pot",
+  with Year 1 / Year N labels (were hover-only). Level 2's yearly rows now
+  carry `contributed` so it can show the paid-in layer too. Verified by
+  screenshot on both pages (Level 1: Grows to ₹3.7 Cr, You put in ₹64.8 L,
+  83%).
+- Pot (spend-down) charts on both pages: end-label text uses AA colours,
+  edge labels are no longer clipped, text is at least 10px.
+- Chart width cap raised from 480px to 760px (charts filled about a third
+  of a desktop card; still capped per the existing note).
+- Viewport no longer sets maximum-scale=1.0 on Levels 1/2 (pinch-zoom was
+  blocked, WCAG 1.4.4).
+- Level 1: "See the full month-by-month schedule" is now "year-by-year" (the
+  table is yearly).
+- WCAG AA text contrast pass on index.html, goalden.html and
+  goalden-door2.html (same method as the Lab: muted ink to .74, pastel text
+  to #256F55/#9C4A2C, --dim/--ok tokens darkened, plus concatenated-style
+  colours in all four pages). Verified: automated audit shows 0 failing text
+  elements on the landing page, Level 1 start and results, Level 2 start
+  and plan, and all 12 Lab tabs.
+- All four pages: `initChart` attaches a debounced ResizeObserver per chart,
+  disconnected on dispose. ECharts SVG measured its container only once, so
+  charts created while a card was laying out stayed too narrow (Level 2's
+  goal chart ended about 90px short). Verified: chart SVG width equals its
+  container (651/651).
+- Checks: engine.test.js 109/109, 11/11 smoke files, agent evals 9/9
+  (mock), chat end-to-end on 3 pages with no errors, all Lab tabs error-free,
+  phone width 412px holds.

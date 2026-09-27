@@ -1090,16 +1090,24 @@ function initChart(id, option, optsOverride){
   const dom = document.getElementById(id);
   if(!dom) return null;
   let entry = chartInstances[id];
-  if(entry && entry.dom !== dom){ entry.inst.dispose(); entry = null; }
+  if(entry && entry.dom !== dom){ if(entry.ro) entry.ro.disconnect(); entry.inst.dispose(); entry = null; }
   if(!entry){
     const inst = echarts.init(dom, 'goalden', Object.assign({renderer:'svg'}, optsOverride));
     entry = chartInstances[id] = { inst, dom };
+    // ECharts' SVG renderer measures its container once, at init. A chart
+    // created while its card is still laying out (a section opening, a
+    // grid settling) kept that first width forever -- plots stopped ~90px
+    // short of the card edge. Re-measure whenever THIS container resizes.
+    if(typeof ResizeObserver!=='undefined'){
+      let t; const ro=new ResizeObserver(()=>{ clearTimeout(t); t=setTimeout(()=>{ try{ if(!inst.isDisposed() && dom.isConnected) inst.resize(); }catch(e){} }, 60); });
+      ro.observe(dom); entry.ro=ro;
+    }
   }
   entry.inst.setOption(option, true);
   return entry.inst;
 }
 function disposeChart(id){
-  if(chartInstances[id]){ chartInstances[id].inst.dispose(); delete chartInstances[id]; }
+  if(chartInstances[id]){ if(chartInstances[id].ro) chartInstances[id].ro.disconnect(); chartInstances[id].inst.dispose(); delete chartInstances[id]; }
 }
 // Charts are placed into the DOM as part of a synchronous innerHTML
 // string (same convention as the old SVG-string chart functions), so the
@@ -9027,7 +9035,7 @@ function resultCanvasFX() {
     '<div class="stat-row">' +
       '<div class="stat"><div class="stat-label">Stayed home</div><div class="stat-value">'+homeC.compact(res.domesticFV)+'</div></div>' +
       '<div class="stat"><div class="stat-label">Went abroad</div><div class="stat-value">'+homeC.compact(res.crossBorderFV)+'</div></div>' +
-      '<div class="stat"><div class="stat-label">Currency effect</div><div class="stat-value" style="color:'+(res.currencyEffect>=0?'#8FC79E':'#E8977A')+'">'+(res.currencyEffect>=0?'+':'')+homeC.compact(res.currencyEffect)+'</div></div>' +
+      '<div class="stat"><div class="stat-label">Currency effect</div><div class="stat-value" style="color:'+(res.currencyEffect>=0?'#256F55':'#9C4A2C')+'">'+(res.currencyEffect>=0?'+':'')+homeC.compact(res.currencyEffect)+'</div></div>' +
     '</div>' +
     '<div class="card"><h4>The interesting fact</h4><div class="gr-note" style="margin-top:0">In market terms alone, '+homeC.compact(f.principal)+' at '+f.foreignReturn+'% for '+f.years+' years becomes <b style="color:var(--paper)">'+homeC.compact(res.marketOnlyFV)+'</b>. With currency movement priced in, it becomes <b style="color:var(--paper)">'+homeC.compact(res.crossBorderFV)+'</b> — an effective '+((res.effectiveAnnualReturn*100).toFixed(2))+'% a year in '+homeC.name+' terms.</div></div>'
   };
@@ -9109,7 +9117,7 @@ function briefingStress() {
   const survived = !!(res.shockInfo && !res.shockInfo.ranOutYear);
   return { ok:true, html: '<div class="card"><h4>Against the ' + ep.label + ' (' + (ep.rate*100).toFixed(0) + '% in one year)</h4>' +
     '<div class="stat-row">' +
-    '<div class="stat"><div class="stat-label">Outcome</div><div class="stat-value" style="color:' + (survived ? '#8FC79E' : '#E8977A') + '">' + (survived ? 'Survives' : 'Runs out in drawdown year ' + res.shockInfo.ranOutYear) + '</div></div>' +
+    '<div class="stat"><div class="stat-label">Outcome</div><div class="stat-value" style="color:' + (survived ? '#256F55' : '#9C4A2C') + '">' + (survived ? 'Survives' : 'Runs out in drawdown year ' + res.shockInfo.ranOutYear) + '</div></div>' +
     '<div class="stat"><div class="stat-label">Monthly SIP</div><div class="stat-value">' + c.fmt(Math.round(res.sip)) + '</div></div>' +
     '</div></div>' };
 }
