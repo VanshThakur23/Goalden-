@@ -1824,7 +1824,7 @@ const L = {
     eduInflation:10, preRate:11, parkRate:7, editingChild:null,
   },
   mc:{ sip:200000, years:20, meanReturn:10, volatility:15, regime:'normal', seed:42 },
-  health:{ capacity:40000, totalSIP:35000, emergencyStatus:'partial', shockSurvives:true },
+  health:{ capacity:40000, totalSIP:35000, emergencyStatus:'partial' },
   snapshots:[], // up to 2 saved Retirement Lab states, for side-by-side comparison
   instCategory:'all',
   instSearch:'',
@@ -3815,10 +3815,27 @@ function calcHealthScore(){
   const fundingRatio = h.capacity>0 ? Math.min(1, h.capacity/Math.max(1,h.totalSIP)) : 0;
   const funding=Math.round(fundingRatio*40);
   const emergency = h.emergencyStatus==='full'?20:h.emergencyStatus==='partial'?10:0;
-  const stress = h.shockSurvives?25:5;
-  const surplus = h.capacity > h.totalSIP;
-  const discipline = surplus?15:5;
-  return {funding, emergency, stress, discipline, total:funding+emergency+stress+discipline, fundingRatio};
+  // Stress survival is MEASURED, not self-reported: the toggle defaulted to
+  // "Yes" and handed out 25 of 100 points for nothing. Runs the current
+  // Retirement Lab plan through the first historical episode (2008 for
+  // India) in year 1 of retirement, at the pot's equity share.
+  const st = healthStressCheck();
+  const stress = st.survives ? 25 : (st.ranOutYear!=null && st.ranOutYear > 0.8*st.drawYrs ? 15 : 5);
+  // "Discipline" used to repeat the funding test (capacity > need). It now
+  // scores HEADROOM: spare capacity beyond what the goals need, as a share
+  // of capacity -- the room to absorb a rise in costs or a missed month.
+  // Key kept as `discipline` for the advisor's result contract.
+  const headroom = h.capacity>0 ? (h.capacity-h.totalSIP)/h.capacity : -1;
+  const discipline = headroom>=0.10 ? 15 : headroom>=0 ? 8 : 0;
+  return {funding, emergency, stress, discipline, total:funding+emergency+stress+discipline, fundingRatio, stressCheck:st, headroom};
+}
+function healthStressCheck(){
+  const ep=cfg().episodes[0];
+  const saved=L.ret.shock;
+  L.ret.shock={epId:ep.id, year:1};
+  let res; try{ res=calcRetLab(); } finally { L.ret.shock=saved; }
+  const ran=res.shockInfo ? res.shockInfo.ranOutYear : null;
+  return {episode:ep, survives:ran==null, ranOutYear:ran, drawYrs:res.drawYrs, retireAge:L.ret.retireAge, equity:L.ret.shockEquity==null?40:L.ret.shockEquity};
 }
 
 function renderHealth(){
@@ -3839,16 +3856,12 @@ function renderHealth(){
       <button class="tglbtn${h.emergencyStatus==='partial'?' active':''}" data-toggle="emergencyStatus" data-val="partial">Partial</button>
       <button class="tglbtn${h.emergencyStatus==='full'?' active':''}" data-toggle="emergencyStatus" data-val="full">Full</button>
     </div>
-    <div class="section-label">Survives a 2008-style shock?</div>
-    <div class="toggle-row">
-      <button class="tglbtn${h.shockSurvives?' active':''}" data-toggle="shockSurvives" data-val="true">Yes</button>
-      <button class="tglbtn${!h.shockSurvives?' active':''}" data-toggle="shockSurvives" data-val="false">No / unsure</button>
-    </div>
-    <div class="gr-note">A scored composite, built only from what this app actually measures: funding, emergency cover, and stress survival. Not a substitute for a full review with an adviser.</div>
+    <div class="gr-note">Stress survival is tested, not asked: it runs your Retirement Lab plan through the ${sc.stressCheck.episode.label} in the first year of retirement. Change the plan on the Retirement tab and this updates.</div>
+    <div class="gr-note">A scored composite, built only from what this app actually measures: funding, emergency cover, stress survival and headroom. Not a substitute for a full review with an adviser.</div>
   </div>
   <div class="output">
     <div class="card is-primary">
-      <h4>Plan Health Score${infoIcon('A 0 to 100 composite scored only from what this app can actually measure: funding 40 points, emergency cover 20, stress survival 25, discipline 15. A quick pulse check, not a full financial review.')}</h4>
+      <h4>Plan Health Score${infoIcon('A 0 to 100 composite scored only from what this app can actually measure: funding 40 points, emergency cover 20, stress survival 25 (tested on your Retirement Lab plan), headroom 15. A quick pulse check, not a full financial review.')}</h4>
       <div class="cap">${band.label}</div>
       <div class="score-dial">
         <div class="dial-num" style="color:${band.color}">${sc.total}</div>
@@ -3856,7 +3869,7 @@ function renderHealth(){
           <div class="dbar-row"><span class="dbar-label">Funding</span><div class="dbar-track"><div class="dbar-fill" style="width:${sc.funding/40*100}%"></div></div><span class="dbar-val">${sc.funding}/40</span></div>
           <div class="dbar-row"><span class="dbar-label">Emergency</span><div class="dbar-track"><div class="dbar-fill" style="width:${sc.emergency/20*100}%"></div></div><span class="dbar-val">${sc.emergency}/20</span></div>
           <div class="dbar-row"><span class="dbar-label">Stress survival</span><div class="dbar-track"><div class="dbar-fill" style="width:${sc.stress/25*100}%"></div></div><span class="dbar-val">${sc.stress}/25</span></div>
-          <div class="dbar-row"><span class="dbar-label">Discipline</span><div class="dbar-track"><div class="dbar-fill" style="width:${sc.discipline/15*100}%"></div></div><span class="dbar-val">${sc.discipline}/15</span></div>
+          <div class="dbar-row"><span class="dbar-label">Headroom</span><div class="dbar-track"><div class="dbar-fill" style="width:${sc.discipline/15*100}%"></div></div><span class="dbar-val">${sc.discipline}/15</span></div>
         </div>
       </div>
     </div>
@@ -3865,8 +3878,8 @@ function renderHealth(){
       <div class="gr-note" style="margin-top:0">
       <b>Funding (40pts):</b> your capacity (${c.fmt(h.capacity)}) against what your goals need (${c.fmt(h.totalSIP)}). Currently ${(sc.fundingRatio*100).toFixed(0)}% funded.${infoIcon('Funding ratio: savings capacity divided by what all goals together need per month. At 100% or more, every goal is fully paid for out of current capacity.')}<br>
       <b>Emergency (20pts):</b> ${h.emergencyStatus==='full'?'fully covered':h.emergencyStatus==='partial'?'partially covered':'not yet built'}.<br>
-      <b>Stress survival (25pts):</b> ${h.shockSurvives?'plan holds up':'plan may not survive'} a 2008-style shock. Check the Retirement tab's stress test to verify this properly rather than guessing.<br>
-      <b>Discipline (15pts):</b> ${h.capacity>h.totalSIP?'capacity exceeds what goals need, a real surplus':'capacity is fully or over-committed'}.
+      <b>Stress survival (25pts):</b> your Retirement Lab plan (retiring at ${sc.stressCheck.retireAge}, pot ${sc.stressCheck.equity}% in equities) with the ${sc.stressCheck.episode.label} in its first year ${sc.stressCheck.survives?'<b style="color:#256F55">still lasts the full '+sc.stressCheck.drawYrs+' years</b>':'<b style="color:#9C4A2C">runs out in year '+sc.stressCheck.ranOutYear+' of '+sc.stressCheck.drawYrs+'</b>'}.<br>
+      <b>Headroom (15pts):</b> ${sc.headroom>=0 ? (sc.headroom*100).toFixed(0)+'% of your capacity is spare after the goals' : 'your goals need more than you can save each month'} (15 pts at 10% or more).
       </div>
     </div>
     ${nextStepCard([{q:'Start from the Retirement tab to raise the funding score.', tab:'retirement'}])}
@@ -5615,7 +5628,6 @@ function attach(){
       }
       else if(key==='regime') L.mc.regime=parsedVal;
       else if(key==='emergencyStatus') L.health.emergencyStatus=parsedVal;
-      else if(key==='shockSurvives') L.health.shockSurvives=parsedVal;
       else L.ret[key]=parsedVal;
       render();
     });
@@ -9473,7 +9485,7 @@ function resultCanvasHealth() {
         '<div class="dbar-row"><span class="dbar-label">Funding</span><div class="dbar-track"><div class="dbar-fill" style="width:'+(sc.funding/40*100)+'%"></div></div><span class="dbar-val">'+sc.funding+'/40</span></div>' +
         '<div class="dbar-row"><span class="dbar-label">Emergency</span><div class="dbar-track"><div class="dbar-fill" style="width:'+(sc.emergency/20*100)+'%"></div></div><span class="dbar-val">'+sc.emergency+'/20</span></div>' +
         '<div class="dbar-row"><span class="dbar-label">Stress survival</span><div class="dbar-track"><div class="dbar-fill" style="width:'+(sc.stress/25*100)+'%"></div></div><span class="dbar-val">'+sc.stress+'/25</span></div>' +
-        '<div class="dbar-row"><span class="dbar-label">Discipline</span><div class="dbar-track"><div class="dbar-fill" style="width:'+(sc.discipline/15*100)+'%"></div></div><span class="dbar-val">'+sc.discipline+'/15</span></div>' +
+        '<div class="dbar-row"><span class="dbar-label">Headroom</span><div class="dbar-track"><div class="dbar-fill" style="width:'+(sc.discipline/15*100)+'%"></div></div><span class="dbar-val">'+sc.discipline+'/15</span></div>' +
       '</div></div></div>'
   };
 }

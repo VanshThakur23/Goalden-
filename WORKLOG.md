@@ -2388,3 +2388,23 @@ Changes made by Claude Code (Chief). Pre-existing bug found while verifying iter
   (a tiny first value uses the next meaningful base; an all-negative series
   is excluded and reported). Tests 111/111, smokes 11/11, no errors on six
   companies.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 24: honest Plan Health)
+Changes made by Claude Code (Chief). D1-15 from the Retirement division.
+- goalden-lab.html `calcHealthScore` / `healthStressCheck`: stress survival
+  (25 pts) is now MEASURED. It runs the current Retirement Lab plan through
+  the first historical episode (2008 for India) in year 1 of retirement,
+  at the pot's equity share: survives = 25, runs out in the last fifth of
+  the drawdown = 15, earlier = 5. It used to be a self-reported Yes/No
+  toggle that defaulted to "Yes", 25 free points. The toggle and its dead
+  state key are removed; the card explains the test and states the result
+  ("runs out in year 18 of 25").
+- "Discipline" (15 pts) repeated the funding test; it is now "Headroom":
+  spare capacity as a share of capacity (>=10% = 15, 0-10% = 8, deficit =
+  0). The advisor result keeps the `discipline` key (tool contract).
+- VISIBLE EFFECT: the default score goes from 90 ("Strong shape") to 70,
+  because the default retirement plan has zero margin and does not survive
+  a 2008 crash in its first year. That's the truthful reading.
+- Verified: the health check's ran-out year equals a direct calcRetLab run
+  (18 at 40% equity, 10 at 100%); the user's own shock setting is restored
+  afterwards; tests 111/111, smokes 11/11, evals 9/9, contrast 0, no errors.
