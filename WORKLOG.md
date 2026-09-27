@@ -2204,3 +2204,25 @@ Changes made by Claude Code (Chief). D1-07 from the Retirement division.
 - agent-evals/runner.js ground-truth CONFIG mirrors the new defaults (it
   recomputes expected figures independently and failed until updated).
   Checks: evals 9/9, engine tests 109/109, smokes 11/11.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 13: growth + drawdown chart)
+Changes made by Claude Code (Chief). D2 visualization ideas 1-2 (retail pain points: "what would I have now?" and "how bad did it get?").
+- goalden-lab.html Test Real Investments: new card "What ₹1.00 L would have
+  become" (`liveGrowthDrawdown`, `liveGrowthCardHTML`,
+  `renderLiveGrowthChart`) under the frontier, for 2+ instruments.
+  - Top panel: growth of ₹1 lakh ($1,000 in US mode) in each instrument and
+    in "Your mix" (current weights, rebalanced back to them once a year),
+    with final values printed at the line ends.
+  - Bottom panel: underwater chart of the mix (% below its previous peak),
+    with the worst fall labelled.
+  - Stat tiles: final value with CAGR, worst fall with bottom date, and time
+    to recover (or "still below its old high").
+  - Uses the shared date window and only dates all instruments traded on;
+    weekly-sampled for drawing. On phones, names move to a legend so the
+    end labels fit.
+- Verified: per-instrument final multiples equal raw last/first price
+  (2.9338, 1.3134); worst drawdown equals a brute-force recomputation
+  (-44.55% for 2 instruments, -9.2% for 3); CAGR 2.1948^(1/10)-1 = 8.2%
+  matches the tile. No page errors across weight changes and tab switches;
+  the phone layout holds 412px; tests 109/109, smokes 11/11. (Sandbox
+  prices are synthetic; the arithmetic is what was checked.)

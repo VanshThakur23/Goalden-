@@ -4413,6 +4413,87 @@ function liveWindowNoteHTML(items){
     ? `<div class="gr-note" style="border-left-color:#9C4A2C">These instruments overlap for less than about six months (${fmt(w.start)} to ${fmt(w.end)}), too short to compare fairly, so each is shown over its own history. Treat the frontier as rough.${curNote}</div>`
     : `<div class="gr-note">Compared over the same dates for every instrument: <b>${fmt(w.start)} to ${fmt(w.end)}</b> (${w.years.toFixed(1)} years), the period they all have data for.${curNote}</div>`;
 }
+// "What would ₹1 lakh have become, and how bad did it get?" -- the two
+// questions a retail investor actually asks of a backtest, which the
+// risk/return scatter alone never answers. Uses the SAME shared date
+// window as every other comparison (liveCommonWindow). The mix is
+// rebalanced back to its target weights once a year, which is what a
+// person can realistically do; the frontier maths assumes constant
+// weights, and yearly rebalancing is the closest honest equivalent.
+function liveGrowthDrawdown(items, weights){
+  const win=liveCommonWindow(items);
+  const maps=items.map(it=>new Map(L.live.data[it.key].prices.filter(p=>p.date>=win.start&&p.date<=win.end).map(p=>[p.date,p.close])));
+  // Dates every instrument traded on (calendars differ across exchanges).
+  const dates=[...maps[0].keys()].filter(d=>maps.every(m=>m.has(d))).sort();
+  if(dates.length<60) return null;
+  const px=dates.map(d=>maps.map(m=>m.get(d)));
+  let units=weights.map((w,i)=>w/px[0][i]); let lastYear=dates[0].slice(0,4);
+  const mix=[], idx=items.map(()=>[]);
+  dates.forEach((d,k)=>{
+    let v=units.reduce((a,u,i)=>a+u*px[k][i],0);
+    if(d.slice(0,4)!==lastYear){ units=weights.map((w,i)=>w*v/px[k][i]); lastYear=d.slice(0,4); }
+    mix.push(v);
+    items.forEach((_,i)=>idx[i].push(px[k][i]/px[0][i]));
+  });
+  let peak=mix[0], worst={dd:0,k:0,peakK:0}, peakK=0; const dd=[];
+  mix.forEach((v,k)=>{ if(v>peak){peak=v;peakK=k;} const x=v/peak-1; dd.push(x); if(x<worst.dd) worst={dd:x,k,peakK}; });
+  let recK=null; for(let k=worst.k;k<mix.length;k++){ if(mix[k]>=mix[worst.peakK]){ recK=k; break; } }
+  const years=(new Date(dates[dates.length-1])-new Date(dates[0]))/(365.25*864e5);
+  const cagr=Math.pow(mix[mix.length-1], 1/Math.max(years,0.05))-1;
+  return {dates, mix, idx, dd, worst, recK, years, cagr};
+}
+function liveGrowthCardHTML(items, weights){
+  const g=liveGrowthDrawdown(items, weights);
+  if(!g) return '';
+  const c=cfg(), amt = c.code==='IN' ? 100000 : 1000;
+  const fmtD=d=>new Date(d).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+  const monthsBetween=(a,b)=>Math.max(0,Math.round((new Date(b)-new Date(a))/(30.44*864e5)));
+  const w=g.worst, rec = g.recK!=null ? `back to its old high by ${fmtD(g.dates[g.recK])}` : 'still below its old high at the end of the data';
+  deferChartInit(()=>renderLiveGrowthChart('live-growth-echart', g, items, amt));
+  return `<div class="card">
+    <h4>What ${c.compact(amt)} would have become${infoIcon('Each line starts at the same amount on the first shared date. "Your mix" holds your current weights and is rebalanced back to them once a year. Past prices only: this is what happened, not a forecast.')}</h4>
+    <div class="stat-row" style="margin-bottom:10px">
+      <div class="stat"><div class="stat-label">Your mix grew to</div><div class="stat-value">${c.compact(amt*g.mix[g.mix.length-1])}</div><div class="stat-sub">${(g.cagr*100).toFixed(1)}%/yr over ${g.years.toFixed(1)} yrs</div></div>
+      <div class="stat"><div class="stat-label">Worst fall${infoIcon('The deepest drop from a previous high point to a later low, for your mix. Everyone who held through this period sat through it.')}</div><div class="stat-value" style="color:#9C4A2C">${(w.dd*100).toFixed(1)}%</div><div class="stat-sub">bottom in ${fmtD(g.dates[w.k])}</div></div>
+      <div class="stat"><div class="stat-label">Time to recover</div><div class="stat-value" style="font-size:20px">${g.recK!=null?monthsBetween(g.dates[w.k], g.dates[g.recK])+' months':'Not yet'}</div><div class="stat-sub">${rec}</div></div>
+    </div>
+    <div id="live-growth-echart" class="echart" style="height:380px"></div>
+  </div>`;
+}
+function renderLiveGrowthChart(chartId, g, items, amt){
+  const c=cfg();
+  const dom=document.getElementById(chartId); const narrow=!!dom && dom.clientWidth<520;
+  // Weekly points keep ten years of daily data light to draw.
+  const step=Math.max(1, Math.floor(g.dates.length/520));
+  const keep=g.dates.map((_,k)=>k).filter(k=>k%step===0 || k===g.dates.length-1);
+  const x=keep.map(k=>g.dates[k]);
+  const pal=['#8FA9DE','#E8977A','#5FA875','#C99A45'];
+  const last=keep.length-1;
+  const series=items.map((it,i)=>({ name:it.symbol, type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.idx[i][k]),
+    lineStyle:{width:1.3, color:pal[i%pal.length]}, itemStyle:{color:pal[i%pal.length]},
+    endLabel:{show:true, formatter:p=>(narrow?'':it.symbol+' ')+c.compact(p.value), color:CHART_TEXT.muted, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} }));
+  series.push({ name:'Your mix', type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.mix[k]), lineStyle:{width:2.6, color:'#2557C7'}, itemStyle:{color:'#2557C7'}, z:5,
+    endLabel:{show:true, formatter:p=>(narrow?'':'Your mix ')+c.compact(p.value), color:CHART_TEXT.blue, fontWeight:700, fontSize:11, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} });
+  const wk=keep.reduce((best,k,i)=>Math.abs(k-g.worst.k)<Math.abs(keep[best]-g.worst.k)?i:best,0);
+  series.push({ name:'Below previous peak', type:'line', xAxisIndex:1, yAxisIndex:1, showSymbol:false, data:keep.map(k=>+(g.dd[k]*100).toFixed(2)),
+    lineStyle:{width:1, color:'#D97757'}, areaStyle:{color:'rgba(217,119,87,.28)'}, itemStyle:{color:'#D97757'},
+    markPoint:{symbol:'circle', symbolSize:6, silent:true, itemStyle:{color:'#9C4A2C'}, data:[{coord:[wk, +(g.worst.dd*100).toFixed(2)]}],
+      label:valueTag('Worst '+(g.worst.dd*100).toFixed(1)+'%', CHART_TEXT.bad, wk>last*0.7?'left':'right')} });
+  initChart(chartId, {
+    // Room on the right for the end labels, narrower on a phone.
+    grid:[{left:8,right:narrow?62:130,top:narrow?40:12,height:narrow?'52%':'58%',containLabel:true},{left:8,right:narrow?62:130,top:'74%',bottom:24,containLabel:true}],
+    // On a phone the series names move into a legend so the line-end labels
+    // only carry values and fit.
+    legend: narrow ? {top:0, left:0, itemWidth:14, itemHeight:3, textStyle:{fontSize:10, color:CHART_TEXT.muted}, data:items.map(it=>it.symbol).concat(['Your mix'])} : {show:false},
+    xAxis:[{type:'category', data:x, gridIndex:0, boundaryGap:false, axisLabel:{show:false}, axisTick:{show:false}},
+           {type:'category', data:x, gridIndex:1, boundaryGap:false, axisLabel:{formatter:v=>v.slice(0,4), interval:Math.max(0,Math.floor(x.length/6)-1), color:CHART_TEXT.muted}, axisTick:{show:false}}],
+    yAxis:[{type:'value', gridIndex:0, scale:true, axisLabel:{formatter:v=>c.compact(v), color:CHART_TEXT.muted}},
+           {type:'value', gridIndex:1, max:0, axisLabel:{formatter:v=>v+'%', color:CHART_TEXT.muted}, splitNumber:2}],
+    axisPointer:{link:[{xAxisIndex:'all'}]},
+    tooltip:{trigger:'axis', confine:true, formatter:ps=>{ const arr=Array.isArray(ps)?ps:[ps]; return (arr[0]?arr[0].axisValue:'')+'<br/>'+arr.map(p=>p.marker+p.seriesName+': '+(p.seriesName==='Below previous peak'?(+p.value).toFixed(1)+'%':c.compact(p.value))).join('<br/>'); }},
+    series,
+  });
+}
 function onLiveFrontierPick(w){ L.live.weight=Math.round(w*100); render(); }
 function liveComputeMulti(){
   const items=liveReadyItems();
@@ -4958,7 +5039,10 @@ function liveOutputHTML(ready, rfPct){
   const mixRet = isTwoAsset
     ? (() => { const [sa,sb]=liveWindowStats(ready).stats; const w=L.live.weight/100; const {corr}=computeCovarianceMatrix([sa,sb]); const r=portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]); const v=portfolioVariance([w,1-w],[sa.annualVol,sb.annualVol],corr); return r-v/2; })()
     : (() => { let weights=L.live.selectedWeights; if(!weights||weights.length!==multiComputed.items.length) weights=multiComputed.items.map(()=>1/multiComputed.items.length); const r=portfolioReturn(weights, multiComputed.returns); const v=portfolioVariance(weights, multiComputed.vols, multiComputed.corr); return r-v/2; })();
+  const growthWeights = isTwoAsset ? [L.live.weight/100, 1-L.live.weight/100]
+    : ((L.live.selectedWeights && L.live.selectedWeights.length===multiComputed.items.length) ? L.live.selectedWeights : multiComputed.items.map(()=>1/multiComputed.items.length));
   return errorBanner + (isTwoAsset ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(multiComputed, rfPct))
+    + liveGrowthCardHTML(isTwoAsset ? ready : multiComputed.items, growthWeights)
     + instrumentDropdown
     + explainDropdown('Why do you show two different return numbers?', `
       The <b>expected-return</b> figure ((1+average daily move)<sup>trading days per year</sup> &minus; 1) is what the frontier, Sharpe ratio and tangency point below are built from. Mean-variance portfolio math needs a return figure that combines <i>linearly</i> across assets &ndash; a compounded return does not have that property, so the optimiser can't use it. This is also the convention used in the coursework this tool extends (a two-asset frontier worksheet), hand-checked against its own SBI figures (~29.9% return, ~21.3% risk over a comparable window) before being trusted here.<br><br>
