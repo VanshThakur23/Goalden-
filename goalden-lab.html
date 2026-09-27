@@ -1878,6 +1878,7 @@ const L = {
     blendPct:30 }, // "what if I mixed in something safe" explorer: % parked in the safe leg
   live:{
     items:[],           // [{key, symbol, label, type:'equity'|'fund'}], key doubles as the /api/history cache key
+    fx:null,            // USD/INR daily series for mixed-currency mixes: {status, prices, error}
     data:{},             // key -> {status:'loading'|'ready'|'error', prices, stats, currency, label, error}
     weight:50,           // exactly-2-instrument case: % held in items[0], rest in items[1]
     selectedWeights:null,// 3+-instrument case: weight vector chosen by clicking the chart or the combinations table
@@ -4604,21 +4605,62 @@ async function liveRunFundSearch(){
 // [latest start, earliest end] and re-analysed on exactly those dates.
 // Per-instrument cards keep each instrument's own full history.
 const LIVE_WINDOW_CACHE = new Map();
+// Mixed INR/USD mixes: a US stock's return to an Indian investor includes
+// what the rupee did, and vice versa. Each foreign instrument's prices are
+// converted into the viewer's home currency at that day's USD/INR rate
+// (Yahoo "INR=X", rupees per dollar, through the same /api/history route),
+// using the latest rate on or before each date. Only the joint-analysis
+// paths (common window, stats, frontier, growth chart) use converted
+// prices; each instrument's own card stays in its own currency. If the FX
+// series can't be loaded, nothing is converted and the note says so.
+function liveHomeCurrency(){ return cfg().code==='IN' ? 'INR' : 'USD'; }
+function liveNeedsFx(items){
+  const cur=new Set(items.map(it=>L.live.data[it.key].currency||'INR'));
+  return cur.size>1 && [...cur].every(c=>c==='INR'||c==='USD');
+}
+function liveEnsureFx(items){
+  if(!liveNeedsFx(items) || L.live.fx) return;
+  L.live.fx={status:'loading'};
+  liveApiGet('/api/history?type=equity&symbol='+encodeURIComponent('INR=X'))
+    .then(raw=>{ L.live.fx={status:'ready', prices:raw.prices.filter(p=>p.close>0)}; })
+    .catch(e=>{ L.live.fx={status:'error', error:(e&&e.message)||'Could not load the USD/INR rate.'}; })
+    .then(()=>{ LIVE_WINDOW_CACHE.clear(); render(); });
+}
+function liveFxActive(items){ return liveNeedsFx(items) && L.live.fx && L.live.fx.status==='ready'; }
+const LIVE_FX_CACHE = new Map();
+function liveItemPrices(it, convert){
+  const d=L.live.data[it.key], cur=d.currency||'INR', home=liveHomeCurrency();
+  if(!convert || cur===home) return d.prices;
+  const key=it.key+'|'+d.prices.length+'|'+home+'|'+L.live.fx.prices.length;
+  if(LIVE_FX_CACHE.has(key)) return LIVE_FX_CACHE.get(key);
+  const fx=L.live.fx.prices; const out=[]; let j=-1;
+  for(const p of d.prices){
+    while(j+1<fx.length && fx[j+1].date<=p.date) j++;
+    if(j<0) continue; // before the FX series starts
+    const rate=fx[j].close; // rupees per dollar
+    out.push({date:p.date, close: cur==='USD' ? p.close*rate : p.close/rate});
+  }
+  if(LIVE_FX_CACHE.size>40) LIVE_FX_CACHE.clear();
+  LIVE_FX_CACHE.set(key,out);
+  return out;
+}
 function liveCommonWindow(items){
-  const ds=items.map(it=>L.live.data[it.key]);
-  const start=ds.map(d=>d.prices[0].date).sort().pop();
-  const end=ds.map(d=>d.prices[d.prices.length-1].date).sort()[0];
+  const conv=liveFxActive(items);
+  const ps=items.map(it=>liveItemPrices(it, conv));
+  const start=ps.map(p=>p[0].date).sort().pop();
+  const end=ps.map(p=>p[p.length-1].date).sort()[0];
   return {start, end};
 }
 function liveWindowStats(items){
   if(!items.length) return {stats:[], window:null};
   const win=liveCommonWindow(items);
-  const key=items.map(it=>it.key+':'+L.live.data[it.key].prices.length).join('|')+'|'+win.start+'|'+win.end;
+  const conv=liveFxActive(items);
+  const key=items.map(it=>it.key+':'+L.live.data[it.key].prices.length).join('|')+'|'+win.start+'|'+win.end+'|'+(conv?'fx-'+liveHomeCurrency():'own');
   if(LIVE_WINDOW_CACHE.has(key)) return LIVE_WINDOW_CACHE.get(key);
   let tooShort=false;
   const stats=items.map(it=>{
     const d=L.live.data[it.key];
-    const cut=d.prices.filter(p=>p.date>=win.start && p.date<=win.end);
+    const cut=liveItemPrices(it, conv).filter(p=>p.date>=win.start && p.date<=win.end);
     // Under ~6 months of overlap the statistics are noise; fall back to the
     // full histories and say so on screen rather than print fake precision.
     if(cut.length<120){ tooShort=true; return d.stats; }
@@ -4630,7 +4672,7 @@ function liveWindowStats(items){
     return Object.assign({}, st, {weekly, market: d.currency || 'INR'});
   });
   const years=(new Date(win.end)-new Date(win.start))/(365.25*24*3600*1000);
-  const res={stats, window:Object.assign({}, win, {years, tooShort})};
+  const res={stats, window:Object.assign({}, win, {years, tooShort, converted:conv})};
   if(LIVE_WINDOW_CACHE.size>40) LIVE_WINDOW_CACHE.clear();
   LIVE_WINDOW_CACHE.set(key,res);
   return res;
@@ -4640,7 +4682,13 @@ function liveWindowNoteHTML(items){
   if(!w) return '';
   const fmt=d=>new Date(d).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
   const cur=[...new Set(items.map(it=>L.live.data[it.key].currency||'INR'))];
-  const curNote = cur.length>1 ? ` <b style="color:#9C4A2C">Mixed currencies (${cur.join(' and ')}):</b> returns are each in their own currency, with no exchange-rate conversion, so the mix return and the risk-free comparison are approximate. Correlations between instruments on different exchanges use weekly returns, because the markets close at different times and same-day daily moves would understate how closely they move.` : '';
+  const weeklyNote = ' Correlations between instruments on different exchanges use weekly returns, because the markets close at different times and same-day daily moves would understate how closely they move.';
+  const home=liveHomeCurrency(), sym=home==='INR'?'\u20b9':'$';
+  const fx=L.live.fx;
+  const curNote = cur.length<=1 ? ''
+    : w.converted ? ` <b>Mixed currencies (${cur.join(' and ')}):</b> the ${home==='INR'?'USD':'INR'} instruments are converted to ${sym} at each day's USD/INR rate, so their returns and risk include what the currency did, as they would for you. Each instrument's own card below stays in its own currency.${weeklyNote}`
+    : liveNeedsFx(items) && fx && fx.status==='loading' ? ` <b>Mixed currencies (${cur.join(' and ')}):</b> loading the USD/INR rate to convert everything to ${sym}\u2026${weeklyNote}`
+    : ` <b style="color:#9C4A2C">Mixed currencies (${cur.join(' and ')}):</b> returns are each in their own currency, with no exchange-rate conversion${fx&&fx.status==='error'?' (the USD/INR rate could not be loaded: '+advisorAttr(fx.error)+')':''}, so the mix return and the risk-free comparison are approximate.${weeklyNote}`;
   return w.tooShort
     ? `<div class="gr-note" style="border-left-color:#9C4A2C">These instruments overlap for less than about six months (${fmt(w.start)} to ${fmt(w.end)}), too short to compare fairly, so each is shown over its own history. Treat the frontier as rough.${curNote}</div>`
     : `<div class="gr-note">Compared over the same dates for every instrument: <b>${fmt(w.start)} to ${fmt(w.end)}</b> (${w.years.toFixed(1)} years), the period they all have data for. The "best" mixes below are the best <i>for this past window</i>; the pick-list is today's index members, so companies that failed and left the index aren't in it. Treat them as a description of the past, not a forecast.${curNote}</div>`;
@@ -4654,7 +4702,8 @@ function liveWindowNoteHTML(items){
 // weights, and yearly rebalancing is the closest honest equivalent.
 function liveGrowthDrawdown(items, weights){
   const win=liveCommonWindow(items);
-  const maps=items.map(it=>new Map(L.live.data[it.key].prices.filter(p=>p.date>=win.start&&p.date<=win.end).map(p=>[p.date,p.close])));
+  const conv=liveFxActive(items);
+  const maps=items.map(it=>new Map(liveItemPrices(it, conv).filter(p=>p.date>=win.start&&p.date<=win.end).map(p=>[p.date,p.close])));
   // Dates every instrument traded on (calendars differ across exchanges).
   const dates=[...maps[0].keys()].filter(d=>maps.every(m=>m.has(d))).sort();
   if(dates.length<60) return null;
@@ -5258,6 +5307,7 @@ function liveInstrumentStatsCardHTML(items){
   return rows;
 }
 function liveOutputHTML(ready, rfPct){
+  liveEnsureFx(ready); // async: re-renders once the USD/INR series settles
   const items=L.live.items;
   const errored=items.filter(it=>L.live.data[it.key] && L.live.data[it.key].status==='error');
   const loading=items.filter(it=>!L.live.data[it.key] || L.live.data[it.key].status==='loading');

@@ -2619,3 +2619,28 @@ divergence rules still use index offsets".
   PAYTM: 8 checks that compared the wrong years are now not_applicable;
   86 checks run and the same 3 flags as before. New engine test (114/114).
   Smokes 11/11, evals 9/9 (mock), all 12 Lab tabs render with no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 36: mixed-currency mixes converted)
+Changes made by Claude Code (Chief). D2-04 from the Portfolio division, the
+last backlog item.
+- goalden-lab.html Test Real Investments: when a mix holds both INR and USD
+  instruments, the app fetches the USD/INR daily rate (Yahoo "INR=X")
+  through the existing /api/history route; no server change. It converts
+  the foreign instruments' prices into the viewer's home currency (₹ in
+  India mode, $ in US mode), using the latest rate on or before each date.
+  The common date window, the stats, the covariance, the frontier and the
+  growth/drawdown chart all use converted prices, so a US stock's return
+  to an Indian investor now includes what the rupee did. Each instrument's
+  own card stays in its own currency. Weekly correlation for cross-market
+  pairs is unchanged (it is about trading hours, not currency).
+- The note says which way things were converted. If the rate can't be
+  loaded, nothing is converted and the old warning shows, with the reason.
+  A single-currency mix never requests the rate.
+- Verified on the mock server: converted prices matched an independent
+  forward-fill calculation with 0 relative error, in both directions.
+  Home-currency series are returned untouched. The growth chart's index
+  equals converted end/start. Forced a 502 on the FX request: the fallback
+  warning names the error. INR+INR mix: 0 FX requests. NOT verified
+  against live Yahoo (the sandbox blocks it); the symbol is URL-encoded
+  the same way as every other ticker. Tests 114/114, smokes 11/11, evals
+  9/9 (mock), all 12 Lab tabs render with no errors.
