@@ -664,6 +664,49 @@ function discontinuityNote(year) {
   return hit ? hit.note : null;
 }
 
+// Company-specific breaks: a merger, demerger, acquisition or large capital
+// raise makes the balance sheet jump in one year, so every ratio and trend
+// that crosses that year compares unlike companies (HDFCBANK FY24: total
+// assets +59% on the HDFC Ltd merger; VEDL FY26: fixed assets 99,905 ->
+// 30,548 Cr on the demerger). Unlike KNOWN_DISCONTINUITIES these can't be
+// listed by hand, so they're detected from the balance sheet:
+//   - total assets up >= 50% in a year AND >= 2.5x the company's own median
+//     yearly growth (so a fast grower like BAJFINANCE, ~30%/yr, isn't
+//     flagged for being itself),
+//   - total assets down >= 25%, or fixed assets down >= 40%.
+// Only consecutive fiscal years are compared (PAYTM's data skips FY17-18).
+// The message says what moved and the usual causes; it can't know which.
+function detectStructuralBreaks(bundle) {
+  const bs = bundle && bundle.balanceSheet;
+  if (!bs) return [];
+  const yoy = (series) => {
+    const out = [];
+    for (let i = 1; i < series.length; i++) {
+      const a = series[i - 1], b = series[i];
+      if (b.year - a.year !== 1 || a.value == null || b.value == null || a.value <= 0) continue;
+      out.push({ year: b.year, from: a.value, to: b.value, change: b.value / a.value - 1 });
+    }
+    return out;
+  };
+  const ta = yoy(fySeries(bs, 'Total Assets'));
+  const fa = yoy(fySeries(bs, 'Fixed Assets'));
+  const medTa = median(ta.map((x) => x.change));
+  const breaks = new Map();
+  const add = (year, text) => { if (!breaks.has(year)) breaks.set(year, []); breaks.get(year).push(text); };
+  const cr = (v) => Math.round(v).toLocaleString('en-IN');
+  ta.forEach((x) => {
+    if (x.change >= 0.5 && x.change >= 2.5 * Math.max(0, medTa || 0)) add(x.year, `total assets rose ${(x.change * 100).toFixed(0)}% in one year (Rs ${cr(x.from)} to ${cr(x.to)} Cr)`);
+    else if (x.change <= -0.25) add(x.year, `total assets fell ${(-x.change * 100).toFixed(0)}% in one year (Rs ${cr(x.from)} to ${cr(x.to)} Cr)`);
+  });
+  fa.forEach((x) => {
+    if (x.change <= -0.40) add(x.year, `fixed assets fell ${(-x.change * 100).toFixed(0)}% in one year (Rs ${cr(x.from)} to ${cr(x.to)} Cr)`);
+  });
+  return [...breaks.entries()].sort((a, b) => a[0] - b[0]).map(([year, parts]) => ({
+    year,
+    message: `FY${year}: ${parts.join('; ')}. A move this size usually means a merger, demerger, acquisition or large capital raise, so figures before and after FY${year} are not like for like.`,
+  }));
+}
+
 // A business is cyclical when its long-run and recent growth point opposite
 // ways, or its margin has swung wide over the last decade — steel, cement,
 // sugar, chemicals. At the cyclical trough every margin/leverage rule fires
@@ -1794,17 +1837,20 @@ function cashFlowWaterfallOption(cfoSeries, cfiSeries, cffSeries, ncfSeries) {
 function formatCroreSafe(v) {
   if (v == null || !isFinite(v)) return '\u2014';
   const abs = Math.abs(v);
-  if (abs >= 1e7) return (v / 1e7).toFixed(1) + 'L Cr';
+  // v is already in crore, so a lakh crore is 1e5 (this said 1e7 -- a
+  // hundred lakh crore -- which printed a bank's balance sheet as "4907.7k Cr").
+  if (abs >= 1e5) return (v / 1e5).toFixed(2) + 'L Cr';
   if (abs >= 1e3) return (v / 1e3).toFixed(1) + 'k Cr';
   return v.toFixed(0) + ' Cr';
 }
-// formatCroreSafe's "k" step without the unit, for on-chart value labels
+// formatCroreSafe's k / L steps without the unit, for on-chart value labels
 // where the axis name already says "₹ Cr" and every character of width
 // counts. Deliberately the same k-scaling as the axis ticks beside it, so
 // a label and the tick next to it never use two conventions.
 function formatCroreCompact(v) {
   if (v == null || !isFinite(v)) return '—';
   const abs = Math.abs(v), sign = v < 0 ? '−' : '';
+  if (abs >= 1e5) return sign + (abs / 1e5).toFixed(2) + 'L';
   if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + 'k';
   return sign + abs.toFixed(0);
 }
@@ -2002,7 +2048,7 @@ const api = {
   findRow, fySeries, median, pctChange, yearIndex, vsOwnMedian,
   classifySchema, compareRefusal,
   COMPANION_MAP, companionMapFor,
-  KNOWN_DISCONTINUITIES, discontinuityNote, detectCyclical,
+  KNOWN_DISCONTINUITIES, discontinuityNote, detectCyclical, detectStructuralBreaks,
   DIVERGENCE_RULES, evaluateDivergenceRules,
   SERIES_PALETTE, benchChartOption, profitVsCashChartOption, profitVsCashCaption,
   CANONICAL_ROWS, ROW_POLARITY, rowPolarity, ROW_UNIT, rowUnit, rowBoxScore,

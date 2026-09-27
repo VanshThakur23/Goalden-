@@ -1423,7 +1423,7 @@ test('D3-12 chart builders print key values without hover', () => {
   const sales = stmt.fySeries(tcs.profitLoss, 'Sales');
   const bench = stmt.benchChartOption([{ label: 'Sales', series: sales }], true);
   const s0 = bench.series[0];
-  assert.strictEqual(s0.label.formatter({ dataIndex: s0.data.length - 1 }), '₹267.0k Cr', 'the ACTUAL latest value, even on an indexed chart');
+  assert.strictEqual(s0.label.formatter({ dataIndex: s0.data.length - 1 }), '₹2.67L Cr', 'the ACTUAL latest value, even on an indexed chart');
   assert.strictEqual(s0.label.formatter({ dataIndex: 0 }), '', 'only the last bar is labelled');
 
   const growth = stmt.growthChartOption(stmt.growthSummary(sales), stmt.growthSummary(stmt.fySeries(tcs.profitLoss, 'Net Profit')), 'Sales');
@@ -1512,4 +1512,13 @@ test('statements-engine: a check that fires for the first time in the latest yea
   assert.ok(r.allFlags.every((f) => !(f.year === 2026 && ['DIVIDEND_EXCEEDS_FCF', 'INVENTORY_BUILD'].includes(f.ruleId))));
   // A company with nothing new in its latest year has an empty watch list.
   assert.deepStrictEqual(stmt.evaluateDivergenceRules(loadFinancials('TCS')).watch, []);
+});
+
+test('statements-engine: detectStructuralBreaks marks mergers/demergers, not ordinary fast growth', () => {
+  const years = (sym) => stmt.detectStructuralBreaks(loadFinancials(sym)).map((b) => b.year);
+  assert.deepStrictEqual(years('HDFCBANK'), [2024]);   // HDFC Ltd merger: total assets +59%
+  assert.deepStrictEqual(years('VEDL'), [2026]);       // demerger: fixed assets -69%
+  assert.deepStrictEqual(years('BAJFINANCE'), []);     // ~30%/yr growth is the company's normal, not a break
+  assert.deepStrictEqual(years('TCS'), []);
+  assert.ok(/not like for like/.test(stmt.detectStructuralBreaks(loadFinancials('HDFCBANK'))[0].message));
 });

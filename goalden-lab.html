@@ -996,6 +996,10 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-table th:first-child{z-index:3;background:#fbfcfe}
 .stmt-table td:first-child{z-index:1;background:#fff}
 .stmt-table th.stmt-th-ttm{color:var(--warn)}
+.stmt-table th.stmt-th-break{box-shadow:inset 2px 0 0 #9C4A2C}
+.stmt-break-mark{color:#9C4A2C;font-size:9px;margin-left:3px;vertical-align:1px}
+.stmt-break-note{font-size:11.5px;line-height:1.45;color:#9C4A2C;padding:6px 16px 2px}
+.stmt-break-note .stmt-break-mark{margin:0 2px 0 0}
 .stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.055);width:92px;white-space:nowrap}
 .stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:12.5px;width:230px;white-space:normal;line-height:1.45}
 /* Every year/TTM column gets a fixed, generous width -- this is the actual
@@ -1045,7 +1049,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-table-title:hover .stmt-collapse-chevron{background:var(--gold);color:#fff}
 .stmt-table-title-label{flex:1}
 .stmt-section-block.stmt-collapsed .stmt-table-title{border-radius:10px}
-.stmt-section-block.stmt-collapsed .stmt-table-wrap,.stmt-section-block.stmt-collapsed .stmt-coverage-note{display:none}
+.stmt-section-block.stmt-collapsed .stmt-table-wrap,.stmt-section-block.stmt-collapsed .stmt-coverage-note,.stmt-section-block.stmt-collapsed .stmt-break-note{display:none}
 
 /* CSS-only linked highlighting: two attributes on #stmtRoot (data-hl-metric,
    data-hl-period), written by one delegated mouseover handler inside a rAF
@@ -6171,7 +6175,19 @@ const ROW_DEFINITIONS = {
   'ROCE %':'Return on Capital Employed \u2014 earnings before interest and tax (EBIT) as a percentage of all capital invested in the business (equity plus borrowings).',
   'ROE %':'Return on Equity \u2014 Net Profit as a percentage of shareholder funds.',
 };
-function rowDefinitionText(label){ return ROW_DEFINITIONS[label] || 'As reported by the company on screener.in.'; }
+// Some rows mean something different for a lender. "Other Income" is the
+// clearest case: for a manufacturer it is one-offs and treasury income, but
+// screener books a bank's fees, commissions and treasury income there, and
+// for a group with insurance arms the insurance income too -- the core
+// business, not "outside" it (HDFCBANK FY26: Rs 1.47 L Cr).
+const LENDER_ROW_DEFINITIONS = {
+  'Other Income':'For a bank or NBFC this is mostly core business, not one-offs: fee and commission income, treasury gains and, in a group with insurance arms, insurance income.',
+};
+function rowDefinitionText(label){
+  const b = statementsBundle(L.statements.primary);
+  const lender = b && b.profitLoss && (b.schema || classifySchema(b.profitLoss))==='financial';
+  return (lender && LENDER_ROW_DEFINITIONS[label]) || ROW_DEFINITIONS[label] || 'As reported by the company on screener.in.';
+}
 
 // Which rows a fired divergence rule pins when its tick is clicked -- the
 // plan's "clicking a tick pins both members of the pair" requirement.
@@ -7107,12 +7123,30 @@ function updateBenchChart(){
         data:[[{xAxis:cats[i0]},{xAxis:cats[i1]}]]};
     }
   }
+  // Merger/demerger years: the axis label is coloured and the caption says
+  // why, so a line that jumps there isn't read as organic growth. Not a
+  // markLine: through the column centre it ran into the latest-value label
+  // when the break was the last year (VEDL FY26); and a one-category
+  // markArea has zero width on this axis. The label keeps its width so
+  // axis-label thinning doesn't hide the very year being marked.
+  const primaryForBreaks = statementsBundle(s.primary);
+  const brks = s.focusYear==null && primaryForBreaks && option.__years && option.series ? detectStructuralBreaks(primaryForBreaks) : [];
+  if(brks.length){
+    const cats=(option.xAxis && (Array.isArray(option.xAxis)?option.xAxis[0]:option.xAxis).data) || [];
+    const hit=brks.map(b=>{ const i=option.__years.indexOf(b.year); return i>=0 && cats[i]!=null ? cats[i] : null; }).filter(v=>v!=null);
+    if(hit.length){
+      const breakCats=new Set(hit);
+      const xa=Array.isArray(option.xAxis)?option.xAxis[0]:option.xAxis;
+      xa.axisLabel=Object.assign({}, xa.axisLabel, {formatter:v=>breakCats.has(v)?`{brk|${v}}`:v,
+        rich:{brk:{color:'#9C4A2C', fontWeight:700, fontSize:(xa.axisLabel&&xa.axisLabel.fontSize)||10}}});
+    }
+  }
   initChart('stmtBenchChart', option);
   // Bar-at-a-year mode re-keys the x-axis to pin labels, not fiscal years,
   // so a data-period hover value can't address a dataIndex on it the same
   // way -- cross-highlight only applies to the default over-time view.
   stmtChartYears.bench = s.focusYear==null ? (option.__years||[]) : [];
-  if(capEl) capEl.textContent = benchCaptionText(pins, s.indexed, s.focusYear)
+  if(capEl) capEl.textContent = benchCaptionText(pins, s.indexed, s.focusYear) + (brks.length ? ' '+brks.map(b=>'FY'+String(b.year).slice(-2)).join(', ')+' in red: the balance sheet changed size in one step (merger, demerger or large capital raise), so the years either side are not like for like.' : '')
     + (option.__notIndexed && option.__notIndexed.length ? ' Not shown indexed (no positive starting year to index from): '+option.__notIndexed.join(', ')+'. Switch the scale to Actual to see '+(option.__notIndexed.length>1?'them':'it')+'.' : '');
 }
 function renderDivergenceParts(){
@@ -7736,11 +7770,16 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
   }
   const pinnedSet = new Set(L.statements.pins.map(p=>rowKey(p.section,p.label)));
   const compareSection = compareBundle ? compareBundle[sectionKey] : null;
+  // Merger/demerger years: the column gets a rule on its left edge (the
+  // "before | after" boundary) and the table a one-line note saying what moved.
+  const breaks = detectStructuralBreaks(primaryBundle);
+  const breakYears = new Set(breaks.map(b=>b.year));
   const theadCols = periods.map(p=>{
     const g = p.type==='fy' ? growthByYear.get(p.year) : null;
     const band = g==null ? '' : `<div class="stmt-growth-band ${g>=0?'up':'down'}"><div class="gb-mid"></div><div class="gb-fill" style="height:${Math.min(50,Math.abs(g*100))}%"></div></div>`;
     const label = p.type==='ttm' ? 'TTM' : 'FY'+String(p.year).slice(2);
-    return `<th class="${p.type==='ttm'?'stmt-th-ttm':''}" data-stmt-year="${p.type==='ttm'?'':p.year}">${label}${band}</th>`;
+    const brk = p.type==='fy' && breakYears.has(p.year);
+    return `<th class="${p.type==='ttm'?'stmt-th-ttm':''}${brk?' stmt-th-break':''}" data-stmt-year="${p.type==='ttm'?'':p.year}"${brk?` title="${advisorAttr(breaks.find(b=>b.year===p.year).message)}"`:''}>${label}${brk?'<span class="stmt-break-mark" aria-hidden="true">&#9670;</span>':''}${band}</th>`;
   }).join('');
   const bodyRows = rows.map((label,i)=>statementRowHTML(sectionKey,label,primSection,compareSection,periods,pinnedSet,L.statements.focusYear,L.statements.changeMode,i)).join('');
   // Box-score footer: updates with the focused row -- the last row pinned
@@ -7805,6 +7844,7 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
     <span class="cap" style="font-family:'Spline Sans Mono',monospace;font-size:10px;font-weight:400">${spanTxt}${sectionKey==='ratios'?'':' \u00b7 Rs Cr unless noted'}</span>
   </div>
   ${coverageNote}
+  ${breaks.map(b=>`<div class="stmt-break-note"><span class="stmt-break-mark" aria-hidden="true">&#9670;</span> ${advisorAttr(b.message)}</div>`).join('')}
   <div class="stmt-table-wrap"><table class="stmt-table">
     <thead><tr><th>Line item</th>${theadCols}<th class="stmt-th-median">vs ${periods.filter(p=>p.type==='fy').length}y median</th><th></th></tr></thead>
     <tbody>${bodyRows}</tbody>
@@ -8260,6 +8300,7 @@ function advisorStatementsState(){
     checkSummary: div?{checksRun:div.checksRun,notApplicable:div.notApplicable,observations:div.fired,shownOnBench:div.flags.length,noObservation:div.clear}:null,
     flags: div?div.flags:[],
     newThisYearWatch: div?(div.watch||[]):[],
+    structuralBreaks: primary?detectStructuralBreaks(primary):[],
   };
 }
 // Tool results must say what actually happened: pin_row used to TOGGLE

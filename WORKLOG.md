@@ -2570,3 +2570,33 @@ Changes made by Claude Code (Chief). D3-19 from the Company division.
   Checked in the browser at 1400px and 412px, including the click-through
   and the TCS/VEDL summaries. Smokes 11/11, evals 9/9 (mock), all 12 Lab
   tabs render with no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 34: merger/demerger years marked)
+Changes made by Claude Code (Chief). D3-20 from the Company division, plus a
+number-format bug found while checking it.
+- statements-engine.js detectStructuralBreaks(bundle) flags a year when:
+  total assets rise >= 50% AND >= 2.5x the company's own median yearly
+  growth; total assets fall >= 25%; or fixed assets fall >= 40%. Only
+  consecutive years are compared. The message says what moved and the
+  usual causes (merger, demerger, acquisition, large capital raise).
+  Fixtures: HDFCBANK FY24 (+59%, HDFC Ltd merger), VEDL FY26 (fixed assets
+  -69%, demerger), PAYTM FY16 and FY22 (capital raises; FY22 is the IPO).
+  Nothing for BAJFINANCE (fast but steady growth), TCS or HINDALCO.
+- goalden-lab.html Read the Company: break years get a red rule and a
+  diamond on the column header in every statement table, and a one-line
+  note under each table title. On the Bench chart the year label is red
+  and the caption explains it. The advisor's statements summary includes
+  structuralBreaks.
+- Lender-aware definition: for a bank or NBFC, "Other Income" is explained
+  as mostly core business (fees, commissions, treasury, insurance), not
+  one-offs. HDFCBANK FY26: Rs 1,46,848 Cr.
+- Bug fix: formatCroreSafe switched to "L Cr" at 1e7 crore instead of 1e5
+  (one lakh crore), and the compact label had no lakh step. HDFC Bank's
+  total assets printed as "4907.7k Cr"; now "49.08L Cr". TCS sales:
+  "267.0k Cr" -> "2.67L Cr" (test updated to the new format).
+- Verified: engine test on 4 fixtures (113/113); rendered HDFCBANK, VEDL
+  and TCS in the browser (notes, header marks, caption, lender
+  definition). First tries with an on-chart line and a shaded column were
+  rejected: the line collided with the value label, and the shading has
+  zero width on a category axis. Smokes 11/11, evals 9/9 (mock), all 12
+  Lab tabs render with no errors.
