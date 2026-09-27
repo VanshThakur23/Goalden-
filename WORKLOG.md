@@ -2283,3 +2283,19 @@ Changes made by Claude Code (Chief). D4-13 and a mobile nav fix.
   view.
 - Checks: tests 110/110, smokes 11/11, phone width 412px, contrast audit 0
   on the touched tabs, no page errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 17: readable warning flags)
+Changes made by Claude Code (Chief). D3-03 from the Company Analysis division.
+- goalden-lab.html Read the Company: every shown divergence flag now has a
+  readable card under the tick strip (year badge, message, the detail with
+  the actual figures, "Show the evidence on the Bench"). The ticks were 3px
+  marks whose text lived only in a hover tooltip (invisible on phones and in
+  print) while the summary said "shown below". Cards reuse the ticks'
+  data-stmt-flag click hook, so a click pins the evidence rows exactly as
+  before (checked: VEDL FY16 pins Profit before tax + Interest).
+- When every observation is a one-year blip (TCS), the summary now says so
+  instead of "(0 shown below)".
+- Checks: cards render for VEDL/Hindalco/Paytm with real figures (VEDL
+  FY24 dividend ₹19,526 Cr = 259% of the fixture's ₹7,539 Cr profit); no
+  page errors on six companies; phone width 412px; contrast audit 0; tests
+  110/110; smokes 11/11.

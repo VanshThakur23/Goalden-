@@ -882,6 +882,14 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 
 .stmt-divergence-strip{margin-top:14px;padding-top:12px;border-top:1px solid rgba(20,40,63,.1)}
 .stmt-tickrow{position:relative;height:22px}
+.stmt-flag-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px}
+.stmt-flag-card{display:flex;gap:12px;align-items:flex-start;text-align:left;font:inherit;cursor:pointer;background:rgba(160,58,34,.05);border:1px solid rgba(160,58,34,.22);border-left:3px solid var(--red);border-radius:3px 10px 10px 3px;padding:10px 12px;color:#14283F}
+.stmt-flag-card:hover,.stmt-flag-card:focus-visible{background:rgba(160,58,34,.09);outline:none}
+.stmt-flag-card .sfc-year{font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:700;color:var(--red);background:#fff;border:1px solid rgba(160,58,34,.3);border-radius:4px;padding:2px 6px;flex-shrink:0}
+.stmt-flag-card .sfc-body{display:flex;flex-direction:column;gap:3px;font-size:13px;line-height:1.45}
+.stmt-flag-card .sfc-detail{color:rgba(20,40,63,.74);font-size:12.5px}
+.stmt-flag-card .sfc-cta{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:#1E4FBE;margin-top:2px}
+@media print{.stmt-flag-card .sfc-cta{display:none}}
 .stmt-tick{position:absolute;top:0;width:3px;height:14px;border-radius:2px;background:var(--red);cursor:pointer;transform:translateX(-50%)}
 .stmt-tick:hover{height:20px}
 .stmt-checksummary{font-size:12px;color:var(--dim);margin-top:6px;font-family:'Spline Sans Mono',monospace}
@@ -6227,6 +6235,7 @@ function renderStatementsShell(){
       <div class="stmt-divergence-strip">
         <div class="stmt-tickrow" id="stmtTickRow"></div>
         <div class="stmt-checksummary" id="stmtCheckSummary"></div>
+        <div id="stmtFlagCards"></div>
         <div id="stmtFlagDetail"></div>
       </div>
     </div>
@@ -6938,10 +6947,10 @@ function updateBenchChart(){
 }
 function renderDivergenceParts(){
   const result = computeStatementsDivergence();
-  if(!result) return {tickRow:'', summary:''};
+  if(!result) return {tickRow:'', summary:'', cards:''};
   const primary=statementsBundle(L.statements.primary);
   const periods = (primary.profitLoss ? primary.profitLoss.periods : []).filter(p=>p.type==='fy');
-  if(!periods.length) return {tickRow:'', summary:''};
+  if(!periods.length) return {tickRow:'', summary:'', cards:''};
   const minYear=periods[0].year, maxYear=periods[periods.length-1].year;
   const span = Math.max(1, maxYear-minYear);
   const ticks = result.flags.map(f=>{
@@ -6954,9 +6963,17 @@ function renderDivergenceParts(){
   // strip -- using it here (not the shown/capped count) is what makes
   // notApplicable + clear + fired sum to checksRun exactly, so the line
   // never claims a total it can't account for.
-  const moreNote = result.fired>shown ? ` (${shown} shown below${result.flagsTotal>shown?', '+(result.flagsTotal-shown)+' more past the cap':''})` : '';
+  const moreNote = result.fired>shown ? (shown===0 ? ' (each a one-year blip, not shown: a flag has to persist before it is raised)' : ` (${shown} shown below${result.flagsTotal>shown?', '+(result.flagsTotal-shown)+' more past the cap':''})`) : '';
   const summary = `${result.checksRun} checks run &middot; ${result.notApplicable} not applicable for this reporting format &middot; ${result.fired} observation${result.fired===1?'':'s'}${moreNote} &middot; ${result.clear} no observation`;
-  return {tickRow:ticks, summary};
+  // Each warning as a readable card. The ticks alone were 3px marks whose
+  // text lived only in a hover tooltip (nothing on a phone or in print),
+  // while the summary said "shown below". Same data-stmt-flag hook as the
+  // ticks, so clicking a card pins the evidence exactly like a tick does.
+  const cards = result.flags.length ? `<div class="stmt-flag-cards">${result.flags.map(f=>`<button class="stmt-flag-card" data-stmt-flag="${advisorAttr(f.ruleId+'|'+f.year)}">
+      <span class="sfc-year">FY${String(f.year).slice(-2)}</span>
+      <span class="sfc-body"><b>${advisorAttr(f.message)}</b>${f.detail && f.detail!==f.message ? `<span class="sfc-detail">${advisorAttr(f.detail)}</span>` : ''}<span class="sfc-cta">Show the evidence on the Bench &rarr;</span></span>
+    </button>`).join('')}</div>` : '';
+  return {tickRow:ticks, summary, cards};
 }
 function renderFlagDetailHTML(){
   const flag = L.statements._focusedFlag;
@@ -7643,8 +7660,9 @@ function updateStatementsUI(){
   const chipsEl=document.getElementById('stmtBenchChips'); if(chipsEl) chipsEl.innerHTML = renderBenchChipsHTML();
   const compStripEl=document.getElementById('stmtCompanionStrip'); if(compStripEl) compStripEl.innerHTML = renderCompanionStripHTML();
   updateBenchChart();
-  const {tickRow, summary} = renderDivergenceParts();
+  const {tickRow, summary, cards} = renderDivergenceParts();
   const tickEl=document.getElementById('stmtTickRow'); if(tickEl) tickEl.innerHTML=tickRow;
+  const cardsEl=document.getElementById('stmtFlagCards'); if(cardsEl) cardsEl.innerHTML=cards;
   const sumEl=document.getElementById('stmtCheckSummary'); if(sumEl) sumEl.innerHTML=summary;
   const flagEl=document.getElementById('stmtFlagDetail'); if(flagEl) flagEl.innerHTML=renderFlagDetailHTML();
   updateProfitCashChart();
