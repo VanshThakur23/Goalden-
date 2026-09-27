@@ -4336,6 +4336,21 @@ function computeCovarianceMatrix(statsList){
   const corr=Array.from({length:n},()=>new Array(n).fill(0));
   for(let i=0;i<n;i++) for(let j=0;j<n;j++){
     if(i===j){ covAnnual[i][j]=statsList[i].annualVol*statsList[i].annualVol; corr[i][j]=1; continue; }
+    // Instruments on different markets (India vs US) close at different
+    // times, so same-date DAILY returns miss moves that land a day apart
+    // and bias correlation toward 0 -- flattering cross-border
+    // diversification. For such pairs, correlation comes from aligned
+    // WEEKLY returns (the standard fix), scaled by each side's daily-based
+    // annual volatility.
+    if(statsList[i].weekly && statsList[j].weekly && statsList[i].market!==statsList[j].market){
+      const w=alignReturns(statsList[i].weekly, statsList[j].weekly);
+      if(w.a.length>20){
+        const cv=populationCovariance(w.a,w.b), sa=Math.sqrt(populationCovariance(w.a,w.a)), sb=Math.sqrt(populationCovariance(w.b,w.b));
+        const rho = sa>0&&sb>0 ? Math.max(-1,Math.min(1,cv/(sa*sb))) : 0;
+        corr[i][j]=rho; covAnnual[i][j]=rho*statsList[i].annualVol*statsList[j].annualVol;
+        continue;
+      }
+    }
     const {a,b}=alignReturns(statsList[i].returns, statsList[j].returns);
     const dailyCov = a.length>10 ? populationCovariance(a,b) : 0;
     const days=(statsList[i].tradingDaysPerYear+statsList[j].tradingDaysPerYear)/2;
@@ -4533,7 +4548,12 @@ function liveWindowStats(items){
     // Under ~6 months of overlap the statistics are noise; fall back to the
     // full histories and say so on screen rather than print fake precision.
     if(cut.length<120){ tooShort=true; return d.stats; }
-    return computeReturnStats(cut, it.type==='fund');
+    const st=computeReturnStats(cut, it.type==='fund');
+    // Weekly (last close of each ISO week) returns and a market tag, used by
+    // computeCovarianceMatrix for cross-market pairs.
+    const byWeek=new Map(); cut.forEach(p=>{ const dt=new Date(p.date+'T00:00:00Z'); const day=(dt.getUTCDay()+6)%7; const monday=new Date(dt-day*864e5).toISOString().slice(0,10); byWeek.set(monday, p.close); });
+    const wk=[...byWeek.entries()]; const weekly=[]; for(let k=1;k<wk.length;k++) weekly.push({date:wk[k][0], r:wk[k][1]/wk[k-1][1]-1});
+    return Object.assign({}, st, {weekly, market: d.currency || 'INR'});
   });
   const years=(new Date(win.end)-new Date(win.start))/(365.25*24*3600*1000);
   const res={stats, window:Object.assign({}, win, {years, tooShort})};
@@ -4546,7 +4566,7 @@ function liveWindowNoteHTML(items){
   if(!w) return '';
   const fmt=d=>new Date(d).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
   const cur=[...new Set(items.map(it=>L.live.data[it.key].currency||'INR'))];
-  const curNote = cur.length>1 ? ` <b style="color:#9C4A2C">Mixed currencies (${cur.join(' and ')}):</b> returns are each in their own currency, with no exchange-rate conversion, so the mix return and the risk-free comparison are approximate.` : '';
+  const curNote = cur.length>1 ? ` <b style="color:#9C4A2C">Mixed currencies (${cur.join(' and ')}):</b> returns are each in their own currency, with no exchange-rate conversion, so the mix return and the risk-free comparison are approximate. Correlations between instruments on different exchanges use weekly returns, because the markets close at different times and same-day daily moves would understate how closely they move.` : '';
   return w.tooShort
     ? `<div class="gr-note" style="border-left-color:#9C4A2C">These instruments overlap for less than about six months (${fmt(w.start)} to ${fmt(w.end)}), too short to compare fairly, so each is shown over its own history. Treat the frontier as rough.${curNote}</div>`
     : `<div class="gr-note">Compared over the same dates for every instrument: <b>${fmt(w.start)} to ${fmt(w.end)}</b> (${w.years.toFixed(1)} years), the period they all have data for. The "best" mixes below are the best <i>for this past window</i>; the pick-list is today's index members, so companies that failed and left the index aren't in it. Treat them as a description of the past, not a forecast.${curNote}</div>`;

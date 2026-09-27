@@ -2447,3 +2447,18 @@ Changes made by Claude Code (Chief). D1-14 from the Retirement division.
 - Example (retire 60 vs 55): future money ₹73.72 L LESS (-15.6%), today's
   money ₹10.60 L MORE (+12.9%), SIP ₹22,684 vs ₹32,011 (+₹9,327). Checked
   against the stored raw values. Tests 111/111, smokes 11/11, no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 28: cross-market correlation)
+Changes made by Claude Code (Chief). D2-05 from the Portfolio division.
+- goalden-lab.html Test Real Investments: for a pair of instruments on
+  different markets (INR vs USD listing), correlation now comes from aligned
+  WEEKLY returns instead of same-date daily returns. India and the US close
+  at different times, so a shared move often lands a day apart and daily
+  correlation reads near zero, flattering cross-border diversification.
+  Covariance = weekly correlation x each side's daily-based annual vol.
+  Same-market pairs are unchanged. The mixed-currency note on screen says so.
+- Verified: synthetic markets driven by one common factor with market B
+  reacting a day later -> same-day daily corr 0.002, weekly corr 0.749.
+  On mock RELIANCE.NS + AAPL + INFY.NS (independent series) both stay ~0
+  (0.008 / 0.038), as they should. Tests 111/111, smokes 11/11, all 12 Lab
+  tabs render with no errors.
