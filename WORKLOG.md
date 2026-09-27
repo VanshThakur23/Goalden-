@@ -2506,3 +2506,23 @@ layout bugs found while checking it.
 - Verified: preset returns recomputed from the page before and after; the
   tags were read back from the DOM; screenshots at 1400px and 412px.
   Tests 111/111, smokes 11/11, evals 9/9 (mock), all 12 Lab tabs render with no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 31: market-wide risk counts interest rates)
+Changes made by Claude Code (Chief). D2-13 from the Portfolio division.
+- goalden-lab.html Build a Portfolio, "How much of your risk is
+  diversifiable": market-wide (systematic) risk is now measured against
+  two factors, the stock market (Nifty 50 / US Total-Market) and interest
+  rates (Gilt fund / US Aggregate Bond), instead of the stock market alone.
+  Before, a debt-heavy mix read as ~99% "diversifiable". Bond funds fall
+  together when rates rise (debt-debt correlation 0.80 in the model), so
+  that was wrong. Beta is still the stock-market beta. The info tooltip
+  and legend name both factors.
+- Effect (India): all-debt mix 1.2% -> 86.5% market-wide; conservative
+  67.0% -> 79.1%; balanced 83.0% -> 85.5%; aggressive 86.8% -> 87.1%.
+  US: conservative 60.5% -> 81.4%, all-debt 1.2% -> 82.1%.
+- Verified: the closed form (c' S^-1 c) matched an independent 60,000-draw
+  simulation plus two-factor OLS R^2 within 0.6 points on all 10 mixes.
+  Legend parts add back to total volatility (9.2^2 + 4.0^2 = 10.04^2).
+- Also: the panel caption said "SEBI categories" in US mode; it is now
+  country-aware.
+- Tests 111/111, smokes 11/11, evals 9/9 (mock), all 12 Lab tabs render with no errors.

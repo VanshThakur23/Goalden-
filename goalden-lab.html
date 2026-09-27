@@ -1484,20 +1484,36 @@ function portfolioVariance(weights, vols, corr){
 }
 function portfolioBeta(weights, betas){ return weights.reduce((s,w,i)=>s+w*betas[i],0); }
 
-// Rigorous systematic/unsystematic risk split via the single-index model,
-// computed directly from the covariance matrix rather than the
-// hand-assigned per-asset beta above — guarantees beta=1.00 exactly for
-// 100% market and unsystematic risk >= 0 always, since both are
-// structural properties of covariance projection, not approximations.
-// marketIdx is the asset used as the market proxy (index 0 in each list:
-// Large Cap Equity for India, Total-Market Equity for the US).
-function decomposeRisk(weights, vols, corr, marketIdx){
+// Systematic/unsystematic risk split computed directly from the covariance
+// matrix rather than the hand-assigned per-asset beta above -- guarantees
+// beta=1.00 exactly for 100% market and unsystematic risk >= 0 always,
+// since both are structural properties of covariance projection.
+// marketIdx is the stock-market proxy (index 0 in each list: Nifty 50
+// index fund for India, Total-Market index for the US).
+// Market-wide ("systematic") risk is measured against TWO factors: the
+// stock market (marketIdx) and interest rates (bondIdx, a government-bond
+// fund). With the stock market alone, a debt-heavy mix read as ~99%
+// "diversifiable" -- but bond funds all fall together when rates rise
+// (debt-debt correlation 0.80 here), so that risk can't be diversified away
+// by holding more bond funds. The systematic share is the variance the two
+// factors jointly explain: c' S^-1 c, with c = cov(mix, factor) and S the
+// factors' 2x2 covariance. beta stays the stock-market-only beta, since
+// that is what "beta" means everywhere else in the app.
+function decomposeRisk(weights, vols, corr, marketIdx, bondIdx){
   const marketVol = vols[marketIdx];
   const totalVar = portfolioVariance(weights, vols, corr);
   let covWithMarket = 0;
   for(let i=0;i<weights.length;i++) covWithMarket += weights[i]*vols[i]*marketVol*corr[i][marketIdx];
   const beta = covWithMarket / (marketVol*marketVol);
-  const systematicVar = beta*beta*marketVol*marketVol;
+  let systematicVar = beta*beta*marketVol*marketVol;
+  if(bondIdx!=null && bondIdx>=0 && bondIdx!==marketIdx){
+    const bondVol = vols[bondIdx];
+    let covWithBond = 0;
+    for(let i=0;i<weights.length;i++) covWithBond += weights[i]*vols[i]*bondVol*corr[i][bondIdx];
+    const s11 = marketVol*marketVol, s22 = bondVol*bondVol, s12 = corr[marketIdx][bondIdx]*marketVol*bondVol;
+    const det = s11*s22 - s12*s12;
+    if(det>1e-12) systematicVar = Math.min(totalVar, (covWithMarket*covWithMarket*s22 - 2*covWithMarket*covWithBond*s12 + covWithBond*covWithBond*s11)/det);
+  }
   const unsystematicVar = Math.max(0, totalVar - systematicVar);
   return {
     totalVol: Math.sqrt(totalVar), beta,
@@ -3321,7 +3337,7 @@ function renderRiskBarOption(chartId, decomp, concentratedDecomp){
     xAxis:{type:'value', max:100, show:false},
     yAxis:{type:'category', data:['Risk'], show:false},
     tooltip:{trigger:'item', formatter(p){
-      if(p.seriesName==='Systematic') return `Systematic (market) risk<br/>${sysPct.toFixed(1)}%`;
+      if(p.seriesName==='Systematic') return `Systematic (market-wide: stocks and interest rates) risk<br/>${sysPct.toFixed(1)}%`;
       if(p.seriesName==='Unsystematic') return `Unsystematic (diversifiable) risk<br/>${unsysPct.toFixed(1)}%`;
       return '';
     }},
@@ -3348,14 +3364,15 @@ function computePortfolioDerived(assets, corr){
   const w = rawW.every(x=>x===0) ? rawW.slice() : normalizeWeights(rawW);
   const returns = assets.map(a=>a.ret), vols = assets.map(a=>a.vol);
   const marketIdx = 0;
+  const bondIdx = assets.findIndex(a=>a.id===(L.country==='IN' ? 'gilt' : 'aggbond'));
   const portRet = portfolioReturn(w, returns);
-  const decomp = decomposeRisk(w, vols, corr, marketIdx);
+  const decomp = decomposeRisk(w, vols, corr, marketIdx, bondIdx);
   const topIdx = w.indexOf(Math.max(...w));
   const concRet = returns[topIdx], concVol = vols[topIdx];
   const volSaved = concVol - decomp.totalVol;
   const retGiven = concRet - portRet;
   const concentratedW = assets.map((_,i)=>i===topIdx?1:0);
-  const concentratedDecomp = decomposeRisk(concentratedW, vols, corr, marketIdx);
+  const concentratedDecomp = decomposeRisk(concentratedW, vols, corr, marketIdx, bondIdx);
   return { w, rawW, returns, vols, marketIdx, portRet, decomp, topIdx, concRet, concVol, volSaved, retGiven, concentratedDecomp };
 }
 
@@ -3435,7 +3452,7 @@ function portfolioStatsHTML(d){
 }
 
 function riskBarLegendHTML(d){
-  return `<span><i style="background:#5FA875"></i>Systematic ${(d.decomp.systematicPct*100).toFixed(0)}% (${(d.decomp.systematicVol*100).toFixed(1)}% volatility): the market-wide risk you can't remove</span>
+  return `<span><i style="background:#5FA875"></i>Systematic ${(d.decomp.systematicPct*100).toFixed(0)}% (${(d.decomp.systematicVol*100).toFixed(1)}% volatility): market-wide risk from stock prices and interest rates, which you can't remove</span>
     <span><i style="background:#D97757"></i>Unsystematic ${(d.decomp.unsystematicPct*100).toFixed(0)}% (${(d.decomp.unsystematicVol*100).toFixed(1)}% volatility): specific to your mix, this is what diversifying reduces</span>`;
 }
 function portfolioRiskBarHTML(d){
@@ -3709,7 +3726,7 @@ function renderPortfolio(){
   <div class="panel">
     ${panelHead('Build a portfolio', 'portfolio')}
     ${advisorChipsHTML('portfolio')}
-    <div class="cap" style="margin-bottom:14px">${assets.length} building blocks across ${clusterOrder.filter(cl=>assets.some(a=>a.cluster===cl)).length} categories. Start from a preset below or open any category to drag its sliders yourself &ndash; either way, all ${assets.length} weights stay automatically rescaled against each other so the total always reads exactly 100%. Named after the real SEBI categories and indices you would actually shop from, with long-run category-level assumptions; not any specific fund house's live performance.</div>
+    <div class="cap" style="margin-bottom:14px">${assets.length} building blocks across ${clusterOrder.filter(cl=>assets.some(a=>a.cluster===cl)).length} categories. Start from a preset below or open any category to drag its sliders yourself &ndash; either way, all ${assets.length} weights stay automatically rescaled against each other so the total always reads exactly 100%. Named after the real ${L.country==='IN'?'SEBI fund categories':'fund categories'} and indices you would actually shop from, with long-run category-level assumptions; not any specific fund house's live performance.</div>
     ${presetRow}
     <div class="pf-total-banner"><span class="ttl-label">Total allocated${infoIcon('Every mix, however you drag it, is rescaled to sum to exactly 100%. This checks out to the rupee (or point) by construction, not by luck.')}</span><span class="ttl-value" id="pf-total-check">${pct.reduce((a,b)=>a+b,0)}%</span></div>
     ${sliders}
@@ -3757,7 +3774,7 @@ function renderPortfolio(){
     `)}
 
     <div class="card">
-      <h4>How much of your risk is diversifiable, right now${infoIcon('This updates live as you move the sliders. Systematic risk comes from the market as a whole and cannot be diversified away. Unsystematic risk is specific to your particular mix of holdings, and shrinks as you spread across less-correlated building blocks.')}</h4>
+      <h4>How much of your risk is diversifiable, right now${infoIcon(`This updates live as you move the sliders. Systematic risk comes from market-wide moves and cannot be diversified away. Two are counted: the stock market (${L.country==='IN'?'Nifty 50':'Total-Market index'}) and interest rates (${L.country==='IN'?'Gilt fund':'Aggregate Bond index'}). Counting only the stock market would call nearly all of a bond fund's risk diversifiable, but bond funds tend to fall together when rates rise.`+' Unsystematic risk is specific to your particular mix of holdings, and shrinks as you spread across less-correlated building blocks.')}</h4>
       <div class="cap">Drag any slider above and watch the split shift.</div>
       <div id="pf-riskbar">${portfolioRiskBarHTML(d)}</div>
     </div>
