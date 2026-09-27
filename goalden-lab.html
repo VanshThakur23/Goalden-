@@ -968,7 +968,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-table th:first-child{z-index:3;background:#fbfcfe}
 .stmt-table td:first-child{z-index:1;background:#fff}
 .stmt-table th.stmt-th-ttm{color:var(--warn)}
-.stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.055);width:92px}
+.stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.055);width:92px;white-space:nowrap}
 .stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:12.5px;width:230px;white-space:normal;line-height:1.45}
 /* Every year/TTM column gets a fixed, generous width -- this is the actual
    fix for the overlapping-digits bug above. */
@@ -992,7 +992,7 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-compare-subrow td:first-child{padding-left:20px;font-style:italic}
 .stmt-bar-cell{position:relative}
 .stmt-bar-track{position:absolute;left:3px;right:3px;bottom:1px;height:6px}
-.stmt-bar-fill{position:absolute;bottom:0;height:100%;border-radius:2px 2px 1px 1px}
+.stmt-bar-fill{position:absolute;bottom:0;left:0;right:0;height:100%;border-radius:2px 2px 1px 1px} /* left/right: with no width the fill was 0px wide, so every vs-median bar was invisible */
 .stmt-bar-fill.up{background:linear-gradient(180deg,rgba(46,139,111,.75),rgba(46,139,111,.4))}
 .stmt-bar-fill.down{background:linear-gradient(180deg,rgba(201,154,69,.75),rgba(201,154,69,.4))}
 .stmt-bar-fill.neutral{background:linear-gradient(180deg,rgba(20,40,63,.4),rgba(20,40,63,.2))}
@@ -7438,6 +7438,30 @@ document.getElementById('main').addEventListener('scroll', function(){
 },{passive:true});
 
 /* ---- rendering: the four statement tables ----------------------------- */
+// Year-on-year change in the row's own unit. A % row changes by points,
+// not by a percent of itself: OPM 8% -> 12% used to read "▲50.0%", when
+// what moved was 4 percentage points. Days change by days, ratios by x.
+function stmtYoyText(label, prev, val){
+  if(prev==null || val==null) return null;
+  const unit=rowUnit(label), d=val-prev, arrow=d>=0?'\u25b2':'\u25bc';
+  if(unit==='pct') return arrow+Math.abs(d).toFixed(1)+' pts';
+  if(unit==='days') return arrow+Math.abs(Math.round(d))+'d';
+  if(unit==='ratio') return arrow+Math.abs(d).toFixed(2)+'x';
+  const chg=pctChange(prev, val, 1);
+  return chg==null ? null : (chg>=0?'\u25b2':'\u25bc')+Math.abs(chg*100).toFixed(1)+'%';
+}
+// Latest value against the row's own median, in the row's unit. A ratio of
+// the two is meaningless when either is <= 0 (TCS investing cash flow
+// printed "934%"), so those rows show a dash.
+function stmtVsMedianText(label, lastVal, med){
+  if(lastVal==null || med==null) return '\u2014';
+  const unit=rowUnit(label), d=lastVal-med, sign=d>=0?'+':'\u2212';
+  if(unit==='pct') return sign+Math.abs(d).toFixed(1)+' pts';
+  if(unit==='days') return sign+Math.abs(Math.round(d))+'d';
+  if(unit==='ratio') return sign+Math.abs(d).toFixed(2)+'x';
+  if(!(med>0) || !(lastVal>0)) return '\u2014';
+  return (lastVal/med*100).toFixed(0)+'%';
+}
 function statementRowHTML(sectionKey, label, primarySection, compareSection, periods, pinnedSet, focusYear, changeMode, rowIndex){
 
   const primSeriesAll = fySeriesSafe(primarySection, label);
@@ -7460,8 +7484,7 @@ function statementRowHTML(sectionKey, label, primarySection, compareSection, per
     const prevVal = priorIdx && primRow && primRow.values[priorIdx.ix] ? primRow.values[priorIdx.ix].value : null;
     let display;
     if(changeMode && p.type==='fy'){
-      const chg = pctChange(prevVal, val, 1);
-      display = chg==null ? null : (chg>=0?'\u25b2':'\u25bc')+Math.abs(chg*100).toFixed(1)+'%';
+      display = stmtYoyText(label, prevVal, val);
     } else {
       display = formatCellRaw(label, val);
     }
@@ -7477,7 +7500,7 @@ function statementRowHTML(sectionKey, label, primarySection, compareSection, per
     </td>`;
   }).join('');
   const lastVal = primSeriesAll.length ? primSeriesAll[primSeriesAll.length-1].value : null;
-  const vsMedian = (med && lastVal!=null) ? (lastVal/med*100).toFixed(0)+'%' : '\u2014';
+  const vsMedian = stmtVsMedianText(label, lastVal, med);
   const reading = readingSentence(label, primSeriesAll);
   const spark = sparklineSVG(primSeriesAll);
   const defKey = sectionKey+'::'+label;
@@ -7605,7 +7628,7 @@ function renderOneStatementTable(sectionKey, sectionLabel, schema, primaryBundle
   </div>
   ${coverageNote}
   <div class="stmt-table-wrap"><table class="stmt-table">
-    <thead><tr><th>Line item</th>${theadCols}<th class="stmt-th-median">vs 12y median</th><th></th></tr></thead>
+    <thead><tr><th>Line item</th>${theadCols}<th class="stmt-th-median">vs ${periods.filter(p=>p.type==='fy').length}y median</th><th></th></tr></thead>
     <tbody>${bodyRows}</tbody>
     ${footer}
   </table></div>
@@ -7899,8 +7922,7 @@ function statementsApplyChangeMode(){
       let text;
       if(changeMode){
         const prev = td.dataset.prev===''?null:Number(td.dataset.prev);
-        const chg = pctChange(prev, val, 1);
-        text = chg==null ? null : (chg>=0?'▲':'▼')+Math.abs(chg*100).toFixed(1)+'%';
+        text = stmtYoyText(label, prev, val);
       } else {
         text = formatCellRaw(label, val);
       }

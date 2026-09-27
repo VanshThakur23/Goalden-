@@ -2299,3 +2299,18 @@ Changes made by Claude Code (Chief). D3-03 from the Company Analysis division.
   FY24 dividend ₹19,526 Cr = 259% of the fixture's ₹7,539 Cr profit); no
   page errors on six companies; phone width 412px; contrast audit 0; tests
   110/110; smokes 11/11.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 18: statement table units)
+Changes made by Claude Code (Chief). D3-13 / D3-14 from the Company Analysis division.
+- goalden-lab.html `stmtYoyText`: the Value/YoY toggle shows changes in the
+  row's own unit: % rows in points ("▲2.0 pts", was "▲50.0%" for OPM 8% to
+  12%), day rows in days, ratio rows in x, amounts in %. Used by the initial
+  render and by the in-place toggle patch.
+- `stmtVsMedianText`: the "vs median" column is unit-aware (pts / days / x)
+  and shows a dash when the latest value or the median is <= 0 (TCS
+  investing cash flow printed "934%"). The header counts real fiscal years
+  ("vs 10y median" for Paytm, was always "12y"). The column no longer wraps.
+- `.stmt-bar-fill` got left/right: with no width the fill was 0px wide, so
+  every above/below-median bar was invisible (now 82px, verified).
+- Checks: YoY and vs-median values verified on Hindalco, TCS and Paytm; no
+  errors on six companies; phone width 412px; tests 110/110; smokes 11/11.
