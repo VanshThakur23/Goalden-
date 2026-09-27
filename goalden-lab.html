@@ -3098,6 +3098,8 @@ function renderMC(){
   <div class="panel">
     ${panelHead('Monte Carlo: 1,000 simulated paths', 'mc')}
     ${advisorChipsHTML('mc')}
+    <button class="ns-btn" data-mc-from-ret style="display:inline-flex;margin-bottom:12px">Use my Retirement Lab plan</button>
+    ${m.fromRet?`<div class="gr-note" style="margin-top:-4px;margin-bottom:12px">Loaded from your Retirement Lab plan: ${c.fmt(m.sip)}/yr (your monthly SIP &times; 12${m.fromRet.clamped?', rounded to fit this slider':''}) for ${m.years} years at ${m.meanReturn}%.</div>`:''}
     <div class="field"><label>Annual contribution <b data-mc-label="sip">${c.fmt(m.sip)}</b></label><input type="range" min="10000" max="1000000" step="10000" value="${m.sip}" data-k="sip" data-tab="mc"></div>
     <div class="field"><label>Years <b data-mc-label="years">${m.years}</b></label><input type="range" min="5" max="35" value="${m.years}" data-k="years" data-tab="mc"></div>
     <div class="field"><label>Expected return <b data-mc-label="meanReturn">${m.meanReturn}%</b></label><input type="range" min="4" max="16" step="0.1" value="${m.meanReturn}" data-k="meanReturn" data-tab="mc"></div>
@@ -5560,6 +5562,7 @@ function attach(){
       if(k==='shockYear'){ L.ret.shock.year=v; }
       else if(k==='swpShockYear'){ L.swp.shock.year=v; }
       else target[k]=v;
+      if(tab==='mc' && L.mc.fromRet) L.mc.fromRet=null;
       if(tab==='mc'){
         // MC's stats need the full 1000-path simulation to produce — there
         // is no cheap closed-form shortcut like Portfolio has. Echo just
@@ -7902,6 +7905,18 @@ document.body.addEventListener('click', e=>{
   const th = e.target.closest('[data-stmt-year]');
   if(!th || !th.dataset.stmtYear) return;
   statementsFocusYear(parseInt(th.dataset.stmtYear));
+});
+// Monte Carlo used its own contribution/years, unrelated to the plan the
+// person just built. One click carries the Retirement Lab SIP (x12, as a
+// yearly contribution), the years to retirement and the growth rate over.
+document.body.addEventListener('click', e=>{
+  if(!e.target.closest('[data-mc-from-ret]')) return;
+  const res=calcRetLab(), m=L.mc;
+  const yearly=Math.round(res.sip*12/10000)*10000, sip=Math.min(1000000, Math.max(10000, yearly));
+  const years=Math.min(35, Math.max(5, res.yrs));
+  m.sip=sip; m.years=years; m.meanReturn=L.ret.preRate;
+  m.fromRet={clamped: sip!==Math.round(res.sip*12) || years!==res.yrs};
+  render();
 });
 document.body.addEventListener('click', e=>{
   const el = e.target.closest('[data-stmt-flag]');

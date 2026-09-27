@@ -2424,3 +2424,14 @@ Changes made by Claude Code (Chief). D4-09 (Visual division veto).
 - Checks: tests 111/111, smokes 11/11, evals 9/9; rendered and checked
   (RELIANCE vs TCS: TCS, lower return and higher risk, is the smallest
   shape).
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 26: Monte Carlo uses your plan)
+Changes made by Claude Code (Chief). D1-18 from the Retirement division.
+- goalden-lab.html Monte Carlo: "Use my Retirement Lab plan" button carries
+  the plan's monthly SIP x 12 (as the yearly contribution, rounded to the
+  slider's ₹10,000 step), years to retirement and growth rate. A note says
+  where the numbers came from (and when they were rounded to fit the
+  slider); any manual MC slider change clears it.
+- Verified: ₹22,684/mo gives ₹2,70,000/yr, 30 years, 10%; median ₹4.95 Cr
+  vs the plan's ₹4.72 Cr target (the gap is yearly vs monthly contribution
+  timing); tests 111/111; smokes 11/11; no errors.
