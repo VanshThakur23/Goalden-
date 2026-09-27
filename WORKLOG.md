@@ -2435,3 +2435,15 @@ Changes made by Claude Code (Chief). D1-18 from the Retirement division.
 - Verified: ₹22,684/mo gives ₹2,70,000/yr, 30 years, 10%; median ₹4.95 Cr
   vs the plan's ₹4.72 Cr target (the gap is yearly vs monthly contribution
   timing); tests 111/111; smokes 11/11; no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 27: snapshots compare like for like)
+Changes made by Claude Code (Chief). D1-14 from the Retirement division.
+- goalden-lab.html Retirement snapshots store the corpus in BOTH bases
+  (future and today's money) plus the SIP. Cards and the comparison use
+  whichever basis is currently selected, so two snapshots saved under
+  different "Future / Today's ₹" settings no longer produce a mixed-basis
+  % difference. The comparison also states the monthly SIP difference.
+  Older snapshots without both bases fall back to what they stored.
+- Example (retire 60 vs 55): future money ₹73.72 L LESS (-15.6%), today's
+  money ₹10.60 L MORE (+12.9%), SIP ₹22,684 vs ₹32,011 (+₹9,327). Checked
+  against the stored raw values. Tests 111/111, smokes 11/11, no errors.

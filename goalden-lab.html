@@ -2435,7 +2435,7 @@ function renderSnapshotBar(res){
         <span class="snap-label">${s.label}</span>
         <button class="gp-iconbtn" data-remove-snapshot="${i}" aria-label="Remove this snapshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
       </div>
-      <div class="snap-figure">${s.currency.compact(s.corpus)}</div>
+      <div class="snap-figure">${s.currency.compact(snapCorpus(s))}</div>
       <div class="snap-sub">${s.sipDisplay}/mo &middot; ${s.summary}</div>
     </div>`).join('');
 
@@ -2450,12 +2450,21 @@ function renderSnapshotBar(res){
   </div>`;
 }
 
+// A snapshot's corpus in the basis currently selected (older snapshots
+// without both bases fall back to what they stored).
+function snapCorpus(s){
+  if(s.corpusNominal==null) return s.corpus;
+  return L.ret.realTerms ? s.corpusReal : s.corpusNominal;
+}
 function snapshotCompareNote(){
   const [a,b] = L.snapshots;
   if(a.currency.code !== b.currency.code) return 'These two snapshots use different countries, so the corpus figures are not directly comparable in one currency.';
-  const diff = b.corpus - a.corpus;
-  const pct = a.corpus !== 0 ? (diff/a.corpus*100) : 0;
-  return `${b.label} needs ${a.currency.compact(Math.abs(diff))} ${diff>=0?'more':'less'} than ${a.label} (${diff>=0?'+':''}${pct.toFixed(1)}%).`;
+  const ca=snapCorpus(a), cb=snapCorpus(b), diff = cb - ca;
+  const pct = ca !== 0 ? (diff/ca*100) : 0;
+  const basis = (a.corpusNominal!=null && b.corpusNominal!=null) ? (L.ret.realTerms?" in today's money":' in future money') : '';
+  let out = `${b.label} needs ${a.currency.compact(Math.abs(diff))} ${diff>=0?'more':'less'} than ${a.label}${basis} (${diff>=0?'+':''}${pct.toFixed(1)}%).`;
+  if(a.sip!=null && b.sip!=null){ const d=b.sip-a.sip; out += ` Monthly SIP: ${a.currency.fmt(Math.round(a.sip))} vs ${a.currency.fmt(Math.round(b.sip))} (${d>=0?'+':'\u2212'}${a.currency.fmt(Math.round(Math.abs(d)))}).`; }
+  return out;
 }
 
 /* =====================================================================
@@ -5877,9 +5886,13 @@ function attach(){
     if(L.snapshots.length>=2) return;
     const c=cfg(), r=L.ret, res=calcRetLab();
     const rLabel = r.shock ? `with ${c.episodes.find(e=>e.id===r.shock.epId).label}` : (r.realTerms ? "today's money" : 'baseline');
+    // Both bases and the SIP are stored, so snapshots saved under different
+    // "Future / Today's ₹" settings still compare like for like (the old
+    // version stored whichever basis was on, and compared across bases).
     L.snapshots.push({
       label: 'Snapshot ' + (L.snapshots.length+1),
       corpus: r.realTerms ? res.realCorpus : res.corpus,
+      corpusNominal: res.corpus, corpusReal: res.realCorpus, sip: res.sip,
       sipDisplay: c.fmt(Math.round(res.sip)),
       summary: `age ${r.age}\u2192${r.retireAge}, ${r.preRate}%/${r.postRate}%, ${rLabel}`,
       currency: c,
