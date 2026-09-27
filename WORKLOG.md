@@ -2600,3 +2600,22 @@ number-format bug found while checking it.
   rejected: the line collided with the value label, and the shading has
   zero width on a category axis. Smokes 11/11, evals 9/9 (mock), all 12
   Lab tabs render with no errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 35: statement checks compare real years)
+Changes made by Claude Code (Chief). The last Company-division item: "other
+divergence rules still use index offsets".
+- statements-engine.js: 9 of the 11 divergence rules lined series up by
+  array position (np[i-3], sales[i], cfo[i-1]). When a company's data skips
+  years (PAYTM: FY16 then FY19), "three years ago" for FY20 was FY15, and
+  "last year" for FY19 was FY16. They now look values up by fiscal year
+  (yearMap/at). Loops start where they did, so a rule is still silent for
+  the first k years. A gap inside the data gives not_applicable instead of
+  a wrong comparison. The persistence gate also requires the previous
+  result to be the previous fiscal year.
+- goalden-lab.html: the checks summary said "not applicable for this
+  reporting format"; it now also names a missing year.
+- Verified: dumped every rule's full output on all 6 fixtures before and
+  after. BAJFINANCE, HDFCBANK, HINDALCO, TCS and VEDL are byte-identical.
+  PAYTM: 8 checks that compared the wrong years are now not_applicable;
+  86 checks run and the same 3 flags as before. New engine test (114/114).
+  Smokes 11/11, evals 9/9 (mock), all 12 Lab tabs render with no errors.

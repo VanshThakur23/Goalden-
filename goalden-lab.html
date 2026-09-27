@@ -7170,7 +7170,7 @@ function renderDivergenceParts(){
   const nWatch = (result.watch||[]).length;
   const watchNote = nWatch ? `, ${nWatch} new in the latest year to watch` : '';
   const moreNote = result.fired>shown ? (shown===0 ? (nWatch ? ` (${nWatch} new in the latest year, listed below to watch; any others are one-year blips, since a flag has to persist before it is raised)` : ' (each a one-year blip, not shown: a flag has to persist before it is raised)') : ` (${shown} shown below${result.flagsTotal>shown?', '+(result.flagsTotal-shown)+' more past the cap':''}${watchNote})`) : '';
-  const summary = `${result.checksRun} checks run &middot; ${result.notApplicable} not applicable for this reporting format &middot; ${result.fired} observation${result.fired===1?'':'s'}${moreNote} &middot; ${result.clear} no observation`;
+  const summary = `${result.checksRun} checks run &middot; ${result.notApplicable} not applicable (not reported for this kind of company, or a year is missing) &middot; ${result.fired} observation${result.fired===1?'':'s'}${moreNote} &middot; ${result.clear} no observation`;
   // Each warning as a readable card. The ticks alone were 3px marks whose
   // text lived only in a hover tooltip (nothing on a phone or in print),
   // while the summary said "shown below". Same data-stmt-flag hook as the

@@ -1522,3 +1522,17 @@ test('statements-engine: detectStructuralBreaks marks mergers/demergers, not ord
   assert.deepStrictEqual(years('TCS'), []);
   assert.ok(/not like for like/.test(stmt.detectStructuralBreaks(loadFinancials('HDFCBANK'))[0].message));
 });
+
+test('statements-engine: divergence rules compare fiscal years, not array positions, across a gap in the data', () => {
+  // PAYTM's statements skip FY17-FY18. "Three years before FY20" is FY17,
+  // which doesn't exist -- it must not silently become FY15 (index i-3).
+  const b = loadFinancials('PAYTM');
+  assert.deepStrictEqual(stmt.fySeries(b.profitLoss, 'Net Profit').map((p) => p.year).slice(0, 3), [2015, 2016, 2019]);
+  const rule = (id) => stmt.DIVERGENCE_RULES.find((r) => r.id === id).run(b);
+  for (const id of ['DEBTOR_BALLOON', 'CAPEX_NO_REVENUE', 'CWIP_FROZEN']) {
+    const fy20 = rule(id).find((r) => r.year === 2020);
+    assert.strictEqual(fy20.status, 'not_applicable', id + ' FY20 has no FY17 to compare with');
+  }
+  // FY19's "prior year" is FY18, also missing.
+  assert.strictEqual(rule('TAX_DRIVEN_MARGIN').find((r) => r.year === 2019).status, 'not_applicable');
+});

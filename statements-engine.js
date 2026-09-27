@@ -270,16 +270,28 @@ function companionMapFor(label, isCyclical) {
 
 const MATERIALITY_FLOOR = 1; // Rs crore — screener's rows are already in Cr
 
+// Year-keyed access for the rules below. They used to line series up by
+// array position (cfo[i-1], np[i-3], sales[i]), which silently compares the
+// wrong years when a company's data skips years (PAYTM: FY16 then FY19, so
+// "three years ago" for FY20 was FY15) or when two sections cover different
+// years. at(map, y) is the value for fiscal year y, or null if absent.
+// Loops still start at the same position as before (so a rule stays silent
+// for the first k years, exactly as it was); a gap INSIDE the data now gives
+// not_applicable instead of a comparison against the wrong year.
+function yearMap(series) { return new Map(series.map((p) => [p.year, p.value])); }
+function at(map, year) { const v = map.get(year); return v == null ? null : v; }
+
 function ruleDividendNotFromOps(bundle) {
   const cfo = fySeries(bundle.cashFlow, 'Cash from Operating Activity');
-  const cfi = fySeries(bundle.cashFlow, 'Cash from Investing Activity');
-  const payout = fySeries(bundle.profitLoss, 'Dividend Payout %');
-  const np = fySeries(bundle.profitLoss, 'Net Profit');
+  const cfoM = yearMap(cfo);
+  const cfi = yearMap(fySeries(bundle.cashFlow, 'Cash from Investing Activity'));
+  const payout = yearMap(fySeries(bundle.profitLoss, 'Dividend Payout %'));
+  const np = yearMap(fySeries(bundle.profitLoss, 'Net Profit'));
   const out = [];
   for (let i = 1; i < cfo.length; i++) {
     const year = cfo[i].year;
-    const cfoT = cfo[i].value, cfoT1 = cfo[i - 1].value, cfiT = cfi[i] && cfi[i].value;
-    const payoutT = payout[i] && payout[i].value, npT = np[i] && np[i].value;
+    const cfoT = cfo[i].value, cfoT1 = at(cfoM, year - 1), cfiT = at(cfi, year);
+    const payoutT = at(payout, year), npT = at(np, year);
     if (cfoT == null || cfoT1 == null || cfiT == null || payoutT == null || npT == null) {
       out.push({ year, status: 'not_applicable', reason: 'missing an input for this year' });
       continue;
@@ -322,9 +334,10 @@ function ruleDividendExceedsFcf(bundle) {
   const borrowSeries = borrowRaw.length ? borrowRaw : fySeries(bundle.balanceSheet, 'Borrowing');
   const out = [];
   if (!payout.length || !borrowSeries.length) return out;
+  const borrowM = yearMap(borrowSeries);
   for (let i = 1; i < borrowSeries.length; i++) {
     const year = borrowSeries[i].year;
-    const bT = borrowSeries[i].value, bT1 = borrowSeries[i - 1].value;
+    const bT = borrowSeries[i].value, bT1 = at(borrowM, year - 1);
     const payoutRow = payout.find((p) => p.year === year);
     const payoutT = payoutRow ? payoutRow.value : null;
     const npT = np.get(year), fcfT = fcf.get(year);
@@ -348,14 +361,15 @@ function ruleDividendExceedsFcf(bundle) {
 }
 
 function ruleCfoDivergence(bundle) {
-  const cfo = fySeries(bundle.cashFlow, 'Cash from Operating Activity');
+  const cfo = yearMap(fySeries(bundle.cashFlow, 'Cash from Operating Activity'));
   const np = fySeries(bundle.profitLoss, 'Net Profit');
+  const npM = yearMap(np);
   const out = [];
   for (let i = 3; i < np.length; i++) {
     const year = np[i].year;
-    const growth = pctChange(np[i - 3].value, np[i].value, MATERIALITY_FLOOR);
-    const npWindow = [np[i - 2], np[i - 1], np[i]].map((p) => p.value);
-    const cfoWindow = [cfo[i - 2], cfo[i - 1], cfo[i]].map((p) => p && p.value);
+    const growth = pctChange(at(npM, year - 3), np[i].value, MATERIALITY_FLOOR);
+    const npWindow = [year - 2, year - 1, year].map((y) => at(npM, y));
+    const cfoWindow = [year - 2, year - 1, year].map((y) => at(cfo, y));
     if (growth == null || npWindow.some((v) => v == null) || cfoWindow.some((v) => v == null)) {
       out.push({ year, status: 'not_applicable', reason: 'missing an input, or the 3-year-ago base is not comparable (loss year / too small)' });
       continue;
@@ -377,12 +391,13 @@ function ruleCfoDivergence(bundle) {
 
 function ruleDebtorBalloon(bundle) {
   const dd = fySeries(bundle.ratios, 'Debtor Days');
-  const sales = fySeries(bundle.profitLoss, 'Sales').length ? fySeries(bundle.profitLoss, 'Sales') : fySeries(bundle.profitLoss, 'Revenue');
+  const ddM = yearMap(dd);
+  const sales = yearMap(fySeries(bundle.profitLoss, 'Sales').length ? fySeries(bundle.profitLoss, 'Sales') : fySeries(bundle.profitLoss, 'Revenue'));
   const out = [];
   if (!dd.length) return out; // lenders don't report this row at all — silently not applicable, not a wall of N/A rows
   for (let i = 3; i < dd.length; i++) {
     const year = dd[i].year;
-    const t = dd[i].value, t3 = dd[i - 3].value;
+    const t = dd[i].value, t3 = at(ddM, year - 3);
     if (t == null || t3 == null || t3 <= 0) { out.push({ year, status: 'not_applicable', reason: 'missing debtor-days data' }); continue; }
     const ratio = t / t3;
     const delta = t - t3;
@@ -390,7 +405,7 @@ function ruleDebtorBalloon(bundle) {
     // Rupee-materiality proxy: incremental sales-days now sitting uncollected,
     // approximated from this year's sales — a day count alone can't be ranked
     // against the other rules' rupee figures for the 3-flag cap.
-    const salesT = sales[i] && sales[i].value;
+    const salesT = at(sales, year);
     const impliedRupees = fired && salesT != null ? (delta / 365) * salesT : null;
     out.push({
       year, status: fired ? 'fired' : 'clear',
@@ -403,14 +418,15 @@ function ruleDebtorBalloon(bundle) {
 }
 
 function ruleAssetSaleGain(bundle) {
-  const cfi = fySeries(bundle.cashFlow, 'Cash from Investing Activity');
+  const cfi = yearMap(fySeries(bundle.cashFlow, 'Cash from Investing Activity'));
   const oi = fySeries(bundle.profitLoss, 'Other Income');
-  const pbt = fySeries(bundle.profitLoss, 'Profit before tax');
+  const oiM = yearMap(oi);
+  const pbt = yearMap(fySeries(bundle.profitLoss, 'Profit before tax'));
   const out = [];
   for (let i = 5; i < oi.length; i++) {
     const year = oi[i].year;
-    const cfiT = cfi[i] && cfi[i].value, oiT = oi[i].value, pbtT = pbt[i] && pbt[i].value;
-    const window = oi.slice(i - 5, i).map((p) => p.value);
+    const cfiT = at(cfi, year), oiT = oi[i].value, pbtT = at(pbt, year);
+    const window = [5, 4, 3, 2, 1].map((k) => at(oiM, year - k));
     if (cfiT == null || oiT == null || pbtT == null || window.some((v) => v == null)) {
       out.push({ year, status: 'not_applicable', reason: 'missing an input for this year' });
       continue;
@@ -430,14 +446,15 @@ function ruleAssetSaleGain(bundle) {
 
 function ruleTaxDrivenMargin(bundle) {
   const np = fySeries(bundle.profitLoss, 'Net Profit');
-  const pbt = fySeries(bundle.profitLoss, 'Profit before tax');
-  const taxPct = fySeries(bundle.profitLoss, 'Tax %');
+  const npM = yearMap(np);
+  const pbt = yearMap(fySeries(bundle.profitLoss, 'Profit before tax'));
+  const taxPct = yearMap(fySeries(bundle.profitLoss, 'Tax %'));
   const out = [];
   for (let i = 1; i < np.length; i++) {
     const year = np[i].year;
-    const npGrowth = pctChange(np[i - 1].value, np[i].value, MATERIALITY_FLOOR);
-    const pbtGrowth = pctChange(pbt[i - 1] && pbt[i - 1].value, pbt[i] && pbt[i].value, MATERIALITY_FLOOR);
-    const taxT = taxPct[i] && taxPct[i].value, taxT1 = taxPct[i - 1] && taxPct[i - 1].value;
+    const npGrowth = pctChange(at(npM, year - 1), np[i].value, MATERIALITY_FLOOR);
+    const pbtGrowth = pctChange(at(pbt, year - 1), at(pbt, year), MATERIALITY_FLOOR);
+    const taxT = at(taxPct, year), taxT1 = at(taxPct, year - 1);
     if (npGrowth == null || pbtGrowth == null || taxT == null || taxT1 == null) {
       out.push({ year, status: 'not_applicable', reason: 'missing an input, or a base year is not comparable (loss year / too small)' });
       continue;
@@ -445,7 +462,7 @@ function ruleTaxDrivenMargin(bundle) {
     const fired = npGrowth > 0.20 && pbtGrowth < 0.08 && taxT < taxT1 - 5;
     // Rupee-materiality proxy: the extra post-tax profit attributable purely
     // to the lower tax rate, holding pre-tax profit fixed.
-    const pbtT = pbt[i] && pbt[i].value;
+    const pbtT = at(pbt, year);
     const taxSavingRupees = fired && pbtT != null ? Math.abs(((taxT1 - taxT) / 100) * pbtT) : null;
     out.push({
       year, status: fired ? 'fired' : 'clear',
@@ -463,18 +480,19 @@ function ruleTaxDrivenMargin(bundle) {
 // once it's deteriorated *from* a level that already mattered.
 function ruleInventoryBuild(bundle) {
   const idays = fySeries(bundle.ratios, 'Inventory Days');
+  const idaysM = yearMap(idays);
   const salesRaw = fySeries(bundle.profitLoss, 'Sales');
-  const sales = salesRaw.length ? salesRaw : fySeries(bundle.profitLoss, 'Revenue');
+  const sales = yearMap(salesRaw.length ? salesRaw : fySeries(bundle.profitLoss, 'Revenue'));
   const out = [];
   if (!idays.length) return out; // not every business carries inventory (services, some financials) -- silently not applicable
   for (let i = 3; i < idays.length; i++) {
     const year = idays[i].year;
-    const t = idays[i].value, t3 = idays[i - 3].value;
+    const t = idays[i].value, t3 = at(idaysM, year - 3);
     if (t == null || t3 == null || t3 <= 0) { out.push({ year, status: 'not_applicable', reason: 'missing inventory-days data' }); continue; }
     const ratio = t / t3;
     const delta = t - t3;
     const fired = ratio > 1.30 && t > 60 && delta > 15;
-    const salesT = sales[i] && sales[i].value;
+    const salesT = at(sales, year);
     const impliedRupees = fired && salesT != null ? (delta / 365) * salesT : null;
     out.push({
       year, status: fired ? 'fired' : 'clear',
@@ -542,13 +560,16 @@ function ruleInterestCoverThin(bundle) {
 function ruleLeverageUpReturnsDown(bundle) {
   const borrowRaw = fySeries(bundle.balanceSheet, 'Borrowings');
   const borrow = borrowRaw.length ? borrowRaw : fySeries(bundle.balanceSheet, 'Borrowing');
-  const roce = fySeries(bundle.ratios, 'ROCE %');
+  const roceS = fySeries(bundle.ratios, 'ROCE %');
+  const roce = yearMap(roceS);
+  const borrowM = yearMap(borrow);
   const out = [];
-  if (!borrow.length || !roce.length) return out;
+  if (!borrow.length || !roceS.length) return out;
   for (let i = 1; i < borrow.length; i++) {
     const year = borrow[i].year;
-    const borrowGrowth = pctChange(borrow[i - 1].value, borrow[i].value, MATERIALITY_FLOOR);
-    const roceT = roce[i] && roce[i].value, roceT1 = roce[i - 1] && roce[i - 1].value;
+    const bT1 = at(borrowM, year - 1);
+    const borrowGrowth = pctChange(bT1, borrow[i].value, MATERIALITY_FLOOR);
+    const roceT = at(roce, year), roceT1 = at(roce, year - 1);
     if (borrowGrowth == null || roceT == null || roceT1 == null) { out.push({ year, status: 'not_applicable', reason: 'missing an input, or the prior-year borrowings base is not comparable' }); continue; }
     const roceDelta = roceT - roceT1;
     const fired = borrowGrowth > 0.15 && roceDelta < -2;
@@ -556,7 +577,7 @@ function ruleLeverageUpReturnsDown(bundle) {
       year, status: fired ? 'fired' : 'clear',
       message: fired ? 'Borrowings grew while return on capital fell — the new debt does not yet appear to be earning its keep.' : null,
       detail: fired ? `FY${year} — borrowings rose ${(borrowGrowth * 100).toFixed(0)}% while ROCE fell from ${roceT1.toFixed(1)}% to ${roceT.toFixed(1)}%.` : null,
-      materiality: fired ? Math.abs(borrow[i].value - borrow[i - 1].value) : null,
+      materiality: fired ? Math.abs(borrow[i].value - bT1) : null,
     });
   }
   return out;
@@ -576,14 +597,15 @@ function ruleLeverageUpReturnsDown(bundle) {
 // fixed assets to have barely moved over the same three years.
 function ruleCwipFrozen(bundle) {
   const cwip = fySeries(bundle.balanceSheet, 'CWIP');
-  const fixedAssets = fySeries(bundle.balanceSheet, 'Fixed Assets');
+  const cwipM = yearMap(cwip);
+  const fixedAssets = yearMap(fySeries(bundle.balanceSheet, 'Fixed Assets'));
   const out = [];
   if (!cwip.length) return out;
   for (let i = 3; i < cwip.length; i++) {
     const year = cwip[i].year;
-    const t = cwip[i].value, t3 = cwip[i - 3].value;
-    const faT = fixedAssets[i] && fixedAssets[i].value;
-    const faT3 = fixedAssets[i - 3] && fixedAssets[i - 3].value;
+    const t = cwip[i].value, t3 = at(cwipM, year - 3);
+    const faT = at(fixedAssets, year);
+    const faT3 = at(fixedAssets, year - 3);
     if (t == null || t3 == null || t3 < MATERIALITY_FLOOR || faT == null || faT <= 0 || faT3 == null || faT3 <= 0) { out.push({ year, status: 'not_applicable', reason: 'missing CWIP or fixed-assets data, or CWIP was negligible three years ago' }); continue; }
     const ratio = t / t3;
     const share = t / faT;
@@ -605,20 +627,23 @@ function ruleCwipFrozen(bundle) {
 function ruleCapexNoRevenue(bundle) {
   const fixedAssets = fySeries(bundle.balanceSheet, 'Fixed Assets');
   const salesRaw = fySeries(bundle.profitLoss, 'Sales');
-  const sales = salesRaw.length ? salesRaw : fySeries(bundle.profitLoss, 'Revenue');
+  const salesS = salesRaw.length ? salesRaw : fySeries(bundle.profitLoss, 'Revenue');
+  const sales = yearMap(salesS);
+  const faM = yearMap(fixedAssets);
   const out = [];
-  if (!fixedAssets.length || !sales.length) return out;
+  if (!fixedAssets.length || !salesS.length) return out;
   for (let i = 3; i < fixedAssets.length; i++) {
     const year = fixedAssets[i].year;
-    const faGrowth = pctChange(fixedAssets[i - 3].value, fixedAssets[i].value, MATERIALITY_FLOOR);
-    const salesGrowth = pctChange(sales[i - 3] && sales[i - 3].value, sales[i] && sales[i].value, MATERIALITY_FLOOR);
+    const faT3 = at(faM, year - 3);
+    const faGrowth = pctChange(faT3, fixedAssets[i].value, MATERIALITY_FLOOR);
+    const salesGrowth = pctChange(at(sales, year - 3), at(sales, year), MATERIALITY_FLOOR);
     if (faGrowth == null || salesGrowth == null) { out.push({ year, status: 'not_applicable', reason: 'missing an input, or a 3-year-ago base is not comparable' }); continue; }
     const fired = faGrowth > 0.30 && salesGrowth < 0.05;
     out.push({
       year, status: fired ? 'fired' : 'clear',
       message: fired ? 'Fixed assets have grown much faster than sales over three years — recent capital spending has not yet shown up as revenue.' : null,
       detail: fired ? `FY${year - 3}–FY${year} — fixed assets grew ${(faGrowth * 100).toFixed(0)}% while sales grew ${(salesGrowth * 100).toFixed(0)}%.` : null,
-      materiality: fired ? Math.abs(fixedAssets[i].value - fixedAssets[i - 3].value) : null,
+      materiality: fired ? Math.abs(fixedAssets[i].value - faT3) : null,
     });
   }
   return out;
@@ -757,8 +782,11 @@ function evaluateDivergenceRules(bundle) {
       if (r.status === 'not_applicable') { notApplicable++; return; }
       if (r.status === 'clear') { clear++; return; }
       // fired — only surfaces if the previous transition for this same rule also fired
+      // "Previous" means the previous fiscal year, not the previous array
+      // entry: across a gap in the data (PAYTM FY16 -> FY19) two results
+      // aren't consecutive years, so they can't make a persistent pattern.
       const prev = results[i - 1];
-      if (prev && prev.status === 'fired') {
+      if (prev && prev.status === 'fired' && prev.year === r.year - 1) {
         flags.push({ ruleId: rule.id, year: r.year, message: r.message, detail: r.detail, note: discontinuityNote(r.year), materiality: r.materiality || 0 });
       } else if (i === results.length - 1) {
         watch.push({ ruleId: rule.id, year: r.year, message: r.message, detail: r.detail, note: discontinuityNote(r.year), materiality: r.materiality || 0, watch: true });
