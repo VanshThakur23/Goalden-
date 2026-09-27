@@ -2544,6 +2544,33 @@ function renderSWP(){
 /* =====================================================================
    TAB: CROSS-BORDER
    ===================================================================== */
+// Bridge from the amount invested to the final value: market growth and
+// the currency effect as separate, labelled steps, with "stayed home" as a
+// comparison bar. The three steps land exactly on crossBorderFV by
+// construction (currencyEffect = crossBorderFV - marketOnlyFV).
+function renderFxBridge(chartId, principal, res, homeC, awayC){
+  const mkt=res.marketOnlyFV-principal, fx=res.currencyEffect;
+  const steps=[
+    {label:'You invest', lo:0, hi:principal, v:principal, kind:'total'},
+    {label:awayC.name+' market growth', lo:Math.min(principal,principal+mkt), hi:Math.max(principal,principal+mkt), v:mkt, kind:mkt>=0?'up':'down'},
+    {label:'Currency effect', lo:Math.min(res.marketOnlyFV,res.crossBorderFV), hi:Math.max(res.marketOnlyFV,res.crossBorderFV), v:fx, kind:fx>=0?'up':'down'},
+    {label:'Went abroad', lo:0, hi:res.crossBorderFV, v:res.crossBorderFV, kind:'final'},
+    {label:'Stayed home', lo:0, hi:res.domesticFV, v:res.domesticFV, kind:'compare'},
+  ];
+  const fill={total:'#2557C7', up:'#5FA875', down:'#D97757', final:'#1E4FBE', compare:'#B6C2D6'};
+  const text={total:CHART_TEXT.blue, up:CHART_TEXT.good, down:CHART_TEXT.bad, final:CHART_TEXT.blue, compare:CHART_TEXT.ink};
+  const fmt=(st)=>(st.kind==='up'?'+':st.kind==='down'?'−':'')+homeC.compact(Math.abs(st.v));
+  initChart(chartId, {
+    grid:{left:8,right:8,top:30,bottom:30,containLabel:true},
+    xAxis:{type:'category', data:steps.map(s=>s.label), axisTick:{show:false}, axisLabel:{interval:0, color:CHART_TEXT.muted, fontSize:10.5, width:90, overflow:'break'}},
+    yAxis:{type:'value', axisLabel:{formatter:v=>homeC.compact(v), color:CHART_TEXT.muted}, splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}},
+    tooltip:{trigger:'item', confine:true, formatter:p=>steps[p.dataIndex].label+': '+fmt(steps[p.dataIndex])},
+    series:[{ type:'custom', encode:{x:0,y:[1,2]}, data:steps.map((st,i)=>[i,st.lo,st.hi]),
+      renderItem:(params,api)=>{ const st=steps[params.dataIndex]; const a=api.coord([api.value(0),api.value(2)]), b=api.coord([api.value(0),api.value(1)]); const w=api.size([1,0])[0]*0.55;
+        return {type:'rect', shape:{x:a[0]-w/2, y:a[1], width:w, height:Math.max(1,b[1]-a[1])}, style:{fill:fill[st.kind]},
+          textContent:{style:{text:fmt(st), fill:text[st.kind], fontSize:11, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace"}}, textConfig:{position:'top', distance:4}}; } }],
+  });
+}
 function renderFX(){
   const f=L.fx;
   const homeC = f.direction==='investingAbroad' ? C.IN : C.US;
@@ -2552,6 +2579,7 @@ function renderFX(){
   const pMin = f.direction==='investingAbroad' ? 100000 : 1000;
   const pMax = f.direction==='investingAbroad' ? 10000000 : 120000;
   const pStep = f.direction==='investingAbroad' ? 50000 : 500;
+  deferChartInit(()=>renderFxBridge('fx-bridge', f.principal, res, homeC, awayC));
 
   return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
@@ -2575,6 +2603,11 @@ function renderFX(){
       <div class="stat"><div class="stat-label">Stayed home</div><div class="stat-value">${homeC.compact(res.domesticFV)}</div></div>
       <div class="stat"><div class="stat-label">Went abroad</div><div class="stat-value">${homeC.compact(res.crossBorderFV)}</div><div class="stat-sub">${res.foreignBeatsHome?'beats staying home':'loses to staying home'}</div></div>
       <div class="stat"><div class="stat-label">Currency effect${infoIcon('The part of the final outcome caused purely by exchange-rate movement, separated from what the foreign market itself earned. Positive means the currency worked for you, negative means it ate into the market return.')}</div><div class="stat-value" style="color:${res.currencyEffect>=0?'#256F55':'#9C4A2C'}">${res.currencyEffect>=0?'+':''}${homeC.compact(res.currencyEffect)}</div><div class="stat-sub">${res.currencyEffect>=0?'tailwind':'drag'}</div></div>
+    </div>
+    <div class="card">
+      <h4>How the money got there</h4>
+      <div class="cap">Starting amount, plus what the ${awayC.name} market earned, plus or minus the currency move, next to staying home</div>
+      <div id="fx-bridge" class="echart" style="height:250px"></div>
     </div>
     <div class="card is-primary">
       <h4>The interesting fact</h4>
@@ -5262,6 +5295,12 @@ function renderTabs(){
       // change -- so it's safe to bind listeners here rather than relying
       // on attach()'s broader, every-render rebind (see attach()'s own
       // comment on why its query is scoped away from this element).
+      // On a phone the slim tab strip scrolls sideways and always opened at
+      // its first tab, so the current tool wasn't visible (Read the Company
+      // showed "Retirement Lab"). Centre the active tab in the strip,
+      // horizontally only, so the page itself doesn't jump.
+      const strip=inner.querySelector('.tabs-slim'), act=strip&&strip.querySelector('.tab.active');
+      if(strip && act && strip.scrollWidth>strip.clientWidth) strip.scrollLeft=Math.max(0, act.offsetLeft-strip.offsetLeft-(strip.clientWidth-act.clientWidth)/2);
       inner.querySelectorAll('[data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{
         L.tab=el.dataset.tabSwitch;
         try{ localStorage.setItem('goaldenLabLastTab', L.tab); }catch(e){}

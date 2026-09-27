@@ -2267,3 +2267,19 @@ Changes made by Claude Code (Chief). D1-12 (math) and D4-12 (visual).
   month loop (₹7,943); the plan lands exactly on the target; a 0% step-up
   equals the flat SIP; figures match the Retirement division's
   predictions. Tests 110/110, smokes 11/11, evals 9/9, no page errors.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 16: FX bridge, phone nav)
+Changes made by Claude Code (Chief). D4-13 and a mobile nav fix.
+- goalden-lab.html Cross-Border: new "How the money got there" bridge chart
+  (`renderFxBridge`): amount invested -> + foreign market growth -> ±
+  currency effect -> went abroad, with "stayed home" as a comparison bar;
+  every bar labelled. The steps land exactly on the final value by
+  construction. Checked: ₹10 L + ₹13.67 L + ₹11.37 L = ₹35.04 L (India
+  investing in US); $10K + $13.67K - $7.68K = $15.99K (the reverse).
+- goalden-lab.html phone nav: the slim tab strip scrolls sideways and always
+  opened at its first tab, so the current tool wasn't visible. It now
+  centres the active tab (horizontal scroll only). Checked on Pixel 7 for
+  Read the Company, Plan Health and Retirement: the active tab is fully in
+  view.
+- Checks: tests 110/110, smokes 11/11, phone width 412px, contrast audit 0
+  on the touched tabs, no page errors.
