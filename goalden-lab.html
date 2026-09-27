@@ -1150,10 +1150,22 @@ window.addEventListener('resize', ()=>{
    goalden-engine.js, loaded above. Only the Lab-specific extensions stay
    here: solveStepUpSIP, swpWithdrawal, drawdownWithShock.
    ===================================================================== */
-function solveStepUpSIP(rate,growth,periods,fv,due){
-  if(Math.abs(rate-growth)<1e-9){const f=periods*Math.pow(1+rate,periods-1)*(due?(1+rate):1);return fv/f;}
-  let f=(Math.pow(1+rate,periods)-Math.pow(1+growth,periods))/(rate-growth);
-  return fv/(due?f*(1+rate):f);
+// Step-up SIP the way real SIP mandates work: the monthly amount is FLAT
+// within each year and rises by the step-up % once a year. The old model
+// (solveStepUpSIP with a monthly-equivalent growth rate) raised it a little
+// every month, understating the starting SIP by ~3.4% at the defaults
+// (₹7,671 vs ₹7,943). Future value is linear in the starting SIP, so solve
+// with S=1 and scale -- exact, no iteration. Contributions at the start of
+// each month (annuity due), matching the flat SIP it is compared with.
+function stepUpAnnualPlan(target, years, annualRate, stepPct){
+  const m=effectiveMonthlyRate(annualRate), g=stepPct;
+  const simulate=S=>{ let bal=0, paid=0; const rows=[], yearly=[];
+    for(let y=0;y<years;y++){ const sip=S*Math.pow(1+g,y); yearly.push(sip);
+      for(let k=0;k<12;k++){ bal=(bal+sip)*(1+m); paid+=sip; rows.push({closeBal:bal, sip}); } }
+    return {bal, paid, rows, yearly}; };
+  const unit=simulate(1).bal;
+  const S=target/unit, run=simulate(S);
+  return {startSip:S, rows:run.rows, yearlySip:run.yearly, totalPaid:run.paid, finalBal:run.bal};
 }
 function swpWithdrawal(rate,years,corpus,due){
   if(rate===0)return corpus/years;
@@ -2084,6 +2096,26 @@ function renderTwinFatesChartOption(chartId, rowsA, rowsB){
   });
 }
 
+function renderStepPathChart(chartId, yearlySip, flatSip){
+  const c=cfg(), n=yearlySip.length;
+  const cross=yearlySip.findIndex(v=>v>flatSip);
+  initChart(chartId, {
+    grid:{left:8,right:12,top:26,bottom:22,containLabel:true},
+    xAxis:{type:'category', data:yearlySip.map((_,i)=>'Yr '+(i+1)), axisTick:{show:false}, axisLabel:{color:CHART_TEXT.muted, interval:Math.max(0,Math.floor(n/8)-1)}},
+    yAxis:{type:'value', axisLabel:{formatter:v=>c.compact(v), color:CHART_TEXT.muted}, splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}},
+    tooltip:{trigger:'axis', confine:true, formatter:ps=>ps[0].axisValue+'<br/>'+ps.map(p=>p.marker+p.seriesName+': '+c.fmt(Math.round(p.value))+'/mo').join('<br/>')},
+    series:[
+      { name:'Step-up SIP', type:'bar', data:yearlySip.map(v=>Math.round(v)), barMaxWidth:18,
+        itemStyle:{color:p=>p.dataIndex>=cross && cross>=0 ? '#D97757' : '#5FA875', borderRadius:[2,2,0,0]},
+        markPoint:{silent:true, symbolSize:1, data:[{coord:[0,Math.round(yearlySip[0])]},{coord:[n-1,Math.round(yearlySip[n-1])]}],
+          label:{show:true, position:'top', formatter:p=>c.fmt(p.data.coord[1]), color:CHART_TEXT.ink, fontSize:10.5, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace"}} },
+      { name:'Flat SIP', type:'line', data:yearlySip.map(()=>Math.round(flatSip)), showSymbol:false, lineStyle:{color:'#14283F', width:1.5, type:'dashed'},
+        endLabel:{show:true, formatter:()=>'Flat '+c.fmt(Math.round(flatSip)), color:CHART_TEXT.ink, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace", offset:[-110,-12]},
+        markLine: cross>=0 ? {silent:true, symbol:'none', lineStyle:{color:'#9C4A2C', type:'dotted'}, label:{formatter:'overtakes flat in year '+(cross+1), color:CHART_TEXT.bad, fontSize:10.5, position:'end', align:cross>n*0.6?'right':'left'}, data:[{xAxis:cross}]} : undefined },
+    ],
+  });
+}
+
 /* =====================================================================
    TAB: RETIREMENT LAB
    ===================================================================== */
@@ -2407,10 +2439,15 @@ function renderStepUp(){
   const mRate=effectiveMonthlyRate(s.preRate/100);
   const mStep=effectiveMonthlyRate(s.stepUpPct/100);
   const flatSip=solveSIP(mRate, s.years*12, s.corpus, true);
-  const steppedSip=solveStepUpSIP(mRate, mStep, s.years*12, s.corpus, true);
+  const plan=stepUpAnnualPlan(s.corpus, s.years, s.preRate/100, s.stepUpPct/100);
+  const steppedSip=plan.startSip;
 
   const flatAcc=accumulationSchedule({sip:flatSip, rate:mRate, periods:s.years*12, due:true}).rows;
-  const stepAcc=accumulationSchedule({sip:steppedSip, rate:mRate, periods:s.years*12, due:true, stepUp:mStep}).rows;
+  const stepAcc=plan.rows;
+  const flatPaid=flatSip*s.years*12;
+  // First year the stepped monthly amount exceeds the flat one.
+  const crossIdx=plan.yearlySip.findIndex(v=>v>flatSip);
+  deferChartInit(()=>renderStepPathChart('step-path', plan.yearlySip, flatSip));
 
   return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
@@ -2427,6 +2464,16 @@ function renderStepUp(){
       <div class="stat"><div class="stat-label">Flat SIP (fixed forever)${infoIcon('One unchanging monthly amount from the first month to the last. Simple, but it front-loads the burden into your lowest-earning years.')}</div><div class="stat-value">${c.fmt(Math.round(flatSip))}</div></div>
       <div class="stat"><div class="stat-label">Step-up SIP (starting)${infoIcon('The first-year monthly amount. It then rises by the step-up rate each year, reaching the same target by paying more in later, higher-income years.')}</div><div class="stat-value">${c.fmt(Math.round(steppedSip))}</div></div>
       <div class="stat"><div class="stat-label">Year-1 saving</div><div class="stat-value">${c.fmt(Math.round(flatSip-steppedSip))}</div><div class="stat-sub">less to start</div></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Total paid in, flat</div><div class="stat-value">${c.compact(flatPaid)}</div></div>
+      <div class="stat"><div class="stat-label">Total paid in, step-up${infoIcon('Starting lower means paying more in total: later, larger instalments have less time to grow, so more of the target has to come from your own money.')}</div><div class="stat-value" style="color:#9C4A2C">${c.compact(plan.totalPaid)}</div><div class="stat-sub">${c.compact(plan.totalPaid-flatPaid)} more than flat</div></div>
+      <div class="stat"><div class="stat-label">Step-up overtakes flat</div><div class="stat-value">${crossIdx>=0?'Year '+(crossIdx+1):'Never'}</div><div class="stat-sub">${crossIdx>=0?'from then on you pay more each month':'within this period'}</div></div>
+    </div>
+    <div class="card">
+      <h4>What you pay each month, year by year</h4>
+      <div class="cap">Bars = step-up SIP (rises once a year) · line = flat SIP</div>
+      <div id="step-path" class="echart" style="height:230px"></div>
     </div>
     <div class="card is-primary">
       <h4>Both reach the same target, at a different starting cost</h4>
@@ -8968,7 +9015,7 @@ function advisorReadCurrentChart() {
     const mRate = effectiveMonthlyRate(s.preRate/100);
     const mStep = effectiveMonthlyRate(s.stepUpPct/100);
     const flatSip = solveSIP(mRate, s.years*12, s.corpus, true);
-    const steppedSip = solveStepUpSIP(mRate, mStep, s.years*12, s.corpus, true);
+    const steppedSip = stepUpAnnualPlan(s.corpus, s.years, s.preRate/100, s.stepUpPct/100).startSip;
     return { ok:true, tool:'Step-Up SIP', charts:[
       { kind:'comparison', title:'Flat vs step-up SIP', xAxis:'years (0 → '+s.years+')', yAxis:'balance (both reach '+c.compact(s.corpus)+')', note:'red = flat SIP, green = step-up', points:[{ label:'flat SIP', value:c.fmt(Math.round(flatSip))+'/mo' }, { label:'step-up SIP (starting)', value:c.fmt(Math.round(steppedSip))+'/mo' }, { label:'year-1 saving', value:c.fmt(Math.round(flatSip-steppedSip))+'/mo' }] },
     ] };
@@ -9062,8 +9109,8 @@ function advisorGetResults() {
     const mRate = effectiveMonthlyRate(s.preRate/100);
     const mStep = effectiveMonthlyRate(s.stepUpPct/100);
     const flatSip = solveSIP(mRate, s.years*12, s.corpus, true);
-    const steppedSip = solveStepUpSIP(mRate, mStep, s.years*12, s.corpus, true);
-    return { ok:true, result:{ tool:'Step-Up SIP', targetCorpus:s.corpus, years:s.years, flatMonthlySIP:Math.round(flatSip), startingStepUpSIP:Math.round(steppedSip), yearOneSaving:Math.round(flatSip - steppedSip) } };
+    const plan = stepUpAnnualPlan(s.corpus, s.years, s.preRate/100, s.stepUpPct/100), steppedSip = plan.startSip;
+    return { ok:true, result:{ tool:'Step-Up SIP', totalPaidFlat:Math.round(flatSip*s.years*12), totalPaidStepUp:Math.round(plan.totalPaid), targetCorpus:s.corpus, years:s.years, flatMonthlySIP:Math.round(flatSip), startingStepUpSIP:Math.round(steppedSip), yearOneSaving:Math.round(flatSip - steppedSip) } };
   }
   if (tab === 'swp') {
     const s = L.swp;
@@ -9228,9 +9275,9 @@ function resultCanvasStepUp() {
   const mRate = effectiveMonthlyRate(s.preRate/100);
   const mStep = effectiveMonthlyRate(s.stepUpPct/100);
   const flatSip = solveSIP(mRate, s.years*12, s.corpus, true);
-  const steppedSip = solveStepUpSIP(mRate, mStep, s.years*12, s.corpus, true);
+  const plan = stepUpAnnualPlan(s.corpus, s.years, s.preRate/100, s.stepUpPct/100), steppedSip = plan.startSip;
   const flatAcc = accumulationSchedule({sip:flatSip, rate:mRate, periods:s.years*12, due:true}).rows;
-  const stepAcc = accumulationSchedule({sip:steppedSip, rate:mRate, periods:s.years*12, due:true, stepUp:mStep}).rows;
+  const stepAcc = plan.rows;
   return { ok:true, html:
     '<div class="stat-row">' +
       '<div class="stat"><div class="stat-label">Flat SIP</div><div class="stat-value">'+c.fmt(Math.round(flatSip))+'</div></div>' +

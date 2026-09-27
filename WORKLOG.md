@@ -2247,3 +2247,23 @@ Changes made by Claude Code (Chief). D3 visualization idea 3.
   (now a test, within 1.5 pts over 5 years). Identity holds to 1e-12 on all
   six companies. TCS tiles: 18.5% × 1.57 × 1.68 = 49.0%. No errors on any
   company; phone width 412px; contrast audit 0; tests 110/110; smokes 11/11.
+
+## 2026-09-27 - Claude Code (cloud session, review-board loop, iteration 15: Step-Up SIP)
+Changes made by Claude Code (Chief). D1-12 (math) and D4-12 (visual).
+- goalden-lab.html `stepUpAnnualPlan`: the step-up SIP now rises ONCE A
+  YEAR (flat within each year), like real SIP mandates. The old
+  `solveStepUpSIP` raised it by a monthly-equivalent rate every month,
+  understating the starting SIP (₹7,671 vs ₹7,943 at defaults). Solved
+  exactly (future value is linear in the start amount). The old solver was
+  removed; the tab, advisor chart/results tools and the report canvas all
+  use the new plan.
+- New tiles: total paid in, flat (₹64.20 L) vs step-up (₹1.08 Cr, ₹43.77 L
+  more), and the year the step-up overtakes the flat SIP (year 12). New
+  chart "What you pay each month, year by year": step-up bars (green while
+  below the flat SIP, orange after), flat SIP as a dashed line, the
+  crossover year marked, first/last amounts printed. The advisor results
+  gain totalPaidFlat / totalPaidStepUp.
+- Verified: start SIP equals an independent bisection over a from-scratch
+  month loop (₹7,943); the plan lands exactly on the target; a 0% step-up
+  equals the flat SIP; figures match the Retirement division's
+  predictions. Tests 110/110, smokes 11/11, evals 9/9, no page errors.
