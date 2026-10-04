@@ -1884,6 +1884,7 @@ const L = {
     selectedWeights:null,// 3+-instrument case: weight vector chosen by clicking the chart or the combinations table
     rf:null,             // risk-free rate override, %; null = use the country default (fdRate) until touched
     searchMode:'equity', search:'', klassFilter:'all', fundResults:[], fundSearching:false, fundSearchError:null,
+    marketResults:[], marketQuery:'', marketSearching:false, marketSearchError:null,
     freeText:'', freeTextError:null, freeTextLoading:false,
     seed:19,
     overrides:{},        // key -> true once someone explicitly says "use it anyway" past an unusable data-quality flag
@@ -4316,6 +4317,18 @@ function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoA
   }
   if(maxGapDays>30) bump('caution','GAP',`A ${Math.round(maxGapDays)}-day gap in the price history — something didn't trade or wasn't reported for a while.`);
 
+  // Thin trading: an SME-board stock like SPEB-SM.NS has a price on only
+  // ~70% of weekdays (no trades on the rest), so each "daily" return can
+  // span several days and won't line up with another instrument's same-date
+  // move. A liquid stock or fund has prices on ~94-96% of weekdays (market
+  // holidays are the gap), so under 80% means genuinely thin trading.
+  if(prices.length>1){
+    const d0=new Date(prices[0].date+'T00:00:00Z'), d1=new Date(prices[prices.length-1].date+'T00:00:00Z');
+    let weekdays=0; for(let t=d0.getTime(); t<=d1.getTime(); t+=86400000){ const wd=new Date(t).getUTCDay(); if(wd!==0 && wd!==6) weekdays++; }
+    const coverage = weekdays ? prices.length/weekdays : 1;
+    if(weekdays>=40 && coverage<0.80) bump('caution','THIN',`Traded on only about ${Math.round(coverage*100)}% of weekdays — a thinly traded stock, so its daily risk and its correlation with other instruments are rough estimates.`);
+  }
+
   // NSE circuit limits cap most single-day equity moves at 20%, so a
   // >35% one-day move is almost always a corporate action or a bad
   // print, not real trading. Funds get a tighter 10% bar: a NAV jump
@@ -4532,7 +4545,7 @@ async function liveLoadInstrument(item){
   if(chipsEl) chipsEl.innerHTML = L.live.items.map(it=>liveChipHTML(it)).join('') || '<span class="cap">Add two or more to see a frontier.</span>';
   try{
     const raw=await liveFetchHistory(item);
-    L.live.data[item.key]={status:'ready', label:raw.label||item.label, currency:raw.currency, prices:raw.prices, stats:computeReturnStats(raw.prices, item.type==='fund')};
+    L.live.data[item.key]={status:'ready', label:raw.label||item.label, currency:raw.currency, prices:raw.prices, source:raw.source||null, sourceNote:raw.sourceNote||null, stats:computeReturnStats(raw.prices, item.type==='fund')};
   }catch(e){
     L.live.data[item.key]={status:'error', label:item.label, error:(e&&e.message)||'Could not fetch this instrument.'};
   }
@@ -4573,7 +4586,7 @@ async function liveAddFreeText(){
     const raw2=await liveFetchHistory({type:'equity', symbol});
     const item={key:symbol, symbol, label:raw2.label||symbol, type:'equity'};
     L.live.items.push(item);
-    L.live.data[item.key]={status:'ready', label:raw2.label||symbol, currency:raw2.currency, prices:raw2.prices, stats:computeReturnStats(raw2.prices, false)};
+    L.live.data[item.key]={status:'ready', label:raw2.label||symbol, currency:raw2.currency, prices:raw2.prices, source:raw2.source||null, sourceNote:raw2.sourceNote||null, stats:computeReturnStats(raw2.prices, false)};
     L.live.freeText=''; L.live.freeTextError=null;
   }catch(e){
     L.live.freeTextError=(e&&e.message)||'Could not find that ticker.';
@@ -4803,7 +4816,7 @@ function liveEquityResultsHTML(){
   const emptyNote = !L.live.search
     ? `<div class="cap" style="padding:0 2px 8px">${L.live.klassFilter==='all'?'A couple of starting picks from every asset class. Search above to see more, or filter to just one.':`Showing ${(KLASS_LABELS[L.live.klassFilter]||'').toLowerCase()} only.`}</div>`
     : '';
-  if(!results.length) return emptyNote + `<div class="cap" style="padding:8px 2px">No matches. Try a shorter word, a different filter, or use the exact-ticker box below.</div>`;
+  if(!results.length) return emptyNote + liveMarketResultsHTML(already);
   return emptyNote + results.map(r=>{
     const disabled=already.has(r.symbol);
     return `<button class="live-result-btn"${disabled?' disabled style="opacity:.35;cursor:default"':` data-live-add-equity="${r.symbol}" data-live-add-name="${r.name}"`}>
@@ -4811,6 +4824,47 @@ function liveEquityResultsHTML(){
       <span class="live-result-sym">${r.symbol}</span>
     </button>`;
   }).join('');
+}
+// The built-in list covers ~20 well-known names per country. When it has
+// no match, the same query goes to the wider market search (/api/symbolsearch,
+// Yahoo's own symbol lookup) -- so a small or newly listed company such as
+// SPEB Adhesives (SPEB-SM.NS, NSE's SME board) can be found by name. The
+// curated list is checked FIRST because Yahoo's ranking often buries the
+// Indian listing of a common word ("titan"); see symbolSearch in src/worker.js.
+function liveMarketResultsHTML(already){
+  const q=(L.live.search||'').trim();
+  const none = `<div class="cap" style="padding:8px 2px">No matches. Try a shorter word, a different filter, or use the exact-ticker box below.</div>`;
+  if(q.length<2) return none;
+  if(L.live.marketSearching || L.live.marketQuery!==q){
+    // A full re-render can arrive with a query no search has run for yet.
+    if(!L.live.marketSearching) setTimeout(liveRunMarketSearch, 0);
+    return `<div class="cap" style="padding:8px 2px">Not in the built-in list. Searching the wider market&hellip;</div>`;
+  }
+  if(L.live.marketSearchError) return `<div class="cap" style="padding:8px 2px">Not in the built-in list, and the wider market search failed (${advisorAttr(L.live.marketSearchError)}). Use the exact-ticker box below.</div>`;
+  const home = cfg().code==='IN';
+  const isIndian = r => /\.(NS|BO)$/i.test(r.symbol);
+  const list = (L.live.marketResults||[]).slice().sort((a,b)=>(home ? isIndian(b)-isIndian(a) : isIndian(a)-isIndian(b)));
+  if(!list.length) return none;
+  return `<div class="cap" style="padding:2px 2px 8px">Not in the built-in list. From the wider market:</div>` + list.map(r=>{
+    const disabled=already.has(r.symbol);
+    return `<button class="live-result-btn"${disabled?' disabled style="opacity:.35;cursor:default"':` data-live-add-equity="${advisorAttr(r.symbol)}" data-live-add-name="${advisorAttr(r.name)}"`}>
+      <span>${advisorAttr(r.name)}${r.exchange?` <span class="cap" style="font-size:10.5px">${advisorAttr(r.exchange)}</span>`:''}${disabled?' <span class="cap" style="font-size:10.5px">(added)</span>':''}</span>
+      <span class="live-result-sym">${advisorAttr(r.symbol)}</span>
+    </button>`;
+  }).join('');
+}
+async function liveRunMarketSearch(){
+  const q=(L.live.search||'').trim();
+  const refresh=()=>{ const el=document.getElementById('liveResults'); if(el){ el.innerHTML=liveEquityResultsHTML(); wireLiveResultButtons(el); } };
+  if(q.length<2 || searchInstrumentIndex(q, cfg().code, L.live.klassFilter).length){ return; }
+  L.live.marketSearching=true; L.live.marketSearchError=null; refresh();
+  let results=[], error=null;
+  try{ results = await liveApiGet(`/api/symbolsearch?q=${encodeURIComponent(q)}`); }
+  catch(e){ error=(e&&e.message)||'Search failed.'; }
+  // A slower reply for an older query must not overwrite a newer one.
+  if((L.live.search||'').trim()!==q) return;
+  L.live.marketResults=Array.isArray(results)?results:[]; L.live.marketSearchError=error; L.live.marketQuery=q; L.live.marketSearching=false;
+  refresh();
 }
 function liveFundResultsHTML(){
   const live=L.live;
@@ -4953,8 +5007,34 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
     ],
   };
 }
+// Keeps every label of a chart inside its canvas. Real instruments put the
+// riskiest point in the top-right corner (a small-cap like SPEB-SM.NS at
+// ~48% risk), and a label printed above or to the right of it was cut off at
+// the edge ("SPEB-SM.NS 11..."). Reads the container's width at layout time,
+// so it still holds after a resize; any existing labelLayout settings
+// (hideOverlap / moveOverlap) are kept.
+function clampLabelsInside(option, dom){
+  (option.series||[]).forEach(sr=>{
+    if(!sr.label || typeof sr.labelLayout==='function') return;
+    const base = sr.labelLayout || {};
+    // ECharts re-runs labelLayout (on hover, on resize) and passes the rect
+    // with the PREVIOUS dx already applied, while a returned dx counts from
+    // the default position -- so the last shift is remembered per label and
+    // undone before measuring, or the second pass snaps the label back out.
+    const last = new Map();
+    sr.labelLayout = p => {
+      const W = dom ? dom.clientWidth : 0, r = p.labelRect;
+      if(!W || !r) return base;
+      const x0 = r.x - (last.get(p.dataIndex) || 0);
+      const dx = x0 < 4 ? 4 - x0 : Math.min(0, W - 4 - (x0 + r.width));
+      last.set(p.dataIndex, dx);
+      return Object.assign({}, base, {dx});
+    };
+  });
+  return option;
+}
 function renderLiveFrontierChartOption(chartId, frontier, assetPoints, currentPoint, cal, tangencyPoint, onPointClick, currentMixLabel, minVarPoint){
-  const chart=initChart(chartId, liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel, minVarPoint));
+  const chart=initChart(chartId, clampLabelsInside(liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tangencyPoint, currentMixLabel, minVarPoint), document.getElementById(chartId)));
   if(!chart) return;
   chart.off('click');
   if(onPointClick) chart.on('click', params=>{ if(params.seriesName==='Frontier' && frontier[params.dataIndex]) onPointClick(frontier[params.dataIndex].w); });
@@ -5300,6 +5380,7 @@ function liveInstrumentStatsCardHTML(items){
         <span>${(s.annualVol*100).toFixed(1)}% risk</span>
         <span class="cap">${s.n} days &middot; ${s.startDate} to ${s.endDate}</span>
       </div>
+      ${d.sourceNote ? `<div class="cap" style="margin-top:4px">${advisorAttr(d.sourceNote)}</div>` : ''}
       ${flagsHtml}
       ${heldBack ? `<button class="tglbtn" data-live-override="${it.key}" style="margin-top:8px">Use it anyway</button>` : ''}
     </div>`;
@@ -5382,8 +5463,9 @@ function renderLiveFrontier(){
       <tr><td>An Indian gold ETF</td><td class="mono">GOLDBEES.NS</td></tr>
       <tr><td>A US stock</td><td class="mono">AAPL</td></tr>
       <tr><td>A US ETF</td><td class="mono">SPY</td></tr>
+      <tr><td>An NSE SME-board stock</td><td class="mono">SPEB.NS</td></tr>
       </tbody></table></div>
-      <div style="margin-top:8px">Rule: NSE listings need <b style="color:var(--paper)">.NS</b>, BSE needs <b style="color:var(--paper)">.BO</b>, US tickers need no suffix at all.</div>
+      <div style="margin-top:8px">Rule: NSE listings need <b style="color:var(--paper)">.NS</b>, BSE needs <b style="color:var(--paper)">.BO</b>, US tickers need no suffix at all. Small and SME-board Indian stocks that Yahoo Finance has no price history for are fetched from screener.in instead, and the instrument's card says so.</div>
     `)}
     <div class="live-freetext">
       <input id="liveFreeText" type="text" placeholder="e.g. RELIANCE.NS" value="${live.freeText||''}" autocomplete="off" spellcheck="false">
@@ -6099,10 +6181,13 @@ function attach(){
   }));
   const liveSearchEl=document.getElementById('liveSearchBox');
   if(liveSearchEl){
+    let liveMarketTimer=null;
     liveSearchEl.addEventListener('input',()=>{
       L.live.search=liveSearchEl.value;
       const el=document.getElementById('liveResults');
       if(el){ el.innerHTML=liveEquityResultsHTML(); wireLiveResultButtons(el); }
+      if(liveMarketTimer) clearTimeout(liveMarketTimer);
+      liveMarketTimer=setTimeout(()=>{ liveMarketTimer=null; liveRunMarketSearch(); }, 400);
     });
   }
   let liveFundTimer=null;
@@ -9178,9 +9263,9 @@ async function advisorAddInstrument(symbol) {
   try {
     const raw = await liveFetchHistory(item);
     L.live.items.push(item);
-    L.live.data[item.key] = { status:'ready', label: raw.label || item.label, currency: raw.currency, prices: raw.prices, stats: computeReturnStats(raw.prices, item.type === 'fund') };
+    L.live.data[item.key] = { status:'ready', label: raw.label || item.label, currency: raw.currency, prices: raw.prices, source: raw.source || null, sourceNote: raw.sourceNote || null, stats: computeReturnStats(raw.prices, item.type === 'fund') };
     render();
-    return JSON.stringify({ ok:true, added: { symbol: item.symbol, label: L.live.data[item.key].label } });
+    return JSON.stringify({ ok:true, added: Object.assign({ symbol: item.symbol, label: L.live.data[item.key].label }, raw.sourceNote ? { priceSource: raw.sourceNote } : {}) });
   } catch (e) {
     return JSON.stringify({ ok:false, error:'Could not fetch ' + sym + ': ' + ((e && e.message) || e) });
   }

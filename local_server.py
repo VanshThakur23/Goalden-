@@ -12,6 +12,7 @@ Usage:
 Then open http://localhost:8000/index.html
 """
 
+import html as html_lib
 import json
 import math
 import os
@@ -500,6 +501,82 @@ def fetch_screener_financials(symbol_raw):
         if fixture:
             return {**fixture, 'servedFrom': 'fixture', 'fixtureNote': 'Live fetch failed; showing bundled sample figures for this demo company, not a fresh scrape.'}
         raise
+
+
+# ---------------------------------------------------------------------------
+# Price-history fallback for Indian stocks Yahoo doesn't carry. Yahoo has no
+# history for most NSE Emerge / BSE SME listings: SPEB Adhesives (NSE: SPEB,
+# listed 8 Dec 2025) is "SPEB-SM.NS" on Yahoo, and the chart endpoint returns
+# a single bar ("validRanges": 1d/5d) even for an explicit 10-month window,
+# while plain SPEB.NS is a 404. screener.in's company page loads its price
+# chart from /api/company/<id>/chart/, which has the full daily series.
+# Called WITHOUT ?q=: screener's robots.txt disallows "/*?q=", and without q
+# the endpoint returns its default datasets (Price first) anyway.
+# Mirrors src/worker.js's fetchScreenerPriceHistory.
+
+
+def _screener_code_for(symbol):
+    """Bare NSE/BSE code for an Indian-looking symbol, else None.
+
+    SPEB.NS / SPEB.BO / SPEB-SM.NS -> SPEB, BAJAJ-AUTO.NS -> BAJAJ-AUTO;
+    a bare code (SPEB) -> itself,
+    since someone typing an Indian code without the suffix is the common
+    case. Anything else (^NSEI, INR=X, BRK-B) isn't a screener company."""
+    s = str(symbol or '').strip().upper()
+    m = re.fullmatch(r'([A-Z0-9&-]+?)(?:-SM)?\.(?:NS|BO)', s)
+    if m:
+        return m.group(1)
+    if re.fullmatch(r'[A-Z0-9&]{2,20}', s):
+        return s
+    return None
+
+
+def fetch_screener_price_history(code, symbol):
+    html, _url, _consolidated = _fetch_screener_page(code)
+    m = re.search(r'data-company-id="(\d+)"', html)
+    if not m:
+        raise ValueError(f'screener.in has a page for "{code}" but no price chart on it')
+    data = upstream_json(f'https://www.screener.in/api/company/{m.group(1)}/chart/?days=3650',
+                         headers={'User-Agent': UA, 'Accept': 'application/json'})
+    datasets = data.get('datasets') or []
+    price = next((d for d in datasets if d.get('metric') == 'Price'), None) or {}
+    prices = []
+    for row in price.get('values') or []:
+        try:
+            date, close = str(row[0]), float(row[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if close > 0 and re.fullmatch(r'\d{4}-\d{2}-\d{2}', date):
+            prices.append({'date': date, 'close': close, 'rawClose': close})
+    prices.sort(key=lambda p: p['date'])
+    if len(prices) < 30:
+        raise ValueError(f'Only {len(prices)} usable daily prices for {code} on screener.in — too few to compute reliable stats')
+    t = re.search(r'<title>\s*(.*?)\s+share price', html, re.S | re.I)
+    label = html_lib.unescape(t.group(1)).strip() if t else code
+    return {
+        'id': symbol, 'label': label, 'currency': 'INR', 'prices': prices,
+        'source': 'screener.in',
+        'sourceNote': (f'Prices from screener.in ({price.get("label") or "closing price"}): Yahoo Finance has no '
+                       f'history for this stock, which is common for SME-board listings. Closing prices only, '
+                       f'with dividends not added back.'),
+    }
+
+
+def fetch_equity_history_any(symbol):
+    """Yahoo first (it adjusts for dividends); screener.in only when Yahoo
+    has no usable history for an Indian-looking symbol. If both fail, the
+    Yahoo error is the one shown -- it's the actionable one for a typo."""
+    try:
+        return fetch_equity_history(symbol)
+    except Exception as yahoo_err:
+        code = _screener_code_for(symbol)
+        if not code:
+            raise
+        try:
+            return fetch_screener_price_history(code, symbol)
+        except Exception as e:
+            print(f'screener price fallback for {symbol} failed: {e}', file=sys.stderr)
+            raise yahoo_err
 
 
 def financials_health_check():
@@ -1652,7 +1729,7 @@ class Handler(SimpleHTTPRequestHandler):
                     symbol = (qs.get('symbol') or [None])[0]
                     if not symbol:
                         return self._send_json({'error': 'symbol is required'}, 400)
-                    return self._send_json(fetch_equity_history(symbol))
+                    return self._send_json(fetch_equity_history_any(symbol))
                 if kind == 'fund':
                     scheme = (qs.get('scheme') or [None])[0]
                     if not scheme:

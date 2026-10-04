@@ -432,6 +432,73 @@ async function fetchScreenerPage(symbol) {
   );
 }
 
+// Price-history fallback for Indian stocks Yahoo doesn't carry. Yahoo has
+// no history for most NSE Emerge / BSE SME listings: SPEB Adhesives (NSE:
+// SPEB, listed 8 Dec 2025) is "SPEB-SM.NS" on Yahoo, and the chart endpoint
+// returns a single bar ("validRanges": 1d/5d) even for an explicit
+// 10-month window, while plain SPEB.NS is a 404. screener.in's company page
+// loads its price chart from /api/company/<id>/chart/, which has the full
+// daily series. Called WITHOUT ?q=: screener's robots.txt disallows
+// "/*?q=", and without q the endpoint returns its default datasets (Price
+// first) anyway. Mirrors local_server.py's fetch_screener_price_history.
+function screenerCodeFor(symbol) {
+  // SPEB.NS / SPEB.BO / SPEB-SM.NS -> SPEB, BAJAJ-AUTO.NS -> BAJAJ-AUTO; a
+  // bare code (SPEB) -> itself, since typing an Indian code without the
+  // suffix is the common case. ^NSEI, INR=X, BRK-B aren't screener companies.
+  const s = String(symbol || '').trim().toUpperCase();
+  const m = s.match(/^([A-Z0-9&-]+?)(?:-SM)?\.(?:NS|BO)$/);
+  if (m) return m[1];
+  if (/^[A-Z0-9&]{2,20}$/.test(s)) return s;
+  return null;
+}
+
+async function fetchScreenerPriceHistory(code, symbol) {
+  const { html } = await fetchScreenerPage(code);
+  const idMatch = html.match(/data-company-id="(\d+)"/);
+  if (!idMatch) throw new Error(`screener.in has a page for "${code}" but no price chart on it`);
+  const res = await fetch(`https://www.screener.in/api/company/${idMatch[1]}/chart/?days=3650`, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+      Accept: 'application/json',
+    },
+  });
+  if (!res.ok) throw new UpstreamError(`screener.in chart returned ${res.status}`);
+  const data = await res.json();
+  const price = (Array.isArray(data.datasets) ? data.datasets : []).find((d) => d.metric === 'Price') || {};
+  const prices = [];
+  for (const row of Array.isArray(price.values) ? price.values : []) {
+    const date = String(row[0]), close = parseFloat(row[1]);
+    if (close > 0 && /^\d{4}-\d{2}-\d{2}$/.test(date)) prices.push({ date, close, rawClose: close });
+  }
+  prices.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  if (prices.length < 30) throw new Error(`Only ${prices.length} usable daily prices for ${code} on screener.in — too few to compute reliable stats`);
+  const t = html.match(/<title>\s*([\s\S]*?)\s+share price/i);
+  const label = t ? t[1].replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim() : code;
+  return {
+    id: symbol, label, currency: 'INR', prices,
+    source: 'screener.in',
+    sourceNote: `Prices from screener.in (${price.label || 'closing price'}): Yahoo Finance has no history for this stock, which is common for SME-board listings. Closing prices only, with dividends not added back.`,
+  };
+}
+
+// Yahoo first (it adjusts for dividends); screener.in only when Yahoo has no
+// usable history for an Indian-looking symbol. If both fail, the Yahoo error
+// is the one shown -- it's the actionable one for a typo.
+async function fetchEquityHistoryAny(symbol) {
+  try {
+    return await fetchEquityHistory(symbol);
+  } catch (yahooErr) {
+    const code = screenerCodeFor(symbol);
+    if (!code) throw yahooErr;
+    try {
+      return await fetchScreenerPriceHistory(code, symbol);
+    } catch (e) {
+      console.warn(`screener price fallback for ${symbol} failed: ${e && e.message}`);
+      throw yahooErr;
+    }
+  }
+}
+
 function buildFinancialsResult(symbol, html, url, consolidated) {
   const result = { symbol, source: 'screener.in', sourceUrl: url, consolidated, fetchedAt: new Date().toISOString() };
   // Debtor Days / Inventory Days / Cash Conversion Cycle / ROCE % (or ROE %
@@ -820,7 +887,7 @@ export default {
         if (type === 'equity') {
           const symbol = url.searchParams.get('symbol');
           if (!symbol) return json({ error: 'symbol is required' }, 400);
-          return json(await fetchEquityHistory(symbol));
+          return json(await fetchEquityHistoryAny(symbol));
         }
         if (type === 'fund') {
           const scheme = url.searchParams.get('scheme');

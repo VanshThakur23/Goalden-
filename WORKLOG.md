@@ -2644,3 +2644,51 @@ last backlog item.
   against live Yahoo (the sandbox blocks it); the symbol is URL-encoded
   the same way as every other ticker. Tests 114/114, smokes 11/11, evals
   9/9 (mock), all 12 Lab tabs render with no errors.
+
+## 2026-10-04 - Claude Code (cloud session): SPEB / SME-board stocks in Test Real Investments
+Changes made by Claude Code. The user reported that SPEB could not be fetched.
+- Root cause (checked live from outside the sandbox): SPEB is SPEB Adhesives
+  Ltd, listed on NSE Emerge (the SME board) on 8 Dec 2025. Yahoo Finance
+  has no history for it. SPEB.NS returns 404 ("No data found, symbol may be
+  delisted"). Yahoo's own symbol is SPEB-SM.NS, but its chart endpoint
+  returns a single bar ("validRanges": 1d, 5d), even for an explicit
+  10-month window. The app's name search only covers its built-in list,
+  so "speb" also said "No matches". This was not a Goalden bug; the
+  source has no data.
+- src/worker.js and local_server.py (kept in step): /api/history?type=equity
+  still tries Yahoo first (dividend-adjusted). Only if Yahoo has no usable
+  history for an Indian-looking symbol (X.NS, X.BO, X-SM.NS or a bare
+  code) does it fall back to screener.in. It reads the company id from
+  screener's company page, then the daily closes from
+  /api/company/<id>/chart/?days=3650 (no ?q=, which screener's robots.txt
+  disallows; without q the endpoint returns the price series by default).
+  The result carries source/sourceNote. If both fail, Yahoo's error is
+  shown. ^NSEI, INR=X, BRK-B and similar never touch screener.
+- goalden-lab.html:
+  - The equity search queries the wider market (/api/symbolsearch) when
+    the built-in list has no match, so "speb" finds SPEB-SM.NS. The
+    curated list still comes first ("titan" makes no market call).
+    Loading, empty and failed states are handled.
+  - The instrument card says when prices came from screener.in, and the
+    advisor's add-instrument result includes it.
+  - New "THIN" caution when a stock has prices on under 80% of weekdays.
+    SPEB: 147 of 214, "about 69%"; liquid stocks and funds are ~94-96%.
+  - Live-frontier labels are kept inside the chart. The riskiest point
+    sits in the top-right corner and its label was cut off. ECharts
+    re-runs labelLayout with the previous shift already applied, so the
+    shift is remembered per label.
+  - The ticker help mentions SME-board stocks.
+- New smoke-15.js plus fixtures/screener-chart/SPEB.json (the real price
+  series recorded 2026-10-04): worker and local_server.py map 10 symbols
+  identically. Both return all 147 closes (57.00 on 2025-12-08 to 86.00 on
+  2026-10-01), request the chart without ?q=, and keep Yahoo's error when
+  there's no fallback.
+- Verified: the real screener responses replayed through the real server
+  code for SPEB-SM.NS, SPEB.NS, SPEB and speb. The Worker was driven end to
+  end with stubbed fetch. In the browser, typing "speb" -> search ->
+  add -> card, frontier and flags all work. 65.8%/yr compounded checked by
+  hand (57 -> 86 over 297 days = 65.9%). No chart label outside the canvas
+  at 1400px or 412px, including after hovering. Tests 114/114, smokes 12/12,
+  evals 9/9 (mock), all 12 Lab tabs render with no errors. NOT verified:
+  the deployed Worker calling screener.in from Cloudflare (the sandbox
+  can't reach it). The endpoint was checked from outside via a web fetch.
