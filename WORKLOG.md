@@ -2482,3 +2482,157 @@ all fixes verified live on TCS (non-lender) and HDFCBANK (lender).
   lines render together — `series` names `["Sales", "Revenue
   (HDFCBANK)"]` — and both rows appear in the exact-value data table.
   Zero console errors.
+
+## 2026-09-12 - Claude Code - Advisor acts on a user's own situation instead of looping the A/B menu
+
+### Why
+A user described their own situation (job, income, family, loans, goals) and
+the advisor kept replying with the "A) Do it all / B) Walk me through" menu.
+Five causes:
+1. The "Choice before action (mandatory, ALWAYS the first move)" rule in both
+   runtimes' system prompts made the menu the first reply to anything,
+   including situations, what-ifs and edits.
+2. BM25 tool routing ranks against the latest message only. "Drop the flat and
+   add a trip" shares no words with build_goal_plan, so the model was left with
+   read-only and stock tools ("add" pulled in add_instrument).
+3. Door 2 had no way to edit or remove a goal, build_goal_plan appended goals
+   (a rebuild duplicated them), and add_goal had no cap or label.
+4. Level 1 build_goal_plan carried existingSavings from one goal type into the
+   next, lowering the second goal's SIP.
+5. The guardrail rewrote ordinary planning sentences ("I'll add Retirement...",
+   "Your EPF and PPF...") as stock calls: 18 false positives on 27 benign
+   sentences.
+
+### Done
+- Prompt (`_build_system_prompt` in local_server.py, `buildSystemPrompt` in
+  src/worker.js, in parity): the Choice rule is replaced by situation-first
+  rules. Map facts to fields with the arithmetic shown, build with the compound
+  tool in the same turn, never invent a number only the user knows (ask for all
+  missing ones together), state defaults. Changes and what-ifs are instructions,
+  reported before -> after. "What should I do?" is answered with the app's
+  numbers. A bare request gets A/B at most once and any reply that isn't
+  clearly B counts as A. Review-first or unsure users get propose_plan, as an
+  explicit override.
+- Transcript nudges (`_situation_nudges` / `situationNudges`, in parity) append
+  "Right now:" notes when: the menu was already offered; the latest user
+  message is a first-person situation with 2+ numbers and no tool from this
+  page has run since (Hinglish pronouns count; the landing page's open_door
+  doesn't, so Door 2 still builds on arrival; walk-through requests suppress
+  it); or the same, but the user asked to review first (-> propose_plan).
+- Routing: `TOOL_ALWAYS_KEEP` (13 planning tools) in goalden-engine.js,
+  worker.js and local_server.py. Only names the page defines survive the final
+  filter.
+- Door 2: new update_goal and remove_goal (by index or label/type; "flat" finds
+  the house; an ambiguous match is refused with the goal list). add_goal takes
+  a label, caps at 3 and returns plan totals before/after. build_goal_plan
+  validates every goal before setting anything and replaces the goal list.
+  Knowledge rewritten to map a free-text situation onto capacity, cap_0-3,
+  tol_0-4, emergency status (months of cover) and up to 3 goals.
+- Level 1: knowledge for multi-goal situations (one build per goal, total vs
+  monthly surplus, point to The Full Plan), lakh/crore parsing, what-ifs.
+  build_goal_plan resets existingSavings when the goal type changes and says so
+  in `notes`.
+- Lab: situation paragraph (run_full_analysis with the given values, name the
+  defaults kept, re-run what-ifs).
+- Landing: a described situation opens the right door with
+  auto_continue:true, and the reply after open_door quotes no figures (this page
+  calculates nothing).
+- Guardrail (advisor.js): `ADVISOR_TICKER_DENY` gains EPF, HRA, ULIP, CTC, LPA,
+  LKG, NRI, PAN, LTCG and similar; `advisorNamesObject` with
+  `ADVISOR_OBJECT_STOPWORDS` stops capitalised app words after a verb ("add
+  Retirement", "choose Balanced") counting as a company. Sentence-initial and
+  bulleted directives ("- Buy Reliance on dips") and "Yes Bank" are still caught.
+- Evals: runner.js records every reply and tool call. New assertions:
+  menuOfferedAtMost, noReplyIncludes, anyToolCalled, toolCallCountAtLeast,
+  toolCallArgs, fieldsRange, goalsInclude/goalsExclude. getResults tolerates
+  pages with no results, and errored scenarios now count as ran. 7 new live
+  scenarios: Door 2 situation, Door 2 edit, L1 what-if, L1 bare request,
+  Hinglish wedding, L1 multi-goal situation, landing handoff.
+- Tests: engine.test.js covers routing on an edit follow-up; smoke-11 checks the
+  always-keep list is identical in all three copies and the nudges are wired in
+  both runtimes; smoke-07's propose_plan check is now a parity count (the
+  routing list mentions it too).
+
+### Verified
+- `node --test engine.test.js`: 163/163. smoke-02 to smoke-13: all pass. Python
+  AST parse of local_server.py; `node --check` on worker.js, advisor.js,
+  goalden-engine.js, runner.js.
+- Guardrail calibration: 31 benign sentences unchanged, 22 adversarial rewritten.
+- Nudge parity: 12 transcripts give identical output in Python and JS.
+- Offline tool checks (vm, 20 cases): rebuild replaces instead of appending; a
+  4-goal build or a fee-less education goal is rejected with state untouched;
+  update/remove by label; the 3-goal cap; label sanitising; L1 savings reset.
+- Live replay on Door 2 (Pune situation -> drop the flat + add a trip -> retire
+  at 58): the first reply built the plan with the take-home arithmetic and
+  listed its assumptions; then remove_goal + add_goal; then update_goal with the
+  retirement SIP going from Rs 50,363 to Rs 39,865. No menu at any point.
+- Browser (local server): the Door 2 plan screen renders the edited goals
+  (Retirement 24y, Family trip abroad 2y). No console errors on index.html,
+  goalden.html or goalden-door2.html.
+- Live eval run 1: 19/20. The hesitant-user scenario built directly instead of
+  proposing (fixed with the review override and nudge); the landing scenario hit
+  a harness error (fixed in runner.js). Run 2, after both fixes: 21/21 passed
+  (1 mock-only scenario skipped).
+- The first Door 2 replay marked the emergency fund "partial" although Rs 6L of
+  FDs covers ~8.5 months, and estimated a what-if SIP itself. Door 2 knowledge
+  now works emergency cover out as months, and both Level 1 and Door 2 quote
+  only SIPs the page calculated. Replay 2: emergencyStatus "full" with the
+  division shown, and alternatives offered as "want me to run it?" instead of
+  guessed figures. It also first tried an education goal without a fee, got
+  the validation error, and rebuilt without it.
+
+### Not done
+- Merton model not wired into the advisor (optional).
+- Credit Risk Analysis Module (credit-engine.js) still parked and uncommitted.
+- Nothing committed or deployed.
+
+## 2026-09-15 - Claude Code - Landing page and Lab reprioritised for a placement demo; methodology/data-source dropdown added to Test Real Investments
+
+### Why
+User needs to demo the app, unsupervised, to a wealth-management founder.
+Priority: the founder should land on Test Real Investments with minimal
+friction, the Lab's tool order should match what's actually worth showing,
+and Test Real Investments needed to explain its own numbers without someone
+standing over the founder's shoulder.
+
+### Done
+- index.html: dropped Door 1 (Quick Calculate) from the landing page entirely,
+  now a 2-door grid. Door 3 (The Lab) gets a gold "Start here" badge and a
+  visual promotion (border/shadow). "Not sure which one?" copy rewritten to
+  point at the Lab first. `ADVISOR_DOORS`/`open_door` deliberately left
+  untouched (still reference 'quick') - this was a visual-only change.
+- goalden-lab.html: added `?tab=<id>` deep-linking, highest priority over both
+  the Door 2 handoff and the returning-visitor last-tab memory, so a demo link
+  behaves the same regardless of the viewer's browser history. Demo link:
+  `/goalden-lab.html?tab=livefrontier`.
+- goalden-lab.html: `TABS` reordered - Test Real Investments, Retirement Lab,
+  Build a Portfolio stay primary (bold home cards); Read the Company demoted
+  out of the primary row (newer, more complex, higher risk of an in-demo
+  break). `renderHome()`'s tool-count caption is now computed from the array
+  instead of hardcoded.
+- goalden-lab.html: added an `explainDropdown` to Test Real Investments -
+  "How is this calculated, and where does the data come from?" - covering the
+  Yahoo Finance data source (10y daily, adjusted close preferred), how
+  return/risk/correlation/Sharpe/the frontier are actually computed from the
+  real daily price series, and what's left out (costs, taxes, expense ratios).
+  Placed right under the tab's intro line, before the instrument search.
+
+### Verified
+- `node --test engine.test.js`: 163/163. All 11 smoke-*.js pass (smoke-10 and
+  smoke-13 specifically confirm the live-frontier math functions this touched
+  are otherwise untouched).
+- Browser (local server): landing page shows 2 doors with the Lab badge;
+  `?tab=livefrontier` lands directly on Test Real Investments; the new
+  dropdown expands cleanly with no console errors; added Reliance + TCS live
+  and the correlation/frontier/Sharpe output rendered correctly with real
+  fetched data (2,473 daily observations for Reliance, 2016-09-15 to
+  2026-09-15).
+
+### Not done
+- Live deploy at goalden.vanshsingh23.workers.dev is stale: it has the demo
+  link and the 2-door landing page from an earlier deploy this session, but
+  NOT the tab reorder or the new methodology dropdown above. Needs a redeploy
+  (`npx wrangler deploy`) once the user confirms - asked, not yet answered.
+- Email to Vaibhav Porwal (Dezerv) not drafted - explicitly deferred by the
+  user to later.
+- Nothing committed.

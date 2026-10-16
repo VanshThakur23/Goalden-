@@ -676,6 +676,17 @@ function bm25Rank(query, documents, opts){
 var TOOL_FAMILIES = [
   ['search_instruments', 'add_instrument', 'remove_instrument', 'compare_portfolio', 'render_frontier_chart'],
 ];
+// Planning tools are never routed away: an everyday follow-up like "drop the
+// flat and add a trip" shares almost no words with build_goal_plan's
+// description, so ranking alone left the model with nothing that could edit a
+// plan. Only names already in `tools` survive the final filter, so a page never
+// gains a tool it doesn't define. Same list in src/worker.js and
+// local_server.py (smoke-11 checks they match).
+var TOOL_ALWAYS_KEEP = [
+  'navigate', 'set_value', 'get_state', 'get_results', 'build_goal_plan',
+  'add_goal', 'update_goal', 'remove_goal', 'run_full_analysis',
+  'compose_briefing', 'propose_plan', 'execute_plan', 'open_door',
+];
 function filterToolsByQuery(tools, query, alreadyCalled, opts){
   const k = (opts && opts.k) || 8;
   if(!Array.isArray(tools) || tools.length <= k) return tools;
@@ -683,6 +694,7 @@ function filterToolsByQuery(tools, query, alreadyCalled, opts){
   const ranked = bm25Rank(query, docs);
   const keep = {};
   ranked.slice(0, k).forEach(function(r){ keep[r.id] = true; });
+  TOOL_ALWAYS_KEEP.forEach(function(n){ keep[n] = true; });
   (alreadyCalled || []).forEach(function(n){ keep[n] = true; });
   TOOL_FAMILIES.forEach(function(family){
     if(family.some(function(name){ return keep[name]; })){
@@ -710,6 +722,6 @@ if (typeof module !== 'undefined' && module.exports) {
     capitalAllocationLine, liveFrontierChartOption,
     barComparisonChartOption, radarComparisonChartOption,
     mulberry32, randomWeights, generateFrontier, bestSharpePoint, multiAssetFrontier,
-    bm25Tokenize, bm25Rank, filterToolsByQuery,
+    bm25Tokenize, bm25Rank, filterToolsByQuery, TOOL_ALWAYS_KEEP,
   };
 }

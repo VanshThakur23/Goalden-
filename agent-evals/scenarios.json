@@ -140,5 +140,92 @@
     "requiresLive": true,
     "userMessages": ["Set my age to 500."],
     "expect": { "fieldsSet": { "age": null } }
+  },
+  {
+    "name": "door2 situation dump builds the plan without the menu",
+    "page": "goalden-door2.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?"],
+    "expect": {
+      "toolsCalled": ["build_goal_plan"],
+      "menuOfferedAtMost": 0,
+      "fieldsSet": { "country": "IN" },
+      "fieldsRange": { "monthlyCapacity": [50000, 70000] },
+      "goalsInclude": ["retirement", "house"],
+      "goalsExclude": ["education"]
+    }
+  },
+  {
+    "name": "door2 edit: drop the flat, add a trip",
+    "page": "goalden-door2.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?", "The engineering college fee is about 3 lakh a year today.", "Actually drop the flat, we'll keep renting. And add a family trip abroad of 4 lakh in 2 years."],
+    "expect": {
+      "anyToolCalled": ["remove_goal", "build_goal_plan"],
+      "menuOfferedAtMost": 0,
+      "goalsInclude": ["retirement", "education", { "amount": 400000, "years": 2 }],
+      "goalsExclude": ["house"]
+    }
+  },
+  {
+    "name": "goalden what-if: retire at 58 instead",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["I'm 34 and live in Pune. We spend about 70k a month and I want to retire at 55. Balanced risk is fine.", "What if I retire at 58 instead?"],
+    "expect": {
+      "anyToolCalled": ["build_goal_plan", "set_value"],
+      "menuOfferedAtMost": 0,
+      "noReplyIncludes": ["haven't run any numbers"],
+      "fieldsSet": { "goalType": "retirement", "age": 34, "retireAge": 58, "monthlyExpense": 70000, "country": "IN" }
+    }
+  },
+  {
+    "name": "goalden bare request: menu at most once, then acts on numbers",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["help me plan my retirement", "I'm 30, in India, I spend 50000 a month and want to retire at 60."],
+    "expect": {
+      "toolsCalled": ["build_goal_plan"],
+      "menuOfferedAtMost": 1,
+      "fieldsSet": { "age": 30, "retireAge": 60, "monthlyExpense": 50000, "goalType": "retirement" }
+    }
+  },
+  {
+    "name": "goalden hinglish wedding goal",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["Meri shaadi 2 saal mein hai, uske liye 10 lakh chahiye. Main India mein hoon."],
+    "expect": {
+      "toolsCalled": ["build_goal_plan"],
+      "menuOfferedAtMost": 0,
+      "fieldsSet": { "goalType": "generic", "genType": "wedding", "genAmount": 1000000, "genYears": 2, "country": "IN" }
+    }
+  },
+  {
+    "name": "goalden situation with several goals runs each one",
+    "page": "goalden.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?"],
+    "expect": {
+      "toolCallCountAtLeast": { "build_goal_plan": 2 },
+      "menuOfferedAtMost": 0
+    }
+  },
+  {
+    "name": "landing situation opens The Full Plan and continues",
+    "page": "index.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": ["I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?"],
+    "expect": {
+      "toolCallArgs": { "open_door": { "door": "full", "auto_continue": true } },
+      "menuOfferedAtMost": 0
+    }
   }
 ]

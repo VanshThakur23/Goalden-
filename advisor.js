@@ -309,9 +309,37 @@ function advisorTrim() {
 // safer bet, better pick, worth it, wait for a correction — almost none of
 // which contain "buy"). Read the Company (statements-engine.js divergence
 // rules) surfaces facts, never verdicts, for the same reason this exists.
-const ADVISOR_TICKER_DENY = ['SIP','FD','ETF','NAV','CAGR','NPS','ELSS','PPF','NSE','BSE','REIT','AMC','SEBI','AUM','SWP','USD','INR','GBP','EUR','XIRR','EMI','FV','PV','IIP','GDP','IPO'];
+const ADVISOR_TICKER_DENY = ['SIP','FD','ETF','NAV','CAGR','NPS','ELSS','PPF','NSE','BSE','REIT','AMC','SEBI','AUM','SWP','USD','INR','GBP','EUR','XIRR','EMI','FV','PV','IIP','GDP','IPO',
+  // Acronyms a user's own situation brings in ("my EPF", "CTC of 18 LPA", "an
+  // NRI in the UAE", "son in LKG"). Without them, "I'll add your MF savings" or
+  // "hold the HRA part aside" read as a directive aimed at a ticker.
+  'MF','EPF','EPFO','PF','VPF','HRA','LTA','TDS','GST','ITR','HUF','ULIP','CTC','LPA','PA','IT','HR','CA','MBA','IIT','NIT','IIM','JEE','NEET','MBBS','LKG','UKG','EV','NRI','OCI','OK','UK','US','USA','UAE','IN','AI','ATM','UPI','KYC','PAN','RBI','SGB','FY','LTCG','STCG','CIBIL','MODE'];
 const ADVISOR_DIRECTIVE_VERBS = /\b(buy|sell|avoid|exit|hold|accumulate|add(?:\s+on\s+dips)?|book(?:\s+profits?)?|switch(?:\s+to)?|pick|choose|invest(?:ed)?\s+in|purchase|subscribe|dump|offload|stay\s+away)\b/;
 const ADVISOR_VALUATION_TERMS = /\b(undervalued|overvalued|fairly\s+valued|attractive(?:ly\s+priced)?|cheap|expensive|safer|riskier|outperform|multibagger|sure\s+shot|no-brainer|worth\s+it|(?:better|best|worse|worst)\s+(?:bet|pick|choice|option))\b/;
+// Capitalised words that follow a directive verb in ordinary plan talk ("add
+// Retirement", "choose Balanced", "switch to The Full Plan", "pick Option A").
+// A company name in that slot still trips the guardrail; these never are one.
+const ADVISOR_OBJECT_STOPWORDS = ['The','This','That','These','Those','Your','My','Our','Their','It','Its','All','Both','Each','Every','Some','Any','One','Two','Three','Another','Other','Option','Options','Retirement','Education','College','House','Home','Flat','Car','Wedding','Travel','Trip','Family','Emergency','Goal','Goals','Plan','Plans','Level','Quick','Full','Lab','Case','Balanced','Cautious','Growth','Moderate','Moderately','Conservative','Aggressive','Equity','Debt','Hybrid','Gold','Cash','Savings','SIPs','Monthly','Annual','Step','Goalden','Build','Test','Portfolio','Read','Monte','Report','Briefing','Next'];
+const ADVISOR_OBJ_VERB_RE = /\b(?:buy|sell|avoid|exit|hold|accumulate|add(?:\s+on\s+dips)?|book(?:\s+profits?)?|switch(?:\s+to)?|pick|choose|invest(?:ed)?\s+in|purchase|subscribe|dump|offload)(?:\s+in)?\s+([A-Z][a-zA-Z&.\-]{2,24})\b/g;
+// A recommendation object right after the verb ("buy Reliance") is as much a
+// specific-instrument call as an ALL-CAPS ticker ("buy RELIANCE"). The verb is
+// matched in lowercase, so a sentence that OPENS with it ("Exit Vedanta",
+// "- Buy Reliance", "2. Pick HDFC Bank") is retried with its first letter
+// lowercased, skipping leading spaces, bullets and list numbers. The object
+// must still be capitalised, so the retry can't launder a lowercase word in.
+// Every match is checked, not just the first, so "add Retirement, then buy
+// Reliance" is still caught.
+function advisorNamesObject(sentence) {
+  const variants = [sentence, sentence.replace(/^([\s*_>#•\d.)-]*)([A-Z])/, function (m, lead, ch) { return lead + ch.toLowerCase(); })];
+  for (let v = 0; v < variants.length; v++) {
+    ADVISOR_OBJ_VERB_RE.lastIndex = 0;
+    let m;
+    while ((m = ADVISOR_OBJ_VERB_RE.exec(variants[v])) !== null) {
+      if (ADVISOR_OBJECT_STOPWORDS.indexOf(m[1].split(/[-.&]/)[0]) === -1) return true;
+    }
+  }
+  return false;
+}
 function advisorGuardrail(text) {
   if (typeof text !== 'string' || !text) return text;
   const parts = text.split(/(?<=[.!?\n])/);
@@ -321,24 +349,10 @@ function advisorGuardrail(text) {
     const hasVerb = ADVISOR_DIRECTIVE_VERBS.test(lower);
     const hasValuation = ADVISOR_VALUATION_TERMS.test(lower);
     const caps = sentence.match(/[A-Z]{2,10}/g) || [];
-    // A recommendation object right after the verb ("buy Reliance") is just as
-    // much a specific-instrument call as an ALL-CAPS ticker ("buy RELIANCE") --
-    // checking only ALL-CAPS tokens let a title-case company name slip through
-    // with no price target attached (agent-evals surfaced this).
-    const OBJ_VERB_RE = /\b(?:buy|sell|avoid|exit|hold|accumulate|add(?:\s+on\s+dips)?|book(?:\s+profits?)?|switch(?:\s+to)?|pick|choose|invest(?:ed)?\s+in|purchase|subscribe|dump|offload)(?:\s+in)?\s+([A-Z][a-zA-Z&.\-]{2,24})\b/;
-    // The verb itself is case-sensitive in this pattern, so a sentence that
-    // OPENS with the verb ("Exit Vedanta...", "Pick HDFC Bank...") never
-    // matches — only a mid-sentence lowercase "exit" does. Every sentence
-    // here is itself the start of a split-on-punctuation segment, so this
-    // isn't an edge case, it's the common case. Retry with the first letter
-    // lowercased before giving up; the company capture still requires real
-    // capitalization, so this can't launder a lowercase company name in.
-    const objMatch = sentence.match(OBJ_VERB_RE)
-      || (sentence && sentence[0] !== sentence[0].toLowerCase() ? (sentence[0].toLowerCase() + sentence.slice(1)).match(OBJ_VERB_RE) : null);
     // "this company/stock/business" counts as pointing at a specific company
     // even with no ticker in the same sentence — "Is this company overvalued"
     // said right after discussing HDFC Bank is exactly the case to catch.
-    const hasCompanyRef = caps.some(function (t) { return ADVISOR_TICKER_DENY.indexOf(t) === -1; }) || !!objMatch || /\bthis\s+(?:company|stock|business)\b/i.test(lower);
+    const hasCompanyRef = caps.some(function (t) { return ADVISOR_TICKER_DENY.indexOf(t) === -1; }) || advisorNamesObject(sentence) || /\bthis\s+(?:company|stock|business)\b/i.test(lower);
     const hasPrice = /price target|target price|will reach|expect(?:s|ed)?(?:\s+it)?\s+to\s+hit|will hit|going to hit|should hit/i.test(lower);
     // A directive verb or valuation word only counts as advice when it's
     // actually pointed at a company — "get better returns" or "that's cheap

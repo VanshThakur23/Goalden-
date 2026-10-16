@@ -1828,7 +1828,7 @@ const L = {
     weight:50,           // exactly-2-instrument case: % held in items[0], rest in items[1]
     selectedWeights:null,// 3+-instrument case: weight vector chosen by clicking the chart or the combinations table
     rf:null,             // risk-free rate override, %; null = use the country default (fdRate) until touched
-    searchMode:'equity', search:'', klassFilter:'all', fundResults:[], fundSearching:false, fundSearchError:null,
+    searchMode:'equity', search:'', klassFilter:'equity', fundResults:[], fundSearching:false, fundSearchError:null,
     freeText:'', freeTextError:null, freeTextLoading:false,
     seed:19,
     overrides:{},        // key -> true once someone explicitly says "use it anyway" past an unusable data-quality flag
@@ -4755,7 +4755,8 @@ function liveOutputHTML(ready, rfPct){
   const instrumentDropdown = instrumentRows ? `<div class="card">${collapsibleSection('', `What each one did on its own${infoIcon('Total return, dividends reinvested, from real daily prices. The compounded figure is what holding this the entire window actually turned into; the expected-return figure is the average-based number the frontier math below is built from, because portfolio math needs a linearly-combinable figure -- see "Why do you show two different return numbers?" below.')}`, instrumentRows)}</div>` : '';
   if(ready.length<2){
     return errorBanner + `<div class="card live-empty">
-      ${loading.length? 'Fetching real prices&hellip;' : 'Add at least two usable instruments on the left to compute a frontier.<br><span class="cap">Two gives the exact closed-form curve from your class exercise; three or more switches to a simulated cloud, same as Build a Portfolio.</span>'}
+      ${loading.length? 'Fetching real prices&hellip;' : `Search for a stock, ETF or fund on the left and add at least two &ndash; that's what turns this into a real comparison.<br><span class="cap">Two instruments give the exact frontier curve; three or more use a simulated cloud of combinations, the same approach Build a Portfolio uses.</span>
+      <button class="ns-btn" data-live-jump-search style="margin-top:14px;justify-content:center">Add an instrument<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>`}
     </div>` + instrumentDropdown;
   }
   const isTwoAsset = ready.length===2;
@@ -4785,6 +4786,12 @@ function renderLiveFrontier(){
     ${panelHead('Test Real Investments', 'livefrontier')}
     ${advisorChipsHTML('livefrontier')}
     <div class="cap" style="margin-bottom:14px">Pick real stocks, ETFs or funds and see the actual risk and return of mixing them, computed from real historical prices instead of long-run assumptions.</div>
+    ${explainDropdown('How is this calculated, and where does the data come from?', `
+      <b>Data:</b> Real daily closing prices from Yahoo Finance, up to 10 years back (less if the instrument hasn't traded that long &ndash; the exact window and number of trading days used for each one is shown below, under "What each one did on its own"). Where Yahoo provides it, this uses the dividend- and split-adjusted close rather than the raw price, so a payout doesn't look like a price drop and the return reflects what an investor holding the instrument actually received, not just its ticker price.<br><br>
+      <b>Return and risk:</b> Computed from that instrument's actual daily price changes &ndash; the average daily change, annualised using however many trading days its own data actually has per year (not a fixed 252-day assumption). Volatility is the day-to-day swing in those same daily changes, annualised the same way. Correlation between two instruments is how closely their daily changes have historically moved together, from &minus;1 (perfect opposites) to +1 (moved in lockstep).<br><br>
+      <b>Sharpe ratio</b> is (this mix's return &minus; the risk-free rate) &divide; this mix's risk &ndash; return earned per unit of risk taken. <b>The frontier curve</b> is every possible weight split between the instruments you've picked, swept from one extreme to the other, so you can see which splits actually pay for the extra risk they carry and which don't.<br><br>
+      <b>What this leaves out:</b> transaction costs, taxes, and (for funds) the expense ratio are not modelled. Nothing here is a forecast &ndash; it's what these exact instruments actually did over their available real history, not a prediction of what they'll do next.
+    `)}
 
     <div class="section-label">Add an instrument</div>
     ${c.code==='IN' ? `<div class="live-mode-row">
@@ -4856,13 +4863,13 @@ const ICON_HEALTH=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const ICON_STATEMENTS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M9 12h7"/><path d="M9 16h7"/><path d="M9 8h3"/></svg>`;
 
 const TABS=[
+  {id:'livefrontier', label:'Test Real Investments', primary:true, icon:ICON_LIVEFRONTIER,
+    blurb:'Pick real stocks, ETFs or funds and see how mixing them would actually have performed - real risk, real return, real history.'},
   {id:'retirement', label:'Retirement Lab', primary:true, icon:ICON_RETIREMENT,
     blurb:'How much you need to save, and whether that number actually survives a real retirement.'},
   {id:'portfolio', label:'Build a Portfolio', primary:true, icon:ICON_PORTFOLIO,
     blurb:'Mix real fund categories with presets or your own sliders, and watch the efficient frontier move live.'},
-  {id:'livefrontier', label:'Test Real Investments', primary:true, icon:ICON_LIVEFRONTIER,
-    blurb:'Pick real stocks, ETFs or funds and see how mixing them would actually have performed - real risk, real return, real history.'},
-  {id:'statements', label:'Read the Company', primary:true, icon:ICON_STATEMENTS,
+  {id:'statements', label:'Read the Company', icon:ICON_STATEMENTS,
     blurb:"Read one company's real reported numbers, put any part of them beside another company's, and see the things that don't add up."},
   {id:'stepup', label:'Step-Up SIP', icon:ICON_STEPUP,
     blurb:'Model a SIP that grows with your income every year, not a flat amount forever.'},
@@ -4884,7 +4891,7 @@ function renderHome(){
   return `<div class="lab-home">
     <div class="lab-home-head">
       <h2>The Lab</h2>
-      <div class="cap">Three main tools to start with. Seven more below if you want to go deeper on something specific.</div>
+      <div class="cap">${primary.length} main tools to start with. ${secondary.length} more below if you want to go deeper on something specific.</div>
     </div>
     <div class="lab-home-primary">
       ${primary.map(t=>`<button class="lab-tool-card" data-tab-switch="${t.id}">
@@ -5405,6 +5412,14 @@ function attach(){
     el.addEventListener('click',()=>{
       L.live.klassFilter = el.dataset.liveKlass;
       render();
+    });
+  });
+  document.querySelectorAll('[data-live-jump-search]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const panel=document.querySelector('main .grid > .panel');
+      if(panel) panel.scrollIntoView({behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth', block:'start'});
+      const box=document.getElementById(L.live.searchMode==='fund'?'liveFundSearchBox':'liveSearchBox');
+      if(box) setTimeout(()=>box.focus(), 300);
     });
   });
   document.querySelectorAll('input[data-pfblend]').forEach(el=>{
@@ -8258,12 +8273,25 @@ function consumeDoor2Handoff(){
   return true;
 }
 
-// Landing behaviour: a Door 2 handoff always wins -- it's an explicit,
-// one-shot "take me there" signal. Otherwise, if this browser has used
-// the Lab before, skip the three-card chooser and reopen whatever tool
-// it last used; only a genuinely first-ever visit sees L.tab's default
-// of 'home'.
-if(!consumeDoor2Handoff()){
+// Landing behaviour, highest to lowest priority:
+// 1. ?tab=<id> in the URL -- an explicit deep link (demo links, "see the
+//    statements" chips) always wins over anything saved in this browser.
+// 2. A Door 2 handoff -- an explicit, one-shot "take me there" signal.
+// 3. If this browser has used the Lab before, reopen whatever tool it
+//    last used.
+// Only a genuinely first-ever visit with no deep link sees L.tab's
+// default of 'home'.
+function tabFromQuery(){
+  try{
+    const t = new URLSearchParams(location.search).get('tab');
+    if(t && (t==='home' || TABS.some(x=>x.id===t))) return t;
+  }catch(e){}
+  return null;
+}
+const queryTab = tabFromQuery();
+if(queryTab){
+  L.tab = queryTab;
+}else if(!consumeDoor2Handoff()){
   try{
     const last = localStorage.getItem('goaldenLabLastTab');
     if(last==='home' || TABS.some(t=>t.id===last)) L.tab = last;
@@ -8520,6 +8548,8 @@ Portfolio math (Build a Portfolio / Test Real Investments):
 - Diversification benefit: the ratio of the weighted-average volatility of the holdings to the portfolio's actual volatility. Above 1 means the mix is less risky than its parts standing alone — the whole point of diversification.
 
 Behavior: prefer driving the real interface — navigate to the right tool, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.
+
+Acting on a user's own situation: when someone describes their life (age, spending, savings, when they want to retire), run it straight away with run_full_analysis tab:'retirement' and the values they gave (age, retireAge, monthlyExpense, existingSavings, and any rates they named), then explain the result against their numbers. Keep the Lab's defaults for anything they didn't say and name the defaults you kept. If a value is outside a slider's range, say so rather than quietly using the nearest allowed value. What-ifs ("retire at 58", "spend 80k") re-run with just that value changed; report before → after. Goals other than retirement (a house, a trip, a child's college) belong on Quick Calculate (one goal) or The Full Plan (several goals against a budget); say so rather than forcing them into a Lab tool.
 
 Explaining charts: when a user asks to explain a chart or "what's on my screen", call read_current_chart() first and explain THEIR actual numbers and points — reference the specific points by name (their mix, the best-Sharpe point, the risk-free rate, each asset's own dot), then call highlight to point at the chart feature as you describe it. A textbook definition of the efficient frontier is a failure state — ground every sentence in the numbers read_current_chart returned.`;
 

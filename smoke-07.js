@@ -41,10 +41,11 @@ check(/advExecuteTool\(step\.tool, step\.args/.test(advisor), 'advisor.js: execu
 check(/advisor\.pendingPlan\.approved\[i\] = cb\.checked/.test(advisor), 'advisor.js: checkbox change updates approved[i]');
 check(/!plan\.approved\[i\]/.test(advisor), 'advisor.js: executePlan skips unchecked steps');
 
-// 6. worker.js / local_server.py mirror (both mention propose_plan once).
+// 6. worker.js / local_server.py mirror (propose_plan mentioned the same number
+// of times: once in the prompt rules, once in the always-keep routing list).
 const w = (worker.match(/propose_plan/g) || []).length;
 const p = (py.match(/propose_plan/g) || []).length;
-check(w === 1 && p === 1, `worker/local_server propose_plan mention match (${w} vs ${p})`);
+check(w >= 1 && w === p, `worker/local_server propose_plan mention match (${w} vs ${p})`);
 
 console.log(fail ? `\n${fail} FAILURES` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

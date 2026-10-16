@@ -206,15 +206,32 @@ test('filterToolsByQuery: relevant tool survives, unrelated dropped', () => {
     { type: 'function', function: { name: 'render_frontier_chart', description: 'render a stock chart' } },
   ];
   // 8 more tools, each matching only one query term ("stock"), so
-  // compare_portfolio (matching 5+ terms) is clearly top and build_goal_plan
+  // compare_portfolio (matching 5+ terms) is clearly top and read_other_page
   // (matching none) is clearly dropped.
   for (let i = 0; i < 8; i++) tools.push({ type: 'function', function: { name: 'filler_' + i, description: 'a stock metric ' + i } });
-  tools.push({ type: 'function', function: { name: 'build_goal_plan', description: 'build a retirement or education savings plan' } });
+  tools.push({ type: 'function', function: { name: 'read_other_page', description: 'read a saved snapshot from another page' } });
   const filtered = engine.filterToolsByQuery(tools, 'which stocks should i pair to minimize risk', []);
   const names = filtered.map((t) => t.function.name);
   assert.ok(names.includes('compare_portfolio'), 'compare_portfolio survives');
-  assert.ok(!names.includes('build_goal_plan'), 'goal-planning tool dropped');
+  assert.ok(!names.includes('read_other_page'), 'unrelated tool dropped');
   assert.strictEqual(filtered.length, 8, 'filters down to K=8');
+});
+
+test('filterToolsByQuery: planning tools survive an everyday edit follow-up', () => {
+  // The real failure: "drop the flat, add a trip" ranked add_instrument and
+  // other word-overlap matches above build_goal_plan, so the model could only talk.
+  const tools = [
+    { type: 'function', function: { name: 'build_goal_plan', description: 'Build the full multi-goal plan in one call' } },
+    { type: 'function', function: { name: 'remove_goal', description: 'Remove one goal from the plan' } },
+    { type: 'function', function: { name: 'update_goal', description: 'Change one goal already in the plan' } },
+    { type: 'function', function: { name: 'get_results', description: 'Run the current plan calculation' } },
+    { type: 'function', function: { name: 'add_instrument', description: 'add a stock to the comparison' } },
+  ];
+  for (let i = 0; i < 12; i++) tools.push({ type: 'function', function: { name: 'filler_' + i, description: 'add a family trip abroad drop flat ' + i } });
+  const names = engine.filterToolsByQuery(tools, 'actually drop the flat and add a family trip abroad', []).map((t) => t.function.name);
+  ['build_goal_plan', 'remove_goal', 'update_goal', 'get_results'].forEach((n) => assert.ok(names.includes(n), n + ' kept'));
+  assert.ok(names.length < tools.length, 'ranking still drops the rest');
+  assert.ok(Array.isArray(engine.TOOL_ALWAYS_KEEP) && engine.TOOL_ALWAYS_KEEP.includes('build_goal_plan'), 'TOOL_ALWAYS_KEEP exported');
 });
 
 test('filterToolsByQuery: already-called tools are never dropped', () => {
@@ -1514,3 +1531,975 @@ test('classifyLynchCategory refuses to categorise a lender', () => {
   // The refusal still says what it WILL show, per the plan's refusal shape.
   assert.ok(c.careful.some((t) => /revenue|financing profit/i.test(t)), 'names what is comparable instead');
 });
+
+// ---------------------------------------------------------------------------
+// credit-engine.js — leverage, sector bands, Merton, expected loss
+//
+// The Bharat Forge figures below are the real FY2025 consolidated numbers as
+// screener.in reports them (Operating Profit 2,692 · Borrowings 6,698 ·
+// Interest 417, all in ₹ crore), read off /api/financials and recorded here so
+// these tests never touch the network. Cash of 2,680 is supplied separately
+// and deliberately: screener's condensed balance sheet has no cash row, which
+// is the whole reason netLeverage takes it as an explicit argument.
+// ---------------------------------------------------------------------------
+
+const credit = require('./credit-engine.js');
+
+const BFORGE = { ebitda: 2692, debt: 6698, cash: 2680, interest: 417, marketCapCr: 93232 };
+
+test('screener Operating Profit sits above interest and depreciation, so it is EBITDA', () => {
+  // This is the assumption every multiple in credit-engine rests on. If a
+  // screener layout change ever breaks the identity, it should fail loudly
+  // here rather than silently re-defining leverage everywhere downstream.
+  // Bharat Forge FY2025, as reported.
+  const sales = 15123, expenses = 12431, op = 2692;
+  const otherIncome = 55, interest = 417, depreciation = 874, pbt = 1456;
+  assert.strictEqual(sales - expenses, op, 'Sales - Expenses = Operating Profit');
+  assert.strictEqual(op + otherIncome - interest - depreciation, pbt, 'Operating Profit is pre-interest and pre-depreciation');
+});
+
+test('leverage and coverage match the hand-checked Bharat Forge figures', () => {
+  approx(credit.grossLeverage(BFORGE.debt, BFORGE.ebitda), 2.488112927191679, 1e-12);
+  approx(credit.netLeverage(BFORGE.debt, BFORGE.cash, BFORGE.ebitda), 1.4925705794947994, 1e-12);
+  approx(credit.interestCoverage(BFORGE.ebitda, BFORGE.interest), 6.455635491606715, 1e-12);
+});
+
+test('net leverage lands within 0.10x of the agency figure for the same period', () => {
+  // The spec's regression: CARE published 1.55x net debt/EBITDA for this
+  // period. Reproducing it from the raw statements to inside a tenth of a turn
+  // is what makes the rest of the module's arithmetic trustworthy.
+  const net = credit.netLeverage(BFORGE.debt, BFORGE.cash, BFORGE.ebitda);
+  assert.ok(Math.abs(net - 1.55) <= 0.10, 'expected within 0.10x of 1.55x, got ' + net.toFixed(4) + 'x');
+});
+
+test('a loss-making company gets no leverage multiple rather than a negative one', () => {
+  // -100 EBITDA against 500 of debt computes to -5.0x, which reads on any
+  // chart as LESS levered than a debt-free company. The sign flip turns the
+  // worst case into the best-looking number, so it refuses.
+  assert.strictEqual(credit.grossLeverage(500, -100), null);
+  assert.strictEqual(credit.netLeverage(500, 50, -100), null);
+  assert.strictEqual(credit.interestCoverage(-100, 40), null);
+  assert.strictEqual(credit.grossLeverage(500, 0), null, 'zero EBITDA is division by zero, not infinite leverage');
+});
+
+test('net leverage refuses when cash is unknown instead of quietly reporting gross', () => {
+  assert.strictEqual(credit.netLeverage(BFORGE.debt, null, BFORGE.ebitda), null);
+  assert.strictEqual(credit.netLeverage(BFORGE.debt, undefined, BFORGE.ebitda), null);
+  // Nothing may be inferred from Investments: it carries strategic and
+  // subsidiary stakes that cannot be applied against debt.
+  const wrong = credit.netLeverage(BFORGE.debt, 2063, BFORGE.ebitda);
+  assert.ok(Math.abs(wrong - 1.55) > 0.10, 'the Investments row is NOT a cash proxy — it misses the agency figure');
+});
+
+test('interest coverage refuses a debt-free company rather than rendering Infinity', () => {
+  assert.strictEqual(credit.interestCoverage(2692, 0), null);
+  assert.strictEqual(credit.interestCoverage(2692, null), null);
+});
+
+test('stressed ratios reproduce the -20/+10/+15 scenario exactly', () => {
+  const s = credit.stressedRatios(
+    { ebitda: BFORGE.ebitda, debt: BFORGE.debt, interest: BFORGE.interest, cash: BFORGE.cash },
+    { ebitda: -0.20, debt: 0.10, interest: 0.15 }
+  );
+  // 1e-9 rather than 1e-12 here: the engine shocks the inputs and then
+  // divides, which accumulates float error differently from scaling the base
+  // ratio. Both are correct to well past any figure this page displays.
+  approx(s.stressed.grossLeverage, 3.4211552748386088, 1e-9);
+  // (6698*1.10 - 2680) / (2692*0.80) = 4687.8 / 2153.6
+  approx(s.stressed.netLeverage, 2.176727340267459, 1e-9);
+  approx(s.stressed.interestCoverage, 4.490876863725629, 1e-9);
+  approx(s.base.grossLeverage, 2.488112927191679, 1e-12);
+  // Cash is held flat: the scenario is an earnings and funding shock, not a
+  // liquidity raid, and moving it would need a rule nobody stated.
+  assert.strictEqual(s.stressedInputs.cash, BFORGE.cash);
+});
+
+test('sector archetypes classify from screener breadcrumbs', () => {
+  const bforge = credit.classifySectorArchetype({
+    broadSector: 'Consumer Discretionary', sector: 'Automobile and Auto Components',
+    broadIndustry: 'Auto Components', industry: 'Auto Components & Equipments',
+  });
+  assert.strictEqual(bforge.archetype, 'stable');
+  assert.deepStrictEqual(bforge.comfortable, { min: 2.5, max: 4.0 });
+
+  const hindalco = credit.classifySectorArchetype({
+    broadSector: 'Commodities', sector: 'Metals & Mining',
+    broadIndustry: 'Non - Ferrous Metals', industry: 'Aluminium',
+  });
+  assert.strictEqual(hindalco.archetype, 'cyclical');
+  assert.deepStrictEqual(hindalco.comfortable, { min: 1.0, max: 2.5 });
+
+  const ntpc = credit.classifySectorArchetype({ broadSector: 'Utilities', sector: 'Power', industry: 'Power Generation' });
+  assert.strictEqual(ntpc.archetype, 'utility');
+
+  const unknown = credit.classifySectorArchetype({ broadSector: 'Zorbing', sector: 'Zorbing' });
+  assert.strictEqual(unknown.archetype, 'unknown');
+  assert.strictEqual(unknown.comfortable, null);
+  assert.strictEqual(credit.classifySectorArchetype(null).archetype, 'unknown');
+});
+
+test('a lender is refused a leverage band, and refused for the lender reason', () => {
+  const bank = credit.classifySectorArchetype({ broadSector: 'Financials', sector: 'Banks', industry: 'Private Sector Bank' });
+  assert.strictEqual(bank.archetype, 'lender');
+  assert.strictEqual(bank.comfortable, null);
+  // A housing-finance company's breadcrumb also says "financial services";
+  // the lender rule must win over the stable rule, not the other way round.
+  const hfc = credit.classifySectorArchetype({ broadSector: 'Financials', sector: 'Financial Services', industry: 'Housing Finance Company' });
+  assert.strictEqual(hfc.archetype, 'lender');
+
+  const a = credit.assessLeverageVsSector(3.1, bank);
+  assert.strictEqual(a.status, 'not_assessable');
+  assert.ok(/deposits/i.test(a.reason), 'the reason names deposits, not "unrecognised sector": ' + a.reason);
+  assert.strictEqual(a.sentence, null);
+});
+
+test('leverage is judged against its own sector, never an absolute threshold', () => {
+  const utility = credit.classifySectorArchetype({ broadSector: 'Utilities', industry: 'Power Generation' });
+  const cyclical = credit.classifySectorArchetype({ broadSector: 'Commodities', industry: 'Aluminium' });
+  // The same 4.5x reads differently in each, which is the entire point.
+  assert.strictEqual(credit.assessLeverageVsSector(4.5, utility).status, 'adequate');
+  assert.strictEqual(credit.assessLeverageVsSector(4.5, cyclical).status, 'stretched');
+  // And the sentence always carries the band, so the multiple is never shown
+  // bare for the reader to mis-anchor against.
+  assert.ok(/4\.00x–6\.00x/.test(credit.assessLeverageVsSector(4.5, utility).sentence));
+});
+
+test('an unclassified sector refuses to place the multiple rather than defaulting to the middle band', () => {
+  const unknown = credit.classifySectorArchetype({ broadSector: 'Zorbing' });
+  const a = credit.assessLeverageVsSector(3.0, unknown);
+  assert.strictEqual(a.status, 'not_assessable');
+  assert.strictEqual(a.sentence, null);
+  assert.ok(a.reason.length > 0);
+});
+
+test('normCdf is accurate in the body and does not collapse to zero in the far tail', () => {
+  approx(credit.normCdf(0), 0.5, 1e-9);
+  approx(credit.normCdf(1), 0.8413447460685429, 1e-6);
+  approx(credit.normCdf(-1), 0.15865525393145707, 1e-6);
+  approx(credit.normCdf(1.959963984540054), 0.975, 1e-6);
+  // A healthy company lands near d2 = 9.6, where the true probability is
+  // ~3.5e-22. A polynomial CDF approximation returns a hard 0 here, which is
+  // indistinguishable from a solver failure -- this is why erfc is used.
+  const tail = credit.normCdf(-9.6144);
+  assert.ok(tail > 0, 'the far tail is not rounded to zero');
+  assert.ok(tail > 1e-23 && tail < 1e-20, 'expected ~3.5e-22, got ' + tail);
+  approx(credit.normPdf(0), 0.3989422804014327, 1e-12);
+});
+
+test('the Merton solver recovers the asset value and volatility it was built from', () => {
+  // Round-trip: pick a known (V, sigma_V), derive the E and sigma_E they imply
+  // through the model's own two equations, then check the solver inverts them.
+  // Stronger than matching a published figure, because it has no rounding.
+  const V = 95000, sigmaV = 0.28, D = 6698, r = 0.065, T = 1;
+  const d1 = (Math.log(V / D) + (r + 0.5 * sigmaV * sigmaV) * T) / (sigmaV * Math.sqrt(T));
+  const d2 = d1 - sigmaV * Math.sqrt(T);
+  const E = V * credit.normCdf(d1) - D * Math.exp(-r * T) * credit.normCdf(d2);
+  const sigmaE = credit.normCdf(d1) * sigmaV * V / E;
+
+  const out = credit.mertonSolve({ E: E, sigmaE: sigmaE, D: D, r: r, T: T });
+  assert.strictEqual(out.ok, true, out.reason);
+  approx(out.V, V, 1e-8);
+  approx(out.sigmaV, sigmaV, 1e-8);
+  approx(out.distanceToDefault, d2, 1e-8);
+  // Both equations must actually balance, not merely have stopped moving.
+  assert.ok(Math.abs(out.residuals[0]) / E < 1e-8, 'equation 1 balances');
+  assert.ok(Math.abs(out.residuals[1]) / E < 1e-8, 'equation 2 balances');
+  assert.ok(out.iterations < 50, 'converges quickly: ' + out.iterations);
+});
+
+test('the Merton solver converges across a wide range of leverage and volatility', () => {
+  const cases = [];
+  [0.15, 0.30, 0.55, 0.90].forEach((sv) => {
+    [0.05, 0.25, 0.60, 0.85].forEach((debtShare) => {
+      const V = 50000, D = V * debtShare, r = 0.07, T = 1;
+      const d1 = (Math.log(V / D) + (r + 0.5 * sv * sv) * T) / (sv * Math.sqrt(T));
+      const d2 = d1 - sv * Math.sqrt(T);
+      const E = V * credit.normCdf(d1) - D * Math.exp(-r * T) * credit.normCdf(d2);
+      const sigmaE = credit.normCdf(d1) * sv * V / E;
+      cases.push({ V: V, sv: sv, D: D, r: r, T: T, E: E, sigmaE: sigmaE });
+    });
+  });
+  cases.forEach((c) => {
+    const out = credit.mertonSolve({ E: c.E, sigmaE: c.sigmaE, D: c.D, r: c.r, T: c.T });
+    assert.strictEqual(out.ok, true, 'failed at sigma_V=' + c.sv + ' debt share=' + (c.D / c.V).toFixed(2) + ': ' + out.reason);
+    approx(out.V, c.V, 1e-6);
+    approx(out.sigmaV, c.sv, 1e-6);
+  });
+});
+
+test('Merton refuses a debt-free company instead of reporting infinite safety', () => {
+  const out = credit.mertonSolve({ E: 50000, sigmaE: 0.3, D: 0, r: 0.065, T: 1 });
+  assert.strictEqual(out.ok, false);
+  assert.strictEqual(out.noDebt, true);
+  assert.ok(/no default point/i.test(out.reason), out.reason);
+  assert.strictEqual(out.distanceToDefault, undefined, 'no number is reported at all');
+});
+
+test('Merton refuses missing or nonsensical inputs rather than substituting one', () => {
+  assert.strictEqual(credit.mertonSolve({ E: 0, sigmaE: 0.3, D: 100, r: 0.06 }).ok, false);
+  assert.strictEqual(credit.mertonSolve({ E: 100, sigmaE: 0, D: 100, r: 0.06 }).ok, false);
+  assert.strictEqual(credit.mertonSolve({ E: 100, sigmaE: 0.3, D: 100, r: null }).ok, false);
+  assert.strictEqual(credit.mertonSolve({ E: 100, sigmaE: 0.3, D: 100, r: 0.06, T: 0 }).ok, false);
+});
+
+test('equity volatility comes from a real price series or not at all', () => {
+  // A flat 1% daily alternation has a known closed-form volatility, so the
+  // annualisation factor is checked against arithmetic rather than a fixture.
+  const prices = [];
+  let p = 100;
+  for (let i = 0; i < 400; i++) { prices.push({ date: 'd' + i, close: p }); p *= (i % 2 === 0) ? 1.01 : (1 / 1.01); }
+  const v = credit.annualisedVolFromPrices(prices);
+  assert.strictEqual(v.ok, true, v.reason);
+  assert.strictEqual(v.observations, 399);
+  assert.strictEqual(v.tradingDaysPerYear, 252);
+  approx(v.vol, v.dailyVol * Math.sqrt(252), 1e-12);
+  assert.strictEqual(v.startDate, 'd0');
+  assert.strictEqual(v.endDate, 'd399');
+});
+
+test('a short price series refuses rather than annualising from noise', () => {
+  const short = [];
+  for (let i = 0; i < 60; i++) short.push({ date: 'd' + i, close: 100 + i });
+  const v = credit.annualisedVolFromPrices(short);
+  assert.strictEqual(v.ok, false);
+  assert.strictEqual(v.vol, undefined, 'no volatility number is produced at all');
+  assert.ok(/at least/i.test(v.reason), v.reason);
+  assert.strictEqual(credit.annualisedVolFromPrices(null).ok, false);
+  assert.strictEqual(credit.annualisedVolFromPrices([]).ok, false);
+});
+
+test('extreme single-day moves are counted and reported, never trimmed away', () => {
+  const prices = [];
+  let p = 100;
+  for (let i = 0; i < 400; i++) {
+    prices.push({ date: 'd' + i, close: p });
+    p = (i === 100) ? p * 0.3 : p * (i % 2 === 0 ? 1.01 : 1 / 1.01);
+  }
+  const v = credit.annualisedVolFromPrices(prices);
+  assert.strictEqual(v.ok, true);
+  assert.ok(v.extremeMoves >= 1, 'the outlier is counted');
+  // Silently dropping the tail of a volatility estimate is how a model ends
+  // up understating risk, so the observation count is unchanged.
+  assert.strictEqual(v.observations, 399);
+});
+
+// The CRISIL tables below were transcribed from the agency's own SEBI
+// regulatory disclosure PDF ("Long-run and short-run average default rates",
+// retrieved 2026-09-05). The figures asserted here are the published ones, so
+// if anyone edits the table by hand these fail.
+const withVerifiedBand = (category, pd, fn) => {
+  const ds = credit.RATING_DEFAULT_STUDIES.CRISIL.datasets.longRunAllInstruments;
+  const had = Object.prototype.hasOwnProperty.call(ds.bands, category);
+  const prev = ds.bands[category];
+  ds.bands[category] = { oneYear: pd };
+  try { fn(); } finally { if (had) ds.bands[category] = prev; else delete ds.bands[category]; }
+};
+
+test('CRISIL default rates match the published regulatory disclosure', () => {
+  const long = credit.RATING_DEFAULT_STUDIES.CRISIL.datasets.longRunAllInstruments;
+  // ANNEXURE A.1, April 2015 to March 2026.
+  const published = { AAA: 0.0001, AA: 0.0006, A: 0.0009, BBB: 0.0042, BB: 0.0197, B: 0.0295, C: 0.1021 };
+  Object.keys(published).forEach((b) => approx(long.bands[b].oneYear, published[b], 1e-12));
+  // ANNEXURE A.6 Table 1 — listed debt securities only.
+  const listed = credit.RATING_DEFAULT_STUDIES.CRISIL.datasets.longRunListedDebt;
+  const publishedListed = { AAA: 0, AA: 0.0020, A: 0.0054, BBB: 0.0312, BB: 0.1029, B: 0.2630, C: 0.5789 };
+  Object.keys(publishedListed).forEach((b) => {
+    if (publishedListed[b] === 0) assert.strictEqual(listed.bands[b].oneYear, 0);
+    else approx(listed.bands[b].oneYear, publishedListed[b], 1e-12);
+  });
+  assert.ok(/crisilratings\.com/.test(credit.RATING_DEFAULT_STUDIES.CRISIL.sourceUrl));
+});
+
+test('a rating resolves against the default dataset and carries its citation', () => {
+  const ok = credit.ratingPd('CRISIL', 'AA');
+  assert.strictEqual(ok.ok, true);
+  approx(ok.pd, 0.0006, 1e-12);
+  assert.strictEqual(ok.agency, 'CRISIL Ratings');
+  assert.strictEqual(ok.annexure, 'A.1');
+  assert.ok(/April 2015 to March 2026/.test(ok.period), 'the window travels with the number');
+  assert.ok(/SEBI/.test(ok.study), 'so does the source document');
+  assert.ok(ok.sourceUrl && ok.retrieved, 'and the URL and retrieval date');
+  // The AA footnote about the three real defaults must survive to the reader.
+  assert.ok(/legal event/i.test(ok.bandFootnote), ok.bandFootnote);
+});
+
+test('the two CRISIL datasets disagree, and the module says so instead of picking quietly', () => {
+  // Same agency, same window, up to a nine-fold difference at the lower
+  // categories. A reader shown one figure alone cannot tell that the choice
+  // of table moved it by an order of magnitude.
+  const all = credit.ratingPd('CRISIL', 'BBB');
+  const listed = credit.ratingPd('CRISIL', 'BBB', 'longRunListedDebt');
+  approx(all.pd, 0.0042, 1e-12);
+  approx(listed.pd, 0.0312, 1e-12);
+  assert.ok(listed.pd > all.pd * 7, 'the gap is real, not rounding');
+  assert.ok(all.spreadNote, 'the default view flags that other tables exist');
+  assert.ok(/0\.12%/.test(all.spreadNote) && /3\.12%/.test(all.spreadNote), all.spreadNote);
+  assert.ok(all.alternatives.some((a) => a.dataset === 'longRunListedDebt'));
+  // AAA is 0.01% vs 0.00% — too close to be worth a warning.
+  assert.strictEqual(credit.ratingPd('CRISIL', 'AAA').spreadNote, null);
+});
+
+test('the short-term scale is kept apart from the long-term one', () => {
+  const a1 = credit.ratingPd('CRISIL', 'A1+', 'longRunShortTermScale');
+  assert.strictEqual(a1.ok, true);
+  approx(a1.pd, 0.0002, 1e-12);
+  assert.ok(/short-term/i.test(a1.scale), a1.scale);
+  assert.strictEqual(credit.normaliseRatingBand('A1+').category, 'A1+', 'A1+ must not collapse to A');
+  assert.strictEqual(credit.normaliseRatingBand('A4').category, 'A4');
+  // With no dataset named, a short-term rating selects the short-term table
+  // itself. The property that matters is that it never picks up the long-term
+  // 'A' rate -- silently reading A1+ off the long-term row would be a
+  // different scale reported as if it were the same one.
+  const auto = credit.ratingPd('CRISIL', 'A1+');
+  assert.strictEqual(auto.ok, true);
+  assert.strictEqual(auto.category, 'A1+');
+  assert.strictEqual(auto.annexure, 'A.2');
+  approx(auto.pd, 0.0002, 1e-12);
+  const longTermA = credit.RATING_DEFAULT_STUDIES.CRISIL.datasets.longRunAllInstruments.bands.A.oneYear;
+  assert.notStrictEqual(auto.pd, longTermA, 'A1+ must never read the long-term A rate');
+  assert.ok(/short-term rating scale/i.test((auto.qualifierNotes || []).join(' ')), 'the scale switch is stated');
+  // An explicitly named dataset still wins over the automatic choice.
+  assert.strictEqual(credit.ratingPd('CRISIL', 'A1+', 'longRunAllInstruments').ok, false);
+});
+
+test('a rating is read the way it is actually written on a filing', () => {
+  // Nobody types a bare notch. These are the shapes that get pasted in.
+  const shapes = {
+    'CRISIL AA/Stable': 'AA', 'CRISIL AA+/Stable': 'AA', '[ICRA]AA (Stable)': 'AA',
+    'CARE AA; Stable': 'AA', 'IND AA+/Rating Watch Negative': 'AA',
+    'India Ratings AA+/Stable': 'AA', 'CRISIL AA/Stable/CRISIL A1+': 'AA',
+  };
+  for (const [input, category] of Object.entries(shapes)) {
+    const parsed = credit.normaliseRatingBand(input);
+    assert.ok(parsed, input + ' must parse');
+    assert.strictEqual(parsed.category, category, input);
+    assert.strictEqual(credit.ratingPd('CRISIL', input).ok, true, input + ' must resolve to a rate');
+  }
+  assert.deepStrictEqual(credit.normaliseRatingBand('CRISIL AA/Stable/CRISIL A1+').companions, ['A1+']);
+  assert.strictEqual(credit.normaliseRatingBand('IND AA+/Rating Watch Negative').watch, 'RATING WATCH NEGATIVE');
+  assert.strictEqual(credit.normaliseRatingBand('Provisional CRISIL A1+').provisional, true);
+
+  // Qualifiers that change what the rating covers must not be stripped and
+  // treated as decoration. A (CE) rating measures the guarantor.
+  const ce = credit.ratingPd('CRISIL', 'CRISIL AA(CE)/Stable');
+  assert.strictEqual(ce.ok, false);
+  assert.ok(/credit-enhanced/i.test(ce.reason), ce.reason);
+  assert.strictEqual(credit.normaliseRatingBand('CRISIL AA(SO)').structural, 'SO');
+
+  // A withdrawn rating is not a current opinion.
+  const wd = credit.ratingPd('CRISIL', 'CRISIL AA - Withdrawn');
+  assert.strictEqual(wd.ok, false);
+  assert.ok(/withdrawn or suspended/i.test(wd.reason), wd.reason);
+  // The spaced hyphen is a separator; the unspaced one is the minus modifier.
+  assert.strictEqual(credit.normaliseRatingBand('AA-').modifier, '-');
+
+  // An unknown qualifier refuses rather than guessing it is harmless.
+  const odd = credit.ratingPd('CRISIL', 'AAA/Wobbly');
+  assert.strictEqual(odd.ok, false);
+  assert.ok(/does not recognise/i.test(odd.reason), odd.reason);
+
+  // Issuer Not Cooperating still resolves -- the category is real -- but the
+  // reader is told the agency had no current information from the company.
+  const inc = credit.ratingPd('CRISIL', 'CARE BBB-; Stable; ISSUER NOT COOPERATING');
+  assert.strictEqual(inc.ok, true);
+  assert.strictEqual(inc.category, 'BBB');
+  assert.ok(/Issuer Not Cooperating/i.test((inc.qualifierNotes || []).join(' ')));
+
+  // Free text still returns null rather than matching a stray letter.
+  ['not a rating', '', 'no rating available', 'AA rated by an analyst'].forEach((s) => {
+    assert.strictEqual(credit.normaliseRatingBand(s), null, JSON.stringify(s));
+  });
+});
+
+test('agencies with no loaded study refuse by name', () => {
+  ['CARE', 'ICRA', 'MOODYS', 'SP'].forEach((a) => {
+    const r = credit.ratingPd(a, 'AA');
+    assert.strictEqual(r.ok, false, a + ' has no study loaded');
+    assert.ok(/only reports default rates transcribed/i.test(r.reason), r.reason);
+  });
+  assert.strictEqual(credit.ratingPd('NOTANAGENCY', 'AA').ok, false);
+  assert.strictEqual(credit.ratingPd('CRISIL', 'not a rating').ok, false);
+  // 'D' is a default state, not a rated category with a forward default rate.
+  assert.strictEqual(credit.ratingPd('CRISIL', 'D').ok, false);
+});
+
+test('rating notches collapse to the published category and say so', () => {
+  assert.strictEqual(credit.normaliseRatingBand('CRISIL AA+').category, 'AA');
+  assert.strictEqual(credit.normaliseRatingBand('CRISIL AA+').modifier, '+');
+  assert.strictEqual(credit.normaliseRatingBand('AA-').category, 'AA');
+  assert.strictEqual(credit.normaliseRatingBand('CARE AA (Stable)').category, 'AA');
+  withVerifiedBand('AA', 0.0005, () => {
+    const plus = credit.ratingPd('CRISIL', 'CRISIL AA+');
+    assert.strictEqual(plus.ok, true);
+    approx(plus.pd, 0.0005, 1e-12);
+    assert.ok(/by notch/i.test(plus.conservativeNote), plus.conservativeNote);
+  });
+});
+
+test('expected loss is PD x LGD x EAD, and says which LGD it used', () => {
+  const el = credit.expectedLoss(0.0005, 0.45, 10000000);
+  assert.strictEqual(el.ok, true);
+  approx(el.pctOfExposure, 0.000225, 1e-12);
+  approx(el.amount, 2250, 1e-9);
+  // No exposure supplied means a percentage only -- never an assumed amount.
+  const noEad = credit.expectedLoss(0.0005, 0.45, null);
+  assert.strictEqual(noEad.ok, true);
+  assert.strictEqual(noEad.amount, null);
+  const lgd = credit.resolveLgd(null);
+  approx(lgd.lgd, 0.45, 1e-12);
+  assert.strictEqual(lgd.basis, 'basel_foundation');
+  assert.ok(/regulatory standard, not an estimate/i.test(lgd.note), lgd.note);
+  assert.strictEqual(credit.resolveLgd(0.6).basis, 'supplied');
+  assert.strictEqual(credit.expectedLoss(1.5, 0.45, 100).ok, false);
+  assert.strictEqual(credit.expectedLoss(0.01, 2, 100).ok, false);
+});
+
+test('the two probability views are reconciled, never averaged', () => {
+  const rec = credit.reconcilePdViews({ ok: true, pd: 0.0005 }, { ok: true, impliedPd: 3.5e-22 });
+  assert.strictEqual(rec.available, 'both');
+  assert.strictEqual(rec.ratingPd, 0.0005);
+  assert.strictEqual(rec.mertonPd, 3.5e-22);
+  assert.strictEqual(rec.blendedPd, undefined, 'there is no blended figure');
+  assert.ok(/through-the-cycle/.test(rec.sentence) && /point-in-time/.test(rec.sentence));
+  assert.ok(/neither is the correction to the other/.test(rec.sentence));
+  assert.strictEqual(credit.reconcilePdViews(null, { ok: true, impliedPd: 1e-9 }).available, 'merton_only');
+  assert.strictEqual(credit.reconcilePdViews({ ok: true, pd: 0.01 }, null).available, 'rating_only');
+  assert.strictEqual(credit.reconcilePdViews(null, null).available, 'neither');
+});
+
+test('the composite is the most cautious available signal, and names it', () => {
+  const c = credit.compositeCreditTier([
+    { name: 'leverage against its sector band', status: 'comfortable' },
+    { name: 'interest coverage', status: 'stretched' },
+    { name: 'market-implied distance to default', status: 'comfortable' },
+  ]);
+  assert.strictEqual(c.tier, 'stretched');
+  assert.strictEqual(c.drivenBy, 'interest coverage');
+  assert.strictEqual(c.componentsUsed.length, 3);
+  // No score, no fraction, no rank -- those are banned page-wide.
+  assert.strictEqual(c.score, undefined);
+  assert.ok(!/\d+\s*\/\s*\d+/.test(c.sentence), 'no "2/3" style fraction: ' + c.sentence);
+
+  // Unavailable signals are skipped, not counted as passes.
+  const partial = credit.compositeCreditTier([
+    { name: 'leverage against its sector band', status: 'not_assessable' },
+    { name: 'interest coverage', status: 'adequate' },
+  ]);
+  assert.strictEqual(partial.tier, 'adequate');
+  assert.strictEqual(partial.componentsUsed.length, 1);
+
+  const none = credit.compositeCreditTier([{ name: 'x', status: 'not_assessable' }]);
+  assert.strictEqual(none.tier, 'not_assessable');
+  assert.strictEqual(credit.compositeCreditTier([]).tier, 'not_assessable');
+});
+
+test('creditProfile assembles the full model for a real company', () => {
+  let p;
+  withVerifiedBand('AA', 0.0005, () => { p = credit.creditProfile({
+    symbol: 'BHARATFORG', companyName: 'Bharat Forge Ltd', fiscalYear: 2025,
+    sector: { broadSector: 'Consumer Discretionary', sector: 'Automobile and Auto Components', broadIndustry: 'Auto Components', industry: 'Auto Components & Equipments' },
+    ebitda: BFORGE.ebitda, totalDebt: BFORGE.debt, cash: BFORGE.cash, interestExpense: BFORGE.interest,
+    marketCapCr: BFORGE.marketCapCr, currentPrice: 1956, high52w: 2295, low52w: 1128,
+    equityVolatility: 0.32, riskFreeRate: 0.065,
+    ratingAgency: 'CRISIL', ratingBand: 'AA', ead: 10000000,
+  }); });
+  assert.strictEqual(p.ok, true);
+  assert.strictEqual(p.sector.archetype, 'stable');
+  approx(p.ratios.grossLeverage, 2.488112927191679, 1e-12);
+  approx(p.ratios.netLeverage, 1.4925705794947994, 1e-12);
+  assert.strictEqual(p.ratios.leverageAssessment.status, 'comfortable');
+  assert.strictEqual(p.merton.ok, true, p.merton.reason);
+  assert.ok(p.merton.distanceToDefault > 5, 'a low-levered company sits far from the default point');
+  assert.strictEqual(p.rating.ok, true);
+  assert.strictEqual(p.expectedLoss.ok, true);
+  assert.strictEqual(p.reconciliation.available, 'both');
+  assert.ok(['comfortable', 'adequate', 'stretched'].indexOf(p.composite.tier) >= 0);
+
+  // Every displayed number traces to a source, stored as data.
+  assert.ok(p.provenance.length >= 3, 'provenance covers statements, volatility, rate and rating');
+  assert.ok(p.provenance.some((x) => /FY2025/.test(x.asOf || '')));
+  assert.ok(p.provenance.some((x) => /volatility/i.test(x.what)));
+  assert.ok(p.provenance.some((x) => /risk-free/i.test(x.what)));
+  // The recompute-and-verify payload carries the figures, not prose.
+  Object.keys(p.figures).forEach((k) => assert.strictEqual(typeof p.figures[k], 'number', k + ' is a number'));
+  assert.ok(p.figures.creditNetLeverage != null && p.figures.creditDistanceToDefault != null);
+
+  // A share price near its 52-week high must raise the euphoria caveat.
+  assert.ok(p.caveats.some((c) => c.id === 'price_context'), 'the distance-to-default carries its market-price caveat');
+});
+
+test('creditProfile refuses the whole EBITDA apparatus for a lender', () => {
+  const p = credit.creditProfile({
+    symbol: 'HDFCBANK', companyName: 'HDFC Bank Ltd', fiscalYear: 2025, schema: 'financial',
+    sector: { broadSector: 'Financials', sector: 'Banks', industry: 'Private Sector Bank' },
+    ebitda: 50000, totalDebt: 700000, cash: 200000, interestExpense: 100000,
+    marketCapCr: 1500000, equityVolatility: 0.22, riskFreeRate: 0.065,
+  });
+  assert.strictEqual(p.isLender, true);
+  assert.strictEqual(p.ratios.grossLeverage, null, 'no multiple is reported');
+  assert.strictEqual(p.ratios.netLeverage, null);
+  assert.strictEqual(p.ratios.interestCoverage, null);
+  assert.strictEqual(p.stress, null);
+  assert.strictEqual(p.merton.ok, false, 'Borrowings alone understates a bank debt load by an order of magnitude');
+  assert.ok(/deposits/i.test(p.merton.reason), p.merton.reason);
+  assert.strictEqual(p.figures.creditGrossLeverage, undefined, 'the suppressed number does not leak into figures');
+  assert.strictEqual(p.composite.tier, 'not_assessable');
+  // A refusal must say what it WILL show, per the page's refusal shape.
+  assert.ok(p.ratios.notes.some((n) => /revenue|financing profit/i.test(n)), 'names what is comparable instead');
+});
+
+test('creditProfile degrades one piece at a time when data is missing', () => {
+  const p = credit.creditProfile({
+    symbol: 'X', fiscalYear: 2025,
+    sector: { broadSector: 'Commodities', industry: 'Aluminium' },
+    ebitda: 1000, totalDebt: 2000, cash: null, interestExpense: 400,
+    marketCapCr: 5000, riskFreeRate: 0.065, priceSeries: [],
+  });
+  approx(p.ratios.grossLeverage, 2, 1e-12);
+  approx(p.ratios.interestCoverage, 2.5, 1e-12);
+  assert.strictEqual(p.ratios.netLeverage, null, 'net leverage refuses without cash');
+  assert.ok(p.ratios.notes.some((n) => /cash line/i.test(n)), 'and says exactly why');
+  assert.strictEqual(p.merton.ok, false, 'no price series means no Merton result');
+  assert.strictEqual(p.rating.ok, false, 'no rating supplied means no expected loss');
+  assert.strictEqual(p.expectedLoss.ok, false);
+  assert.strictEqual(p.reconciliation.available, 'neither');
+  // The rest of the page still works: coverage alone can still set a tier.
+  assert.strictEqual(p.composite.tier, 'stretched');
+  assert.strictEqual(p.composite.drivenBy, 'interest coverage');
+});
+
+test('no sentence the credit module can emit gives advice or a verdict', () => {
+  // The guardrail is a test over the module's real generated prose, not a
+  // promise in a system prompt. Every profile shape gets walked.
+  const profiles = [
+    credit.creditProfile({
+      symbol: 'BHARATFORG', fiscalYear: 2025,
+      sector: { broadSector: 'Consumer Discretionary', industry: 'Auto Components & Equipments' },
+      ebitda: BFORGE.ebitda, totalDebt: BFORGE.debt, cash: BFORGE.cash, interestExpense: BFORGE.interest,
+      marketCapCr: BFORGE.marketCapCr, currentPrice: 1956, high52w: 2295, low52w: 1128,
+      equityVolatility: 0.32, riskFreeRate: 0.065, ratingAgency: 'CRISIL', ratingBand: 'AA+', ead: 1e7,
+    }),
+    credit.creditProfile({
+      symbol: 'HDFCBANK', schema: 'financial', fiscalYear: 2025,
+      sector: { broadSector: 'Financials', sector: 'Banks' },
+      ebitda: 50000, totalDebt: 700000, interestExpense: 100000, marketCapCr: 1500000, riskFreeRate: 0.065,
+    }),
+    credit.creditProfile({
+      symbol: 'LOSSMAKER', fiscalYear: 2025, sector: { broadSector: 'Commodities', industry: 'Steel' },
+      ebitda: -400, totalDebt: 9000, cash: 100, interestExpense: 800, marketCapCr: 1200, riskFreeRate: 0.065,
+    }),
+    credit.creditProfile({ symbol: 'BARE', fiscalYear: 2025 }),
+  ];
+  // Also lint the expected-loss prose, which only exists when a rating band
+  // actually resolves.
+  withVerifiedBand('AA', 0.0005, () => {
+    profiles.push(credit.creditProfile({
+      symbol: 'BHARATFORG', fiscalYear: 2025,
+      sector: { broadSector: 'Consumer Discretionary', industry: 'Auto Components & Equipments' },
+      ebitda: BFORGE.ebitda, totalDebt: BFORGE.debt, cash: BFORGE.cash, interestExpense: BFORGE.interest,
+      marketCapCr: BFORGE.marketCapCr, currentPrice: 1956, high52w: 2295, low52w: 1128,
+      equityVolatility: 0.32, riskFreeRate: 0.065, ratingAgency: 'CRISIL', ratingBand: 'AA', ead: 1e7,
+    }));
+  });
+  assert.ok(profiles[4].expectedLoss.ok, 'the expected-loss sentence exists to be linted');
+  let sentences = 0;
+  profiles.forEach((p) => {
+    credit.collectProfileProse(p).forEach((s) => {
+      sentences++;
+      const hit = credit.findBannedLanguage(s);
+      assert.strictEqual(hit, null, 'banned phrase "' + hit + '" in: ' + s);
+    });
+  });
+  assert.ok(sentences > 20, 'the walk actually covered the prose, found ' + sentences + ' sentences');
+  // And the checker itself works, so a green run means something.
+  assert.ok(credit.findBannedLanguage('this looks like a safer bet') !== null);
+  assert.ok(credit.findBannedLanguage('the stock is undervalued') !== null);
+  assert.ok(credit.findBannedLanguage('you should buy this') !== null);
+});
+
+test('credit chart builders return usable options, or null when there is nothing to draw', () => {
+  const arche = credit.classifySectorArchetype({ broadSector: 'Commodities', industry: 'Aluminium' });
+  const band = credit.sectorLeverageBandOption(1.49, arche);
+  assert.ok(band && band.series && band.series.length === 1);
+  assert.strictEqual(band.xAxis.type, 'value');
+  assert.strictEqual(credit.sectorLeverageBandOption(null, arche), null);
+  assert.strictEqual(credit.sectorLeverageBandOption(1.49, { archetype: 'lender', comfortable: null }), null);
+
+  const stress = credit.stressedRatios(
+    { ebitda: BFORGE.ebitda, debt: BFORGE.debt, interest: BFORGE.interest, cash: BFORGE.cash },
+    { ebitda: -0.2, debt: 0.1, interest: 0.15 }
+  );
+  const sc = credit.stressComparisonOption(stress);
+  assert.strictEqual(sc.series.length, 2);
+  assert.strictEqual(sc.yAxis.length, undefined, 'a single y-axis — no dual axes anywhere on this page');
+  assert.ok(sc.series.every((s) => s.label && s.label.show), 'direct labels, not a legend');
+  assert.strictEqual(sc.legend, undefined);
+
+  const V = 95000, sv = 0.28, D = 6698, r = 0.065;
+  const d1 = (Math.log(V / D) + (r + 0.5 * sv * sv)) / sv;
+  const E = V * credit.normCdf(d1) - D * Math.exp(-r) * credit.normCdf(d1 - sv);
+  const m = credit.mertonSolve({ E: E, sigmaE: credit.normCdf(d1) * sv * V / E, D: D, r: r, T: 1 });
+  const payoff = credit.mertonPayoffOption(m);
+  assert.ok(payoff && payoff.series.length === 2);
+  assert.strictEqual(credit.mertonPayoffOption({ ok: false }), null);
+
+  const pd = credit.pdComparisonOption(0.0005, 3.5e-22);
+  assert.strictEqual(pd.yAxis.type, 'log');
+  assert.ok(pd.yAxis.min > 0, 'a log axis cannot carry a true zero');
+  assert.strictEqual(credit.pdComparisonOption(0.0005, null), null, 'one bar is not a comparison');
+});
+
+
+test('the borrowings split says what it is and refuses to say what it is not', () => {
+  // Bharat Forge, Mar 2025 consolidated, scraped from the expandable borrowings
+  // schedule and reconciled against the balance-sheet total of 6698.
+  const comp = credit.debtComposition({ longTerm: 1319, shortTerm: 4969, leases: 410, other: 0 }, { unit: 'cr' });
+  assert.strictEqual(comp.ok, true);
+  assert.strictEqual(comp.total, 6698);
+  approx(comp.shortTermShare, 4969 / 6698, 1e-12);
+  approx(comp.longTermShare, 1319 / 6698, 1e-12);
+  approx(comp.unratedShare, 410 / 6698, 1e-12);
+  assert.strictEqual(comp.dominantScale, 'short-term');
+  // Rows come back largest first so the reader sees the shape immediately.
+  assert.deepStrictEqual(comp.rows.map((r) => r.key), ['shortTerm', 'longTerm', 'leases', 'other']);
+
+  // The whole point of the section: tenor is not instrument class, and the
+  // notes must say so rather than letting the split imply a rating scale.
+  const prose = comp.notes.join(' ');
+  assert.ok(/not by what kind of borrowing it is/i.test(prose), prose);
+  assert.ok(/current maturities|falls due within a year/i.test(prose), prose);
+  // Leases are debt for leverage but carry no rating, and both halves of that
+  // must be stated -- dropping either one misleads in a different direction.
+  assert.ok(/no agency rating/i.test(prose) && /still count as debt/i.test(prose), prose);
+
+  assert.strictEqual(credit.debtComposition(null).ok, false);
+  assert.strictEqual(credit.debtComposition({}).ok, false);
+  assert.strictEqual(credit.debtComposition({ longTerm: 0, shortTerm: 0 }).ok, false);
+  // A negative bucket is dropped rather than netted against the others.
+  const neg = credit.debtComposition({ longTerm: 100, shortTerm: -50 });
+  assert.strictEqual(neg.total, 100);
+});
+
+test('a rating is reported against the debt it is actually applied to', () => {
+  const comp = credit.debtComposition({ longTerm: 1319, shortTerm: 4969, leases: 410 }, { unit: 'cr' });
+  const longTerm = credit.ratingPd('CRISIL', 'CRISIL AA+/Stable');
+  const note = credit.ratingCoverageNote(longTerm, comp);
+  assert.ok(note, 'a long-term rating on a 74%-short-term stack must be flagged');
+  assert.ok(/74%/.test(note), note);
+  assert.ok(/long-term scale/.test(note) && /short-term/.test(note), note);
+
+  // The same stack read with the short-term rating leaves only 19.7% (the
+  // long-term bucket) uncovered, which is below the materiality gate -- so it
+  // says nothing rather than nagging about a fifth of the debt.
+  const shortTerm = credit.ratingPd('CRISIL', 'CRISIL A1+');
+  assert.strictEqual(credit.ratingCoverageNote(shortTerm, comp), null);
+
+  // Flip the stack and the note flips with it.
+  const longHeavy = credit.debtComposition({ longTerm: 4969, shortTerm: 1319 }, { unit: 'cr' });
+  const flipped = credit.ratingCoverageNote(shortTerm, longHeavy);
+  assert.ok(/short-term scale/.test(flipped), flipped);
+  assert.ok(/79%/.test(flipped), flipped);
+  // The long-term rating on that same stack leaves 21% uncovered, just over
+  // the gate, so it fires too -- each note measures the share of the debt the
+  // scale it was given does not reach.
+  assert.ok(/21%/.test(credit.ratingCoverageNote(longTerm, longHeavy)));
+
+  // Below the materiality gate it says nothing rather than nagging.
+  const mostlyLong = credit.debtComposition({ longTerm: 900, shortTerm: 100 });
+  assert.strictEqual(credit.ratingCoverageNote(longTerm, mostlyLong), null);
+  // No composition, no claim.
+  assert.strictEqual(credit.ratingCoverageNote(longTerm, { ok: false }), null);
+  assert.strictEqual(credit.ratingCoverageNote({ ok: false }, comp), null);
+});
+
+test('per-instrument expected loss prices each tranche off its own scale', () => {
+  const bt = credit.expectedLossByTranche([
+    { label: 'Long-term bank facilities and NCDs', amount: 1319, band: 'CRISIL AA+/Stable' },
+    { label: 'Short-term facilities and CP', amount: 4969, band: 'CRISIL A1+' },
+    { label: 'Lease liabilities', amount: 410 },
+  ], null, { unit: 'cr' });
+  assert.strictEqual(bt.ok, true);
+  assert.strictEqual(bt.rows.length, 2);
+  // Each row reads its own table: AA off A.1, A1+ off A.2.
+  assert.strictEqual(bt.rows[0].annexure, 'A.1');
+  assert.strictEqual(bt.rows[1].annexure, 'A.2');
+  approx(bt.rows[0].pd, 0.0006, 1e-12);
+  approx(bt.rows[1].pd, 0.0002, 1e-12);
+  // EL = PD * LGD * EAD, summed. Basel foundation LGD of 45% on both.
+  const expected = 0.0006 * 0.45 * 1319 + 0.0002 * 0.45 * 4969;
+  approx(bt.el, expected, 1e-9);
+  approx(bt.ratedEad, 6288, 1e-12);
+
+  // The unrated lease is reported at its amount and excluded from the total,
+  // never spread across the rated tranches.
+  assert.strictEqual(bt.unrated.length, 1);
+  assert.strictEqual(bt.unrated[0].amount, 410);
+  assert.ok(/No rating was supplied/i.test(bt.unrated[0].reason));
+  assert.strictEqual(bt.unratedAmount, 410);
+  assert.ok(bt.el < 0.0006 * 0.45 * 6698, 'the whole stack at the long-term rate must be larger');
+
+  // A tranche whose rating cannot be read is refused by name, not guessed.
+  const bad = credit.expectedLossByTranche([
+    { label: 'Good', amount: 100, band: 'CRISIL AA' },
+    { label: 'Enhanced', amount: 100, band: 'CRISIL AA(CE)' },
+    { label: 'Nonsense', amount: 100, band: 'not a rating' },
+  ]);
+  assert.strictEqual(bad.rows.length, 1);
+  assert.strictEqual(bad.unrated.length, 2);
+  assert.ok(/credit-enhanced/i.test(bad.unrated[0].reason), bad.unrated[0].reason);
+
+  // Nothing usable at all is a refusal, not a zero.
+  assert.strictEqual(credit.expectedLossByTranche([]).ok, false);
+  assert.strictEqual(credit.expectedLossByTranche(null).ok, false);
+  assert.strictEqual(credit.expectedLossByTranche([{ label: 'x', amount: 10, band: 'D' }]).ok, false);
+
+  // A per-tranche LGD overrides the supervisory default for that row only.
+  const mixed = credit.expectedLossByTranche([
+    { label: 'Secured', amount: 100, band: 'CRISIL AA', lgd: 0.25 },
+    { label: 'Unsecured', amount: 100, band: 'CRISIL AA' },
+  ]);
+  assert.strictEqual(mixed.rows[0].lgd, 0.25);
+  approx(mixed.rows[1].lgd, 0.45, 1e-12);
+});
+
+test('the composition reaches the assembled profile and the lint sees its prose', () => {
+  const profile = credit.creditProfile({
+    symbol: 'BHARATFORG', sector: 'Auto Ancillaries', ebitda: 2692, totalDebt: 6698,
+    cash: 1291, interestExpense: 417, marketCapCr: 93232,
+    ratingAgency: 'CRISIL', ratingBand: 'CRISIL AA+/Stable',
+    debtBreakdown: { longTerm: 1319, shortTerm: 4969, leases: 410, other: 0 },
+    ead: 10000000,
+  });
+  assert.strictEqual(profile.ok, true);
+  assert.strictEqual(profile.debtComposition.ok, true);
+  assert.strictEqual(profile.debtComposition.unit, 'cr');
+  const ids = profile.caveats.map((c) => c.id);
+  assert.ok(ids.includes('rating_covers_one_scale'), ids.join(','));
+  // The split is a scraped figure, so it has to carry provenance like any other.
+  assert.ok(profile.provenance.some((p) => /Split of borrowings/.test(p.what)), 'the split needs a source line');
+
+  // A lender never gets a borrowings breakdown, for the same reason it gets no
+  // leverage ratios: its liabilities are the business.
+  const bank = credit.creditProfile({
+    symbol: 'HDFCBANK', sector: 'Banks', ebitda: 100, totalDebt: 500,
+    debtBreakdown: { longTerm: 100, shortTerm: 400 },
+  });
+  assert.strictEqual(bank.debtComposition, null);
+
+  // Every sentence the new sections can emit goes through the guardrail.
+  const prose = credit.collectProfileProse(profile);
+  assert.ok(prose.length > 20, prose.length);
+  prose.forEach((s) => assert.strictEqual(credit.findBannedLanguage(s), null, s));
+  assert.ok(prose.some((s) => /not by what kind of borrowing/i.test(s)), 'composition notes must be linted');
+});
+
+
+// Bharat Forge, Mar 2026 consolidated, every figure scraped and reconciled
+// against the balance-sheet borrowings total of 7309.
+const BF_DEBT = { longTerm: 1812, shortTerm: 5062, leases: 434, other: 0 };
+
+test('refinancing counts only what a lender can decline to renew', () => {
+  const r = credit.refinancingProfile({ debtBreakdown: BF_DEBT, cash: 990, ebitda: 2918, unit: 'cr' });
+  assert.strictEqual(r.ok, true);
+  // Leases are debt, and they are in the total -- but they are not in the
+  // amount that has to be found again, because no one renews a lease annually.
+  assert.strictEqual(r.total, 7308);
+  assert.strictEqual(r.rollingWithinYear, 5062);
+  assert.ok(r.rollingWithinYear < r.total - 434 + 1);
+  approx(r.shortTermShare, 5062 / 7308, 1e-12);
+  approx(r.cashCover, 990 / 5062, 1e-12);
+  approx(r.ebitdaMultiple, 5062 / 2918, 1e-12);
+  assert.ok(/agreed term/i.test(r.notes.join(' ')), r.notes.join(' '));
+});
+
+test('cash cover is arithmetic, and says which side of 1.0x it lands', () => {
+  const thin = credit.refinancingProfile({ debtBreakdown: BF_DEBT, cash: 990, ebitda: 2918, unit: 'cr' });
+  assert.strictEqual(thin.coverAssessment.status, 'roll_dependent');
+  assert.ok(/covers 20%/.test(thin.coverAssessment.sentence), thin.coverAssessment.sentence);
+  assert.ok(/rolled over|refinanced/.test(thin.coverAssessment.sentence));
+
+  const covered = credit.refinancingProfile({ debtBreakdown: BF_DEBT, cash: 6000, ebitda: 2918, unit: 'cr' });
+  assert.strictEqual(covered.coverAssessment.status, 'covered');
+  assert.ok(/would not require going back to a lender/.test(covered.coverAssessment.sentence));
+
+  const partly = credit.refinancingProfile({ debtBreakdown: BF_DEBT, cash: 3000, ebitda: 2918, unit: 'cr' });
+  assert.strictEqual(partly.coverAssessment.status, 'partly_covered');
+
+  // No cash figure is a refusal with a reason, never a cover of zero.
+  const noCash = credit.refinancingProfile({ debtBreakdown: BF_DEBT, ebitda: 2918 });
+  assert.strictEqual(noCash.cashCover, null);
+  assert.strictEqual(noCash.coverAssessment.status, 'not_assessable');
+  assert.strictEqual(noCash.coverAssessment.sentence, null);
+  assert.strictEqual(noCash.signal.status, 'not_assessable');
+});
+
+test('the funding signal needs all three gates, not one', () => {
+  const fires = credit.refinancingProfile({ debtBreakdown: BF_DEBT, cash: 990, ebitda: 2918, unit: 'cr' });
+  assert.strictEqual(fires.signal.status, 'roll_dependent');
+  assert.deepStrictEqual(fires.signal.gates, { share: true, cash: true, size: true });
+
+  // Each gate on its own must be able to switch it off. A company with plenty
+  // of short-term debt and plenty of cash is running a working-capital line,
+  // which is what a working-capital line is for.
+  const cashRich = credit.refinancingProfile({ debtBreakdown: BF_DEBT, cash: 4000, ebitda: 2918, unit: 'cr' });
+  assert.strictEqual(cashRich.signal.status, 'ordinary');
+  assert.strictEqual(cashRich.signal.gates.cash, false);
+
+  // Small relative to earnings: one year of EBITDA repays it.
+  const earnsPlenty = credit.refinancingProfile({ debtBreakdown: BF_DEBT, cash: 990, ebitda: 9000, unit: 'cr' });
+  assert.strictEqual(earnsPlenty.signal.status, 'ordinary');
+  assert.strictEqual(earnsPlenty.signal.gates.size, false);
+
+  // Mostly long-dated: little of it comes up for renewal.
+  const longDated = credit.refinancingProfile({
+    debtBreakdown: { longTerm: 6000, shortTerm: 1300, leases: 400 }, cash: 200, ebitda: 900, unit: 'cr',
+  });
+  assert.strictEqual(longDated.signal.status, 'ordinary');
+  assert.strictEqual(longDated.signal.gates.share, false);
+
+  // The refusal always names which condition was not met.
+  assert.ok(/under half the borrowings/.test(longDated.signal.sentence), longDated.signal.sentence);
+  assert.ok(/ordinary for a company that finances stock/.test(longDated.signal.sentence));
+});
+
+test('the trend needs enough periods, a material move, and persistence', () => {
+  const hist = [
+    { label: 'Mar 2021', shortTerm: 2778, total: 5271 },
+    { label: 'Mar 2022', shortTerm: 3867, total: 5972 },
+    { label: 'Mar 2023', shortTerm: 5101, total: 7313 },
+    { label: 'Mar 2024', shortTerm: 5663, total: 7948 },
+    { label: 'Mar 2025', shortTerm: 4969, total: 6698 },
+  ];
+  const r = credit.refinancingProfile({ debtBreakdown: BF_DEBT, cash: 990, ebitda: 2918, history: hist, unit: 'cr' });
+  assert.strictEqual(r.trend.ok, true);
+  assert.strictEqual(r.trend.direction, 'rising');
+  approx(r.trend.from.share, 2778 / 5271, 1e-12);
+  approx(r.trend.to.share, 4969 / 6698, 1e-12);
+  assert.ok(/Mar 2021/.test(r.trend.sentence) && /Mar 2025/.test(r.trend.sentence));
+
+  // Two periods is not a trend.
+  const tooShort = credit.refinancingProfile({ debtBreakdown: BF_DEBT, cash: 990, ebitda: 2918, history: hist.slice(0, 2) });
+  assert.strictEqual(tooShort.trend.ok, false);
+  assert.ok(/Not enough periods/i.test(tooShort.trend.reason));
+
+  // A move inside five percentage points is not reported as a direction.
+  const flat = credit.refinancingProfile({
+    debtBreakdown: BF_DEBT, cash: 990, ebitda: 2918,
+    history: [
+      { label: 'A', shortTerm: 500, total: 1000 },
+      { label: 'B', shortTerm: 520, total: 1000 },
+      { label: 'C', shortTerm: 510, total: 1000 },
+    ],
+  });
+  assert.strictEqual(flat.trend.direction, 'flat');
+  assert.ok(/stayed within five percentage points/.test(flat.trend.sentence));
+
+  // Persistence is reported separately from direction, and a path that
+  // wandered says so rather than implying a straight line.
+  const wandered = credit.refinancingProfile({
+    debtBreakdown: BF_DEBT, cash: 990, ebitda: 2918,
+    history: [
+      { label: 'A', shortTerm: 200, total: 1000 },
+      { label: 'B', shortTerm: 800, total: 1000 },
+      { label: 'C', shortTerm: 700, total: 1000 },
+      { label: 'D', shortTerm: 600, total: 1000 },
+    ],
+  });
+  assert.strictEqual(wandered.trend.direction, 'rising');
+  assert.strictEqual(wandered.trend.persistent, false);
+  assert.ok(/not in one direction/.test(wandered.trend.sentence));
+});
+
+test('refinancing refuses where the question has no meaning', () => {
+  // For a bank, borrowing short is the business, and this source does not
+  // separate deposits from borrowings anyway.
+  const bank = credit.refinancingProfile({ isLender: true, debtBreakdown: BF_DEBT, cash: 990, ebitda: 2918 });
+  assert.strictEqual(bank.ok, false);
+  assert.ok(/business model/i.test(bank.reason), bank.reason);
+
+  // A single borrowings total says nothing about when it falls due.
+  const noSplit = credit.refinancingProfile({ cash: 990, ebitda: 2918 });
+  assert.strictEqual(noSplit.ok, false);
+  assert.ok(/not broken down/i.test(noSplit.reason), noSplit.reason);
+
+  // TCS: the whole borrowings line is lease liabilities, so nothing rolls.
+  const leasesOnly = credit.refinancingProfile({ debtBreakdown: { longTerm: 0, shortTerm: 0, leases: 11283 }, cash: 12908, ebitda: 72398 });
+  assert.strictEqual(leasesOnly.ok, false);
+  assert.strictEqual(leasesOnly.rollingWithinYear, 0);
+  assert.ok(/nothing falling due/i.test(leasesOnly.reason), leasesOnly.reason);
+});
+
+test('the refinancing chart uses stacked grids, not two y-axes', () => {
+  const hist = [
+    { label: 'Mar 2023', shortTerm: 5101, longTerm: 1751, leases: 461, total: 7313, cash: 1040 },
+    { label: 'Mar 2024', shortTerm: 5663, longTerm: 1859, leases: 425, total: 7948, cash: 1690 },
+    { label: 'Mar 2025', shortTerm: 4969, longTerm: 1319, leases: 410, total: 6698, cash: 1291 },
+  ];
+  const opt = credit.refinancingStructureOption(hist, { unit: 'cr' });
+  assert.ok(opt, 'three periods must produce a chart');
+  // Two grids, each with exactly one y-axis. A dual axis would let the author
+  // choose where the bars and the ratio appear to cross.
+  assert.strictEqual(opt.grid.length, 2);
+  assert.strictEqual(opt.yAxis.length, 2);
+  assert.strictEqual(opt.yAxis[0].gridIndex, 0);
+  assert.strictEqual(opt.yAxis[1].gridIndex, 1);
+  const perGrid = {};
+  opt.series.forEach((s) => { perGrid[s.yAxisIndex] = (perGrid[s.yAxisIndex] || 0) + 1; });
+  assert.deepStrictEqual(Object.keys(perGrid).sort(), ['0', '1']);
+  // The two grids share the category axis, linked so one pointer reads both.
+  assert.deepStrictEqual(opt.axisPointer.link, [{ xAxisIndex: 'all' }]);
+  assert.deepStrictEqual(opt.xAxis[0].data, opt.xAxis[1].data);
+  // No legend: a legend is a memory task, and the last column is labelled.
+  assert.ok(!('legend' in opt), 'no legend on this page');
+  const bars = opt.series.filter((s) => s.type === 'bar');
+  assert.strictEqual(bars.length, 3);
+  bars.forEach((b) => assert.strictEqual(b.stack, 'debt'));
+  // The reference line is at 1.0x and nowhere else -- it is the only value on
+  // this chart that means something without a convention behind it.
+  const line = opt.series.find((s) => s.type === 'line');
+  assert.deepStrictEqual(line.markLine.data, [{ yAxis: 1 }]);
+
+  // Without cash there is no ratio panel, and the chart collapses to one grid
+  // rather than drawing an empty one.
+  const noCash = credit.refinancingStructureOption(hist.map((h) => ({ ...h, cash: null })), { unit: 'cr' });
+  assert.strictEqual(noCash.grid.length, 1);
+  assert.strictEqual(noCash.series.length, 3);
+  // One period cannot show a direction, so it draws nothing.
+  assert.strictEqual(credit.refinancingStructureOption(hist.slice(0, 1)), null);
+  assert.strictEqual(credit.refinancingStructureOption([]), null);
+});
+
+test('refinancing reaches the profile and every sentence passes the guardrail', () => {
+  const profile = credit.creditProfile({
+    symbol: 'BHARATFORG', sector: { industry: 'Auto Ancillaries' },
+    ebitda: 2918, totalDebt: 7309, cash: 990, interestExpense: 417, marketCapCr: 93232,
+    debtBreakdown: BF_DEBT,
+    debtHistory: [
+      { label: 'Mar 2023', shortTerm: 5101, total: 7313, cash: 1040 },
+      { label: 'Mar 2024', shortTerm: 5663, total: 7948, cash: 1690 },
+      { label: 'Mar 2025', shortTerm: 4969, total: 6698, cash: 1291 },
+    ],
+  });
+  assert.strictEqual(profile.refinancing.ok, true);
+  assert.strictEqual(profile.refinancing.signal.status, 'roll_dependent');
+  assert.ok(profile.caveats.some((c) => c.id === 'roll_dependent_funding'));
+  approx(profile.figures.creditShortTermDebtShare, 5062 / 7308, 1e-12);
+  approx(profile.figures.creditCashCoverOfShortTermDebt, 990 / 5062, 1e-12);
+
+  // A lender gets the refusal, and no short-term figures leak into `figures`.
+  const bank = credit.creditProfile({
+    symbol: 'HDFCBANK', sector: { industry: 'Banks' }, ebitda: 100, totalDebt: 500,
+    debtBreakdown: BF_DEBT, cash: 200707,
+  });
+  assert.strictEqual(bank.isLender, true);
+  assert.strictEqual(bank.refinancing.ok, false);
+  assert.strictEqual(bank.figures.creditShortTermDebtShare, undefined);
+  assert.strictEqual(bank.figures.creditCashCoverOfShortTermDebt, undefined);
+
+  const prose = credit.collectProfileProse(profile);
+  prose.forEach((s) => assert.strictEqual(credit.findBannedLanguage(s), null, s));
+  assert.ok(prose.some((s) => /falling due within the year/.test(s)), 'the cover sentence must be linted');
+  assert.ok(prose.some((s) => /depends on lenders renewing/.test(s)), 'the signal sentence must be linted');
+  assert.ok(credit.collectProfileProse(bank).some((s) => /business model/.test(s)), 'the lender refusal must be linted');
+});
+
