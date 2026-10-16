@@ -32,7 +32,7 @@ check(py.includes('MODE: A') && py.includes('MODE: B') && py.includes('MODE: C')
 // 3. Extract the real advisorMarkdown from advisor.js and run it against
 //    known inputs (stubbing only advisorEscapeHtml, which is a separate
 //    function and is exercised by the escape test below).
-const m = advisor.match(/function advisorMarkdown\(text\) \{([\s\S]*?)\n\}\n\nfunction advisorAddMsg/);
+const m = advisor.match(/function advisorMarkdown\(text\) \{([\s\S]*?)\r?\n\}\r?\n\r?\nfunction advisorAddMsg/);
 if (!m) {
   check(false, 'advisorMarkdown extractable from advisor.js');
 } else {

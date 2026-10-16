@@ -30,6 +30,20 @@ function fySeries(section, label) {
   return out;
 }
 
+// Generic series that includes ALL period types (fy, period, quarter) —
+// used by the shareholding and quarterly tables, whose periods don't carry
+// type:'fy'. Filters out nulls so downstream computations see clean data.
+function allPeriodSeries(section, label) {
+  const row = findRow(section, label);
+  if (!row || !section) return [];
+  const out = [];
+  section.periods.forEach((p, i) => {
+    const cell = row.values[i];
+    out.push({ year: p.year, label: p.label || p.key, value: cell ? cell.value : null });
+  });
+  return out;
+}
+
 function median(values) {
   const clean = values.filter((v) => v != null).sort((a, b) => a - b);
   if (!clean.length) return null;
@@ -55,14 +69,23 @@ function yearIndex(series, year) {
 // vs-own-median: the sticky rightmost table column and the deviation bars.
 // Ratio > 1 means "above its own 12-year normal", which is legible to a
 // beginner in a way an absolute rupee figure is not.
+// A ratio to the median only reads as "% of its own normal" when that
+// median is positive. On a row whose median is negative (a loss-maker's
+// Net Profit, Cash from Financing, free cash flow) the percentage inverts:
+// the year with the SMALLEST loss divides to the LOWEST percentage, so the
+// best year reads as the weakest one. There is no sign convention that
+// fixes this for a beginner, so it is refused -- `ratio: null`, which the
+// table renders as an em dash with a reason, per the plan's rule that
+// not_computable is never a number.
 function vsOwnMedian(series) {
   const values = series.map((p) => p.value);
   const med = median(values);
+  const usable = med != null && med > 0;
   return series.map((p) => ({
     year: p.year,
     value: p.value,
     median: med,
-    ratio: med && p.value != null ? p.value / med : null,
+    ratio: usable && p.value != null ? p.value / med : null,
   }));
 }
 
@@ -877,7 +900,9 @@ function benchChartOption(pins, indexed) {
     return allYears.map((y) => {
       const v = byYear.has(y) ? byYear.get(y) : null;
       if (v == null) return null;
-      return indexed && base ? (v / base) * 100 : v;
+      if (!indexed) return v;
+      if (!Number.isFinite(base)) return null; // refused, not silently raw
+      return (v / base) * 100;
     });
   };
   // Each series prints its ACTUAL latest value (in the row's own unit)
@@ -1193,7 +1218,11 @@ function rowBoxScore(series, label) {
   const unit = label ? rowUnit(label) : null;
   const lowerBetter = polarity === 'lower-better';
   const first = clean[0], last = clean[clean.length - 1];
-  const years = last.year - first.year;
+  // Elapsed calendar years between endpoints, not point count minus one --
+  // a quarterly series has ~4x the points of an annual one covering the
+  // same span, and compounding over point-count would silently relabel a
+  // 3-year quarterly window as a fabricated "12Y CAGR".
+  const years = (last.year != null && first.year != null) ? last.year - first.year : clean.length - 1;
   const changeUnit = unit ? (CHANGE_UNIT[unit] || null) : null;
   let cagr = null, cagrRefusal = null;
   if (changeUnit) {
@@ -1510,6 +1539,52 @@ function peHistoryBand(priceFySeries, epsSeries) {
   };
 }
 
+// Two-grid chart: price line on top, P/E ratio below, sharing the same
+// fiscal-year x-axis. No dual y-axes — each band has its own scale and its
+// own y-axis, linked by position. dataZoom enables scrolling through the
+// full history. priceFySeries is fyEndPriceSeries output; peResult is
+// peHistoryBand output.
+function peBandChartOption(priceFySeries, peResult) {
+  const years = priceFySeries.filter(p => p.value != null).map(p => 'FY' + p.year);
+  const prices = priceFySeries.filter(p => p.value != null).map(p => p.value);
+  const pe = peResult.series.filter(p => p.value != null).map(p => +(p.value.toFixed(1)));
+  const peYears = peResult.series.filter(p => p.value != null).map(p => 'FY' + p.year);
+  return {
+    axisPointer: { link: [{ xAxisIndex: 'all' }] },
+    dataZoom: [
+      { type: 'inside', xAxisIndex: [0, 1] },
+      { type: 'slider', xAxisIndex: [0, 1], bottom: 2, height: 18 },
+    ],
+    grid: [
+      // top:32 (not 20) leaves room for the yAxis name drawn above the
+      // topmost gridline -- at 20 the name's glyphs land at a negative
+      // pixel y and get clipped by the canvas edge instead of the axis.
+      { left: 70, right: 70, top: 32, height: '40%', containLabel: true },
+      // right:70 (not 26) on both grids -- the P/E median markLine's
+      // label ("median 25.3x") draws past the grid's right edge toward
+      // the axis end, and at 26 that text ran off the canvas entirely.
+      // Both grids must share right/left so the linked x-axis stays
+      // pixel-aligned between the two stacked charts.
+      { left: 70, right: 70, top: '62%', bottom: 56, containLabel: true },
+    ],
+    xAxis: [
+      { type: 'category', gridIndex: 0, data: years, axisLabel: { show: false }, axisTick: { show: false }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
+      { type: 'category', gridIndex: 1, data: peYears.length ? peYears : years, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
+    ],
+    yAxis: [
+      { gridIndex: 0, type: 'value', name: '\u20b9 / share', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => '\u20b9' + formatShareValueSafe(v), fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
+      { gridIndex: 1, type: 'value', name: 'P/E (x)', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
+    ],
+    tooltip: { trigger: 'axis', confine: true },
+    series: [
+      { name: 'Price (FY end)', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: prices, showSymbol: true, symbolSize: 5, lineStyle: { color: '#2557C7', width: 2 }, itemStyle: { color: '#2557C7' } },
+      { name: 'P/E', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: pe, showSymbol: true, symbolSize: 5, lineStyle: { color: '#A03A22', width: 1.5 }, itemStyle: { color: '#A03A22' },
+        markLine: peResult.median != null ? { silent: true, symbol: 'none', lineStyle: { type: 'dashed', color: 'rgba(20,40,63,.35)', width: 1 }, data: [{ yAxis: peResult.median, label: { formatter: 'median ' + peResult.median.toFixed(1) + 'x', fontSize: 9.5, color: 'rgba(20,40,63,.5)' } }] } : undefined,
+      },
+    ],
+  };
+}
+
 /* =====================================================================
    PHASE 3 — THE COMPOUNDING CHECKLIST
    Ten conditions, each independently checkable, using the plan's exact
@@ -1622,7 +1697,36 @@ function compoundingChecklist(bundle, options) {
   }
   conditions.push({ id: 7, label: 'Share count grew at most 10% over the last 5 years', value: dilutionRatio != null ? `${((dilutionRatio - 1) * 100).toFixed(1)}% change` : 'not computable', meets: dilutionRatio != null ? dilutionRatio <= 1.10 : null, available: dilutionRatio != null });
 
-  conditions.push({ id: 8, label: 'Promoter holding fell by at most 5 percentage points over 12 quarters, and pledge is under 10%', value: 'Shareholding pattern is not fetched by this app yet', meets: null, available: false });
+  {
+    const label8 = 'Promoter holding fell by at most 5 percentage points over 12 quarters, and pledge is under 10%';
+    const promoterHist = allPeriodSeries(bundle.shareholding, 'Promoters').filter((p) => p.value != null);
+    if (!bundle.shareholding || promoterHist.length < 2) {
+      conditions.push({ id: 8, label: label8, value: 'Shareholding pattern is not fetched by this app yet', meets: null, available: false });
+    } else {
+      const window8 = promoterHist.slice(-12);
+      const change = window8[window8.length - 1].value - window8[0].value;
+      const promoterOk = change >= -5;
+      const pledgeHist = allPeriodSeries(bundle.shareholding, 'Pledged %').filter((p) => p.value != null);
+      if (pledgeHist.length) {
+        const latestPledge = pledgeHist[pledgeHist.length - 1].value;
+        const pledgeOk = latestPledge < 10;
+        conditions.push({
+          id: 8, label: label8,
+          value: `Promoter holding ${change >= 0 ? 'rose' : 'fell'} ${Math.abs(change).toFixed(1)}pp over ${window8.length} quarters, pledge ${latestPledge.toFixed(1)}%`,
+          meets: promoterOk && pledgeOk, available: true,
+        });
+      } else {
+        // Screener has no Pledged % row for this company here — per the
+        // house rule, that absence must never be read as "0% pledged", so
+        // the pledge half of this condition can't be asserted either way.
+        conditions.push({
+          id: 8, label: label8,
+          value: `Promoter holding ${change >= 0 ? 'rose' : 'fell'} ${Math.abs(change).toFixed(1)}pp over ${window8.length} quarters — pledge % not reported by the source, so this condition can't be fully evaluated`,
+          meets: null, available: false,
+        });
+      }
+    }
+  }
 
   // A lender's "Financing Margin %" is Revenue − Interest − Expenses over
   // Revenue, and screener's Expenses line carries provisions and (after
@@ -1717,6 +1821,334 @@ function stmtExploreCatalog(bundle) {
     });
   });
   return out;
+}
+
+/* =====================================================================
+   CROSS-COMPANY DIVERGENCE — "Where they parted"
+
+   The divergence rules read ONE company against itself over time. This
+   reads TWO companies against each other, over their common window, and
+   ranks the rows where their growth rates pulled furthest apart.
+
+   Everything is expressed as one unit -- percentage change across the
+   common window -- so a rupee row and a margin row rank on the same
+   scale. Every guard is inherited rather than reinvented: pctChange()
+   already refuses a sign flip and a zero base, and the row set is the
+   INTERSECTION of the two companies' canonical rows, which means a
+   lender vs a manufacturer simply never produces a Sales-vs-Revenue
+   pairing -- the no-synonym-map rule enforced by construction rather
+   than by a special case.
+
+   No causal or comparative language: this reports two growth rates and
+   the arithmetic gap between them. It never says which is better.
+   ===================================================================== */
+const DIVERGENCE_MIN_COMMON_YEARS = 4;
+// A sign disagreement only counts as one when BOTH companies actually
+// moved. Without this, "TCS -16%, INFY +0%" reads as "opposite directions"
+// off the sign of a rounding-level change, and outranks a genuine
+// thousand-point gap — the same relative-gate-alone false positive the
+// single-company rules guard against with an absolute floor.
+const DIVERGENCE_OPPOSITE_MIN_MOVE = 0.10;
+// A row must be worth at least this share of the company's own scale
+// before a percentage change in it is allowed to rank. Without it, a line
+// that went from 10 Cr to 350 Cr posts +3400% and tops the list even when
+// the company earns 40,000 Cr and that line is a rounding error. Same
+// relative-gate-alone failure as above, on the ranking rather than the
+// sign. Ratio rows (margins, day counts) are exempt -- a margin has no
+// rupee scale to be immaterial against.
+const DIVERGENCE_MATERIALITY_SHARE = 0.01;
+
+// Graham's prescription for reading growth across a long window: compare
+// a three-year average at each end rather than the two endpoint years.
+// A single first year that happened to be a trough (or a peak) otherwise
+// sets the whole result, which is the same two-endpoint artifact this
+// project already refuses for headline CAGR. Falls back to shorter
+// averages on shorter windows, and to single years when there is nothing
+// else available -- reported via `avgYears` so the caller can say so.
+function endpointAverages(map, years) {
+  const n = years.length >= 8 ? 3 : (years.length >= 6 ? 2 : 1);
+  const mean = (ys) => {
+    const vals = ys.map((y) => map.get(y)).filter((v) => v != null && isFinite(v));
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  };
+  return {
+    n,
+    first: mean(years.slice(0, n)),
+    last: mean(years.slice(-n)),
+  };
+}
+
+// The company's own size, used as the denominator for the materiality
+// gate: its headline top line for P&L/cash-flow rows, total assets for
+// balance-sheet rows. Median rather than latest so one outlier year
+// cannot move the bar.
+function companyScaleRef(bundle, sectionKey) {
+  const pick = (section, labels) => {
+    for (const label of labels) {
+      const s = fySeries(section, label).map((p) => p.value).filter((v) => v != null);
+      if (s.length) return median(s.map(Math.abs));
+    }
+    return null;
+  };
+  if (sectionKey === 'balanceSheet') {
+    return pick(bundle.balanceSheet, ['Total Assets', 'Total Liabilities'])
+        || pick(bundle.profitLoss, ['Sales', 'Revenue']);
+  }
+  return pick(bundle.profitLoss, ['Sales', 'Revenue'])
+      || pick(bundle.balanceSheet, ['Total Assets']);
+}
+
+function crossCompanyDivergence(bundleA, bundleB, options) {
+  const opts = options || {};
+  const limit = opts.limit || 5;
+  if (!bundleA || !bundleB) return null;
+  const schemaA = bundleA.schema || classifySchema(bundleA.profitLoss);
+  const schemaB = bundleB.schema || classifySchema(bundleB.profitLoss);
+  const rowsA = CANONICAL_ROWS[schemaA];
+  const rowsB = CANONICAL_ROWS[schemaB];
+  if (!rowsA || !rowsB) {
+    return { rows: [], skipped: [], window: null, note: 'One of these companies uses a reporting format we do not recognise, so there is no row set we can line up.' };
+  }
+  const refusal = compareRefusal(bundleA, bundleB);
+  // A schema mismatch already blocks the balance sheet and cash flow from
+  // being shown side by side; ranking their divergence would smuggle the
+  // same comparison back in through a different card.
+  const sections = refusal
+    ? [{ key: 'profitLoss', label: 'Profit & Loss' }, { key: 'ratios', label: 'Ratios' }]
+    : [{ key: 'profitLoss', label: 'Profit & Loss' }, { key: 'balanceSheet', label: 'Balance Sheet' },
+       { key: 'cashFlow', label: 'Cash Flow' }, { key: 'ratios', label: 'Ratios' }];
+
+  const out = [];
+  const skipped = [];
+  let windowFrom = null, windowTo = null;
+
+  sections.forEach((sec) => {
+    const scaleA = companyScaleRef(bundleA, sec.key);
+    const scaleB = companyScaleRef(bundleB, sec.key);
+    const listA = rowsA[sec.key] || [];
+    const listB = rowsB[sec.key] || [];
+    const shared = listA.filter((label) => listB.indexOf(label) >= 0);
+    shared.forEach((label) => {
+      const sa = fySeries(bundleA[sec.key], label);
+      const sb = fySeries(bundleB[sec.key], label);
+      const mapA = new Map(sa.filter((p) => p.value != null).map((p) => [p.year, p.value]));
+      const mapB = new Map(sb.filter((p) => p.value != null).map((p) => [p.year, p.value]));
+      const years = Array.from(mapA.keys()).filter((y) => mapB.has(y)).sort((x, y) => x - y);
+      if (years.length < DIVERGENCE_MIN_COMMON_YEARS) {
+        if (years.length) skipped.push({ section: sec.key, label, reason: 'fewer than ' + DIVERGENCE_MIN_COMMON_YEARS + ' overlapping years' });
+        return;
+      }
+      const from = years[0], to = years[years.length - 1];
+      // Graham's averaged endpoints, not the two endpoint years.
+      const ea = endpointAverages(mapA, years);
+      const eb = endpointAverages(mapB, years);
+      const pa = pctChange(ea.first, ea.last);
+      const pb = pctChange(eb.first, eb.last);
+      if (pa == null || pb == null) {
+        skipped.push({ section: sec.key, label, reason: 'the change crosses zero or starts from zero for one of them, so a percentage would not mean anything' });
+        return;
+      }
+      // Materiality: a rupee row has to be a real share of the company
+      // before its percentage change is allowed to rank. Ratio rows are
+      // exempt -- there is no rupee scale to measure a margin against.
+      const unit = rowUnit(label);
+      if (unit === 'cr' || unit === 'rupee') {
+        const sizeA = median(years.map((y) => Math.abs(mapA.get(y))).filter((v) => v != null));
+        const sizeB = median(years.map((y) => Math.abs(mapB.get(y))).filter((v) => v != null));
+        const immaterialA = scaleA != null && sizeA != null && sizeA < scaleA * DIVERGENCE_MATERIALITY_SHARE;
+        const immaterialB = scaleB != null && sizeB != null && sizeB < scaleB * DIVERGENCE_MATERIALITY_SHARE;
+        if (immaterialA || immaterialB) {
+          skipped.push({ section: sec.key, label, reason: 'the amounts involved are too small a share of the company to read a percentage from' });
+          return;
+        }
+      }
+      if (windowFrom == null || from > windowFrom) windowFrom = from;
+      if (windowTo == null || to > windowTo) windowTo = to;
+      out.push({
+        section: sec.key, sectionLabel: sec.label, label,
+        from, to, years: years.length,
+        avgYears: Math.min(ea.n, eb.n),
+        pctA: pa, pctB: pb,
+        gapPoints: Math.abs(pa - pb) * 100,
+        opposite: (pa < 0) !== (pb < 0)
+          && Math.abs(pa) >= DIVERGENCE_OPPOSITE_MIN_MOVE
+          && Math.abs(pb) >= DIVERGENCE_OPPOSITE_MIN_MOVE,
+        unit,
+      });
+    });
+  });
+
+  // Rows where the two moved in OPPOSITE directions rank above rows where
+  // they merely moved at different speeds -- a sign disagreement is a
+  // categorically different observation from a magnitude one, and sorting
+  // purely by gap size would bury it under a fast-grower's big number.
+  out.sort((x, y) => (Number(y.opposite) - Number(x.opposite)) || (y.gapPoints - x.gapPoints));
+  return {
+    window: windowFrom != null ? { from: windowFrom, to: windowTo } : null,
+    rows: out.slice(0, limit),
+    total: out.length,
+    skipped,
+    refusalApplied: refusal ? refusal.code : null,
+  };
+}
+
+// Deterministic, template-only. Same inputs produce the same bytes on
+// every refresh -- no adjective, no causal connective, no verdict.
+function crossCompanyDivergenceSentence(row, symA, symB) {
+  const pct = (v) => (v >= 0 ? '+' : '') + (v * 100).toFixed(0) + '%';
+  const span = 'FY' + row.from + '–FY' + row.to;
+  const head = symA + ' ' + pct(row.pctA) + ', ' + symB + ' ' + pct(row.pctB);
+  return row.opposite
+    ? row.label + ' moved in opposite directions over ' + span + ': ' + head + '.'
+    : row.label + ' over ' + span + ': ' + head + ' — a gap of ' + row.gapPoints.toFixed(0) + ' percentage points.';
+}
+
+// Says out loud how the endpoints were measured. A reader who is not told
+// the ends are averaged will assume they are single years and check the
+// arithmetic against the table, find it does not tie, and distrust the
+// card -- disclosure here is what keeps it verifiable.
+function crossCompanyDivergenceBasis(avgYears) {
+  if (avgYears >= 2) {
+    return 'Each end of the window is a ' + avgYears + '-year average, not a single year, so one unusual first or last year cannot set the whole result.';
+  }
+  return 'The window is too short to average its ends, so these compare single years — one unusual year at either end will move them.';
+}
+
+/* =====================================================================
+   WHAT KIND OF COMPANY IS THIS? — Peter Lynch's six categories
+
+   Lynch's argument in One Up on Wall Street is that the same number means
+   different things depending on what kind of company you are holding: a
+   12% grower is a disappointment for a fast grower and a triumph for a
+   utility, and a cyclical's P/E is at its LOWEST exactly when its profits
+   peak, which is the most dangerous moment to read it as cheap.
+
+   This page already refuses to apply manufacturing ratios to a bank. The
+   same discipline, one level finer: say which kind of company this is,
+   then say which measures mean less because of it.
+
+   Thresholds are Lynch's own published bands (slow ~GDP-rate, stalwart
+   10-12%, fast grower 20%+), applied to reported sales growth. Assignment
+   is deterministic and ordered -- a company that satisfies two tests gets
+   the earlier one, every time, so the label never changes on a refresh.
+
+   The category is a description of the last decade of reported numbers.
+   It is not a rating, and nothing here ranks one category above another.
+   ===================================================================== */
+const LYNCH_CATEGORIES = {
+  cyclical: {
+    name: 'Cyclical',
+    plain: 'Sales and profits rise and fall in waves rather than trending steadily — the pattern of steel, cement, sugar, chemicals, autos and airlines.',
+    careful: [
+      'The P/E is lowest when profits are at their peak, which is the point in the cycle where the past ten years flatter the company most.',
+      'A single year’s margin says very little; the range across the whole cycle says more.',
+      'Growth measured from a trough year to a peak year is an artifact of those two dates.',
+    ],
+  },
+  turnaround: {
+    name: 'Possible turnaround',
+    plain: 'Profit fell to a loss or near-nothing at some point in this window, and the recent years read differently from the middle ones.',
+    careful: [
+      'Percentage changes measured across a loss year are undefined, so several figures on this page will show a dash rather than a number.',
+      'Recovery from a low base produces very large percentages that describe the base, not the business.',
+    ],
+  },
+  fastGrower: {
+    name: 'Fast grower',
+    plain: 'Sales compounded at 20% a year or more across this window.',
+    careful: [
+      'Companies growing faster than 15% a year have historically sustained it for another five years about a quarter of the time (Mauboussin’s base-rate work). The past ten years are not a forecast of the next five.',
+      'Check whether the growth arrived as cash: the Net Profit vs Cash from Operations chart on this page is the test.',
+      'Check the share count. Growth funded by issuing shares is not growth per share.',
+    ],
+  },
+  stalwart: {
+    name: 'Stalwart',
+    plain: 'Sales compounded in the low-to-mid teens — a large company still growing steadily.',
+    careful: [
+      'For this kind of company, consistency tells you more than the headline rate: how many of the last ten years were positive, and how far the weakest one fell.',
+    ],
+  },
+  slowGrower: {
+    name: 'Slow grower',
+    plain: 'Sales grew slower than about 10% a year across this window — roughly the pace of the wider economy.',
+    careful: [
+      'For this kind of company the dividend record and the payout ratio usually matter more than the growth rate.',
+      'A low growth rate is not by itself a problem; it is a description of the kind of company this is.',
+    ],
+  },
+  unclear: {
+    name: 'Doesn’t fit cleanly',
+    plain: 'The reported history does not sit in any one of these shapes.',
+    careful: ['Read the rows themselves rather than reaching for a category.'],
+  },
+  // Lynch's categories describe operating businesses that sell something.
+  // A lender does not have a sales line or an operating margin in that
+  // sense: its margin moves with the interest-rate cycle, which looks
+  // identical in the data to a steel company's business cycle and means
+  // something entirely different. Refusing is the honest answer, and it
+  // is the same refusal this page already makes for a bank's ratios.
+  lender: {
+    name: 'Not categorised — this is a lender',
+    plain: 'These six categories describe companies that sell a product or a service. For a bank or an NBFC, lending money is the business, so the figures they turn on — a sales line, an operating margin — either do not exist here or mean something different.',
+    careful: [
+      'A lender’s margin rises and falls with the interest-rate cycle. In the data that is indistinguishable from a manufacturer’s business cycle, so we do not call it one.',
+      'The rows this page can compare for a lender are the ones it genuinely reports: revenue, financing profit, net profit, deposits and borrowings.',
+    ],
+  },
+};
+
+// Ordered, deterministic assignment. Cyclical is tested first because a
+// cyclical's growth rate is the least meaningful thing about it -- letting
+// it fall through to "fast grower" at the top of a cycle is exactly the
+// misread Lynch warns about.
+function classifyLynchCategory(bundle) {
+  if (!bundle) return null;
+  const pl = bundle.profitLoss;
+  // Checked before anything else. detectCyclical() falls back to a bank's
+  // Financing Margin %, which swings with the rate cycle and would
+  // otherwise label every lender "Cyclical" -- HDFCBANK came out cyclical
+  // on a 34-point margin range, which is a fact about interest rates, not
+  // about a business cycle.
+  const schema = bundle.schema || classifySchema(pl);
+  if (schema === 'financial') {
+    return { key: 'lender', ...LYNCH_CATEGORIES.lender, salesCagr: null, from: null, to: null,
+      years: 0, hadLoss: false, cyclicalReason: null,
+      basis: 'This company reports a financing margin rather than an operating margin, which is how a lender reports.' };
+  }
+  const salesSeries = fySeries(pl, 'Sales').length ? fySeries(pl, 'Sales') : fySeries(pl, 'Revenue');
+  const clean = salesSeries.filter((p) => p.value != null);
+  if (clean.length < 4) {
+    return { key: 'unclear', ...LYNCH_CATEGORIES.unclear, salesCagr: null, years: clean.length,
+      basis: 'There are fewer than four reported years here, which is not enough history to describe a shape.' };
+  }
+  const from = clean[0].year, to = clean[clean.length - 1].year;
+  const cagr = windowCagr(clean, clean.length - 1);
+  const profit = fySeries(pl, 'Net Profit').filter((p) => p.value != null);
+  const hadLoss = profit.some((p) => p.value <= 0);
+  const cyc = detectCyclical(pl);
+
+  let key;
+  if (cyc.cyclical) key = 'cyclical';
+  else if (hadLoss) key = 'turnaround';
+  else if (cagr == null) key = 'unclear';
+  else if (cagr >= 0.20) key = 'fastGrower';
+  else if (cagr >= 0.10) key = 'stalwart';
+  else key = 'slowGrower';
+
+  const cat = LYNCH_CATEGORIES[key];
+  const rate = cagr != null ? (cagr * 100).toFixed(1) + '% a year' : 'not computable across a loss year';
+  return {
+    key, name: cat.name, plain: cat.plain, careful: cat.careful,
+    salesCagr: cagr, from, to, years: clean.length, hadLoss,
+    cyclicalReason: cyc.cyclical ? cyc.reason : null,
+    basis: key === 'cyclical'
+      ? cyc.reason + ' Sales compounded at ' + rate + ' over FY' + from + '–FY' + to + ', but for a company with this shape that single rate is the least informative number on the page.'
+      : key === 'turnaround'
+        ? 'Reported profit was zero or negative in at least one year of FY' + from + '–FY' + to + '.'
+        : 'Sales compounded at ' + rate + ' over FY' + from + '–FY' + to + '.',
+  };
 }
 
 // Aligns two FY series on their common years — the X-vs-Y scatter's
@@ -2068,12 +2500,33 @@ function dupontAttribution(a, b) {
   return { parts, total, main };
 }
 
+// Per-share rupee values (a stock price, not a whole-statement aggregate)
+// -- same abbreviation style as formatCroreSafe but without its "Cr" suffix,
+// which would turn a Rs4,000 share price into the nonsensical "Rs4.0k Cr".
+function formatShareValueSafe(v) {
+  if (v == null || !isFinite(v)) return '\u2014';
+  const sign = v < 0 ? '-' : '';
+  const abs = Math.abs(v);
+  if (abs >= 1e5) return sign + (abs / 1e5).toFixed(1) + 'L';
+  if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + 'k';
+  return sign + abs.toFixed(0);
+}
 function advisorEscapeSafe(s) {
   return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
 }
 
+// Pearson correlation coefficient over aligned {x,y} pairs. Pure arithmetic.
+function pearsonR(pairs) {
+  const n = pairs.length;
+  if (n < 3) return null;
+  let sx = 0, sy = 0, sxy = 0, sxx = 0, syy = 0;
+  pairs.forEach(p => { sx += p.x; sy += p.y; sxy += p.x * p.y; sxx += p.x * p.x; syy += p.y * p.y; });
+  const denom = Math.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy));
+  return denom === 0 ? null : (n * sxy - sx * sy) / denom;
+}
+
 const api = {
-  findRow, fySeries, median, pctChange, yearIndex, vsOwnMedian,
+  findRow, fySeries, allPeriodSeries, median, pctChange, yearIndex, vsOwnMedian,
   classifySchema, compareRefusal,
   COMPANION_MAP, companionMapFor,
   KNOWN_DISCONTINUITIES, discontinuityNote, detectCyclical, detectStructuralBreaks,
@@ -2084,9 +2537,12 @@ const api = {
   capitalEmployedSeries, incrementalRoce, assetTurnover, bookValuePerShareSeries,
   priceToBookLatest, reratingSpread, fyEndPriceSeries, peHistoryBand,
   compoundingChecklist, checklistQualityGate,
-  stmtExploreCatalog, alignFyPairs, pctOfSalesSeries,
+  stmtExploreCatalog, alignFyPairs, pctOfSalesSeries, pearsonR,
+  crossCompanyDivergence, crossCompanyDivergenceSentence, crossCompanyDivergenceBasis,
+  classifyLynchCategory, LYNCH_CATEGORIES,
   growthChartOption, cashFlowWaterfallOption, companionMapFor,
   marginBridgeData, marginBridgeOption, dupontSeries, dupontAttribution,
+  peBandChartOption,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

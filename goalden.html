@@ -2164,12 +2164,17 @@ Data sources: "The Case" uses real historical annual returns — Sensex (India, 
 
 Behavior: prefer driving the real interface — navigate to the right screen, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.
 
-Choice before action (mandatory, ALWAYS the first move): The moment the user asks you to build/calculate anything — even with zero numbers given yet, e.g. just "help me plan my retirement" — before touching any field, offer this choice, and nothing else:
-"I can either:
-A) Do it all for you — I'll ask for the few numbers I actually need, then fill everything in, run the calculation, and hand you a full report.
-B) Walk you through it step by step — you do each screen, I explain as we go.
-Which would you prefer?"
-Wait for their reply. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative: if they haven't given you the numbers yet, ask for the essential few in ONE consolidated message (not one field at a time). Once you have them, prefer calling build_goal_plan ONCE with { goalType, country, params } to fill every field and run the calculation in a single step (instead of one set_value per field), narrating briefly as you go, and ALWAYS finish by calling compose_briefing so the result lands as a full report page with graphs — never just a chat summary. If build_goal_plan fails, or you need to correct a single value afterwards, use set_value for just that correction. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it, using set_value one field at a time.`;
+Acting on a user's own situation: this page plans ONE goal at a time. When someone describes their life and several goals, don't stop to ask which one — run each goal that has its numbers with build_goal_plan, one call per goal in the same turn. Then give each goal's monthly SIP, the total, and how that total compares with what they can save each month (take-home − spending − EMIs, shown as one line of arithmetic). Say that The Full Plan (Level 2) puts all the goals into one plan against their budget and risk profile, and offer to take them there. The last goal you build stays on screen, so say which one is showing.
+Mapping what people say to this page:
+- country: ₹, lakh/crore, or an Indian city → IN; $ or a US city → US. Ask only if nothing hints at it.
+- Money: "1.4 lakh" = 140000, "80 lakh" = 8000000, "2 crore" = 20000000, "70k" = 70000.
+- retirement: age, retireAge, monthlyExpense = today's monthly spending (the page applies the retirement lifestyle factor itself).
+- education: yearsToCollege = 18 − the child's age for an undergraduate degree (1-22); courseDuration 4 for engineering and most degrees, 5 for medicine. annualFee comes only from the user — never invent a fee. If it's missing, run the other goals and ask for it.
+- generic: house/car/wedding/travel → genType (a holiday or trip is travel); genAmount = the amount they gave; genYears.
+- existingSavings: only money they said is set aside for that goal. General FDs or mutual funds are not counted against a goal unless they say so — tell them, because counting them would lower the SIP.
+- risk: use what they said ("I can't take losses" → cautious, "I'm fine with big swings" → growth); otherwise balanced, and say so.
+What-ifs and changes ("retire at 58 instead", "make the house 60 lakh"): change just that value — set_value on the goal on screen, or build_goal_plan again for another goal — and report the monthly SIP before → after. Quote only SIPs this page calculated; to show what another date or amount would do, run it rather than estimating.
+A bare "help me plan my retirement" with no details gets the A/B choice from the rules, once. For a walk-through (B), navigate one screen at a time, explain each question before they answer it, and use set_value one field at a time.`;
 
 // F5 — one contextual suggestion chip on the results screen, grounded in the
 // goal type. Rendered by the page, sent through the real send path on click.
@@ -2481,6 +2486,14 @@ function executeAdvisorTool(name, args) {
     const allowed = ALLOWED[goalType];
     const setFields = ['country','goalType'];
     const skipped = [];
+    const notes = [];
+    // Savings belong to one goal. A user with several goals gets one build per
+    // goal, so a build for a different goal type must not inherit the last
+    // goal's savings: an omitted value resets to 0, and the result says so.
+    if (!Object.prototype.hasOwnProperty.call(params, 'existingSavings') && S.goalType && S.goalType !== goalType && S.existingSavings) {
+      notes.push('existingSavings reset from ' + S.existingSavings + ' to 0: that amount was entered for the previous ' + S.goalType + ' goal.');
+      S.existingSavings = 0;
+    }
     // Every value routes through advisorSetValue — no parallel validator here.
     let r = advisorSetValue('country', country);
     if (!r.ok) return JSON.stringify({ ok:false, error:r.error, failedField:'country' });
@@ -2497,7 +2510,7 @@ function executeAdvisorTool(name, args) {
     render();
     const results = advisorGetResults();
     console.log('[skill-metric] build_goal_plan ' + (performance.now()-start).toFixed(0) + 'ms');
-    return JSON.stringify({ ok:true, results: results.result, flags: results.flags, setFields: setFields, skipped: skipped });
+    return JSON.stringify({ ok:true, results: results.result, flags: results.flags, setFields: setFields, skipped: skipped, notes: notes });
   }
   if (name === 'read_other_page') return JSON.stringify(readOtherPage(args && args.page));
   if (name === 'search_instruments') return searchInstruments(args && args.query);

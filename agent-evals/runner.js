@@ -211,6 +211,7 @@ async function runScenario(sc, api) {
   const toolsCalled = [];
   const toolCalls = [];
   let lastReply = '';
+  const replies = [];
   let lastErr = null;
 
   // Send each user message one at a time, running a full ReAct round after
@@ -249,12 +250,13 @@ async function runScenario(sc, api) {
         }
       } catch (e) {
         lastErr = 'could not reach ' + BASE + '/api/chat — is local_server.py running? (' + e.message + ')';
-        return { toolsCalled, toolCalls, lastReply, lastErr, state: api.getRawState(), results: api.getResults() };
+        return { toolsCalled, toolCalls, replies, lastReply, lastErr, state: api.getRawState(), results: api.getResults() };
       }
-      if (!resp.ok) { lastErr = 'chat returned HTTP ' + resp.status; return { toolsCalled, toolCalls, lastReply, lastErr, state: api.getRawState(), results: api.getResults() }; }
+      if (!resp.ok) { lastErr = 'chat returned HTTP ' + resp.status; return { toolsCalled, toolCalls, replies, lastReply, lastErr, state: api.getRawState(), results: api.getResults() }; }
       const data = await resp.json();
       const msg = data.message || {};
       if (msg.tool_calls && msg.tool_calls.length) {
+        if (msg.content) replies.push(msg.content);
         messages.push({ role: 'assistant', content: msg.content || null, tool_calls: msg.tool_calls });
         for (const tc of msg.tool_calls) {
           const name = tc.function && tc.function.name;
@@ -276,12 +278,12 @@ async function runScenario(sc, api) {
         }
         continue;
       }
-      if (msg.content) { lastReply = msg.content; messages.push({ role: 'assistant', content: msg.content }); }
+      if (msg.content) { lastReply = msg.content; replies.push(msg.content); messages.push({ role: 'assistant', content: msg.content }); }
       break;
     }
   }
 
-  return { toolsCalled, toolCalls, lastReply, lastErr, state: api.getRawState(), results: api.getResults() };
+  return { toolsCalled, toolCalls, replies, lastReply, lastErr, state: api.getRawState(), results: api.getResults() };
 }
 
 // ---------------------------------------------------------------------------
@@ -348,6 +350,57 @@ function checkScenario(sc, out) {
   if (expect.noTools) {
     assert(out.toolsCalled.length === 0, 'expected no tool calls (got: ' + out.toolsCalled.join(', ') + ')');
   }
+  // Situation and edit assertions. A reply counts as the A/B menu when it
+  // carries the "A) Do it all" option, in any markdown dressing.
+  const replies = out.replies || [];
+  if (expect.menuOfferedAtMost != null) {
+    const menus = replies.filter((r) => /A\)\W*do it all/i.test(r)).length;
+    assert(menus <= expect.menuOfferedAtMost, 'A/B menu offered ' + menus + ' time(s), allowed at most ' + expect.menuOfferedAtMost);
+  }
+  if (expect.noReplyIncludes) {
+    for (const s of expect.noReplyIncludes) assert(!replies.some((r) => r.toLowerCase().includes(s.toLowerCase())), 'no reply should include "' + s + '"');
+  }
+  if (expect.anyToolCalled) {
+    assert(expect.anyToolCalled.some((t) => out.toolsCalled.includes(t)), 'expected at least one of: ' + expect.anyToolCalled.join(', ') + ' (got: ' + out.toolsCalled.join(', ') + ')');
+  }
+  if (expect.toolCallCountAtLeast) {
+    for (const t in expect.toolCallCountAtLeast) {
+      const n = out.toolsCalled.filter((x) => x === t).length;
+      assert(n >= expect.toolCallCountAtLeast[t], 'expected "' + t + '" at least ' + expect.toolCallCountAtLeast[t] + ' time(s), got ' + n);
+    }
+  }
+  if (expect.toolCallArgs) {
+    for (const t in expect.toolCallArgs) {
+      const want = expect.toolCallArgs[t];
+      const calls = (out.toolCalls || []).filter((c) => c.name === t);
+      const hit = calls.some((c) => Object.keys(want).every((k) => getPath(c.args || {}, k) === want[k]));
+      assert(hit, 'expected a "' + t + '" call with ' + JSON.stringify(want) + ' (got: ' + JSON.stringify(calls.map((c) => c.args)) + ')');
+    }
+  }
+  if (expect.fieldsRange) {
+    for (const k in expect.fieldsRange) {
+      const actual = getPath(out.state || {}, k);
+      const lo = expect.fieldsRange[k][0], hi = expect.fieldsRange[k][1];
+      assert(typeof actual === 'number' && actual >= lo && actual <= hi, 'field "' + k + '" expected within [' + lo + ', ' + hi + '] but got ' + JSON.stringify(actual));
+    }
+  }
+  // Door 2 goal list. A string matches a goal's type, house/generic kind or
+  // label (case-insensitive substring); an object must match every key.
+  const goals = (out.state && Array.isArray(out.state.goals)) ? out.state.goals : [];
+  const goalMatches = (g, want) => {
+    if (typeof want === 'string') {
+      const w = want.toLowerCase();
+      return [g.type, g.genSub, g.label].filter(Boolean).some((v) => String(v).toLowerCase().includes(w));
+    }
+    return Object.keys(want).every((k) => g[k] === want[k]);
+  };
+  const goalSummary = () => JSON.stringify(goals.map((g) => ({ type: g.type, genSub: g.genSub, label: g.label, amount: g.amount, years: g.years })));
+  if (expect.goalsInclude) {
+    for (const want of expect.goalsInclude) assert(goals.some((g) => goalMatches(g, want)), 'expected a goal matching ' + JSON.stringify(want) + ' (goals: ' + goalSummary() + ')');
+  }
+  if (expect.goalsExclude) {
+    for (const want of expect.goalsExclude) assert(!goals.some((g) => goalMatches(g, want)), 'expected no goal matching ' + JSON.stringify(want) + ' (goals: ' + goalSummary() + ')');
+  }
   return failures;
 }
 
@@ -401,6 +454,8 @@ async function main() {
       skipped++;
       continue;
     }
+    // A scenario that errors still ran, so ran always equals passed + failed.
+    ran++;
     let api;
     try { api = loadPage(sc.page); } catch (e) {
       console.log('ERROR ' + sc.name + '  (page load failed: ' + e.message + ')');
@@ -414,7 +469,6 @@ async function main() {
       continue;
     }
     const failures = checkScenario(sc, out);
-    ran++;
     if (failures.length) {
       failed++;
       console.log('FAIL  ' + sc.name);

@@ -67,5 +67,22 @@ check(/tool_calls/.test(py) && /keep\.add/.test(py), 'local_server.py: already-c
 check(/TOOL_ROUTE_K/.test(worker), 'worker.js: TOOL_ROUTE_K threshold present');
 check(/_TOOL_ROUTE_K/.test(py), 'local_server.py: _TOOL_ROUTE_K threshold present');
 
+// 6. Planning tools are always kept, with one list shared by all three copies
+// (a follow-up like "drop the flat, add a trip" must never lose build_goal_plan).
+{
+  const names = (src, re) => { const m = src.match(re); return m ? (m[1].match(/'[a-z_]+'/g) || []).join(',') : null; };
+  const e = names(engine, /var TOOL_ALWAYS_KEEP = \[([\s\S]*?)\]/);
+  const w = names(worker, /const TOOL_ALWAYS_KEEP = \[([\s\S]*?)\]/);
+  const p = names(py, /_TOOL_ALWAYS_KEEP = \(([\s\S]*?)\)/);
+  check(!!e && e.includes("'build_goal_plan'") && e.includes("'remove_goal'"), 'goalden-engine.js: TOOL_ALWAYS_KEEP lists the planning tools');
+  check(e === w && w === p, 'TOOL_ALWAYS_KEEP identical in engine, worker.js and local_server.py');
+  check(/TOOL_ALWAYS_KEEP\.forEach/.test(engine) && /TOOL_ALWAYS_KEEP\.forEach/.test(worker) && /keep\.update\(_TOOL_ALWAYS_KEEP\)/.test(py), 'always-keep list applied in engine and both runtimes');
+}
+
+// 7. Transcript backstops: a re-offered A/B menu and a described situation are
+// caught from the messages themselves, in both runtimes, and fed into the prompt.
+check(/function situationNudges\b/.test(worker) && /situationNudges\(body\.messages, body\.tools\)/.test(worker), 'worker.js: situationNudges defined and used in the prompt');
+check(/def _situation_nudges\b/.test(py) && /_situation_nudges\(body\.get\('messages'\), body\.get\('tools'\)\)/.test(py), 'local_server.py: _situation_nudges defined and used in the prompt');
+
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
 process.exit(fail ? 1 : 0);

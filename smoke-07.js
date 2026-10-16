@@ -42,9 +42,9 @@ check(/advisorDispatchTool\(step\.tool/.test(advisor), 'advisor.js: executePlan 
 check(/advisor\.pendingPlan\.approved\[i\] = cb\.checked/.test(advisor), 'advisor.js: checkbox change updates approved[i]');
 check(/!plan\.approved\[i\]/.test(advisor), 'advisor.js: executePlan skips unchecked steps');
 
-// 6. worker.js / local_server.py mirror each other on propose_plan (it is
-// now also in both servers' always-routed core tool list, so the absolute
-// count changed; parity is what matters -- smoke-14 checks the lists).
+// 6. worker.js / local_server.py mirror each other on propose_plan. It also
+// appears in both servers' core and always-keep routing lists, so the absolute
+// count moves; parity is what matters (smoke-11 and smoke-14 check the lists).
 const w = (worker.match(/propose_plan/g) || []).length;
 const p = (py.match(/propose_plan/g) || []).length;
 check(w > 0 && w === p, `worker/local_server propose_plan mention match (${w} vs ${p})`);

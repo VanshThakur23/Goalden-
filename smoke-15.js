@@ -31,7 +31,8 @@ const SYMBOLS = ['SPEB-SM.NS', 'SPEB.NS', 'SPEB.BO', 'speb', 'BAJAJ-AUTO.NS', 'M
 async function workerRun() {
   const src = fs.readFileSync(path.join(root, 'src', 'worker.js'), 'utf8');
   const a = src.indexOf('function screenerCodeFor');
-  const b = src.indexOf('function buildFinancialsResult');
+  // buildFinancialsResult is async in the worker; stop before the keyword too.
+  const b = src.search(/(?:async\s+)?function buildFinancialsResult/);
   const body = src.slice(a, b);
   const urls = [];
   const fetchStub = async (url) => { urls.push(String(url)); return { ok: true, status: 200, json: async () => JSON.parse(CHART) }; };

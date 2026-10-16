@@ -2449,12 +2449,24 @@ Data sources: same real historical Sensex (India, FY1980-2023) / S&P 500 (US, 19
 
 Behavior: prefer driving the real interface — navigate to the right screen, set the values, scroll the result into view, then explain what the user is looking at in plain language. Use the workspace canvas only to compare two scenarios side by side, or to show something not on the current page. Never describe a number without putting it on screen.
 
-Choice before action (mandatory, ALWAYS the first move): The moment the user asks you to build/plan anything — even with zero numbers given yet, e.g. just "build a retirement plan for me" — before touching any field, offer this choice, and nothing else (don't ask which screen/level to use instead):
-"I can either:
-A) Do it all for you — I'll ask for the few numbers I actually need, then fill everything in, run the plan, and hand you a full report.
-B) Walk you through it step by step — you do each screen, I explain as we go.
-Which would you prefer?"
-Wait for their reply. If they say "do it" / "option A" / "go ahead" / anything clearly affirmative: if they haven't given you the numbers yet, ask for the essential few in ONE consolidated message (not one field at a time) — include a quick risk-comfort question (e.g. "and how would you describe your comfort with investment risk — cautious, moderate, or aggressive?") alongside the financial numbers, since this page's whole point is a risk-profiled plan. If they answer it, you still can't skip the actual questionnaire screens (there's no shortcut field for it) — quickly click through the risk-profile screens yourself using their stated comfort level to pick each answer, narrating briefly ("since you said moderate, I'll answer these consistently"), then continue to the goal(s) and plan. If they don't answer the risk question or you can't tell, proceed anyway using a moderate default — but say so plainly in your final report ("I used a moderate risk profile since we didn't fully cover your risk comfort — you can redo the questionnaire anytime for a more tailored mix"), never silently. Once everything is set, prefer calling build_goal_plan ONCE (with country and a params object carrying the questionnaire answers, capacity and goals) instead of one set_value/add_goal call per field, narrating briefly as you go, and ALWAYS finish by calling compose_briefing so the result lands as a full report page with graphs — never just a chat summary. If build_goal_plan fails, or you need to correct a single value afterwards, use set_value/add_goal for just that correction. If they say "guide me" / "walk me through" / "option B", navigate one screen at a time and explain each question before they answer it.`;
+Acting on a user's own situation (this page is built for it): when someone describes their life — job, income, family, loans, savings, goals — build the whole plan from it with ONE build_goal_plan call. Don't make them click through the questionnaire and don't ask them to pick options first. Map what they said like this:
+- country: ₹, lakh/crore, or an Indian city → IN; $ or a US city → US. Ask only if nothing hints at it.
+- Money: "1.4 lakh" = 140000, "80 lakh" = 8000000, "2 crore" = 20000000, "70k" = 70000.
+- monthlyCapacity: what they said they can invest; otherwise take-home − monthly spending − loan EMIs (if their spending figure already includes the EMI, don't subtract it twice). Show the sum in one line.
+- monthlyExpense: their monthly spending (it sizes the emergency fund).
+- cap_0 income reliability: government or large-company job 4 · salaried at an established private firm (IT, banking, corporate) 3 · self-employed, business owner, commission 2 · freelance, startup, between jobs, student 1.
+- cap_1 people relying on the income: just them 4 · a partner or one child 3 · a partner and children, a non-working spouse plus a child, or supporting parents 2 · a large family 1.
+- cap_2 loan EMIs as a share of take-home: none 4 · under 20% 3 · 20-40% 2 · over 40% 1. Work the percentage out from their numbers.
+- cap_3 how much of their total savings this plan represents: a small slice 4 · a meaningful chunk 3 · more than half 2 · nearly everything 1. If they didn't say, use 3 and say so.
+- emergencyStatus: add up their liquid money (savings account, FDs, liquid funds) and divide by monthly spending. 6 months or more → full (₹6L of FDs ÷ ₹70k ≈ 8.5 months → full); less → partial; none → no. Count FDs here unless they said that money is meant for a goal. When it's partial or no, set emergencyPrioritize true unless they said not to.
+- tol_0..tol_4 (1-4 each): use any hint they gave — "I panic when markets fall" → 1-2, "I bought more in the crash" → 4. tol_1 is experience: 7+ years 4, 3-7 years 3, under 3 years or a small mutual-fund holding 2, never invested 1. With no hints, answer 3 for the rest, say you assumed a middle comfort level, and offer one question to refine it.
+- goals (at most 3): retirement = currentAge, retireAge, monthlyExpense (today's spending unless they gave a retirement budget). education = annualFee and years (18 − the child's age for an undergraduate degree); take the fee only from the user — if it's missing, build everything else now and ask for it. house = amount (the price they gave; say so, since they may only need a down payment) and years. Anything else (a trip, a wedding, a car) = type generic with a short label, amount and years. existingSavings on a goal only when they said that money is set aside for it; otherwise say their FDs and mutual funds weren't counted against any goal.
+- More than 3 goals: build the 3 they care about most (or the nearest) and name the one that's waiting.
+After building, reply with: the risk profile and a one-line reason from their answers, monthly capacity (with the arithmetic), each goal's monthly SIP, the total against capacity, and the surplus or shortfall. If it's short, name the goal driving it and one change that would narrow the gap (a later date, a smaller amount) — never product names. Quote only SIPs this page calculated: offer to run the change with update_goal and report before → after, rather than estimating a new SIP yourself.
+
+Editing the plan: add_goal, update_goal and remove_goal change one goal and return the plan totals before and after. Use them for "drop the flat", "retire at 58 instead", "add a 4 lakh trip in 2 years" — and when the plan already has 3 goals, remove one before adding. build_goal_plan with goals replaces the whole goal list, so keep it for a full rebuild. Changes to capacity or the risk answers go through set_value, then get_results. After any change, say what moved and by how much.
+
+A bare "build me a plan" with no details gets the A/B choice from the rules, once. For A, ask in ONE message for country, take-home pay, monthly spending, loan EMIs, who relies on their income, savings, each goal's numbers, and how they'd react to a 30% market fall. For B ("guide me" / "walk me through"), navigate one screen at a time and explain each question before they answer it.`;
 
 // F5 — one contextual suggestion chip on the plan screen.
 function advisorChipsHTML() {
@@ -2466,7 +2478,9 @@ function advisorTools() {
   return [
     { type:'function', function:{ name:'navigate', description:'Move the app to a named screen. Valid screens right now: '+screens.join(', ')+'.', parameters:{ type:'object', properties:{ screen:{ type:'string', enum:screens } }, required:['screen'] } } },
     { type:'function', function:{ name:'set_value', description:'Set one input/answer. Use it to fill in a value the user just told you. Field meanings: '+ADVISOR_FIELDS.map(f=>f.name+' = '+f.desc).join(' '), parameters:{ type:'object', properties:{ field:{ type:'string', enum:ADVISOR_FIELDS.map(f=>f.name) }, value:{} }, required:['field','value'] } } },
-    { type:'function', function:{ name:'add_goal', description:'Add a financial goal to the plan. For retirement pass type=retirement, retireAge, monthlyExpense, currentAge. For education pass type=education, annualFee, years. For house pass type=house, amount, years. For other pass type=generic, amount, years. Optionally existingSavings for any.', parameters:{ type:'object', properties:{ type:{ type:'string', enum:['retirement','education','house','generic'] }, retireAge:{ type:'integer' }, monthlyExpense:{ type:'integer' }, currentAge:{ type:'integer' }, annualFee:{ type:'integer' }, amount:{ type:'integer' }, years:{ type:'integer' }, existingSavings:{ type:'integer' } }, required:['type'] } } },
+    { type:'function', function:{ name:'add_goal', description:'Add ONE goal to the plan (the plan holds at most 3). retirement: currentAge, retireAge, monthlyExpense (today\'s spending). education: annualFee (today\'s fee, from the user only), years until college starts, optional duration (default 4). house: amount, years. generic (a trip, wedding, car or anything else): amount, years and a short label such as "Family trip". Optional existingSavings (only money set aside for this goal). Returns the goal list and the plan totals before and after.', parameters:{ type:'object', properties:{ type:{ type:'string', enum:['retirement','education','house','generic'] }, label:{ type:'string' }, retireAge:{ type:'integer' }, monthlyExpense:{ type:'integer' }, currentAge:{ type:'integer' }, annualFee:{ type:'integer' }, duration:{ type:'integer' }, amount:{ type:'integer' }, years:{ type:'integer' }, existingSavings:{ type:'integer' } }, required:['type'] } } },
+    { type:'function', function:{ name:'update_goal', description:'Change a goal already in the plan (retire at 58 instead of 55, a bigger house budget, a new fee) and re-run the numbers. Pick the goal by index (0-based, from get_state goals) or by label/type, and put only the fields that change in changes: currentAge, retireAge, monthlyExpense, annualFee, duration, amount, years, existingSavings, label. Returns the goal list and the plan totals before and after.', parameters:{ type:'object', properties:{ index:{ type:'integer' }, label:{ type:'string', description:'The goal\'s label or type, e.g. "Retirement", "House", "education".' }, changes:{ type:'object' } }, required:['changes'] } } },
+    { type:'function', function:{ name:'remove_goal', description:'Remove a goal from the plan (the user drops the house, say) and re-run the numbers. Pick the goal by index (0-based) or by label/type. Returns the remaining goals and the plan totals before and after.', parameters:{ type:'object', properties:{ index:{ type:'integer' }, label:{ type:'string' } } } } },
     { type:'function', function:{ name:'get_state', description:'Return everything the user has entered so far, plus the current screen.' } },
     { type:'function', function:{ name:'get_results', description:'Run the current plan calculation and return the key numbers (risk bucket, monthly SIPs, surplus/shortfall).' } },
     { type:'function', function:{ name:'read_current_chart', description:'Return a structured description of the plan on screen right now — the totals, the profile, and each goal.' } },
@@ -2474,7 +2488,7 @@ function advisorTools() {
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
-    { type:'function', function:{ name:'build_goal_plan', description:'Build the full multi-goal plan in ONE call instead of many set_value/add_goal calls. Pass country plus a params object: monthlyCapacity, monthlyExpense, emergencyStatus (full/partial/no), emergencyPrioritize (true/false), cap_0..cap_3 and tol_0..tol_4 (each 1-4, the risk-questionnaire answers), and goals (an array of goal objects shaped like add_goal: {type: retirement|education|house|generic, retireAge, monthlyExpense, currentAge, annualFee, amount, years, existingSavings}).', parameters:{ type:'object', properties:{ country:{ type:'string', enum:['IN','US'] }, params:{ type:'object' } }, required:['country','params'] } } },
+    { type:'function', function:{ name:'build_goal_plan', description:'Build the full multi-goal plan in ONE call instead of many set_value/add_goal calls. Pass country plus a params object: monthlyCapacity, monthlyExpense, emergencyStatus (full/partial/no), emergencyPrioritize (true/false), cap_0..cap_3 and tol_0..tol_4 (each 1-4, the risk-questionnaire answers), and goals (an array of up to 3 goal objects shaped like add_goal: {type: retirement|education|house|generic, label, retireAge, monthlyExpense, currentAge, annualFee, duration, amount, years, existingSavings}). Passing goals REPLACES the whole goal list; to change a single goal use update_goal, remove_goal or add_goal. Returns the goal list, the plan totals before, and the new results.', parameters:{ type:'object', properties:{ country:{ type:'string', enum:['IN','US'] }, params:{ type:'object' } }, required:['country','params'] } } },
     { type:'function', function:{ name:'read_other_page', description:'Read-only snapshot of another page\'s saved data (from that page\'s own localStorage). page: door1 (Quick Calculate) or lab (The Lab). Returns {page, asOf, state} — context to quote from, NEVER to be merged into this page\'s inputs.', parameters:{ type:'object', properties:{ page:{ type:'string', enum:Object.keys(OTHER_PAGE_KEYS) } }, required:['page'] } } },
     { type:'function', function:{ name:'search_instruments', description:'Search real stocks/ETFs by name or ticker (Yahoo\'s symbol database). Returns matches with symbol/name/exchange.', parameters:{ type:'object', properties:{ query:{ type:'string' } }, required:['query'] } } },
     { type:'function', function:{ name:'add_instrument', description:'Fetch a real instrument\'s price history and add it to the comparison (max 4). Pass a ticker (e.g. TCS.NS, RELIANCE.NS, AAPL) or a fund code. If the fetched history fails an automatic data-quality check, this refuses by default (canForce:true in the result) rather than silently declaring the data fake — only call again with force:true if the user has explicitly confirmed they still want it added despite the check.', parameters:{ type:'object', properties:{ symbol:{ type:'string' }, force:{ type:'boolean', description:'Only set true after the user explicitly confirms they want an instrument added despite a failed data-quality check.' } }, required:['symbol'] } } },
@@ -2508,26 +2522,121 @@ function advisorSetValue(field, value) {
   return { ok:true, field, value, page:f[G.si], touched:'#stage .screen' };
 }
 
-function advisorAddGoal(args) {
-  const type = args.type;
+// Goal editing for the advisor. The plan holds at most 3 goals (the goals hub's
+// own limit). Every change returns the plan totals before and after, so the
+// advisor can say what moved and by how much instead of re-describing the plan.
+const ADVISOR_MAX_GOALS = 3;
+const ADVISOR_GOAL_ALIASES = { flat:'house', apartment:'house', home:'house', property:'house', college:'education', university:'education', school:'education', pension:'retirement', retire:'retirement' };
+function advisorGoalKind(g) { return g.type === 'generic' ? (g.genSub === 'house' ? 'house' : 'generic') : g.type; }
+function advisorGoalList() {
+  return G.goals.map(function (g, i) { return { index:i, type:advisorGoalKind(g), label:g.label, years:g.years }; });
+}
+function advisorPlanTotals() {
+  if (!G.country) return null;
+  const plan = buildPlan();
+  return {
+    goals: plan.goals.map(function (g, i) { return { index:i, label:g.label, years:g.years, monthlySIP:g.sip, corpus:g.corpus }; }),
+    emergencyMonthlySIP: plan.emg.needed ? plan.emg.sip : 0,
+    totalMonthlySIP: plan.totalSIP, monthlyCapacity: plan.cap, shortfallOrSurplus: plan.diff, status: plan.status,
+  };
+}
+// Labels come from the model and are rendered into the plan screen.
+function advisorCleanLabel(s) { return String(s == null ? '' : s).replace(/[<>&"'`]/g, '').trim().slice(0, 40); }
+// Builds a goal in the same shape the goal screens save. Returns {ok, goal} or
+// {ok:false, error}; never touches G.
+function advisorMakeGoal(args, prev) {
+  let type = String(args.type || '').toLowerCase();
+  let label = advisorCleanLabel(args.label);
+  if (['car','wedding','travel','trip','vacation','holiday','other'].indexOf(type) !== -1) {
+    if (!label && type !== 'other') label = type.charAt(0).toUpperCase() + type.slice(1);
+    type = 'generic';
+  }
+  if (ADVISOR_GOAL_ALIASES[type] === 'house') type = 'house';
+  const num = function (k) { const v = parseInt(args[k], 10); return isFinite(v) ? v : null; };
+  const savings = Math.max(0, num('existingSavings') || 0);
   let goal;
   if (type === 'retirement') {
-    if (!args.retireAge || !args.monthlyExpense || !args.currentAge) return { ok:false, error:'A retirement goal needs retireAge, monthlyExpense and currentAge.' };
-    goal = { type:'retirement', label:'Retirement', retireAge:args.retireAge, monthlyExpense:args.monthlyExpense, currentAge:args.currentAge, years:Math.max(1, args.retireAge - args.currentAge), existingSavings:args.existingSavings || 0 };
+    const retireAge = num('retireAge'), currentAge = num('currentAge'), monthlyExpense = num('monthlyExpense');
+    if (!retireAge || !monthlyExpense || !currentAge) return { ok:false, error:'A retirement goal needs currentAge, retireAge and monthlyExpense.' };
+    if (retireAge <= currentAge) return { ok:false, error:'retireAge ('+retireAge+') must be later than currentAge ('+currentAge+').' };
+    goal = { type:'retirement', label:label || 'Retirement', retireAge:retireAge, monthlyExpense:monthlyExpense, currentAge:currentAge, years:retireAge - currentAge, existingSavings:savings };
   } else if (type === 'education') {
-    if (!args.annualFee || !args.years) return { ok:false, error:'An education goal needs annualFee and years.' };
-    goal = { type:'education', label:'Education', annualFee:args.annualFee, years:args.years, duration:4, existingSavings:args.existingSavings || 0 };
+    const annualFee = num('annualFee'), years = num('years');
+    if (!annualFee || !years) return { ok:false, error:'An education goal needs annualFee (from the user, never assumed) and years until college starts.' };
+    goal = { type:'education', label:label || 'Education', annualFee:annualFee, years:years, duration:Math.min(8, Math.max(1, num('duration') || 4)), existingSavings:savings };
+  } else if (type === 'house' || type === 'generic') {
+    const amount = num('amount'), years = num('years');
+    if (!amount || !years) return { ok:false, error:'This goal needs amount and years.' };
+    goal = { type:'generic', label:label || (type === 'house' ? 'House' : 'Other goal'), amount:amount, years:years, genSub:type, existingSavings:savings };
   } else {
-    if (!args.amount || !args.years) return { ok:false, error:'This goal needs amount and years.' };
-    const sub = type === 'house' ? 'house' : 'generic';
-    goal = { type:'generic', label: sub === 'house' ? 'House' : 'Other goal', amount:args.amount, years:args.years, genSub:sub, existingSavings:args.existingSavings || 0 };
+    return { ok:false, error:'Unknown goal type "'+advisorCleanLabel(type)+'". Valid: retirement, education, house, generic.' };
   }
-  G.goals.push(goal);
+  if (prev && prev.type === goal.type) goal.postGoalAlloc = prev.postGoalAlloc || null;
+  return { ok:true, goal:goal };
+}
+function advisorShowPlan() {
   G.addingGoal = false; G.editingIndex = null;
-  const f = flow();
-  G.si = f.indexOf('plan');
+  G.si = flow().indexOf('plan');
   render();
-  return { ok:true, added:goal, page:'plan' };
+}
+// Finds a goal by index, or by label/type ("House", "retirement", "flat").
+// More than one match is an error that lists the goals, so the model retries
+// with an index instead of editing the wrong one.
+function advisorFindGoal(args) {
+  if (args.index != null && args.index !== '') {
+    const i = parseInt(args.index, 10);
+    if (isFinite(i) && i >= 0 && i < G.goals.length) return { ok:true, index:i };
+    return { ok:false, error:'No goal at index '+args.index+'.', goals:advisorGoalList() };
+  }
+  let q = String(args.label || args.type || '').trim().toLowerCase();
+  q = ADVISOR_GOAL_ALIASES[q] || q;
+  if (!q) return { ok:false, error:'Say which goal: pass index or label.', goals:advisorGoalList() };
+  const hits = [];
+  G.goals.forEach(function (g, i) {
+    const names = [g.label, g.type, advisorGoalKind(g)].filter(Boolean).map(function (s) { return String(s).toLowerCase(); });
+    if (names.some(function (n) { return n === q || n.indexOf(q) !== -1 || q.indexOf(n) !== -1; })) hits.push(i);
+  });
+  if (hits.length === 1) return { ok:true, index:hits[0] };
+  return { ok:false, error:(hits.length ? 'More than one goal matches "'+advisorCleanLabel(q)+'"; pass index instead.' : 'No goal matches "'+advisorCleanLabel(q)+'".'), goals:advisorGoalList() };
+}
+function advisorAddGoal(args) {
+  if (G.goals.length >= ADVISOR_MAX_GOALS) return { ok:false, error:'The plan already has '+ADVISOR_MAX_GOALS+' goals, the most it holds. Remove or change one first (remove_goal / update_goal).', goals:advisorGoalList() };
+  const made = advisorMakeGoal(args);
+  if (!made.ok) return made;
+  const before = advisorPlanTotals();
+  G.goals.push(made.goal);
+  advisorShowPlan();
+  return { ok:true, added:made.goal, goals:advisorGoalList(), before:before, after:advisorPlanTotals(), page:'plan' };
+}
+function advisorUpdateGoal(args) {
+  const found = advisorFindGoal(args);
+  if (!found.ok) return found;
+  const prev = G.goals[found.index];
+  const changes = (args.changes && typeof args.changes === 'object') ? args.changes : {};
+  if (changes.type && String(changes.type).toLowerCase() !== advisorGoalKind(prev)) return { ok:false, error:'update_goal can\'t change a goal\'s type. Remove it and add the new goal instead.', goals:advisorGoalList() };
+  const merged = { type:advisorGoalKind(prev), label:prev.label, retireAge:prev.retireAge, monthlyExpense:prev.monthlyExpense, currentAge:prev.currentAge, annualFee:prev.annualFee, duration:prev.duration, amount:prev.amount, years:prev.years, existingSavings:prev.existingSavings };
+  const ignored = [];
+  Object.keys(changes).forEach(function (k) {
+    if (k === 'type') return;
+    if (Object.prototype.hasOwnProperty.call(merged, k)) merged[k] = changes[k]; else ignored.push(k);
+  });
+  // A retirement goal's horizon comes from its ages, so a bare new "years"
+  // becomes a new retirement age rather than being silently overwritten.
+  if (merged.type === 'retirement' && changes.years != null && changes.retireAge == null) merged.retireAge = (parseInt(merged.currentAge, 10) || 0) + (parseInt(changes.years, 10) || 0);
+  const made = advisorMakeGoal(merged, prev);
+  if (!made.ok) return made;
+  const before = advisorPlanTotals();
+  G.goals[found.index] = made.goal;
+  advisorShowPlan();
+  return { ok:true, updated:made.goal, previous:prev, ignored:ignored, goals:advisorGoalList(), before:before, after:advisorPlanTotals(), page:'plan' };
+}
+function advisorRemoveGoal(args) {
+  const found = advisorFindGoal(args);
+  if (!found.ok) return found;
+  const before = advisorPlanTotals();
+  const removed = G.goals.splice(found.index, 1)[0];
+  advisorShowPlan();
+  return { ok:true, removed:removed, goals:advisorGoalList(), before:before, after:advisorPlanTotals(), page:'plan' };
 }
 
 // F7a — structured description of the plan on screen, built from the app's own
@@ -2741,16 +2850,32 @@ function executeAdvisorTool(name, args) {
   }
   if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
   if (name === 'add_goal') return JSON.stringify(advisorAddGoal(args || {}));
+  if (name === 'update_goal') return JSON.stringify(advisorUpdateGoal(args || {}));
+  if (name === 'remove_goal') return JSON.stringify(advisorRemoveGoal(args || {}));
   if (name === 'build_goal_plan') {
     const start = performance.now();
     const country = args && args.country;
     const params = (args && args.params) || {};
     if (!['IN','US'].includes(country)) return JSON.stringify({ ok:false, error:'Invalid country. Valid: IN, US.' });
+    const goals = params.goals;
+    // Goals are checked before anything is set, so a bad goal can't leave a
+    // half-built plan. A goals array REPLACES the list: building again for a
+    // what-if must not stack duplicate goals on top of the old ones.
+    let newGoals = null;
+    if (Array.isArray(goals) && goals.length) {
+      if (goals.length > ADVISOR_MAX_GOALS) return JSON.stringify({ ok:false, error:'The plan holds at most '+ADVISOR_MAX_GOALS+' goals but '+goals.length+' were given. Build the '+ADVISOR_MAX_GOALS+' that matter most and tell the user which one is waiting.' });
+      newGoals = [];
+      for (let i = 0; i < goals.length; i++) {
+        const made = advisorMakeGoal(goals[i] || {}, G.goals[i]);
+        if (!made.ok) return JSON.stringify({ ok:false, error:made.error, failedField:'goals['+i+']' });
+        newGoals.push(made.goal);
+      }
+    }
+    const before = G.goals.length ? advisorPlanTotals() : null;
     const setFields = ['country'];
     const skipped = [];
     let r = advisorSetValue('country', country);
     if (!r.ok) return JSON.stringify({ ok:false, error:r.error, failedField:'country' });
-    const goals = params.goals;
     for (const k in params) {
       if (k === 'goals') continue;
       const spec = ADVISOR_FIELDS.find(function (f) { return f.name === k; });
@@ -2759,18 +2884,16 @@ function executeAdvisorTool(name, args) {
       if (!r2.ok) return JSON.stringify({ ok:false, error:r2.error, failedField:k });
       setFields.push(k);
     }
-    if (Array.isArray(goals)) {
-      for (let i = 0; i < goals.length; i++) {
-        const ga = advisorAddGoal(goals[i] || {});
-        if (!ga.ok) return JSON.stringify({ ok:false, error:ga.error, failedField:'goals['+i+']' });
-        setFields.push('goals['+i+']');
-      }
-    } else if (goals != null) {
+    if (newGoals) {
+      G.goals = newGoals;
+      setFields.push('goals');
+    } else if (goals != null && !Array.isArray(goals)) {
       skipped.push('goals');
     }
+    if (G.goals.length) advisorShowPlan();
     const results = advisorGetResults();
     console.log('[skill-metric] build_goal_plan ' + (performance.now()-start).toFixed(0) + 'ms');
-    return JSON.stringify({ ok:true, results: results.result, flags: results.flags, setFields: setFields, skipped: skipped });
+    return JSON.stringify({ ok:true, results: results.result, flags: results.flags, setFields: setFields, skipped: skipped, goals: advisorGoalList(), before: before });
   }
   if (name === 'read_other_page') return JSON.stringify(readOtherPage(args && args.page));
   if (name === 'search_instruments') return searchInstruments(args && args.query);
@@ -2790,7 +2913,9 @@ function advisorDescribeTool(name, args) {
   switch (name) {
     case 'navigate': return 'Going to ' + args.screen;
     case 'set_value': return 'Setting ' + args.field + ' to ' + args.value;
-    case 'add_goal': return 'Adding your goal';
+    case 'add_goal': return 'Adding your ' + (advisorCleanLabel(args.label) || args.type || 'new') + ' goal';
+    case 'update_goal': return 'Updating your ' + (advisorCleanLabel(args.label) || 'goal');
+    case 'remove_goal': return 'Removing your ' + (advisorCleanLabel(args.label) || 'goal');
     case 'build_goal_plan': return 'Building your full plan';
     case 'read_other_page': return 'Reading your saved ' + (OTHER_PAGE_LABELS[args.page] || args.page) + ' data';
     case 'search_instruments': return 'Searching for ' + args.query;
