@@ -392,14 +392,15 @@ async function fetchScreenerPage(symbol) {
     Accept: 'text/html',
   };
 
+  const layoutError = () => new ScreenerPageError(
+    'layout',
+    `Found a page for "${symbol}" but it doesn't look like a statements page — screener.in may be serving an interstitial, or its layout has changed.`
+  );
+  // null when the page has no statement data, so the caller decides whether
+  // that is final (standalone) or a cue to try the other view (consolidated).
   const readIfEvidenced = async (res, requestedUrl) => {
     const html = await res.text();
-    if (!ScreenerParser.hasCompanyPageEvidence(html)) {
-      throw new ScreenerPageError(
-        'layout',
-        `Found a page for "${symbol}" but it doesn't look like a statements page — screener.in may be serving an interstitial, or its layout has changed.`
-      );
-    }
+    if (!ScreenerParser.hasCompanyPageEvidence(html)) return null;
     // fetch() follows redirects transparently, so a company with no
     // consolidated statement (screener redirects /consolidated/ -> the
     // standalone URL) returns res.ok === true here. Whether this is the
@@ -411,11 +412,23 @@ async function fetchScreenerPage(symbol) {
 
   const consolidatedUrl = `https://www.screener.in/company/${encodeURIComponent(symbol)}/consolidated/`;
   const cRes = await fetch(consolidatedUrl, { headers });
-  if (cRes.ok) return readIfEvidenced(cRes, consolidatedUrl);
+  if (cRes.ok) {
+    const page = await readIfEvidenced(cRes, consolidatedUrl);
+    if (page) return page;
+    // Not final: screener.in no longer always redirects a company with no
+    // consolidated accounts. SPEB (Oct 2026) gets a 200 /consolidated/ page
+    // whose tables carry row labels but no year columns, while its
+    // standalone page has the data. Treat it like the redirect and try
+    // standalone before calling it a layout change.
+  }
 
   const standaloneUrl = `https://www.screener.in/company/${encodeURIComponent(symbol)}/`;
   const sRes = await fetch(standaloneUrl, { headers });
-  if (sRes.ok) return readIfEvidenced(sRes, standaloneUrl);
+  if (sRes.ok) {
+    const page = await readIfEvidenced(sRes, standaloneUrl);
+    if (page) return page;
+    throw layoutError();
+  }
 
   // Neither URL resolved. A 429/503/5xx on either attempt means screener.in
   // itself is the problem, not the symbol — that must never be reported to
@@ -426,6 +439,9 @@ async function fetchScreenerPage(symbol) {
       `screener.in is rate-limiting or temporarily unavailable (status ${cRes.status}/${sRes.status}).`
     );
   }
+  // The consolidated page existed but was empty and standalone didn't
+  // resolve: the page is there, its data isn't, so this is not "no such company".
+  if (cRes.ok) throw layoutError();
   throw new ScreenerPageError(
     'not_found',
     `screener.in has no page for "${symbol}" — check it's the bare NSE/BSE trading code (e.g. "TCS"), not a Yahoo-style symbol with .NS/.BO. Some smaller companies aren't indexed by a letter ticker at all and only resolve by their numeric BSE code (e.g. "511144" for Axis Solutions Ltd) — try that if you have it.`

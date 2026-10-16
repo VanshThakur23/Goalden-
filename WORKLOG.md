@@ -3599,5 +3599,10 @@ standing over the founder's shoulder.
   standalone page. Both fetchers (worker.js fetchScreenerPage,
   local_server.py _fetch_screener_page) raise 'layout' on it and never try
   the standalone page, which does have the data. So the SPEB price fallback
-  returns 502. Fix (fall through to standalone when consolidated has no
-  evidence) is waiting for the user's OK before it goes to production.
+  returns 502. Fixed on local branch `fix-screener-consolidated-fallback`
+  (not pushed or deployed until the user OKs it):
+  - An empty consolidated page now falls through to the standalone page.
+  - A rate-limited standalone retry reports 'transient', not 'layout'.
+  - Live-tested: SPEB gives standalone, 149 days (2025-12-08 to 2026-10-15);
+    TCS is still consolidated; an unknown ticker is still not_found.
+  - Tests: 182/182 and 12/12.

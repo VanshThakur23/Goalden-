@@ -497,21 +497,26 @@ def _fetch_screener_page(symbol):
             return 503, None, url
 
     consolidated_url = f'https://www.screener.in/company/{urllib.parse.quote(symbol)}/consolidated/'
+    layout_msg = f'Found a page for "{symbol}" but it doesn\'t look like a statements page — screener.in may be serving an interstitial, or its layout has changed.'
     c_status, c_html, c_final = attempt(consolidated_url)
-    if c_html is not None:
-        if not _has_company_page_evidence(c_html):
-            raise ScreenerPageError('layout', f'Found a page for "{symbol}" but it doesn\'t look like a statements page — screener.in may be serving an interstitial, or its layout has changed.')
+    if c_html is not None and _has_company_page_evidence(c_html):
         return c_html, c_final, '/consolidated/' in c_final
+    # An empty consolidated page is not final: screener.in no longer always
+    # redirects a company with no consolidated accounts. SPEB (Oct 2026) gets
+    # a 200 /consolidated/ page whose tables carry row labels but no year
+    # columns, while its standalone page has the data. Mirrors the Worker.
 
     standalone_url = f'https://www.screener.in/company/{urllib.parse.quote(symbol)}/'
     s_status, s_html, s_final = attempt(standalone_url)
     if s_html is not None:
         if not _has_company_page_evidence(s_html):
-            raise ScreenerPageError('layout', f'Found a page for "{symbol}" but it doesn\'t look like a statements page — screener.in may be serving an interstitial, or its layout has changed.')
+            raise ScreenerPageError('layout', layout_msg)
         return s_html, s_final, '/consolidated/' in s_final
 
     if _is_transient_status(c_status) or _is_transient_status(s_status):
         raise ScreenerPageError('transient', f'screener.in is rate-limiting or temporarily unavailable (status {c_status}/{s_status}).')
+    if c_html is not None:
+        raise ScreenerPageError('layout', layout_msg)
     raise ScreenerPageError(
         'not_found',
         f'screener.in has no page for "{symbol}" — check it\'s the bare '
