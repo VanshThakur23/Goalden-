@@ -410,8 +410,12 @@ async function fetchScreenerPage(symbol) {
     return { html, url: finalUrl, consolidated: finalUrl.includes('/consolidated/') };
   };
 
+  // A network failure (DNS, a reset connection) counts as a 503 rather than
+  // escaping as a bare TypeError, so it still tries the other view and ends
+  // as 'transient' -- the same thing local_server.py's attempt() does.
+  const get = (url) => fetch(url, { headers }).catch(() => ({ ok: false, status: 503, url }));
   const consolidatedUrl = `https://www.screener.in/company/${encodeURIComponent(symbol)}/consolidated/`;
-  const cRes = await fetch(consolidatedUrl, { headers });
+  const cRes = await get(consolidatedUrl);
   if (cRes.ok) {
     const page = await readIfEvidenced(cRes, consolidatedUrl);
     if (page) return page;
@@ -423,7 +427,7 @@ async function fetchScreenerPage(symbol) {
   }
 
   const standaloneUrl = `https://www.screener.in/company/${encodeURIComponent(symbol)}/`;
-  const sRes = await fetch(standaloneUrl, { headers });
+  const sRes = await get(standaloneUrl);
   if (sRes.ok) {
     const page = await readIfEvidenced(sRes, standaloneUrl);
     if (page) return page;

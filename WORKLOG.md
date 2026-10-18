@@ -3636,3 +3636,17 @@ standing over the founder's shoulder.
   - Add smoke-16, covering fetchScreenerPage and _fetch_screener_page.
   - The last four items were already in production before this deploy.
 
+### Follow-ups done (2026-10-18)
+- All six reviewer nice-to-haves from the deploy above are fixed:
+  - The median header wraps.
+  - Read the Company has a `short:` line on its home chip.
+  - Explore double-click works in both modes through `stmtExploreBindDrill`.
+  - Bench double-click maps series to pins through `__seriesPin`.
+  - The Worker's screener fetches turn network errors into a 503.
+  - New smoke-16.js covers 13 stubbed cases, with worker/python parity.
+    It fails on the pre-fix code and passes now.
+- An independent reviewer said GO. Tests: 182/182; smokes 13/13.
+- Still open (nice-to-have):
+  - Log the swallowed fetch error at worker.js:416.
+  - Read focusYear at bind time at goalden-lab.html:7687.
+  - smoke-16: add explicit asserts that the slice markers exist.

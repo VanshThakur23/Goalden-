@@ -1068,6 +1068,10 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-break-note{font-size:11.5px;line-height:1.45;color:#9C4A2C;padding:6px 16px 2px}
 .stmt-break-note .stmt-break-mark{margin:0 2px 0 0}
 .stmt-table th.stmt-th-median,.stmt-table td.stmt-vsmedian{background:rgba(20,40,63,.055);width:92px;white-space:nowrap}
+/* A <col> width includes padding, so "vs 12y median" (~86px of 11px mono)
+   doesn't fit on one line in 92px; it wraps rather than taking width from
+   the year columns. */
+.stmt-table th.stmt-th-median{white-space:normal;line-height:1.25}
 .stmt-table td.stmt-reading{text-align:left;color:var(--dim);font-family:'Figtree',sans-serif;font-size:12.5px;width:210px;white-space:normal;line-height:1.45}
 .stmt-table th:not(:first-child):not(.stmt-th-median),.stmt-table td.stmt-bar-cell{width:88px}
 .stmt-table td{text-align:right;padding:7px 8px;color:rgba(20,40,63,.82);border-bottom:1px solid rgba(20,40,63,.07);position:relative;cursor:pointer}
@@ -5640,7 +5644,7 @@ const TABS=[
     blurb:'How much you need to save, and whether that number actually survives a real retirement.'},
   {id:'portfolio', label:'Build a Portfolio', primary:true, icon:ICON_PORTFOLIO,
     blurb:'Mix real fund categories with presets or your own sliders, and watch the efficient frontier move live.'},
-  {id:'statements', label:'Read the Company', icon:ICON_STATEMENTS,
+  {id:'statements', short:'One company’s reported numbers, and what doesn’t add up.', label:'Read the Company', icon:ICON_STATEMENTS,
     blurb:"Read one company's real reported numbers, put any part of them beside another company's, and see the things that don't add up."},
   {id:'stepup', short:'A SIP that rises with your income each year.', label:'Step-Up SIP', icon:ICON_STEPUP,
     blurb:'Model a SIP that grows with your income every year, not a flat amount forever.'},
@@ -7673,13 +7677,14 @@ function updateBenchChart(){
   }
   initChart('stmtBenchChart', option);
   // Double-click a Bench series to jump to its source table row — same
-  // drill-down pattern the Explore deck uses. seriesIndex maps to
-  // s.pins order because benchChartOption builds one series per pin.
+  // drill-down pattern the Explore deck uses. Over time, a compare company
+  // adds a second series per pin, so the pin comes from __seriesPin, not the
+  // raw seriesIndex; at a single year the x-axis is the pins (dataIndex).
   var benchInst=chartInstances['stmtBenchChart'];
   if(benchInst){
     benchInst.inst.off('dblclick');
     benchInst.inst.on('dblclick', function(params){
-      var pin=s.pins[params.seriesIndex];
+      var pin=s.pins[s.focusYear!=null ? params.dataIndex : (option.__seriesPin ? option.__seriesPin[params.seriesIndex] : params.seriesIndex)];
       if(!pin) return;
       var key=rowKey(pin.section,pin.label);
       var rowEl=document.querySelector('#stmtRoot [data-stmt-pin="'+advisorAttr(key).replace(/&quot;/g,'"').replace(/&amp;/g,'&')+'"]');
@@ -8182,6 +8187,7 @@ function stmtExploreUpdateChart(){
       if(observations.length) cap+='\n'+observations.join('. ')+'.'; 
     }
     if(capEl){ capEl.textContent=cap; capEl.className='sx-caption-block'; }
+    stmtExploreBindDrill(function(params){ var o=defs[params.seriesIndex]; return o ? (o.key||o.s.label) : null; });
     return;
   }
 
@@ -8297,26 +8303,30 @@ function stmtExploreUpdateChart(){
     }
   }
 
-  // Double-click any scatter point or line-mode element to drill down into
-  // the source statement row. Closes the deck, scrolls to the row, pulses it.
+  stmtExploreBindDrill(function(){ return st.xKey||st.yKey; });
+}
+// Double-click any scatter point or line-mode element to drill down into
+// the source statement row. Closes the deck, scrolls to the row, pulses it.
+// Both modes re-bind through here: the chart instance is reused across a
+// mode switch, so a handler left over from the other mode would otherwise
+// read that mode's locals (lines-mode `defs` is block-scoped -- the old
+// scatter-only binding threw a ReferenceError after scatter -> lines).
+function stmtExploreBindDrill(keyFor){
   var chartInst=chartInstances[STMT_EXPLORE_CHART_ID];
-  if(chartInst){
-    chartInst.inst.off('dblclick');
-    chartInst.inst.on('dblclick', function(params){
-      stmtExploreClose();
-      var key=null;
-      if(st.mode==='lines' && defs && defs[params.seriesIndex]) key=defs[params.seriesIndex].key || defs[params.seriesIndex].s.label;
-      else if(st.mode==='scatter'){ key=st.xKey||st.yKey; }
-      if(!key) return;
-      var rowEl=document.querySelector('#stmtRoot [data-stmt-pin="'+advisorAttr(key).replace(/&quot;/g,'"').replace(/&amp;/g,'&')+'"]');
-      if(rowEl){
-        rowEl.scrollIntoView({behavior:'smooth',block:'center'});
-        rowEl.style.transition='background .8s ease';
-        rowEl.style.background='rgba(37,87,199,.15)';
-        setTimeout(function(){ rowEl.style.background=''; },1200);
-      }
-    });
-  }
+  if(!chartInst) return;
+  chartInst.inst.off('dblclick');
+  chartInst.inst.on('dblclick', function(params){
+    var key=keyFor(params);
+    stmtExploreClose();
+    if(!key) return;
+    var rowEl=document.querySelector('#stmtRoot [data-stmt-pin="'+advisorAttr(key).replace(/&quot;/g,'"').replace(/&amp;/g,'&')+'"]');
+    if(rowEl){
+      rowEl.scrollIntoView({behavior:'smooth',block:'center'});
+      rowEl.style.transition='background .8s ease';
+      rowEl.style.background='rgba(37,87,199,.15)';
+      setTimeout(function(){ rowEl.style.background=''; },1200);
+    }
+  });
 }
 
 // One delegated click listener for every overlay button (open/mode/scale/

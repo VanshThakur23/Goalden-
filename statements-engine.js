@@ -922,13 +922,16 @@ function benchChartOption(pins, indexed) {
     };
   };
   const series = [];
+  const seriesPin = [];
   pins.forEach((pin, i) => {
     const style = SERIES_PALETTE[i % SERIES_PALETTE.length];
+    seriesPin.push(i);
     series.push(Object.assign({
       name: pin.label, type: 'bar', data: seriesFor(pin.series, indexBase(pin.series), pin.label),
       itemStyle: { color: style.color },
     }, endLabel(pin.series, style.color, pin.label)));
     if (pin.compareSeries && pin.compareSeries.length) {
+      seriesPin.push(i);
       series.push(Object.assign({
         name: (pin.compareLabel || 'Compare') + ' — ' + pin.label, type: 'bar',
         data: seriesFor(pin.compareSeries, indexBase(pin.compareSeries), (pin.compareLabel || 'Compare') + ' ' + pin.label),
@@ -948,6 +951,8 @@ function benchChartOption(pins, indexed) {
     // this chart's category axis actually uses (e.g. "FY23").
     __years: allYears,
     __notIndexed: notIndexed,
+    // seriesIndex -> pin index; a compare company adds a second series per pin.
+    __seriesPin: seriesPin,
   };
 }
 
