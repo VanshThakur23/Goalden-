@@ -3606,3 +3606,33 @@ standing over the founder's shoulder.
   - Live-tested: SPEB gives standalone, 149 days (2025-12-08 to 2026-10-15);
     TCS is still consolidated; an unknown ticker is still not_found.
   - Tests: 182/182 and 12/12.
+
+### Deployed (2026-10-18)
+- Two independent reviewers (merge resolutions; SPEB fix and parity) both
+  said GO with no must-fix items. Deployed 3b6cf46 from
+  claude/new-session-4ynhj6 as Worker version ec0ca6fc. main is untouched.
+- Live checks on goalden.vanshsingh23.workers.dev all pass:
+  - a) "speb" search, then click: 148 days from 2025-12-08, with the
+    screener.in note and cautions for short history, extreme swing and thin
+    trading (67%).
+  - b) SPEB and SPEB.NS work in the exact-ticker box.
+  - c) RELIANCE.NS + AAPL shows the USD/INR note; INR=X comes through
+    /api/history.
+  - d) The API returns source screener.in with 149 prices.
+  - e) Retirement Lab, Build a Portfolio and Read the Company load with no
+    console errors.
+  - The demo features (deep link, 2 doors, methodology dropdown, Equity
+    default) are intact.
+- Reviewer nice-to-haves not done yet:
+  - goalden-lab.html:8670: give the median column more width, or don't
+    force "vs 12y median" onto one line.
+  - goalden-lab.html:5643: add `short:` for the Read the Company tab.
+  - goalden-lab.html:8308: the Explore double-click handler refers to
+    `defs`, which is missing after switching scatter → lines.
+  - goalden-lab.html:7682: a Bench click picks the wrong pin when a compare
+    company is loaded.
+  - worker.js:414 and :427: wrap the screener fetches in try/catch so a
+    network error reports 'transient', matching Python.
+  - Add smoke-16, covering fetchScreenerPage and _fetch_screener_page.
+  - The last four items were already in production before this deploy.
+
