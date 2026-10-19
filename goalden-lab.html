@@ -290,6 +290,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .toggle-row{display:flex;gap:1px;margin-bottom:14px;border:1px solid rgba(20,40,63,.18);border-radius:3px;overflow:hidden}
 .tglbtn{flex:1;font-family:'Spline Sans Mono',monospace;font-size:10.5px;padding:9px 6px;border:none;border-right:1px solid rgba(20,40,63,.14);background:transparent;color:rgba(20,40,63,.74);cursor:pointer;text-align:center}
 .tglbtn:last-child{border-right:none}
+/* .tglbtn is styled for a joined .toggle-row; standing alone (the starter
+   pairs) it read as plain text with a ~31px tap target. */
+.live-starters .tglbtn{flex:0 1 auto;border:1px solid rgba(37,87,199,.35);border-radius:3px;padding:10px 12px;min-height:40px}
 .tglbtn.active{background:rgba(37,87,199,.16);color:var(--gold);font-weight:600}
 .divider{border:none;border-top:1px dashed rgba(20,40,63,.15);margin:18px 0}
 .section-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:12px}
@@ -299,6 +302,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stat-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .stat-row>.stat{min-width:0;overflow-wrap:anywhere}
 @media(max-width:560px){.stat-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Four-across rows are a class, not an inline style: an inline
+   grid-template-columns beat the 560px rule above, so phones squeezed
+   four stats into one row ("CORRELATI / ON"). */
+.stat-row.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:560px){.stat-row.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* A flat 1px border in one uniform grey read as barely-there -- a
    left-edge accent in the same blue as the rest of the app's emphasis
    colour gives every parameter box a clear "read me" edge, and a
@@ -3884,7 +3892,7 @@ function renderPortfolio(){
   </div>
 
   <div class="output">
-    <div class="stat-row" id="pf-stats" style="grid-template-columns:repeat(4,1fr)">${portfolioStatsHTML(d)}</div>
+    <div class="stat-row four" id="pf-stats">${portfolioStatsHTML(d)}</div>
 
     <div class="card is-primary">
       <h4>The risk-return map <span style="color:rgba(20,40,63,.74);font-weight:400;font-size:13px">(finance calls this curve the "efficient frontier")</span></h4>
@@ -3973,7 +3981,7 @@ function renderPortfolio(){
       <div class="card">
         <h4>Risk-adjusted return, in one glance${infoIcon('The numbers a research analyst or portfolio manager would actually pull up first. All computed live from the mix you are building above, not a separate example.')}</h4>
         <div class="cap">How much return this mix earns per unit of risk taken, and how spread out it actually is.</div>
-        <div class="stat-row" id="pf-ratios" style="grid-template-columns:repeat(4,1fr)">${portfolioRatiosHTML(d, c)}</div>
+        <div class="stat-row four" id="pf-ratios">${portfolioRatiosHTML(d, c)}</div>
         <div class="cap" style="margin-top:16px;margin-bottom:8px">In a genuinely bad year, not the average one:</div>
         <div class="stat-row" id="pf-tailrisk" style="grid-template-columns:repeat(2,1fr)">${portfolioTailRiskHTML(d)}</div>
         ${explainDropdown('What do these actually mean?', `
@@ -4452,14 +4460,18 @@ function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoA
 
   // NSE circuit limits cap most single-day equity moves at 20%, so a
   // >35% one-day move is almost always a corporate action or a bad
-  // print, not real trading. Funds get a tighter 10% bar: a NAV jump
+  // print, not real trading. Funds get a tighter 15% bar: a NAV jump
   // that size usually means a segregated-portfolio side-pocket event or
-  // a stale-then-corrected NAV, not a real one-day market move.
-  const jumpThreshold = isFund ? 0.10 : 0.35;
+  // a stale-then-corrected NAV, not a real one-day market move. It was
+  // 10%, which flagged the Nifty's real -12.98% day (23 Mar 2020) in
+  // every Nifty index fund; 15% still flagged the real +17.7% election
+  // day (18 May 2009) in older regular plans. 20% is the NSE market-wide
+  // circuit breaker, so a diversified fund can't really move more in a day.
+  const jumpThreshold = isFund ? 0.20 : 0.35;
   let worstJump=null;
   rets.forEach(x=>{ if(!worstJump || Math.abs(x.r)>Math.abs(worstJump.r)) worstJump=x; });
   if(worstJump && Math.abs(worstJump.r)>jumpThreshold){
-    bump('caution','JUMP',`A single-day move of ${(worstJump.r*100).toFixed(0)}% on ${worstJump.date} — most likely a corporate action, not a real trading day.`,worstJump);
+    bump('caution','JUMP',`A single-day move of ${(worstJump.r*100).toFixed(0)}% on ${worstJump.date} — ${isFund ? 'a NAV discontinuity (a side-pocket, a stale price later corrected, or a data error), not a normal market day' : 'most likely a corporate action, not a real trading day'}.`,worstJump);
     // Does that jump look like an unadjusted split or bonus issue? A
     // ~(1/k - 1) or ~(k - 1) move for a small integer k is the classic
     // signature of a k:1 split/bonus the price history wasn't rebased for.
@@ -4671,6 +4683,31 @@ async function liveLoadInstrument(item){
     L.live.data[item.key]={status:'error', label:item.label, error:(e&&e.message)||'Could not fetch this instrument.'};
   }
   render();
+}
+// One-tap pairs for an empty comparison, so a first visit (or a demo)
+// reaches a real frontier without typing. Each pair shows something worth
+// talking about: a low-correlation hedge, two large caps, a cross-currency mix.
+// India uses mutual funds (MFAPI scheme codes), not the Nippon ETFs: Yahoo's
+// NIFTYBEES/GOLDBEES histories have broken Dec-2019 split prices, so the
+// audit holds them back and a pair built on them would open empty.
+const LIVE_STARTERS = {
+  IN: [
+    { label:'Nifty 50 vs Gold', items:[{fund:'120716', label:'UTI Nifty 50 Index Fund - Direct Growth'}, {fund:'119132', label:'HDFC Gold ETF Fund of Fund - Direct Growth'}] },
+    { label:'Reliance vs TCS', items:[{symbol:'RELIANCE.NS', label:'Reliance Industries'}, {symbol:'TCS.NS', label:'Tata Consultancy Services'}] },
+    { label:'Nifty 50 vs S&P 500 (in ₹)', items:[{fund:'120716', label:'UTI Nifty 50 Index Fund - Direct Growth'}, {symbol:'SPY', label:'SPDR S&P 500 ETF'}] },
+  ],
+  US: [
+    { label:'S&P 500 vs Gold', items:[{symbol:'SPY', label:'SPDR S&P 500 ETF'}, {symbol:'GLD', label:'SPDR Gold Shares'}] },
+    { label:'Apple vs Microsoft', items:[{symbol:'AAPL', label:'Apple'}, {symbol:'MSFT', label:'Microsoft'}] },
+    { label:'Stocks vs bonds', items:[{symbol:'SPY', label:'SPDR S&P 500 ETF'}, {symbol:'AGG', label:'iShares Core US Aggregate Bond ETF'}] },
+  ],
+};
+function liveStarters(){ return LIVE_STARTERS[cfg().code] || LIVE_STARTERS.IN; }
+function liveStarterButtonsHTML(){
+  return `<div class="live-starters" role="group" aria-label="Ready-made pairs" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px">
+    <span class="cap" style="width:100%">Or start with a ready-made pair:</span>
+    ${liveStarters().map((p,i)=>`<button type="button" class="tglbtn" data-live-starter="${i}">${p.label}</button>`).join('')}
+  </div>`;
 }
 function liveAddInstrument(item){
   if(L.live.items.some(it=>it.key===item.key)) return;
@@ -5408,7 +5445,7 @@ function liveTwoAssetHTML(items, rfPct){
   const compoundedApprox = currentRet - (currentVol*currentVol)/2;
   const minVarRet=portfolioReturn([wMinVar,1-wMinVar],[sa.annualReturn,sb.annualReturn]);
   const minVarVol=Math.sqrt(portfolioVariance([wMinVar,1-wMinVar],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
-  return `${liveWindowNoteHTML(items)}<div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
+  return `${liveWindowNoteHTML(items)}<div class="stat-row four">
     <div class="stat"><div class="stat-label">Correlation</div><div class="stat-value">${c12.toFixed(2)}</div>${advisorAskLink('What does this correlation mean?')}</div>
     <div class="stat"><div class="stat-label">Your mix return</div><div class="stat-value">${(currentRet*100).toFixed(1)}%</div></div>
     <div class="stat"><div class="stat-label">Your mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
@@ -5456,7 +5493,7 @@ function liveMultiAssetHTML(computed, rfPct){
   const lowPt = frontier[0];
   const hiPt = frontier.reduce((best,p)=> (!best || p.ret>best.ret) ? p : best, null);
   const rangeLine = (lowPt && hiPt && hiPt.vol > lowPt.vol + 0.0005 && hiPt.ret > lowPt.ret + 0.0005) ? `<div class="gr-note" style="margin-top:10px">Moving up the efficient part of this frontier, from the lowest-risk mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(lowPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(lowPt.ret)} for ${pct(lowPt.vol)} risk &ndash; up to the highest-return mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(hiPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(hiPt.ret)} for ${pct(hiPt.vol)} risk &ndash; both return and risk magnify together. Taking more risk on this line always buys more expected return; there's no way to get one without the other.</div>` : '';
-  return `${liveWindowNoteHTML(items)}<div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
+  return `${liveWindowNoteHTML(items)}<div class="stat-row four">
     <div class="stat"><div class="stat-label">Instruments</div><div class="stat-value">${items.length}</div></div>
     <div class="stat"><div class="stat-label">Selected mix return</div><div class="stat-value">${(currentPoint.ret*100).toFixed(1)}%</div></div>
     <div class="stat"><div class="stat-label">Selected mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
@@ -5522,7 +5559,7 @@ function liveOutputHTML(ready, rfPct){
   if(ready.length<2){
     return errorBanner + `<div class="card live-empty">
       ${loading.length? 'Fetching real prices&hellip;' : `Search for a stock, ETF or fund on the left and add at least two &ndash; that's what turns this into a real comparison.<br><span class="cap">Two instruments give the exact frontier curve; three or more use a simulated cloud of combinations, the same approach Build a Portfolio uses.</span>
-      <button class="ns-btn" data-live-jump-search style="margin-top:14px;justify-content:center">Add an instrument<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>`}
+      <button class="ns-btn" data-live-jump-search style="margin-top:14px;justify-content:center">Add an instrument<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>${L.live.items.length===0 ? liveStarterButtonsHTML() : ''}`}
     </div>` + instrumentDropdown;
   }
   const isTwoAsset = ready.length===2;
@@ -6211,6 +6248,16 @@ function attach(){
     el.addEventListener('click',()=>{
       L.live.klassFilter = el.dataset.liveKlass;
       render();
+    });
+  });
+  document.querySelectorAll('[data-live-starter]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const pair=liveStarters()[+el.dataset.liveStarter];
+      if(!pair) return;
+      // Same item shapes the search results add (wireLiveResultButtons).
+      pair.items.forEach(p=>liveAddInstrument(p.fund
+        ? {key:'MF'+p.fund, symbol:p.fund, label:p.label, type:'fund'}
+        : {key:p.symbol, symbol:p.symbol, label:p.label, type:'equity'}));
     });
   });
   document.querySelectorAll('[data-live-jump-search]').forEach(el=>{

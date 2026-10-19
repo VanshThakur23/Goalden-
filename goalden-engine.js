@@ -230,14 +230,18 @@ function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoA
 
   // NSE circuit limits cap most single-day equity moves at 20%, so a
   // >35% one-day move is almost always a corporate action or a bad
-  // print, not real trading. Funds get a tighter 10% bar: a NAV jump
+  // print, not real trading. Funds get a tighter 15% bar: a NAV jump
   // that size usually means a segregated-portfolio side-pocket event or
-  // a stale-then-corrected NAV, not a real one-day market move.
-  const jumpThreshold = isFund ? 0.10 : 0.35;
+  // a stale-then-corrected NAV, not a real one-day market move. It was
+  // 10%, which flagged the Nifty's real -12.98% day (23 Mar 2020) in
+  // every Nifty index fund; 15% still flagged the real +17.7% election
+  // day (18 May 2009) in older regular plans. 20% is the NSE market-wide
+  // circuit breaker, so a diversified fund can't really move more in a day.
+  const jumpThreshold = isFund ? 0.20 : 0.35;
   let worstJump=null;
   rets.forEach(x=>{ if(!worstJump || Math.abs(x.r)>Math.abs(worstJump.r)) worstJump=x; });
   if(worstJump && Math.abs(worstJump.r)>jumpThreshold){
-    bump('caution','JUMP',`A single-day move of ${(worstJump.r*100).toFixed(0)}% on ${worstJump.date} — consistent with a corporate action, a very illiquid/thinly-traded stock, or a bad print. Worth a second look before trusting it.`,worstJump);
+    bump('caution','JUMP',`A single-day move of ${(worstJump.r*100).toFixed(0)}% on ${worstJump.date} — ${isFund ? 'a NAV discontinuity (a side-pocket, a stale price later corrected, or a data error)' : 'consistent with a corporate action, a very illiquid/thinly-traded stock, or a bad print'}. Worth a second look before trusting it.`,worstJump);
     // Does that jump look like an unadjusted split or bonus issue? A
     // ~(1/k - 1) or ~(k - 1) move for a small integer k is the classic
     // signature of a k:1 split/bonus the price history wasn't rebased for.

@@ -266,6 +266,14 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .case-cta button:after{content:" →"}
 .restart-row{padding:6px 0 28px;text-align:center}
 .restart-row button{background:none;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
+.personas{display:grid;gap:8px;margin-top:14px}
+.persona{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;padding:11px 14px;text-align:left;font:inherit;color:var(--paper);background:var(--card);border:1px solid var(--rule);border-radius:3px 14px 14px 14px;cursor:pointer;transition:border-color .14s}
+.persona b{font-family:'Newsreader',serif;font-size:16px;font-weight:600}
+.persona span{font-size:12.5px;line-height:1.4;color:var(--body)}
+.persona:hover{border-color:var(--gold)}
+.persona:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.persona-note{font-size:12.5px;line-height:1.5;color:var(--body);background:rgba(37,87,199,.06);border-left:2px solid var(--gold);border-radius:0 8px 8px 0;padding:8px 12px;margin:0 0 12px}
+.persona-note b{color:var(--paper)}
 </style>
 </head>
 <body>
@@ -465,6 +473,7 @@ const S = {
   annualFee: null, yearsToCollege: null, courseDuration: null,
   genType: null, genAmount: null, genYears: null, existingSavings: 0,
   risk: null, si: 0, quickEdit: false,
+  persona: null, // id of the example person a plan was opened from (PERSONAS)
   // Advanced, opt-in overrides for the flat post-goal rate (d.postRet /
   // d.debt). null = use the flat default; {eq,de,hy} once the user has
   // picked a custom post-goal mix via the "Advanced" control under the
@@ -1003,6 +1012,32 @@ function syncSliderToValue(sl, v, min, max) {
 /* =====================================================================
    SCREENS
    ===================================================================== */
+/* Persona starters: three example people, one tap each, straight to a full
+   result. Zero typing for a demo or a first look; every number can then be
+   changed with the edit chips. All three are Indian on purpose -- the
+   audience is Indian retail investors -- and the third is a mid-career
+   saver with real money already invested, the case a wealth manager meets
+   most. Illustrative people, not real ones. */
+const PERSONAS = [
+  { id:'priya', name:'Priya, 28', line:'Bengaluru, spends ₹45k a month, wants to stop working at 55',
+    S:{ country:'IN', goalType:'retirement', age:28, retireAge:55, monthlyExpense:45000, existingSavings:200000, risk:'balanced' } },
+  { id:'arjun', name:'Arjun, 35', line:'Pune, daughter starts college in 12 years, ₹4 lakh a year in today’s fees',
+    S:{ country:'IN', goalType:'education', annualFee:400000, yearsToCollege:12, courseDuration:4, existingSavings:300000, risk:'balanced' } },
+  { id:'rohan', name:'Rohan, 40', line:'Mumbai, spends ₹1.2 lakh a month, ₹60 lakh already invested, wants to retire at 58',
+    S:{ country:'IN', goalType:'retirement', age:40, retireAge:58, monthlyExpense:120000, existingSavings:6000000, risk:'balanced' } },
+];
+function personasHtml() {
+  return '<div class="personas" role="group" aria-labelledby="personasLabel"><div class="chips-label" id="personasLabel">Just looking? Open an example plan</div>' +
+    PERSONAS.map(p => '<button type="button" class="persona" data-persona="' + p.id + '"><b>' + p.name + '</b><span>' + p.line + '</span></button>').join('') + '</div>';
+}
+// The note describes the persona's answers, so it only shows while every one
+// of them is still what's on screen; after an edit the plan is the user's own.
+function personaNoteHtml() {
+  const p = S.persona && PERSONAS.find(x => x.id === S.persona);
+  if (!p || !Object.keys(p.S).every(k => S[k] === p.S[k]) || S.postRetAlloc || S.eduAlloc) return '';
+  return '<div class="persona-note">Example plan: <b>' + p.name + '</b>, ' + p.line + '. Change anything; it becomes your own.</div>';
+}
+
 function sCountry() {
   return '<div class="q-eyebrow">Before we start</div>' +
     '<div class="q-title">Where will you spend this money?</div>' +
@@ -1012,7 +1047,7 @@ function sCountry() {
       '<div class="country-card'+(S.country===c.code?' selected':'')+'" data-country="'+c.code+'">' +
       '<span class="country-badge">'+c.sym+'</span><div class="country-name">'+c.name+'</div><div class="country-cur">'+c.code+'</div></div>'
     ).join('') +
-    '</div></div>' +
+    '</div>' + personasHtml() + '</div>' +
     '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.country?'':' disabled')+'>Continue</button></div>';
 }
 
@@ -1421,7 +1456,7 @@ function sResultsRetirement() {
     : '<div class="action-card"><div class="al">Put away, starting now</div>' +
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
       '<div class="as">For '+r.yrs+' years at "'+rLabel+'". Pot ready by age '+S.retireAge+', lasts to '+r.d.lifeExp+', deliberately past average lifespan so you are unlikely to outlive it.</div></div>';
-  return '<div class="result-scroll">' + advisorChipsHTML() +
+  return '<div class="result-scroll">' + advisorChipsHTML() + personaNoteHtml() +
     '<div class="result-intro">Good news: this is a solvable problem. Here is exactly what it takes.</div>' +
     '<div class="edit-row">' +
     '<div class="edit-chip" data-jump="age">Age '+S.age+'</div>' +
@@ -1475,7 +1510,7 @@ function sResultsEducation() {
     : '<div class="action-card"><div class="al">Put away, starting now</div>' +
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
       '<div class="as">For '+S.yearsToCollege+' years at "'+rLabel+'". Corpus ready before college starts.</div></div>';
-  return '<div class="result-scroll">' + advisorChipsHTML() +
+  return '<div class="result-scroll">' + advisorChipsHTML() + personaNoteHtml() +
     '<div class="result-intro">A college fund is one of the most plannable goals there is. Here is the number.</div>' +
     '<div class="edit-row">' +
     '<div class="edit-chip" data-jump="edu_fee">'+c.compact(S.annualFee)+'/yr</div>' +
@@ -1518,7 +1553,7 @@ function sResultsGeneric() {
   const genLabel = GEN_TYPES.find(g => g.id === S.genType);
   const rLabel = RISK.find(x => x.id === S.risk).title.toLowerCase();
   const alreadyMet = r.gap === 0;
-  return '<div class="result-scroll">' + advisorChipsHTML() +
+  return '<div class="result-scroll">' + advisorChipsHTML() + personaNoteHtml() +
     '<div class="result-intro">'+(alreadyMet?'Even better news: you may already be on track.':'A clear target ahead. Here is what it takes to reach it.')+'</div>' +
     '<div class="edit-row">' +
     '<div class="edit-chip" data-jump="gen_type">'+genLabel.label+'</div>' +
@@ -1624,7 +1659,7 @@ function go(delta) {
     S.age = null; S.retireAge = null; S.monthlyExpense = null;
     S.annualFee = null; S.yearsToCollege = null; S.courseDuration = null;
     S.genType = null; S.genAmount = null; S.genYears = null; S.existingSavings = 0;
-    S.risk = null; S.postRetAlloc = null; S.eduAlloc = null;
+    S.risk = null; S.postRetAlloc = null; S.eduAlloc = null; S.persona = null;
   }
   S.si = Math.max(0, Math.min(flow().length - 1, S.si + delta));
   render();
@@ -1944,6 +1979,16 @@ function attach(screen) {
       render();
     }));
     nb && nb.addEventListener('click', () => go(1));
+    document.querySelectorAll('[data-persona]').forEach(el => el.addEventListener('click', () => {
+      const p = PERSONAS.find(x => x.id === el.dataset.persona);
+      if (!p) return;
+      // Clear every answer first, so nothing from an earlier plan leaks in.
+      Object.assign(S, { age:null, retireAge:null, monthlyExpense:null, annualFee:null, yearsToCollege:null, courseDuration:null,
+        genType:null, genAmount:null, genYears:null, existingSavings:0, risk:null, postRetAlloc:null, eduAlloc:null,
+        quickEdit:false, viewingCase:false }, p.S, { persona: p.id });
+      S.si = flow().indexOf('results');
+      render();
+    }));
   }
 
   if (screen==='goal') {
@@ -2087,7 +2132,7 @@ function attach(screen) {
     wireAdvAlloc('ret'); wireAdvAlloc('edu');
     const rb = document.getElementById('rb');
     if (rb) rb.addEventListener('click', () => {
-      Object.assign(S, {country:null,goalType:null,age:null,retireAge:null,monthlyExpense:null,annualFee:null,yearsToCollege:null,courseDuration:null,genType:null,genAmount:null,genYears:null,existingSavings:0,risk:null,si:0,quickEdit:false,postRetAlloc:null,eduAlloc:null});
+      Object.assign(S, {country:null,goalType:null,age:null,retireAge:null,monthlyExpense:null,annualFee:null,yearsToCollege:null,courseDuration:null,genType:null,genAmount:null,genYears:null,existingSavings:0,risk:null,si:0,quickEdit:false,postRetAlloc:null,eduAlloc:null,persona:null});
       render();
     });
     const caseBtn = document.getElementById('caseBtn');
@@ -2157,8 +2202,8 @@ Risk options and their asset splits (equity/debt/hybrid): cautious 25/60/15, bal
 Calculations: the target corpus is the present value of future withdrawals using an inflation-adjusted ("real") rate, with withdrawals at the start of each year. The monthly SIP is what compounds at the pre-retirement rate to close the gap between that corpus and what existing savings grow to. Results include the corpus in future and today's money, a fixed-deposit comparison at the country FD rate, a "retire 5 years earlier/later" comparison, and a cost-of-delay figure.
 
 Assumptions (per country):
-- India (₹): inflation 6%, education inflation 10%, debt 7%, hybrid 10%, equity 12%, post-retirement return 9%, life expectancy 78, FD rate 6.5%.
-- US ($): inflation 2.5%, education inflation 5%, debt 4.5%, hybrid 7%, equity 9%, post-retirement 6%, life expectancy 82, FD rate 4%.
+- India (₹): inflation 6%, education inflation 10%, debt 7%, hybrid 10%, equity 12%, post-retirement return 9%, plans run to age 85 (deliberately past ~78, the typical lifespan of someone who reaches 60), FD rate 6.5%.
+- US ($): inflation 2.5%, education inflation 5%, debt 4.5%, hybrid 7%, equity 9%, post-retirement 6%, plans run to age 90 (deliberately past ~82, the typical lifespan of someone who reaches 60), FD rate 4%.
 
 Data sources: "The Case" uses real historical annual returns — Sensex (India, FY1980-2023) and S&P 500 (US, 1928-2024) — to show how often N-year windows lost money and the worst/best windows. Price returns, no fabricated or estimated values. This Level does not fetch live market data.
 
@@ -2172,6 +2217,7 @@ Mapping what people say to this page:
 - education: yearsToCollege = 18 − the child's age for an undergraduate degree (1-22); courseDuration 4 for engineering and most degrees, 5 for medicine. annualFee comes only from the user — never invent a fee. If it's missing, run the other goals and ask for it.
 - generic: house/car/wedding/travel → genType (a holiday or trip is travel); genAmount = the amount they gave; genYears.
 - existingSavings: only money they said is set aside for that goal. General FDs or mutual funds are not counted against a goal unless they say so — tell them, because counting them would lower the SIP.
+- persona: when state.persona is set (priya, arjun or rohan), the inputs belong to an example person picked from the first screen, not to the user. Say so if it matters, and offer to redo the plan with their own numbers.
 - risk: use what they said ("I can't take losses" → cautious, "I'm fine with big swings" → growth); otherwise balanced, and say so.
 What-ifs and changes ("retire at 58 instead", "make the house 60 lakh"): change just that value — set_value on the goal on screen, or build_goal_plan again for another goal — and report the monthly SIP before → after. Quote only SIPs this page calculated; to show what another date or amount would do, run it rather than estimating.
 A bare "help me plan my retirement" with no details gets the A/B choice from the rules, once. For a walk-through (B), navigate one screen at a time, explain each question before they answer it, and use set_value one field at a time.`;
