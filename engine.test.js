@@ -1257,9 +1257,20 @@ test('cashFlowWaterfallOption: signed CFO/CFI/CFF diverging stack + labelled net
   assert.ok(bars.every((s) => s.stack === 'flow' && s.itemStyle.color !== 'transparent'));
   assert.deepStrictEqual(bars.map((s) => s.data.map(val)), [[100, 120], [-50, -60], [30, -20]], 'segments carry their SIGNED values, never Math.abs');
   const net = opt.series.find((s) => s.type === 'scatter');
-  assert.deepStrictEqual(net.data, [80, 40]);
+  assert.deepStrictEqual(net.data.map(val), [80, 40]);
+  // The last dot is a touch bigger: hideOverlap keeps the label whose dot has
+  // the larger area, and only the last label carries the name "Net ...".
+  assert.ok(net.data[1].symbolSize > net.symbolSize, 'the last dot wins a label collision');
   assert.strictEqual(net.label.show, true, 'net cash flow is printed on every dot, not only in the tooltip');
-  assert.strictEqual(opt.legend.show, true);
+  assert.strictEqual(opt.legend.show, false, 'components are named on their last value, never in a legend');
+  // The name sits on each component's last REPORTED value, so a missing latest
+  // cell doesn't leave that component unnamed.
+  const gap = stmt.cashFlowWaterfallOption(cfo, [{ year: 2023, value: -50 }, { year: 2024, value: null }], cff, ncf);
+  const cfiBar = gap.series.filter((s) => s.type === 'bar')[1];
+  assert.strictEqual(typeof cfiBar.data[0], 'object', 'named on FY23, the last year it has a value');
+  assert.strictEqual(cfiBar.data[0].label.formatter(), 'Investing -50'.replace('-', '\u2212'));
+  assert.strictEqual(cfiBar.data[0].label.color, '#14283F', 'ink text, not the ochre bar colour');
+  assert.strictEqual(net.label.formatter({ value: 40, dataIndex: 1 }), 'Net 40', 'the net dot names itself on the last column');
 });
 
 test('cashFlowWaterfallOption: TCS FY26 stack spans +52,094 / −54,019 (net −1,925), not the old ~₹1.46 lakh Cr tower', () => {
@@ -1273,7 +1284,8 @@ test('cashFlowWaterfallOption: TCS FY26 stack spans +52,094 / −54,019 (net −
   const down = vals.filter((v) => v < 0).reduce((a, b) => a + b, 0);
   assert.strictEqual(up, 52094);
   assert.strictEqual(down, -11886 + -42133);
-  const net = opt.series.find((s) => s.type === 'scatter').data[i];
+  const netDatum = opt.series.find((s) => s.type === 'scatter').data[i];
+  const net = typeof netDatum === 'object' ? netDatum.value : netDatum;
   assert.strictEqual(net, -1925);
   assert.strictEqual(up + down, net, 'the column arithmetic reconciles to the reported net cash flow');
   // Latest-year components are labelled with their values beside the column.
@@ -1490,9 +1502,28 @@ test('D3-12 chart builders print key values without hover', () => {
   assert.strictEqual(s0.label.formatter({ dataIndex: 0 }), '', 'only the last bar is labelled');
 
   const growth = stmt.growthChartOption(stmt.growthSummary(sales), stmt.growthSummary(stmt.fySeries(tcs.profitLoss, 'Net Profit')), 'Sales');
-  assert.strictEqual(growth.legend.show, true);
-  assert.deepStrictEqual(growth.legend.data, growth.series.map((s) => s.name));
-  assert.strictEqual(growth.series[0].label.formatter({ value: growth.series[0].data[0] }), '9.4%');
+  assert.strictEqual(growth.legend.show, false, 'series names are printed on the chart, never in a legend');
+  assert.strictEqual(growth.series[0].label.formatter({ value: growth.series[0].data[0], dataIndex: 0 }), '9.4%', 'the value label is the value alone');
+  // The names sit in a row of their own at the top of the axis, so no value
+  // label can collide with one: sales ends at the pair's midline, profit starts there.
+  const nm = (o, i) => o.series[i].markPoint;
+  assert.strictEqual(nm(growth, 0).label.formatter, 'Sales');
+  assert.strictEqual(nm(growth, 1).label.formatter, 'Profit');
+  assert.strictEqual(nm(growth, 0).label.align, 'right');
+  assert.strictEqual(nm(growth, 1).label.align, 'left');
+  assert.deepStrictEqual(nm(growth, 0).data[0].coord, [growth.xAxis.data[0], growth.yAxis.max]);
+  assert.ok(growth.yAxis.max > 9.4 * 1.1, 'headroom above the tallest bar for the names row');
+  // A company without 10 years of history has no 10y bar: the names move to
+  // the first window that has a value instead of vanishing.
+  const young = stmt.growthChartOption({ y10: null, y5: 0.14, y3: 0.2, y1: 0.3 }, { y10: null, y5: null, y3: 0.1, y1: 0.2 }, 'Sales');
+  assert.strictEqual(nm(young, 0).data[0].coord[0], young.xAxis.data[1]);
+  assert.strictEqual(nm(young, 1).data[0].coord[0], young.xAxis.data[2]);
+  assert.ok(young.series.every((s) => s.labelLayout && s.labelLayout.hideOverlap), 'a value label that would print on its neighbour is dropped, never a name');
+  // A series with no value at all has no name to print
+  assert.strictEqual(stmt.growthChartOption({ y10: 0.1, y5: 0.1, y3: 0.1, y1: 0.1 }, {}, 'Sales').series[1].markPoint, undefined);
+  // Negative growth keeps room below the zero line
+  const neg = stmt.growthChartOption({ y10: -0.2, y5: 0.1, y3: 0.1, y1: 0.1 }, {}, 'Sales');
+  assert.ok(neg.yAxis.min <= -20 && neg.yAxis.max > 10);
   assert.strictEqual(growth.series[0].label.position, 'outside', 'outside flips below a negative bar');
   assert.strictEqual(stmt.growthChartOption({}, {}, 'Revenue').series[0].name, 'Revenue CAGR');
 
@@ -3010,3 +3041,120 @@ test('returnReality: a steady 10% market beats a 10% assumption every time; the 
   assert.ok(long.capped && long.count === 1);
 });
 
+test('companyScorecard: six tiles, each with a rule and a jump target, from the checklist\u2019s own numbers', () => {
+  const tcs = loadFinancials('TCS');
+  const card = stmt.companyScorecard(tcs, { divergence: stmt.evaluateDivergenceRules(tcs) });
+  assert.deepStrictEqual(card.tiles.map((t) => t.id), ['growth', 'profitability', 'debt', 'cash', 'valuation', 'flags']);
+  assert.ok(card.tiles.every((t) => t.rule.length > 40 && (t.jump.id || t.jump.section)), 'every label shows its rule and says where to look');
+  const by = (id) => card.tiles.find((t) => t.id === id);
+  // 9.4% a year over 10 years and 5.8% over 3 miss the checklist's 12% / 10%: Slow, not a verdict on the company
+  assert.strictEqual(by('growth').label, 'Slow');
+  assert.strictEqual(by('growth').level, 1);
+  assert.strictEqual(by('profitability').label, 'High', 'ROCE was 15%+ in 10 of 10 years');
+  assert.strictEqual(by('debt').label, 'Comfortable');
+  assert.strictEqual(by('cash').label, 'Strong');
+  assert.match(by('cash').figure, /About .101 of cash came in for every .100 of profit over 10 years/);
+  assert.strictEqual(by('flags').label, 'None found');
+  // no price history yet: the tile says it is loading instead of guessing
+  assert.strictEqual(by('valuation').label, 'Loading');
+  assert.strictEqual(by('valuation').pending, true);
+  // the raw figures the scorecard reads sit on the checklist conditions, additively
+  const list = stmt.compoundingChecklist(tcs, { faceValue: 1 });
+  assert.strictEqual(list.length, 10);
+  assert.deepStrictEqual(Object.keys(list.find((c) => c.id === 4).metric).sort(), ['ratio', 'years']);
+});
+
+test('companyScorecard: a lender is not scored on debt or cash conversion, and profitability uses ROE', () => {
+  const hdfc = loadFinancials('HDFCBANK');
+  const card = stmt.companyScorecard(hdfc, { divergence: stmt.evaluateDivergenceRules(hdfc) });
+  const by = (id) => card.tiles.find((t) => t.id === id);
+  assert.strictEqual(by('debt').label, 'Not scored');
+  assert.strictEqual(by('debt').level, null);
+  assert.match(by('debt').figure, /lender/);
+  assert.strictEqual(by('cash').label, 'Not scored');
+  assert.match(by('profitability').figure, /^ROE was 15% or more/);
+  assert.match(by('growth').figure, /^Revenue /, 'a lender has Revenue, not Sales');
+  // the 5-year share-count jump (the HDFC Ltd merger) is found, and named as possibly a merger
+  assert.match(by('flags').figure, /share count up 40%.*merger/);
+});
+
+test('companyScorecard: debt is graded on the checklist\u2019s 6x line and the interest-cover check\u2019s 3x line', () => {
+  const by = (b) => stmt.companyScorecard(b, { divergence: stmt.evaluateDivergenceRules(b) }).tiles.find((t) => t.id === 'debt');
+  assert.strictEqual(by(loadFinancials('VEDL')).label, 'Some strain', 'lowest cover 3.2x: under 6x but not under 3x');
+  assert.strictEqual(by(loadFinancials('PAYTM')).label, 'Stretched', 'a loss before interest in the last 5 years');
+  const paytm = stmt.companyScorecard(loadFinancials('PAYTM'), {}).tiles.find((t) => t.id === 'cash');
+  assert.strictEqual(paytm.label, 'Not scored', 'cumulative profit is not positive: no ratio, and no made-up one');
+});
+
+test('companyScorecard: red flags count issues, not flag-years, and date each one', () => {
+  const vedl = loadFinancials('VEDL');
+  const div = stmt.evaluateDivergenceRules(vedl);
+  const tile = stmt.companyScorecard(vedl, { divergence: div }).tiles.find((t) => t.id === 'flags');
+  assert.ok(div.allFlags.length > tile.open, 'several flag-years of one check are one issue');
+  assert.match(tile.figure, /thin interest cover \(FY\d\d\)/);
+  assert.strictEqual(tile.label, tile.open + ' found');
+});
+
+test('companyScorecard: valuation is the P/E place among its earlier year-ends, in thirds, and refuses on thin data', () => {
+  const tcs = loadFinancials('TCS');
+  // a ready P/E result built from a list of year-end P/Es, the last one being "now"
+  const pe = (list) => {
+    const series = list.map((value, i) => ({ year: 2010 + i, value }));
+    const sorted = list.slice().sort((a, b) => a - b);
+    return { status: 'ready', spread5: 0.031, band: { series, current: list[list.length - 1], min: sorted[0], max: sorted[sorted.length - 1], median: sorted[Math.floor(sorted.length / 2)] } };
+  };
+  const val = (ctxPe) => stmt.companyScorecard(tcs, { pe: ctxPe }).tiles.find((t) => t.id === 'valuation');
+  // 6 of 9 earlier year-ends were cheaper: exactly two thirds is not "over" two thirds.
+  // (The old percentile counted "now" against itself and read this one as 70 -- Dearer.)
+  assert.strictEqual(val(pe([18, 20, 22, 24, 26, 28, 30, 31, 32, 29])).label, 'About usual');
+  // 3 of 9 cheaper: exactly a third is not "under" a third either
+  assert.strictEqual(val(pe([18, 20, 22, 24, 26, 28, 30, 31, 32, 23])).label, 'About usual');
+  assert.strictEqual(val(pe([30, 28, 26, 24, 22, 20, 18, 17, 16, 15])).label, 'Cheaper than usual', 'lowest of the lot');
+  assert.strictEqual(val(pe([15, 16, 17, 18, 20, 22, 24, 26, 28, 35])).label, 'Dearer than usual', 'highest of the lot');
+  assert.strictEqual(val(pe([20, 20, 20, 20, 20, 20])).label, 'About usual', 'a flat history is not "Dearer"');
+  const dear = val(pe([15, 16, 17, 18, 20, 22, 24, 26, 28, 35]));
+  assert.strictEqual(dear.level, null, 'position in a range is not a good/bad grade');
+  assert.match(dear.figure, /3\.1 points a year faster than profit/);
+  // The latest year is often the extreme: all four numbers print with one decimal,
+  // so the range never excludes the P/E sitting next to it.
+  const lowest = val(pe([40, 30, 25, 22, 20, 19, 18.4, 18.2, 18.0, 17.6]));
+  assert.match(lowest.figure, /P\/E 17\.6 at the last year-end; its 10-year range is 17\.6 to 40\.0/);
+  assert.strictEqual(lowest.track.min, 17.6);
+  assert.strictEqual(val(pe([20, 22, 24])).label, 'Not scored', 'under 5 years of P/E is not a history');
+  const reason = 'Face value is not reported for this company, so shares cannot be split-adjusted.';
+  assert.strictEqual(val({ status: 'error', error: reason }).figure, reason, 'the page own reason, not a guess about loading');
+  assert.match(val({ status: 'error' }).figure, /couldn.t be loaded/);
+});
+
+test('companyScorecard: figures never print as the checkpoint they missed; a negative cash ratio has its own sentence', () => {
+  const tcs = loadFinancials('TCS');
+  const tile = (b, id) => stmt.companyScorecard(b, {}).tiles.find((t) => t.id === id);
+  const withCfo = (fn) => {
+    const b = JSON.parse(JSON.stringify(tcs));
+    const row = b.cashFlow.rows.find((r) => r.label === 'Cash from Operating Activity');
+    row.values = row.values.map((c) => (c && c.value != null ? Object.assign({}, c, { value: fn(c.value) }) : c));
+    return b;
+  };
+  // operations used up cash over the whole window while profit added up to a gain
+  const neg = tile(withCfo((v) => -Math.abs(v)), 'cash');
+  assert.strictEqual(neg.label, 'Thin');
+  assert.doesNotMatch(neg.figure, /-\d/, 'no "-30 of cash for every 100"');
+  assert.match(neg.figure, /used up more cash than they brought in/);
+  // 74.9 stays 74 beside a "Partial" label and a 75 checkpoint; it is never rounded up to the bar
+  const ratio = stmt.compoundingChecklist(tcs, { faceValue: 1 }).find((c) => c.id === 4).metric.ratio;
+  const near = tile(withCfo((v) => v * (0.7496 / ratio)), 'cash');
+  assert.strictEqual(near.label, 'Partial');
+  assert.match(near.figure, /About .74 of cash/);
+});
+
+test('companyScorecard: red flags say only what is checked, and the quality gate is carried to the scorecard', () => {
+  const tcs = loadFinancials('TCS');
+  const open = { allFlags: [], watch: [] };
+  const flags = stmt.companyScorecard(tcs, { divergence: open }).tiles.find((t) => t.id === 'flags');
+  assert.doesNotMatch(flags.rule, /stake that fell|pledge of 10%/, 'the rule must not claim a promoter check the page does not make');
+  assert.match(flags.rule, /Promoter pledge and changes in the promoters. stake are not checked/);
+  assert.match(flags.figure, /Promoter pledge and stake changes aren.t checked here/);
+  assert.strictEqual(stmt.companyScorecard(tcs, { divergence: open }).gated, false);
+  const gated = stmt.companyScorecard(tcs, { divergence: { allFlags: [{ ruleId: 'CFO_DIVERGENCE', year: 2025 }], watch: [] } });
+  assert.strictEqual(gated.gated, true, 'an open earnings-quality flag is a caveat on the other tiles too');
+});

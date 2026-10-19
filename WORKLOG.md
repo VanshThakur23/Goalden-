@@ -3832,8 +3832,84 @@ standing over the founder's shoulder.
   - The advisor's result object gains `stepUp10StartSIP`.
   - The Lab's step-up tab now calls the engine's copy (one function, not two).
 
-### Next: Group 4
-- Read the Company scorecard (Growth, Profitability, Debt, Cash conversion,
-  Valuation, Red flags from the existing checks), then the statements
-  charts (03 B/C/D) with the contrast and null-label fixes.
+### Group 4: Read the Company scorecard and the statements charts
+- Scorecard, "The quick read", under the company header in the Lab. Six tiles
+  over checks the page already runs, each with a plain word, a figure from the
+  company's own numbers, a "How this is scored" fold that prints the rule, and a
+  "See the numbers" button that scrolls to the table or card behind it.
+  - Growth (Fast / Moderate / Slow): sales growth against the checklist's own
+    checkpoints, 12% a year over the long window (10 years, or 5) and 10% over 3.
+  - Profitability (High / Medium / Low): years with ROCE at 15% or more out of
+    the last 10 (ROE for a lender, and the tile says so).
+  - Debt (Comfortable / Some strain / Stretched, or Debt-free): interest cover
+    above 6x in each of 5 years is comfortable; a loss year or under 3x is
+    stretched. Not scored for a lender.
+  - Cash conversion (Strong / Partial / Thin): 10 years of cash from operations
+    over 10 years of profit; 75% is the checklist's checkpoint. Not scored for
+    a lender. A negative ratio has its own sentence instead of "Rs -30".
+  - Valuation (Cheaper / About / Dearer than usual): where the P/E at the last
+    fiscal year-end sits among the company's EARLIER year-end P/Es (a tie counts
+    half): under a third is cheaper, over two thirds dearer. Draws a rail with
+    low, median and high and a dot. Waits for the price history ("Loading") and
+    prints the page's own reason if it can't be scored.
+  - Red flags (N found / None found): one entry per issue, dated with the
+    latest year it fired, so VEDL's FY16 interest cover is one issue and not
+    four flag-years. Red styling only when something is found.
+  - A tile that can't be scored says why, in a dashed box ("Not scored"),
+    instead of guessing. There is no overall score or verdict and no colour
+    ranking: the pips are filled or hollow, and the word carries the meaning.
+  - When the checklist's quality gate is up (an open earnings-quality flag, e.g.
+    VEDL), a note above the tiles says the labels read the figures as reported
+    and don't check whether those figures can be trusted.
+  - `companyScorecard(bundle, ctx)` is pure (statements-engine.js) and returns
+    `{schema, tiles, gated}`; the checklist conditions now carry their raw
+    figure in `metric`, so the tiles and the checklist read the same numbers.
+- Statements charts (03 B/C/D): one palette for all of them (blue, ochre,
+  green, violet; each its own dash and symbol so they read in greyscale), red
+  kept for a warning that has fired. The P/E line was red and is now ochre.
+  Ochre and green are under 4.5:1 on white, so every label is printed in ink.
+  The growth chart and the cash-flow chart lost their legends. Cash flow names
+  each component on its last reported value; the net dot's last point is drawn
+  a little larger so its "Net" label is the one that survives a collision.
+  The growth chart prints "Sales" and "Profit" in a row of their own above the
+  bars (explicit y-axis, 15% headroom) and the percentages as plain values with
+  hide-overlap, so nothing can print on a name at phone width. Checked headless
+  (SSR render, label boxes) at 280/340/560px on TCS, HDFCBANK, VEDL, BAJFINANCE
+  and HINDALCO: no overlaps. On the narrowest charts some value labels are
+  dropped by hide-overlap; the table under the chart still lists every number.
+- Independent Opus review: NO-GO with 7 must-fix items, all fixed:
+  1. The valuation "percentile" counted the latest year against itself, so a
+     middling P/E read "Dearer". Replaced by the position among earlier years.
+  2. The P/E printed outside its own rounded range. All four numbers now print
+     at one decimal (and the rail does too).
+  3. The Red flags rule claimed a pledge/stake check it doesn't make. The text
+     now says plainly that those are not checked.
+  4. The note said "not the share price" but Valuation uses year-end prices.
+     Now: "not whether to buy or sell the shares".
+  5. A negative cash ratio printed as a negative rupee amount (above).
+  6. Growth-chart labels overlapped at phone width (above).
+  7. A bundle without a face value was reported as "couldn't be loaded"; the
+     tile now passes the page's own reason through.
+  Also done: figures compared with a checkpoint never print as the checkpoint
+  they missed (11.996% prints 11.9%, 74.96 prints 74), interest cover is cut
+  rather than rounded, aria-labels on the repeated buttons and summaries.
+  The fixes were re-checked by tests, the headless chart render and the live
+  page (VEDL, TCS, HDFCBANK, PAYTM, desktop and 375px); the reviewer was not
+  asked for a second pass.
+- Known limits, stated on the card where they matter:
+  - Valuation compares a company with itself only; screener loads its peer
+    list with JavaScript, so the peer table is usually empty.
+  - Promoter pledge and changes in the promoters' stake aren't checked (the
+    shareholding data has no pledge row); the Red flags tile says so.
+  - The P/E is the one at the last fiscal year-end, not live.
+  - A merger can inflate the share-count flag (HDFCBANK); the tile says
+    "(new shares or a merger)".
+- The Lab advisor is untouched on purpose: it reads and navigates, it does not
+  grade, so the scorecard is not in `advisorStatementsState`.
+- Tests: 205/205 (8 new/updated for the scorecard, the thirds logic, boundary
+  printing, the gate and the chart names). All 13 smokes pass.
+
+### Next: Group 5
+- The banned charts: 01 allocation strip and 02 dot plots, replacing the
+  donut and radar.
 

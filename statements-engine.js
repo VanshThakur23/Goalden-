@@ -864,11 +864,17 @@ function evaluateDivergenceRules(bundle) {
    CHART OPTION BUILDERS — pure data-in, ECharts-option-out. No dual
    y-axes anywhere: a shared category axis with stacked grids instead.
    ===================================================================== */
+// The same four slots as the other pages: blue, ochre, green, violet, each
+// with its own dash and symbol so a series reads in greyscale too. Red is
+// not a slot -- it is kept for a warning that has actually fired. Ochre and
+// green are under 4.5:1 on white, so they are never used as TEXT colour:
+// labels are printed in ink (see INK_LABEL).
+const INK_LABEL = '#14283F';
 const SERIES_PALETTE = [
   { color: '#2557C7', lineStyle: { type: 'solid' }, symbol: 'circle' },
-  { color: '#A03A22', lineStyle: { type: [8, 4] }, symbol: 'rect' },
-  { color: '#2E8B6F', lineStyle: { type: [2, 3] }, symbol: 'triangle' },
-  { color: '#14283F', lineStyle: { type: 'dashed' }, symbol: 'diamond' },
+  { color: '#B8740F', lineStyle: { type: [8, 4] }, symbol: 'rect' },
+  { color: '#1F8A70', lineStyle: { type: [2, 3] }, symbol: 'triangle' },
+  { color: '#8A4FBF', lineStyle: { type: [8, 3, 2, 3] }, symbol: 'diamond' },
 ];
 
 // Pinned rows over time. Indexed to 100 at the earliest common year by
@@ -916,7 +922,7 @@ function benchChartOption(pins, indexed) {
     const lastIdx = lastYear == null ? -1 : allYears.indexOf(lastYear);
     const raw = lastYear == null ? null : byYear.get(lastYear);
     return {
-      label: { show: lastIdx >= 0, position: 'outside', distance: 4, fontSize: 10, fontWeight: 600, color,
+      label: { show: lastIdx >= 0, position: 'outside', distance: 4, fontSize: 10, fontWeight: 600, color: INK_LABEL,
         formatter: (p) => (p.dataIndex === lastIdx ? formatRowValueCompact(rowLabel, raw) : '') },
       labelLayout: { hideOverlap: true },
     };
@@ -1021,7 +1027,7 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
             : isRatio ? Number(p.value).toFixed(2)
               : 'Rs ' + Math.round(p.value).toLocaleString('en-IN') + ' Cr';
           const reason = PROFIT_CASH_TOOLTIP_REASONS[p.seriesName];
-          return '<div style="margin-top:5px"><b style="color:' + p.color + '">' + p.seriesName + '</b>: ' + valText
+          return '<div style="margin-top:5px">' + (p.marker || '') + '<b>' + p.seriesName + '</b>: ' + valText
             + (reason ? '<div style="color:#8a97a8;font-size:11px;margin-top:2px;max-width:230px;white-space:normal">' + reason + '</div>' : '')
             + '</div>';
         }).join('');
@@ -1084,7 +1090,7 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
         name: 'Cash from Operations', type: 'line', xAxisIndex: 0, yAxisIndex: 0,
         lineStyle: { color: B.color, type: B.lineStyle.type }, itemStyle: { color: B.color }, symbol: B.symbol,
         data: cfoSeries.map((p) => p && p.value),
-        endLabel: { show: true, formatter: (p) => 'CFO\n' + formatCroreCompact(Array.isArray(p.value) ? p.value[1] : p.value), color: B.color, fontWeight: 600, lineHeight: 13 },
+        endLabel: { show: true, formatter: (p) => 'CFO\n' + formatCroreCompact(Array.isArray(p.value) ? p.value[1] : p.value), color: INK_LABEL, fontWeight: 600, lineHeight: 13 },
       },
       {
         name: 'Cumulative CFO / NP', type: 'line', xAxisIndex: 1, yAxisIndex: 1,
@@ -1099,7 +1105,7 @@ function profitVsCashChartOption(npSeries, cfoSeries) {
           let li = -1; cumRatio.forEach((v, i) => { if (v != null) li = i; });
           return {
             symbol: 'circle', symbolSize: 1, silent: true,
-            label: { show: true, position: 'right', distance: 6, formatter: () => 'CFO/NP\n' + Number(cumRatio[li]).toFixed(2), color: C.color, fontWeight: 600, lineHeight: 13 },
+            label: { show: true, position: 'right', distance: 6, formatter: () => 'CFO/NP\n' + Number(cumRatio[li]).toFixed(2), color: INK_LABEL, fontWeight: 600, lineHeight: 13 },
             data: li >= 0 ? [{ coord: [li, cumRatio[li]] }] : [],
           };
         })(),
@@ -1583,7 +1589,7 @@ function peBandChartOption(priceFySeries, peResult) {
     tooltip: { trigger: 'axis', confine: true },
     series: [
       { name: 'Price (FY end)', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: prices, showSymbol: true, symbolSize: 5, lineStyle: { color: '#2557C7', width: 2 }, itemStyle: { color: '#2557C7' } },
-      { name: 'P/E', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: pe, showSymbol: true, symbolSize: 5, lineStyle: { color: '#A03A22', width: 1.5 }, itemStyle: { color: '#A03A22' },
+      { name: 'P/E', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: pe, showSymbol: true, symbolSize: 5, symbol: 'rect', lineStyle: { color: '#B8740F', width: 1.5, type: [8, 4] }, itemStyle: { color: '#B8740F' },
         markLine: peResult.median != null ? { silent: true, symbol: 'none', lineStyle: { type: 'dashed', color: 'rgba(20,40,63,.35)', width: 1 }, data: [{ yAxis: peResult.median, label: { formatter: 'median ' + peResult.median.toFixed(1) + 'x', fontSize: 9.5, color: 'rgba(20,40,63,.5)' } }] } : undefined,
       },
     ],
@@ -1619,7 +1625,7 @@ function compoundingChecklist(bundle, options) {
   const roce = fySeries(ratios, 'ROCE %');
   if (roce.length) {
     const { met, of } = yearsMeetingCount(roce, 10, (v) => v >= 15);
-    conditions.push({ id: 1, label: 'ROCE at least 15% in 8 of the last 10 years', value: `${met} of ${of} years >= 15%`, meets: of > 0 ? met >= 8 : null, available: of > 0 });
+    conditions.push({ id: 1, label: 'ROCE at least 15% in 8 of the last 10 years', value: `${met} of ${of} years >= 15%`, meets: of > 0 ? met >= 8 : null, available: of > 0, metric: { met, of } });
   } else {
     conditions.push({ id: 1, label: 'ROCE at least 15% in 8 of the last 10 years', value: 'ROCE % is not reported for this schema', meets: null, available: false });
   }
@@ -1636,7 +1642,7 @@ function compoundingChecklist(bundle, options) {
   const sales = salesRaw.length ? salesRaw : fySeries(pl, 'Revenue');
   const salesGrowth = growthSummary(sales);
   const cond3ok = (salesGrowth.y10 != null && salesGrowth.y3 != null) ? (salesGrowth.y10 >= 0.12 && salesGrowth.y3 >= 0.10) : null;
-  conditions.push({ id: 3, label: 'Sales growth: 10-year at least 12% AND 3-year at least 10%', value: `10y ${salesGrowth.y10 != null ? (salesGrowth.y10 * 100).toFixed(1) + '%' : '—'}, 3y ${salesGrowth.y3 != null ? (salesGrowth.y3 * 100).toFixed(1) + '%' : '—'}`, meets: cond3ok, available: salesGrowth.y10 != null && salesGrowth.y3 != null });
+  conditions.push({ id: 3, label: 'Sales growth: 10-year at least 12% AND 3-year at least 10%', value: `10y ${salesGrowth.y10 != null ? (salesGrowth.y10 * 100).toFixed(1) + '%' : '—'}, 3y ${salesGrowth.y3 != null ? (salesGrowth.y3 * 100).toFixed(1) + '%' : '—'}`, meets: cond3ok, available: salesGrowth.y10 != null && salesGrowth.y3 != null, metric: { y10: salesGrowth.y10, y5: salesGrowth.y5, y3: salesGrowth.y3 } });
 
   const cfo10 = fySeries(cf, 'Cash from Operating Activity').slice(-10);
   const np10 = fySeries(pl, 'Net Profit').slice(-10);
@@ -1655,7 +1661,7 @@ function compoundingChecklist(bundle, options) {
     // a "Not met" would read as an earnings-quality finding it isn't.
     conditions.push({ id: 4, label: cond4Label, value: 'Not meaningful for a lender — lending money out is counted as operating cash outflow', meets: null, available: false });
   } else {
-    conditions.push({ id: 4, label: cond4Label, value: cfoRatio != null ? `${(cfoRatio * 100).toFixed(0)}%` : 'not computable', meets: cfoRatio != null ? cfoRatio >= 0.75 : null, available: cfoRatio != null });
+    conditions.push({ id: 4, label: cond4Label, value: cfoRatio != null ? `${(cfoRatio * 100).toFixed(0)}%` : 'not computable', meets: cfoRatio != null ? cfoRatio >= 0.75 : null, available: cfoRatio != null, metric: { ratio: cfoRatio, years: np10.length } });
   }
 
   // Cover on EBIT (PBT + Interest), same as INTEREST_COVER_THIN and for the
@@ -1667,7 +1673,7 @@ function compoundingChecklist(bundle, options) {
   const borrowRaw = fySeries(bs, 'Borrowings');
   const borrow = borrowRaw.length ? borrowRaw : fySeries(bs, 'Borrowing');
   const latestBorrow = borrow.length ? borrow[borrow.length - 1].value : null;
-  let cond5 = null, cond5Value = 'not computable';
+  let cond5 = null, cond5Value = 'not computable', cond5Covers = null;
   if (latestBorrow === 0) {
     cond5 = true; cond5Value = 'Borrowings are zero — interest cover is moot';
   } else if (schema !== 'financial') {
@@ -1677,10 +1683,11 @@ function compoundingChecklist(bundle, options) {
       if (e == null || i == null || i <= 0) return null;
       return e <= 0 ? { loss: true } : { cover: e / i };
     }).filter(Boolean);
+    cond5Covers = covers;
     cond5 = covers.length === 5 ? covers.every((c) => !c.loss && c.cover > 6) : null;
     cond5Value = covers.length ? `Interest cover ${covers.map((c) => (c.loss ? 'loss' : c.cover.toFixed(1) + 'x')).join(', ')} (last ${covers.length} years)` : 'not computable';
   }
-  conditions.push({ id: 5, label: 'Profit before interest and tax more than 6x interest every year for 5 years, or no borrowings', value: cond5Value, meets: cond5, available: cond5 !== null });
+  conditions.push({ id: 5, label: 'Profit before interest and tax more than 6x interest every year for 5 years, or no borrowings', value: cond5Value, meets: cond5, available: cond5 !== null, metric: { debtFree: latestBorrow === 0, covers: cond5Covers } });
 
   const payout = fySeries(pl, 'Dividend Payout %');
   if (payout.length) {
@@ -1700,7 +1707,7 @@ function compoundingChecklist(bundle, options) {
     const base = shares.find((p) => p.year === last.year - 5);
     dilutionRatio = base && base.value > 0 ? last.value / base.value : null;
   }
-  conditions.push({ id: 7, label: 'Share count grew at most 10% over the last 5 years', value: dilutionRatio != null ? `${((dilutionRatio - 1) * 100).toFixed(1)}% change` : 'not computable', meets: dilutionRatio != null ? dilutionRatio <= 1.10 : null, available: dilutionRatio != null });
+  conditions.push({ id: 7, label: 'Share count grew at most 10% over the last 5 years', value: dilutionRatio != null ? `${((dilutionRatio - 1) * 100).toFixed(1)}% change` : 'not computable', meets: dilutionRatio != null ? dilutionRatio <= 1.10 : null, available: dilutionRatio != null, metric: { ratio: dilutionRatio } });
 
   {
     const label8 = 'Promoter holding fell by at most 5 percentage points over 12 quarters, and pledge is under 10%';
@@ -1793,6 +1800,231 @@ function checklistQualityGate(divergenceResult) {
     reason: 'This company has open questions about the quality of its reported numbers. The checklist below describes how its growth has looked; it does not check whether those numbers can be trusted.',
     gatingFlags: gating,
   };
+}
+
+/* =====================================================================
+   THE SCORECARD -- six plain labels over the checks this page already runs.
+   Growth, Profitability, Debt and Cash conversion read the compounding
+   checklist's own numbers and checkpoints (each condition now carries its
+   raw figure in `metric`); Valuation reads the P/E history band; Red flags
+   counts the divergence checks that have fired. Nothing here is new data and
+   nothing is locked: every tile states the rule that produced its label,
+   and a tile that can't be scored says why instead of guessing. Pure, no
+   DOM, no model.
+
+   A label is a reading of ONE rule. "Fast" growth means both of the
+   checklist's growth checkpoints were met; it is not advice, and Valuation
+   compares a company with its own history only -- the peer list isn't
+   loaded here.
+   ===================================================================== */
+// Each tile's words describe the thing it measures (fast growth, high
+// returns), not the company as a whole: "Weak" on growth would read as "a
+// weak company" when it only means growth under the checklist's bar.
+// Level 3 is always the favourable end, so the tile's pips read the same way.
+const SCORE_WORDS = {
+  growth: { 3: 'Fast', 2: 'Moderate', 1: 'Slow' },
+  profitability: { 3: 'High', 2: 'Medium', 1: 'Low' },
+  debt: { 3: 'Comfortable', 2: 'Some strain', 1: 'Stretched' },
+  cash: { 3: 'Strong', 2: 'Partial', 1: 'Thin' },
+};
+const FLAG_PHRASE = {
+  CFO_DIVERGENCE: 'profit not arriving as cash',
+  DEBTOR_BALLOON: 'customers taking longer to pay',
+  INVENTORY_BUILD: 'unsold stock piling up',
+  ASSET_SALE_GAIN: 'profit lifted by a one-time gain',
+  TAX_DRIVEN_MARGIN: 'profit lifted by lower tax',
+  DIVIDEND_NOT_FROM_OPS: 'a dividend the business did not earn',
+  DIVIDEND_EXCEEDS_FCF: 'a dividend funded partly by debt',
+  INTEREST_COVER_THIN: 'thin interest cover',
+  LEVERAGE_UP_RETURNS_DOWN: 'more debt, lower returns',
+  CWIP_FROZEN: 'capital stuck in unfinished projects',
+  CAPEX_NO_REVENUE: 'spending that has not shown up as sales',
+  CORRELATED: 'profit moved for reasons the statement does not explain',
+};
+function companyScorecard(bundle, ctx) {
+  ctx = ctx || {};
+  const pl = bundle.profitLoss, bs = bundle.balanceSheet, ratios = bundle.ratios;
+  const schema = bundle.schema || classifySchema(pl);
+  const lender = schema === 'financial';
+  const checklist = compoundingChecklist(bundle, { faceValue: ctx.faceValue != null ? ctx.faceValue : (bundle.topRatios && bundle.topRatios.faceValue) });
+  const cond = (id) => checklist.find((c) => c.id === id);
+  const pct = (v, d) => (v < 0 ? '−' : '') + (Math.abs(v) * 100).toFixed(d == null ? 1 : d) + '%';
+  // A figure that sits just under a checkpoint must not print as the
+  // checkpoint: 11.996% rounds to "12.0%", which would sit beside a label
+  // saying it missed 12%. Rounded as usual, except that a miss never prints
+  // as the bar itself (it prints one step under).
+  const pctVs = (v, bound) => {
+    let t = Math.round(Math.abs(v) * 1000) / 10;
+    if (v >= 0 && v < bound && t >= bound * 100) t = Math.round(bound * 1000 - 1) / 10;
+    return (v < 0 && t > 0 ? '−' : '') + t.toFixed(1) + '%';
+  };
+  const tile = (id, title, level, label, figure, rule, jump, extra) =>
+    Object.assign({ id, title, level, label, figure, rule, jump }, extra || {});
+  const unscored = (id, title, why, rule, jump) => tile(id, title, null, 'Not scored', why, rule, jump);
+  const tiles = [];
+
+  // --- Growth: the checklist's sales checkpoints (12% over the long window,
+  // 10% over 3 years). The long window is 10 years, or 5 when 10 aren't
+  // reported, and the tile says which.
+  {
+    const rule = 'Sales growth against the checklist’s checkpoints: at least 12% a year over the longer window (10 years, or 5 if 10 aren’t reported) and at least 10% a year over the last 3. Both met is Fast, one is Moderate, neither is Slow. Profit growth is shown beside it, not scored.';
+    const g = (cond(3) && cond(3).metric) || {};
+    const long = g.y10 != null ? { yrs: 10, v: g.y10 } : (g.y5 != null ? { yrs: 5, v: g.y5 } : null);
+    const word = lender ? 'Revenue' : 'Sales';
+    if (!long || g.y3 == null) {
+      tiles.push(unscored('growth', 'Growth', 'Needs at least 5 years of ' + word.toLowerCase() + ' history.', rule, { id: 'stmtDepth' }));
+    } else {
+      const longOk = long.v >= 0.12, shortOk = g.y3 >= 0.10;
+      const level = longOk && shortOk ? 3 : (longOk || shortOk ? 2 : 1);
+      const np3 = growthSummary(fySeries(pl, 'Net Profit')).y3;
+      tiles.push(tile('growth', 'Growth', level, SCORE_WORDS.growth[level],
+        word + ' ' + pctVs(long.v, 0.12) + ' a year over ' + long.yrs + ' years, ' + pctVs(g.y3, 0.10) + ' over 3.' + (np3 != null ? ' Profit ' + pct(np3) + ' over 3.' : ''),
+        rule, { id: 'stmtDepth' }));
+    }
+  }
+
+  // --- Profitability: ROCE of at least 15% in 8 of the last 10 years (the
+  // checklist's first condition); a lender reports ROE, not ROCE, so the same
+  // 15% bar is applied to ROE and the tile says so.
+  {
+    const measure = lender ? 'ROE %' : 'ROCE %', short = lender ? 'ROE' : 'ROCE';
+    const rule = short + ' of at least 15% in 8 of the last 10 years is the checklist’s checkpoint. High is 80% of the years or more at or above 15%, Medium is half or more, Low is fewer.' + (lender ? ' A lender reports return on equity, not return on capital employed, so ROE is used.' : '');
+    const series = fySeries(ratios, measure);
+    const { met, of } = yearsMeetingCount(series, 10, (v) => v >= 15);
+    if (of < 5) {
+      tiles.push(unscored('profitability', 'Profitability', 'Needs at least 5 years of ' + short + '.', rule, { section: 'ratios' }));
+    } else {
+      const share = met / of;
+      const level = share >= 0.8 ? 3 : (share >= 0.5 ? 2 : 1);
+      const latest = series.filter((p) => p.value != null).slice(-1)[0];
+      tiles.push(tile('profitability', 'Profitability', level, SCORE_WORDS.profitability[level],
+        short + ' was 15% or more in ' + met + ' of the last ' + of + ' years' + (latest ? ', ' + pctVs(latest.value / 100, 0.15) + ' in FY' + String(latest.year).slice(2) : '') + '.',
+        rule, { section: 'ratios' }));
+    }
+  }
+
+  // --- Debt: the checklist's own test (profit before interest and tax more
+  // than 6x interest every year for 5 years, or no borrowings) is
+  // Comfortable; a loss year or cover under 3x (the divergence check's
+  // "thin" line) is Stretched; anything between is Some strain. Not
+  // meaningful for a lender.
+  {
+    const rule = 'Comfortable if the company has no borrowings, or profit before interest and tax covered interest more than 6 times in each of the last 5 years (the checklist’s checkpoint). Stretched if any of those years had a loss before interest or cover under 3 times (the point where the page’s interest-cover check fires). Some strain is in between.';
+    if (lender) {
+      tiles.push(unscored('debt', 'Debt', 'Not scored for a lender: borrowing is a bank’s raw material, so debt means something different.', rule, { section: 'balanceSheet' }));
+    } else {
+      const m = (cond(5) && cond(5).metric) || {};
+      if (m.debtFree) {
+        tiles.push(tile('debt', 'Debt', 3, 'Debt-free', 'No borrowings on the latest balance sheet.', rule, { section: 'balanceSheet' }));
+      } else if (!m.covers || m.covers.length < 5) {
+        tiles.push(unscored('debt', 'Debt', 'Needs 5 years of profit and interest figures.', rule, { section: 'balanceSheet' }));
+      } else {
+        const anyLoss = m.covers.some((c) => c.loss);
+        const worst = Math.min(...m.covers.filter((c) => !c.loss).map((c) => c.cover));
+        const level = cond(5).meets ? 3 : ((anyLoss || worst < 3) ? 1 : 2);
+        tiles.push(tile('debt', 'Debt', level, SCORE_WORDS.debt[level],
+          anyLoss ? 'At least one of the last 5 years had a loss before interest.' : 'Profit covered interest ' + (() => { let t = Math.round(worst * 10) / 10; if (worst < 3 && t >= 3) t = 2.9; else if (level === 2 && worst < 6 && t >= 6) t = 5.9; return t.toFixed(1); })() + ' times at its lowest in the last 5 years.',
+          rule, { section: 'balanceSheet' }));
+      }
+    }
+  }
+
+  // --- Cash conversion: cumulative cash from operations over cumulative
+  // profit across the last 10 years; 75% is the checklist's checkpoint.
+  {
+    const rule = 'Cash from operations added up over 10 years, as a share of profit added up over the same years. 75% or more is Strong (the checklist’s checkpoint), 50% to 75% is Partial, under 50% is Thin.';
+    if (lender) {
+      tiles.push(unscored('cash', 'Cash conversion', 'Not scored for a lender: lending money out is counted as operating cash outflow.', rule, { id: 'stmtNpCfoCard' }));
+    } else {
+      const m = (cond(4) && cond(4).metric) || {};
+      if (m.ratio == null) {
+        tiles.push(unscored('cash', 'Cash conversion', 'Needs cash-flow and profit figures for the same years, with positive total profit.', rule, { id: 'stmtNpCfoCard' }));
+      } else {
+        const level = m.ratio >= 0.75 ? 3 : (m.ratio >= 0.5 ? 2 : 1);
+        // A miss never prints as the bar itself: 74.96 rounds to 75, which
+        // would sit beside "Partial" under a rule that says 75 is Strong.
+        let shown = Math.round(m.ratio * 100);
+        if (level === 2 && shown >= 75) shown = 74;
+        else if (level === 1 && shown >= 50) shown = 49;
+        tiles.push(tile('cash', 'Cash conversion', level, SCORE_WORDS.cash[level],
+          m.ratio < 0
+            ? 'Operations used up more cash than they brought in over ' + m.years + ' years, while profit added up to a gain.'
+            : 'About ₹' + shown + ' of cash came in for every ₹100 of profit over ' + m.years + ' years.',
+          rule, { id: 'stmtNpCfoCard' }));
+      }
+    }
+  }
+
+  // --- Valuation: where the P/E at the last fiscal year-end sits inside this
+  // company's own history, in thirds. It compares the company with itself;
+  // the peer list isn't loaded, and it is not a buy or sell signal.
+  {
+    const rule = 'Takes the P/E at the last fiscal year-end and counts how many of this company’s earlier year-end P/Es were lower (a tie counts half). Under a third is cheaper than usual, over two thirds is dearer than usual, in between is about usual. It compares the company with itself, not with its peers, and it is not a buy or sell signal.';
+    const pe = ctx.pe;
+    if (!pe || pe.status === 'loading') {
+      tiles.push(tile('valuation', 'Valuation', null, 'Loading', 'Fetching the price history…', rule, { id: 'stmtDepth' }, { pending: true }));
+    } else if (pe.status !== 'ready') {
+      // The page's own reason when it has one (a bundle with no face value
+      // can't be split-adjusted); "couldn't be loaded" only for a load failure.
+      tiles.push(unscored('valuation', 'Valuation', pe.error || 'The price history couldn’t be loaded, so there is no P/E to compare.', rule, { id: 'stmtDepth' }));
+    } else {
+      const band = pe.band || {};
+      const vals = (band.series || []).filter((p) => p.value != null).map((p) => p.value);
+      const usable = vals.length;
+      if (usable < 5 || band.current == null) {
+        tiles.push(unscored('valuation', 'Valuation', 'Needs at least 5 years of price and positive earnings to place today’s P/E in its history.', rule, { id: 'stmtDepth' }));
+      } else {
+        // Position among the EARLIER year-ends. peHistoryBand's own percentile
+        // counts the latest year against itself, so it runs from 100/n to 100
+        // and its 33/67 cut-offs don't split the range into thirds (a middling
+        // P/E read "Dearer"); this one runs from 0 to 1 with ties counting half.
+        const prior = vals.slice(0, -1);
+        const pos = (prior.filter((v) => v < band.current).length + prior.filter((v) => v === band.current).length / 2) / prior.length;
+        const p = Math.round(pos * 100);
+        const label = pos < 1 / 3 ? 'Cheaper than usual' : (pos > 2 / 3 ? 'Dearer than usual' : 'About usual');
+        const spread = pe.spread5;
+        // One decimal on all four numbers: the latest year is often the
+        // extreme, and a rounded range would print it outside its own bounds.
+        tiles.push(tile('valuation', 'Valuation', null, label,
+          'P/E ' + band.current.toFixed(1) + ' at the last year-end; its ' + usable + '-year range is ' + band.min.toFixed(1) + ' to ' + band.max.toFixed(1) + ', median ' + band.median.toFixed(1) + '.'
+            + (spread != null ? ' Over 5 years the share price grew ' + Math.abs(spread * 100).toFixed(1) + ' points a year ' + (spread >= 0 ? 'faster' : 'slower') + ' than profit.' : ''),
+          rule, { id: 'stmtDepth' },
+          { track: { min: band.min, max: band.max, median: band.median, current: band.current, percentile: p } }));
+      }
+    }
+  }
+
+  // --- Red flags: divergence checks that fired two years running, plus share
+  // dilution over 10% in 5 years and, when the shareholding pattern is
+  // loaded, a pledge of 10% or more or a promoter stake down over 5 points.
+  // A first-time observation in the latest year is a "watch", listed but not
+  // counted. Red styling belongs to this tile and only when something is found.
+  {
+    const rule = 'Counts the divergence checks that fired two years running in any year of the history shown (each is dated), plus a share count up more than 10% over 5 years. Promoter pledge and changes in the promoters’ stake are not checked: the shareholding data here has no pledge figure. Checks that don’t apply to this kind of company are skipped, not passed. Something seen for the first time this year is listed as “to watch” and not counted.';
+    const div = ctx.divergence;
+    // One entry per issue: a check that fired in several years is one issue,
+    // named with the latest year it fired.
+    const latestByRule = new Map();
+    if (div) (div.allFlags || div.flags || []).forEach((f) => latestByRule.set(f.ruleId, Math.max(latestByRule.get(f.ruleId) || 0, f.year)));
+    const unique = [];
+    latestByRule.forEach((year, ruleId) => unique.push((FLAG_PHRASE[ruleId] || 'a flagged check') + ' (FY' + String(year).slice(2) + ')'));
+    const dil = cond(7);
+    if (dil && dil.meets === false) unique.push('share count up ' + (((dil.metric && dil.metric.ratio) - 1) * 100).toFixed(0) + '% in 5 years (new shares or a merger)');
+    const sh = cond(8);
+    if (sh && sh.available && sh.meets === false) unique.push('promoter pledge or stake');
+    const open = unique;
+    const watching = div && div.watch ? div.watch.length : 0;
+    const figure = open.length
+      ? 'Found: ' + unique.slice(0, 3).join('; ') + (unique.length > 3 ? '; and ' + (unique.length - 3) + ' more' : '') + '.'
+      : 'No check has fired two years running.';
+    tiles.push(tile('flags', 'Red flags', null, open.length ? open.length + ' found' : 'None found',
+      figure + (watching ? ' ' + watching + ' new this year to watch.' : '') + (!sh || !sh.available ? ' Promoter pledge and stake changes aren’t checked here.' : ''),
+      rule, { id: 'stmtBenchCard' }, { open: open.length, watching }));
+  }
+  // The checklist hides behind an overlay when the reported numbers have open
+  // quality questions; the tiles above read the same numbers, so say it here too.
+  const gate = checklistQualityGate(ctx.divergence);
+  return { schema, tiles, gated: !!gate.blocked };
 }
 
 /* =====================================================================
@@ -2190,28 +2422,66 @@ function pctOfSalesSeries(series, salesSeries) {
 // x-axis is categorical and a line would imply progression that doesn't
 // exist). salesG and npG are growthSummary() outputs.
 // Values are printed on the bars (position 'outside' puts a negative bar's
-// label below it, where there's room) and the two series are named in a
-// legend — with two same-width colours side by side, colour alone was the
-// only way to tell Sales from Net Profit without hovering. Pass salesLabel
+// label below it, where there's room), and a value label that would print on
+// top of its neighbour on a phone-width chart is dropped (every figure is in
+// the table beneath). The two series are named directly, once, in a fixed row
+// above the plot over the first pair of bars -- "Sales" ending at the pair's
+// midline and "Profit" starting there -- not on the value labels: a name is
+// wider than a ~19px phone-width bar, and sharing the value label's row made
+// the names collide with the numbers. The row is fixed by giving the y-axis an
+// explicit maximum with headroom, so no bar's value label can rise into it.
+// Which pair that is depends on the data: a company with under 10 years of
+// history has no 10y bar, so the names go over the first window that has a
+// value. Ink text (the ochre bar colour is under 4.5:1). Pass salesLabel
 // ('Revenue' for a lender) so the name matches the row the table shows.
 function growthChartOption(salesG, npG, salesLabel) {
   const cats = ['10y', '5y', '3y', '1y'];
   const fmt = v => v == null ? null : +(v * 100).toFixed(1);
-  const barLabel = { show: true, position: 'outside', distance: 4, fontSize: 10, fontWeight: 600, formatter: (p) => (p.value == null ? '' : p.value + '%') };
   const salesName = (salesLabel || 'Sales') + ' CAGR';
+  const salesData = cats.map((c, i) => fmt([salesG.y10, salesG.y5, salesG.y3, salesG.y1][i]));
+  const profitData = cats.map((c, i) => fmt([npG.y10, npG.y5, npG.y3, npG.y1][i]));
+  const valueLabel = { show: true, position: 'outside', distance: 4, fontSize: 10, fontWeight: 600, color: INK_LABEL,
+    formatter: (p) => (p.value == null ? '' : p.value + '%') };
+  // An explicit axis with headroom (instead of ECharts' auto range) so the
+  // names row sits above every bar's value label. The step is a round number.
+  const nums = salesData.concat(profitData).filter((v) => v != null);
+  const hi = Math.max(0, ...nums), lo = Math.min(0, ...nums);
+  const span = (hi - lo) || 10;
+  const niceStep = (r) => { const p = Math.pow(10, Math.floor(Math.log10(r))), m = r / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; };
+  const step = niceStep(span / 4);
+  const yMax = Math.ceil((hi + span * 0.15) / step) * step;
+  const yMin = lo < 0 ? Math.floor((lo - span * 0.15) / step) * step : 0;
+  // The name rides a markPoint at the top of the axis, anchored at the
+  // category centre (an x coord on a category axis is the category's middle,
+  // i.e. the midline of the pair).
+  const nameMark = (short, data, dir) => {
+    const first = data.findIndex((v) => v != null);
+    if (first < 0) return undefined;
+    return { silent: true, symbol: 'circle', symbolSize: 1, itemStyle: { opacity: 0 },
+      label: { show: true, formatter: short, position: 'top', offset: [0, -6],
+        align: dir < 0 ? 'right' : 'left', fontSize: 10, fontWeight: 600, color: INK_LABEL },
+      data: [{ coord: [cats[first], yMax] }] };
+  };
+  const bar = (name, data, color, short, dir) => {
+    const o = { name, type: 'bar', barMaxWidth: 32, data, itemStyle: { color, borderRadius: [3, 3, 0, 0] }, label: valueLabel, labelLayout: { hideOverlap: true } };
+    const mp = nameMark(short, data, dir);
+    if (mp) o.markPoint = mp;
+    return o;
+  };
   return {
-    legend: { show: true, top: 0, left: 'center', itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 10.5 }, data: [salesName, 'Net Profit CAGR'] },
-    grid: { left: 60, right: 20, top: 34, bottom: 36, containLabel: true },
-    xAxis: { type: 'category', data: cats, axisLabel: { fontSize: 11, color: 'rgba(20,40,63,.55)' }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
-    yAxis: { type: 'value', name: '% CAGR', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => v + '%', fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
+    legend: { show: false },
+    grid: { left: 12, right: 16, top: 48, bottom: 52, containLabel: true },
+    xAxis: { type: 'category', data: cats, name: 'Compound annual growth over each window', nameLocation: 'middle', nameGap: 28,
+      nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { fontSize: 11, color: 'rgba(20,40,63,.55)' }, axisLine: { lineStyle: { color: 'rgba(20,40,63,.2)' } } },
+    yAxis: { type: 'value', min: yMin, max: yMax, interval: step, axisLabel: { formatter: v => v + '%', fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
     tooltip: { trigger: 'axis', confine: true, formatter: function (params) {
       const arr = Array.isArray(params) ? params : [params];
       const win = arr.length ? arr[0].axisValue : '';
-      return '<b>' + win + '</b>' + arr.map(function (p) { return '<br/>' + p.marker + ' ' + advisorEscapeSafe(p.seriesName) + ': ' + (p.value != null ? p.value + '%' : '\u2014'); }).join('');
+      return '<b>' + win + '</b>' + arr.map(function (p) { return '<br/>' + p.marker + ' ' + advisorEscapeSafe(p.seriesName) + ': ' + (p.value != null ? p.value + '%' : '—'); }).join('');
     } },
     series: [
-      { name: salesName, type: 'bar', barMaxWidth: 32, data: cats.map((c, i) => fmt([salesG.y10, salesG.y5, salesG.y3, salesG.y1][i])), itemStyle: { color: '#2557C7', borderRadius: [3, 3, 0, 0] }, label: Object.assign({ color: '#2557C7' }, barLabel), labelLayout: { hideOverlap: true } },
-      { name: 'Net Profit CAGR', type: 'bar', barMaxWidth: 32, data: cats.map((c, i) => fmt([npG.y10, npG.y5, npG.y3, npG.y1][i])), itemStyle: { color: '#A03A22', borderRadius: [3, 3, 0, 0] }, label: Object.assign({ color: '#A03A22' }, barLabel), labelLayout: { hideOverlap: true } },
+      bar(salesName, salesData, '#2557C7', salesLabel || 'Sales', -1),
+      bar('Net Profit CAGR', profitData, '#B8740F', 'Profit', 1),
     ],
   };
 }
@@ -2248,19 +2518,24 @@ function cashFlowWaterfallOption(cfoSeries, cfiSeries, cffSeries, ncfSeries) {
   // three components are printed beside the last column, where the right
   // margin has room. Labelling all 36 segments would bury the bars in text;
   // the tooltip still carries every year's breakdown.
-  const componentSeries = (name, data, color) => ({
-    name, type: 'bar', stack: 'flow', barMaxWidth: 30, itemStyle: { color },
-    data: data.map((v, i) => (i === lastIdx && v != null
-      ? { value: v, label: { show: true, position: 'right', distance: 6, color, fontWeight: 600, fontSize: 10, formatter: () => name.split(' ')[0] + ' ' + formatCroreCompact(v) } }
-      : v)),
-  });
+  // The name goes on each component's LAST reported value, not blindly on the
+  // last column: a missing latest cell would otherwise leave that component
+  // with no name at all now that there is no legend.
+  const componentSeries = (name, data, color) => {
+    let named = -1; data.forEach((v, i) => { if (v != null) named = i; });
+    return {
+      name, type: 'bar', stack: 'flow', barMaxWidth: 30, itemStyle: { color },
+      data: data.map((v, i) => (i === named
+        ? { value: v, label: { show: true, position: 'right', distance: 6, color: INK_LABEL, fontWeight: 600, fontSize: 10, formatter: () => name.split(' ')[0] + ' ' + formatCroreCompact(v) } }
+        : v)),
+    };
+  };
   // The x-axis is pinned to the bottom (onZero:false) so year labels don't
   // run through the outflow bars; this line marks zero instead, which is
   // the line inflows and outflows diverge from.
   const zeroLine = { silent: true, symbol: 'none', label: { show: false }, data: [{ yAxis: 0 }], lineStyle: { color: 'rgba(20,40,63,.45)', type: 'solid', width: 1 } };
   return {
-    legend: { show: true, top: 0, left: 'center', itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 10.5 },
-      data: ['Operations (CFO)', 'Investing (CFI)', 'Financing (CFF)', 'Net cash flow'] },
+    legend: { show: false },   // the last column names every component, in ink
     grid: { left: 60, right: 118, top: 34, bottom: 30, containLabel: true },
     xAxis: { type: 'category', data: years, axisLabel: { fontSize: 10, color: 'rgba(20,40,63,.55)' }, axisLine: { onZero: false, lineStyle: { color: 'rgba(20,40,63,.2)' } } },
     yAxis: { type: 'value', name: '\u20b9 Cr', nameTextStyle: { fontSize: 10.5, color: 'rgba(20,40,63,.6)' }, axisLabel: { formatter: v => formatCroreSafe(v), fontSize: 10, color: 'rgba(20,40,63,.55)' }, splitLine: { lineStyle: { color: 'rgba(20,40,63,.06)' } } },
@@ -2277,17 +2552,20 @@ function cashFlowWaterfallOption(cfoSeries, cfiSeries, cffSeries, ncfSeries) {
       return '<b>' + year + '</b><br/>' + lines.join('<br/>');
     } },
     series: [
-      Object.assign(componentSeries('Operations (CFO)', cfo, '#2E8B6F'), { markLine: zeroLine }),
-      componentSeries('Investing (CFI)', cfi, '#A03A22'),
-      componentSeries('Financing (CFF)', cff, '#14283F'),
+      Object.assign(componentSeries('Operations (CFO)', cfo, '#1F8A70'), { markLine: zeroLine }),
+      componentSeries('Investing (CFI)', cfi, '#B8740F'),
+      componentSeries('Financing (CFF)', cff, '#8A4FBF'),
       {
         // A scatter, not a line: consecutive years' net flows aren't a path,
         // and a connecting line would imply a trend between unrelated totals.
-        name: 'Net cash flow', type: 'scatter', data: ncf, symbol: 'circle', symbolSize: 9, z: 10,
+        // The last dot is a touch larger on purpose: hideOverlap keeps the
+        // label whose dot has the bigger area, so the only label that carries
+        // the name ("Net ...") is the one that survives a narrow chart.
+        name: 'Net cash flow', type: 'scatter', data: ncf.map((v, i) => (i === lastIdx ? { value: v, symbolSize: 12 } : v)), symbol: 'circle', symbolSize: 9, z: 10,
         itemStyle: { color: '#2557C7', borderColor: '#fff', borderWidth: 1.5 },
         // White halo so the number stays legible where it sits on a bar.
-        label: { show: true, position: 'top', distance: 5, fontSize: 10, fontWeight: 600, color: '#2557C7', textBorderColor: '#fff', textBorderWidth: 2,
-          formatter: (p) => formatCroreCompact(Array.isArray(p.value) ? p.value[1] : p.value) },
+        label: { show: true, position: 'top', distance: 5, fontSize: 10, fontWeight: 600, color: INK_LABEL, textBorderColor: '#fff', textBorderWidth: 2,
+          formatter: (p) => (p.dataIndex === lastIdx ? 'Net ' : '') + formatCroreCompact(Array.isArray(p.value) ? p.value[1] : p.value) },
         // On a narrow (phone-width) chart twelve labels can't all fit; drop
         // the ones that would collide rather than print them on each other.
         labelLayout: { hideOverlap: true },
@@ -2536,7 +2814,7 @@ const api = {
   COMPANION_MAP, companionMapFor,
   KNOWN_DISCONTINUITIES, discontinuityNote, detectCyclical, detectStructuralBreaks,
   DIVERGENCE_RULES, evaluateDivergenceRules,
-  SERIES_PALETTE, benchChartOption, profitVsCashChartOption, profitVsCashCaption,
+  SERIES_PALETTE, companyScorecard, benchChartOption, profitVsCashChartOption, profitVsCashCaption,
   CANONICAL_ROWS, ROW_POLARITY, rowPolarity, ROW_UNIT, rowUnit, rowBoxScore,
   windowCagr, growthSummary, sharesSeries, epsFromShrink, dilutionDrag,
   capitalEmployedSeries, incrementalRoce, assetTurnover, bookValuePerShareSeries,

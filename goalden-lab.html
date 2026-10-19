@@ -937,6 +937,43 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 .stmt-divergence-strip{margin-top:14px;padding-top:12px;border-top:1px solid rgba(20,40,63,.1)}
 .stmt-tickrow{position:relative;height:22px}
 .live-plan-badge{display:inline-block;margin-left:8px;font-family:'Spline Sans Mono',monospace;font-size:10px;color:#946514;background:rgba(201,154,69,.12);border:1px solid rgba(201,154,69,.35);border-radius:4px;padding:1px 6px;vertical-align:1px}
+/* "The quick read": six plain labels under the company header. Ink text
+   throughout (the blue is a fill, never the only carrier of the meaning: a
+   graded tile always prints its word, and the pips differ filled/hollow, not
+   by colour). Red belongs to a tile only when a check has actually fired. */
+#stmtScoreCard{grid-column:1/-1}
+.stmt-score-note{font-size:12.5px;line-height:1.5;color:var(--dim);margin:-6px 0 14px;max-width:72ch}
+.stmt-score-gate{margin-top:-6px;color:var(--ink);border-left:3px solid var(--red);padding-left:10px}
+.stmt-score-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.stmt-score-tile{display:flex;flex-direction:column;gap:8px;background:#fff;border:1px solid rgba(20,40,63,.16);border-radius:10px;padding:14px 14px 12px;color:var(--ink)}
+.stmt-score-tile.sst-none{border-style:dashed;background:rgba(20,40,63,.025)}
+.stmt-score-tile.sst-none .sst-label{color:var(--dim)}
+.stmt-score-tile.sst-flagged{border-color:rgba(160,58,34,.3);border-left:3px solid var(--red);background:rgba(160,58,34,.05)}
+.sst-title{font-family:'Spline Sans Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.sst-read{display:flex;align-items:center;gap:10px;min-height:26px}
+.sst-label{font-family:'Newsreader',serif;font-size:19px;font-weight:700;line-height:1.2;color:var(--ink)}
+.sst-pips{display:inline-flex;gap:4px;flex-shrink:0}
+.sst-pips i{width:12px;height:12px;border-radius:50%;border:2px solid var(--gold);box-sizing:border-box}
+.sst-pips i.on{background:var(--gold)}
+.sst-badge{display:inline-block;font-family:'Spline Sans Mono',monospace;font-size:13px;font-weight:700;color:var(--ink);background:#fff;border:1px solid rgba(20,40,63,.3);border-radius:6px;padding:3px 9px}
+.sst-badge.on{color:var(--red);border-color:rgba(160,58,34,.5)}
+.sst-figure{font-size:13px;line-height:1.5;color:var(--ink)}
+.sst-rail-wrap{margin:2px 0 0}
+.sst-rail-top{position:relative;height:15px}
+.sst-rail-top span{position:absolute;top:0;transform:translateX(-50%);font-family:'Spline Sans Mono',monospace;font-size:10.5px;font-weight:700;color:var(--ink);white-space:nowrap}
+.sst-rail{position:relative;height:6px;border-radius:3px;background:rgba(20,40,63,.14)}
+.sst-rail i{position:absolute;transform:translateX(-50%)}
+.sst-rail .sst-med{top:-3px;width:2px;height:12px;background:var(--ink)}
+.sst-rail .sst-dot{top:-4px;width:14px;height:14px;border-radius:50%;background:var(--gold);border:2px solid #fff;box-shadow:0 0 0 1px var(--ink)}
+.sst-rail-ends{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 6px;margin-top:6px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--ink)}
+.sst-rail-ends .sst-medkey::before{content:'';display:inline-block;width:2px;height:9px;background:var(--ink);margin-right:5px;vertical-align:-1px}
+.sst-how summary{cursor:pointer;font-size:12px;font-weight:600;color:var(--ink2);padding:4px 0}
+.sst-how p{font-size:12px;line-height:1.55;color:var(--dim);margin:4px 0 2px}
+.sst-jump{margin-top:auto;align-self:flex-start;font:inherit;font-size:12px;font-weight:600;color:var(--gold);background:transparent;border:1px solid rgba(37,87,199,.35);border-radius:999px;padding:6px 12px;min-height:32px;cursor:pointer}
+.sst-jump:hover{background:rgba(37,87,199,.08)}
+.sst-how summary:focus-visible,.sst-jump:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media(max-width:700px){.stmt-score-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:400px){.stmt-score-grid{grid-template-columns:minmax(0,1fr)}}
 .stmt-flag-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:10px}
 .stmt-flag-card{display:flex;gap:12px;align-items:flex-start;text-align:left;font:inherit;cursor:pointer;background:rgba(160,58,34,.05);border:1px solid rgba(160,58,34,.22);border-left:3px solid var(--red);border-radius:3px 10px 10px 3px;padding:10px 12px;color:#14283F}
 .stmt-flag-card:hover,.stmt-flag-card:focus-visible{background:rgba(160,58,34,.09);outline:none}
@@ -7105,6 +7142,7 @@ function renderStatementsShell(){
 <button data-stmt-jump="stmtChecklist">Compounding</button>
     </nav>
     <div class="stmt-card" id="stmtHeaderCard"></div>
+    <div class="stmt-card" id="stmtScoreCard" style="display:none"></div>
     <div id="stmtRefusal"></div>
     <div class="stmt-zone-header">Statements &amp; Benchmarks</div>
     <div class="stmt-card" id="stmtBenchCard">
@@ -7456,6 +7494,55 @@ function renderStatementsHeaderHTML(){
     ${marketSnapshot}
     <div class="stmt-source-line">Source: <a href="${advisorAttr(r.sourceUrl||'#')}" target="_blank" rel="noopener">screener.in</a>, fetched ${r.fetchedAt?new Date(r.fetchedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'\u2014'}${r.fixtureNote?' &middot; '+advisorAttr(r.fixtureNote):''}</div>
   </div>${stale}${cyclicalBanner}${sectorBanner}`;
+}
+/* ---- "The quick read": six plain labels over checks the page already runs.
+   companyScorecard() (statements-engine.js) does the work; this only draws it.
+   Each tile prints its own rule behind a "How this is scored" fold, and a tile
+   that can't be scored says why in the same place. The labels describe the
+   reported numbers, not the shares -- there is no overall verdict and no
+   colour ranking. Deliberately NOT passed to the advisor's statements
+   snapshot: the Lab advisor reads and navigates, it does not grade. */
+let stmtScoreOpen = {};   // which "How this is scored" folds are open, kept across re-renders
+function scoreRailHTML(tr){
+  const span = tr.max - tr.min;
+  const at = v => span > 0 ? Math.max(0, Math.min(100, (v - tr.min) / span * 100)) : 50;
+  const cur = at(tr.current), med = at(tr.median);
+  const aria = 'P/E '+tr.current.toFixed(1)+' at the last year-end; lowest '+tr.min.toFixed(1)+', median '+tr.median.toFixed(1)+', highest '+tr.max.toFixed(1)+' over the history shown.';
+  return `<div class="sst-rail-wrap" role="img" aria-label="${advisorAttr(aria)}">
+    <div class="sst-rail-top"><span style="left:${Math.max(8, Math.min(92, cur)).toFixed(1)}%">${tr.current.toFixed(1)}</span></div>
+    <div class="sst-rail"><i class="sst-med" style="left:${med.toFixed(1)}%"></i><i class="sst-dot" style="left:${cur.toFixed(1)}%"></i></div>
+    <div class="sst-rail-ends"><span>low ${tr.min.toFixed(1)}</span><span class="sst-medkey">median ${tr.median.toFixed(1)}</span><span>high ${tr.max.toFixed(1)}</span></div>
+  </div>`;
+}
+function scoreTileHTML(t){
+  const none = t.label === 'Not scored' || t.pending;
+  const flagged = t.id === 'flags' && t.open > 0;
+  let read;
+  if(t.id === 'flags') read = `<span class="sst-badge${flagged?' on':''}">${advisorAttr(t.label)}</span>`;
+  else if(t.level != null) read = `<span class="sst-pips" role="img" aria-label="${t.level} out of 3">${[1,2,3].map(n=>`<i class="${n<=t.level?'on':''}"></i>`).join('')}</span><span class="sst-label">${advisorAttr(t.label)}</span>`;
+  else read = `<span class="sst-label">${advisorAttr(t.label)}</span>`;
+  const jump = t.jump && t.jump.id ? `data-score-id="${advisorAttr(t.jump.id)}"` : (t.jump && t.jump.section ? `data-score-section="${advisorAttr(t.jump.section)}"` : '');
+  return `<div class="stmt-score-tile${none?' sst-none':''}${flagged?' sst-flagged':''}" data-score="${advisorAttr(t.id)}"${t.pending?' aria-busy="true"':''}>
+    <div class="sst-title">${advisorAttr(t.title)}</div>
+    <div class="sst-read">${read}</div>
+    ${t.track ? scoreRailHTML(t.track) : ''}
+    <div class="sst-figure">${advisorAttr(t.figure)}</div>
+    <details class="sst-how" data-score-how="${advisorAttr(t.id)}"${stmtScoreOpen[t.id]?' open':''}><summary aria-label="How this is scored: ${advisorAttr(t.title)}">How this is scored</summary><p>${advisorAttr(t.rule)}</p></details>
+    ${jump ? `<button type="button" class="sst-jump" data-score-jump ${jump} aria-label="See the numbers for ${advisorAttr(t.title)}">See the numbers</button>` : ''}
+  </div>`;
+}
+function renderScorecardHTML(){
+  const s=L.statements;
+  const r=statementsBundle(s.primary);
+  if(!r) return '';
+  let sc;
+  try{
+    sc = companyScorecard(r, {divergence: computeStatementsDivergence(), pe: statementsPeBand(s.primary), faceValue: r.topRatios && r.topRatios.faceValue});
+  }catch(err){ console.warn('scorecard failed', err); return ''; }
+  return `<div class="stmt-section-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>The quick read: ${advisorAttr(r.symbol||s.primary)}</div>
+    <div class="stmt-score-note">Six plain labels over checks this page already runs. They describe the reported numbers, not whether to buy or sell the shares, and they are not advice. Every tile says how its label was worked out.</div>
+    ${sc.gated ? `<div class="stmt-score-note stmt-score-gate" role="note">There are open questions about this company's reported numbers (see Red flags). The labels below read the figures as reported; they do not check whether those figures can be trusted.</div>` : ''}
+    <div class="stmt-score-grid">${sc.tiles.map(scoreTileHTML).join('')}</div>`;
 }
 function renderRefusalHTML(){
   const s=L.statements;
@@ -9173,6 +9260,8 @@ function updateStatementsUI(){
   const topbarCurrentEl=document.getElementById('stmtTopbarCurrent');
   if(topbarCurrentEl) topbarCurrentEl.textContent = (L.statements.primary||'No company open')+(L.statements.compare?' vs '+L.statements.compare:'');
   const refusalEl=document.getElementById('stmtRefusal'); if(refusalEl) refusalEl.innerHTML = renderRefusalHTML();
+  const scoreEl=document.getElementById('stmtScoreCard');
+  if(scoreEl){ const scoreHTML=renderScorecardHTML(); scoreEl.innerHTML=scoreHTML; scoreEl.style.display = scoreHTML ? '' : 'none'; }
   const hintEl=document.getElementById('stmtBenchHint'); if(hintEl) hintEl.textContent = L.statements.pins.length ? '' : 'Sales is pinned. Click any row below to add it here.';
   const chipsEl=document.getElementById('stmtBenchChips'); if(chipsEl) chipsEl.innerHTML = renderBenchChipsHTML();
   const compStripEl=document.getElementById('stmtCompanionStrip'); if(compStripEl) compStripEl.innerHTML = renderCompanionStripHTML();
@@ -9441,6 +9530,21 @@ document.body.addEventListener('click', e=>{
     : document.querySelector('#stmtTables [data-stmt-section="'+btn.dataset.stmtJumpSection+'"]');
   if(target) target.scrollIntoView({behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth', block:'start'});
 });
+// The quick read's "See the numbers" buttons: same two addressing schemes as
+// the jump nav (an id, or a statement-table section key).
+document.body.addEventListener('click', e=>{
+  const btn = e.target.closest('[data-score-jump]');
+  if(!btn) return;
+  const target = btn.dataset.scoreId
+    ? document.getElementById(btn.dataset.scoreId)
+    : document.querySelector('#stmtTables [data-stmt-section="'+btn.dataset.scoreSection+'"]');
+  if(target) target.scrollIntoView({behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth', block:'start'});
+});
+// 'toggle' doesn't bubble, so listen in the capture phase.
+document.addEventListener('toggle', e=>{
+  const d = e.target;
+  if(d && d.matches && d.matches('details[data-score-how]')) stmtScoreOpen[d.dataset.scoreHow] = d.open;
+}, true);
 document.body.addEventListener('click', e=>{
   if(!e.target.closest('[data-stmt-checklist-dismiss]')) return;
   L.statements.checklistDismissed = true;
