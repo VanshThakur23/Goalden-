@@ -56,7 +56,9 @@ function effectiveMonthlyRate(r) { return Math.pow(1 + r, 1/12) - 1; }
      - loops `o.periods` (goalden.html + door2 used to call the key `years`;
        their callers pass months and were updated to `periods`),
      - returns `contributed` on every row,
-     - supports `o.stepUp` (annual SIP step-up; 0 = flat SIP).
+     - supports `o.stepUp`, a PER-PERIOD growth factor applied every month
+       (the pages all pass 0; only a test uses it). For a real SIP step-up -- flat within a year,
+       raised once a year -- use stepUpAnnualPlan below.
    Callers that don't step up pass stepUp: 0 (or omit it — defaults to 0)
    and get output identical to before the reconciliation.
    --------------------------------------------------------------------- */
@@ -75,6 +77,25 @@ function accumulationSchedule(o) {
     contrib *= (1 + (o.stepUp || 0));
   }
   return { rows, finalBalance: bal };
+}
+
+// Step-up SIP the way real SIP mandates work: the monthly amount is FLAT
+// within each year and rises by the step-up % once a year. (Moved here from
+// the Lab so Quick Calculate and the Full Plan can offer the same thing.)
+// The older model (a monthly-equivalent growth rate) raised it a little
+// every month, understating the starting SIP by ~3.4% at the Lab defaults.
+// Future value is linear in the starting SIP, so solve with S=1 and scale --
+// exact, no iteration. Contributions at the start of each month (annuity
+// due), matching the flat SIP it is compared with.
+function stepUpAnnualPlan(target, years, annualRate, stepPct){
+  const m=effectiveMonthlyRate(annualRate), g=stepPct;
+  const simulate=S=>{ let bal=0, paid=0; const rows=[], yearly=[];
+    for(let y=0;y<years;y++){ const sip=S*Math.pow(1+g,y); yearly.push(sip);
+      for(let k=0;k<12;k++){ bal=(bal+sip)*(1+m); paid+=sip; rows.push({closeBal:bal, sip}); } }
+    return {bal, paid, rows, yearly}; };
+  const unit=simulate(1).bal;
+  const S=target/unit, run=simulate(S);
+  return {startSip:S, rows:run.rows, yearlySip:run.yearly, totalPaid:run.paid, finalBal:run.bal};
 }
 
 /* ---------------------------------------------------------------------
@@ -408,6 +429,24 @@ function rollingWindows(series, years){
     out.push({startYear:series[i].y, startIdx:i, cagr:Math.pow(bal,1/years)-1, finalMultiple:bal});
   }
   return out;
+}
+// "Is a 12% equity assumption realistic?" -- the assumption against every
+// real N-year stretch of an index's history. The stretches overlap and share
+// most of their years, so `separate` (how many non-overlapping N-year periods
+// the history holds) is reported with them: 18 overlapping 27-year windows
+// are less than two separate ones. A horizon longer than the history is
+// capped at the history's length, and says so.
+function returnReality(series, years, assumed){
+  const n = Math.min(Math.max(1, Math.round(years)), series.length);
+  const w = rollingWindows(series, n);
+  const sorted = w.slice().sort((a, b) => a.cagr - b.cagr);
+  return {
+    years: n, capped: n < years, count: w.length, windows: w,
+    worst: sorted[0], best: sorted[sorted.length - 1],
+    beat: w.filter(x => x.cagr >= assumed - 1e-9).length,
+    separate: Math.floor(series.length / n),
+    first: series[0].y, last: series[series.length - 1].y,
+  };
 }
 function worstWindow(series, years){
   const w=rollingWindows(series, years);
@@ -1096,7 +1135,7 @@ if (typeof module !== 'undefined' && module.exports) {
     accumulationSchedule, xirr, sipBacktest, findRevertingSpikes,
     TAX_IN, holdsLongTerm, saleTaxIndia, postTaxPlanValue, postTaxFdFinal,
     marketSeries, marketName, compoundPath, marketGrowthPath,
-    rollingWindows, worstWindow, bestWindow,
+    rollingWindows, worstWindow, bestWindow, returnReality, stepUpAnnualPlan,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,
     computeDailyReturns, auditPriceSeries, computeReturnStats, alignReturns,
     populationCovariance, computeCovarianceMatrix, portfolioReturn, portfolioVariance,

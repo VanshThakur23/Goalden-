@@ -188,7 +188,7 @@ is the agentic workflow your college wants.
 |---|---|---|
 | 1 | 09 starter pairs (+ fund threshold, set to 20% in the end), 13 B/C/D, 19 personas (Rohan replaces the US persona) | done, deployed |
 | 2 | Pillar 1 core: 03 parts B/D/E/F (prereq) → 12 → 04 → "Read this company" link (new); SIP vs index fund added | done (after-tax line moved to 3) |
-| 3 | After-tax line on the SIP card (new, uses 06's `TAX_IN`) → Pillar 2 core: 06 → return reality check (new) → step-up row (#8) | next |
+| 3 | After-tax line on the SIP card (new, uses 06's `TAX_IN`) → Pillar 2 core: 06 → return reality check (new) → step-up row (#8) | done (3a after-tax deployed; 3b reality check and step-up) |
 | 4 | Pillar 3 core: Read the Company scorecard (#9 extended) | |
 | 5 | The banned charts: 01 allocation strip, 02 dot plots | |
 | 6 | 08 keep-place fix, 18 verdicts and consistency, 15 pills and readout, 11 nudges | |

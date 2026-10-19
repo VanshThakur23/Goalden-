@@ -2986,3 +2986,27 @@ test('saleTaxIndia: a short-term loss goes to taxed gains before the exempt Rs 1
   assert.deepStrictEqual(engine.TAX_IN.newRegimeSlabs, [0, 15, 20, 25, 30]);
 });
 
+/* ---- Step-up row and return reality check (Group 3b) ---- */
+test('stepUpAnnualPlan: 0% step-up is the flat SIP; 10% starts lower, rises once a year, lands on target', () => {
+  const m = engine.effectiveMonthlyRate(0.10), target = 1e7;
+  const flat = engine.solveSIP(m, 240, target, true);
+  approx(engine.stepUpAnnualPlan(target, 20, 0.10, 0).startSip, flat, 1e-9);
+  const p = engine.stepUpAnnualPlan(target, 20, 0.10, 0.10);
+  assert.ok(p.startSip < flat);
+  approx(p.yearlySip[1] / p.yearlySip[0], 1.10, 1e-12);
+  assert.strictEqual(p.rows[11].sip, p.rows[0].sip);     // flat within the first year
+  approx(p.finalBal, target, 1e-9);
+});
+test('returnReality: a steady 10% market beats a 10% assumption every time; the Sensex has 30 15-year stretches', () => {
+  const steady = Array.from({ length: 40 }, (_, i) => ({ y: 1980 + i, r: 0.10 }));
+  const a = engine.returnReality(steady, 15, 0.10);
+  assert.strictEqual(a.count, 26);
+  assert.strictEqual(a.beat, 26);
+  assert.strictEqual(a.separate, 2);
+  const s = engine.returnReality(engine.SENSEX_ANNUAL_RETURNS, 15, 0.12);
+  assert.strictEqual(s.count, engine.SENSEX_ANNUAL_RETURNS.length - 15 + 1);
+  assert.ok(s.worst.cagr <= s.best.cagr);
+  const long = engine.returnReality(engine.SENSEX_ANNUAL_RETURNS, 60, 0.12);
+  assert.ok(long.capped && long.count === 1);
+});
+

@@ -3793,8 +3793,47 @@ standing over the founder's shoulder.
   - Priya: Rs 3.3 Cr vs Rs 1.7 Cr after tax at 20%. Arjun: Rs 40.0 L vs
     Rs 31.6 L. The gap barely moves with tax, and the card says why.
 
-### Next: Group 3b
-- "Is 12% a year realistic?" from the real Sensex/S&P history
-  (`returnReality`), and the step-up row ("or start at Rs X, +10% a year",
-  `stepUpAnnualPlan` moved from the Lab to the engine).
+### Group 3b: "is 12% realistic?" and the step-up SIP (reviewer NO-GO twice, both fixed)
+- Engine: `returnReality(series, years, assumed)` and `stepUpAnnualPlan`
+  (moved here from the Lab), plus 2 tests (198/198).
+  - `returnReality` lays the plan's equity rate against every real N-year
+    stretch of the Sensex (India) or S&P 500 (US) from `marketSeries`:
+    worst, best, how many matched or beat the rate, and `separate`, the
+    number of non-overlapping N-year periods the history holds.
+  - A horizon longer than the history is capped at its length, and the card
+    says so.
+- Quick Calculate and the Full Plan: a card, "Is 12% a year from equity
+  realistic?"
+  - A dot strip with one dot per real stretch (filled = at or above the
+    plan's rate, hollow = below; greyscale-safe) and the plan's rate as a
+    dashed line.
+  - Worst, best and "at or above" figures, and a caption from the real
+    numbers: the stretches overlap, so the history holds only a few separate
+    periods and the card says it shows a range, not a proof.
+  - Honest about its limits: both index series are price-only (US from 2016
+    on includes dividends), and only the equity rate is tested; the debt and
+    hybrid rates have no index history here.
+  - The note says the figures are before inflation and before a fund's
+    costs. A history with only one stretch (a 44-year horizon, or any capped
+    one) gets single-stretch wording, not "worst" and "best".
+  - Shown on all three Quick Calculate goal types (retirement, education,
+    generic with a gap) and on the Full Plan's blueprint, under the
+    allocation card.
+- Step-up SIP: "Or start at Rs X/month and raise it 10% every year: the same
+  pot" under each SIP result, from `stepUpAnnualPlan` (flat within a year,
+  raised once a year, the way a real mandate works). The target is the flat
+  SIP's own final value, so the two never disagree about the goal.
+  - Starting lower is not cheaper, so the line also says what you would pay
+    in total (Priya: Rs 56 L against Rs 32 L flat). The reviewer's one
+    MUST-FIX. Its re-check then caught two chart labels colliding when the
+    worst and best stretch are within ~1% (a 43-year Sensex horizon): they now
+    print as one label, "15.3%–15.4%".
+  - The Full Plan shows it as a hover/tap term on each goal's monthly figure.
+  - The advisor's result object gains `stepUp10StartSIP`.
+  - The Lab's step-up tab now calls the engine's copy (one function, not two).
+
+### Next: Group 4
+- Read the Company scorecard (Growth, Profitability, Debt, Cash conversion,
+  Valuation, Red flags from the existing checks), then the statements
+  charts (03 B/C/D) with the contrast and null-label fixes.
 

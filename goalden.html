@@ -1219,6 +1219,90 @@ function sResults() {
 
 // Shared by all three results screens: what your money is actually
 // invested in, and what it earns before vs after inflation eats into it.
+// "Can I start smaller?" -- the same pot from a SIP that starts lower and
+// rises 10% once a year (stepUpAnnualPlan, engine). The target is what the
+// flat SIP itself grows to, so the two can never disagree about the goal.
+const STEP_UP = 0.10;
+// Starting lower is not cheaper: later money has less time to grow, so more
+// has to go in overall. The offer carries both totals so the card can say so.
+function stepUpOffer(sip, years, rate) {
+  years = Math.round(years);
+  if (!(sip > 0) || years < 3) return null;
+  const target = accumulationSchedule({ sip: sip, rate: effectiveMonthlyRate(rate), periods: years * 12, due: true, stepUp: 0 }).finalBalance;
+  const p = stepUpAnnualPlan(target, years, rate, STEP_UP);
+  return { start: p.startSip, last: p.yearlySip[years - 1], paid: p.totalPaid, flatPaid: sip * 12 * years };
+}
+function stepUpPaidText(o, c) {
+  return 'You would pay in ' + c.fmt(Math.round(o.paid)) + ' in total instead of ' + c.fmt(Math.round(o.flatPaid)) + ', because the later money has less time to grow.';
+}
+// "Is 12% a year from equity realistic?" -- answered from the real index
+// history the Case screen already uses (marketSeries), not from opinion.
+// Only the equity rate is tested: the debt and hybrid rates have no index
+// history here to test them against, and the card says so.
+const NUM_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+function realityCardHtml(years, d, blendRate, c, cardClass, horizonNote) {
+  if (!(years >= 3)) return '';
+  const country = S.country;
+  const series = marketSeries(country), name = marketName(country);
+  const rr = returnReality(series, years, d.equity);
+  const fy = y => country === 'US' ? String(y) : (y - 1) + '-' + String(y).slice(2);
+  const pct = v => (v * 100).toFixed(1) + '%';
+  const eq = (d.equity * 100).toFixed(0) + '%';
+  // A dot per stretch on one line: filled if it matched or beat the plan's
+  // rate, hollow if not (fill, not colour alone, so it reads in greyscale).
+  const single = rr.count === 1;
+  const W = 320, H = 60, pad = 16;
+  const vals = rr.windows.map(w => w.cagr);
+  const lo = Math.min.apply(null, vals.concat([d.equity])), hi = Math.max.apply(null, vals.concat([d.equity]));
+  const x = v => pad + (v - lo) / ((hi - lo) || 1) * (W - 2 * pad);
+  // Worst and best print as one label when there is a single stretch or the
+  // two sit within ~80 units (e.g. 15.3% and 15.4%): two labels that close
+  // overlap, and the right one runs off the edge.
+  const merged = single || x(rr.best.cagr) - x(rr.worst.cagr) < 80;
+  const mEnd = x(rr.best.cagr) > W / 2;
+  const mono = 'font-family="Spline Sans Mono, monospace"';
+  const dots = rr.windows.map(w => w.cagr >= d.equity - 1e-9
+    ? '<circle cx="' + x(w.cagr).toFixed(1) + '" cy="30" r="4" fill="#2557C7" fill-opacity=".7"/>'
+    : '<circle cx="' + x(w.cagr).toFixed(1) + '" cy="30" r="3.6" fill="none" stroke="#56698A" stroke-width="1.4"/>').join('');
+  const ax = x(d.equity), anchor = ax > W - 50 ? 'end' : (ax < 50 ? 'start' : 'middle');
+  const zero = lo < 0 && x(0) - x(lo) > 44 && x(hi) - x(0) > 44
+    ? '<line x1="' + x(0) + '" x2="' + x(0) + '" y1="20" y2="40" stroke="rgba(20,40,63,.3)"/><text x="' + x(0) + '" y="56" font-size="10.5" text-anchor="middle" fill="#56698A" ' + mono + '>0%</text>' : '';
+  const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" style="display:block;margin:12px 0 4px;max-width:420px" aria-label="' +
+    (single
+      ? 'The one real ' + rr.years + '-year stretch of the ' + name + ' returned ' + pct(rr.worst.cagr) + ' a year, against the plan\'s ' + eq + '.'
+      : rr.count + ' real ' + rr.years + '-year stretches of the ' + name + ', from ' + pct(rr.worst.cagr) + ' to ' + pct(rr.best.cagr) + ' a year; ' + rr.beat + ' of them at or above the plan\'s ' + eq + '.') + '">' +
+    zero +
+    '<line x1="' + ax + '" x2="' + ax + '" y1="12" y2="44" stroke="#14283F" stroke-width="1.5" stroke-dasharray="3 2"/>' +
+    '<text x="' + ax + '" y="9" font-size="10.5" text-anchor="' + anchor + '" fill="#14283F" ' + mono + '>plan ' + eq + '</text>' +
+    dots +
+    (merged
+      ? '<text x="' + (mEnd ? x(rr.best.cagr) : x(rr.worst.cagr)) + '" y="56" font-size="10.5" text-anchor="' + (mEnd ? 'end' : 'start') + '" fill="#56698A" ' + mono + '>' + (single ? pct(rr.worst.cagr) : pct(rr.worst.cagr) + '\u2013' + pct(rr.best.cagr)) + '</text>'
+      : '<text x="' + x(rr.worst.cagr) + '" y="56" font-size="10.5" text-anchor="start" fill="#56698A" ' + mono + '>' + pct(rr.worst.cagr) + '</text>' +
+        '<text x="' + x(rr.best.cagr) + '" y="56" font-size="10.5" text-anchor="end" fill="#56698A" ' + mono + '>' + pct(rr.best.cagr) + '</text>') +
+    '</svg>';
+  const n = rr.years, sep = rr.separate;
+  const priceNote = country === 'US'
+    ? 'S&amp;P 500 figures to 2015 are price-only (2016 on include dividends), so the early stretches understate what a fund earned.'
+    : 'The Sensex figures are price-only: the dividends an index fund reinvests come on top.';
+  return '<div class="' + cardClass + '">' +
+    '<div class="chart-title">Is ' + eq + ' a year from equity realistic?</div>' +
+    '<div class="chart-caption">Your plan\'s equity rate, checked against ' + (single ? 'the one real ' : 'every real ') + n + '-year stretch of the ' + name + ', ' + fy(rr.first) + ' to ' + fy(rr.last) +
+      (rr.capped ? ' (your ' + years + ' years is longer than this history, so its longest stretch is used)' : (horizonNote || '')) + '.</div>' +
+    svg +
+    '<div class="alloc-return-row" style="grid-template-columns:repeat(' + (single ? 2 : 3) + ',minmax(0,1fr))">' +
+    (single
+      ? '<div><div class="alloc-return-label">That stretch</div><div class="alloc-return-value">' + pct(rr.worst.cagr) + '</div></div>'
+      : '<div><div class="alloc-return-label">Worst stretch</div><div class="alloc-return-value">' + pct(rr.worst.cagr) + '</div></div>' +
+        '<div><div class="alloc-return-label">Best stretch</div><div class="alloc-return-value">' + pct(rr.best.cagr) + '</div></div>') +
+    '<div><div class="alloc-return-label">At or above ' + eq + '</div><div class="alloc-return-value">' + rr.beat + ' of ' + rr.count + '</div></div>' +
+    '</div>' +
+    '<div class="gr-note" style="margin-top:10px">' + (single
+        ? 'A filled dot matched or beat ' + eq + ', a hollow one fell short. This stretch began in ' + fy(rr.worst.startYear) + '. This history holds only one ' + n + '-year period, so it shows a single outcome, not a range. '
+        : 'Filled dots matched or beat ' + eq + '. The worst ' + n + '-year stretch began in ' + fy(rr.worst.startYear) + ', the best in ' + fy(rr.best.startYear) + '. ' +
+          'The stretches overlap, so this history holds only ' + (NUM_WORDS[sep] || sep) + ' separate ' + n + '-year period' + (sep === 1 ? '' : 's') + ': it shows the range, it can\'t prove a rate. ') +
+      priceNote + ' Every historical figure here is before inflation and before a fund\'s costs. The plan\'s blended ' + pct(blendRate) + ' also counts ' + (d.debt * 100).toFixed(0) + '% for debt and ' + (d.hybrid * 100).toFixed(0) + '% for hybrid, which this doesn\'t test.</div>' +
+    '</div>';
+}
 function allocationCardHtml(preRate, d, rLabel) {
   const a = riskAllocation();
   const real = realRate(preRate, d.inflation);
@@ -1492,7 +1576,8 @@ function sResultsRetirement() {
       '<div class="as">Your existing '+c.compact(r.existing)+', left to grow at "'+rLabel+'", is already projected to more than cover the pot by age '+S.retireAge+'.</div></div>'
     : '<div class="action-card"><div class="al">Put away, starting now</div>' +
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
-      '<div class="as">For '+r.yrs+' years at "'+rLabel+'". Pot ready by age '+S.retireAge+', lasts to '+r.d.lifeExp+', deliberately past average lifespan so you are unlikely to outlive it.</div></div>';
+      '<div class="as">For '+r.yrs+' years at "'+rLabel+'". Pot ready by age '+S.retireAge+', lasts to '+r.d.lifeExp+', deliberately past average lifespan so you are unlikely to outlive it.</div>' +
+      (o => o ? '<div class="as" style="margin-top:8px">Or start at <b>' + c.fmt(Math.round(o.start)) + '/month</b> and raise it 10% every year: the same pot, with ' + c.fmt(Math.round(o.last)) + '/month in the last year. ' + stepUpPaidText(o, c) + ' That suits you if your pay rises at least that fast.</div>' : '')(stepUpOffer(r.sip, r.yrs, r.preRate)) + '</div>';
   return '<div class="result-scroll">' + advisorChipsHTML() + personaNoteHtml() +
     '<div class="result-intro">Good news: this is a solvable problem. Here is exactly what it takes.</div>' +
     '<div class="edit-row">' +
@@ -1516,6 +1601,7 @@ function sResultsRetirement() {
     '<div class="chart-caption">Built to last until age '+r.d.lifeExp+'</div>' +
     potChart(r.drawRows, c, 'chart-secondary')+'</div>' +
     allocationCardHtml(r.preRate, r.d, rLabel) +
+    realityCardHtml(r.yrs, r.d, r.preRate, c, 'chart-card') +
     (!r.alreadyMet ? fdComparisonCardHtml(r.sip, r.yrs, r.gapCorpus, r.d, c) : '') +
     retireAgeCompareCard(calcRetireAgeCompare(), c) +
     delayCard(r.delay, r.yrs) +
@@ -1546,7 +1632,8 @@ function sResultsEducation() {
       '<div class="as">What you\'ve already saved, left to grow at "'+rLabel+'", is already projected to more than cover the corpus.</div></div>'
     : '<div class="action-card"><div class="al">Put away, starting now</div>' +
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
-      '<div class="as">For '+S.yearsToCollege+' years at "'+rLabel+'". Corpus ready before college starts.</div></div>';
+      '<div class="as">For '+S.yearsToCollege+' years at "'+rLabel+'". Corpus ready before college starts.</div>' +
+      (o => o ? '<div class="as" style="margin-top:8px">Or start at <b>' + c.fmt(Math.round(o.start)) + '/month</b> and raise it 10% every year: the same pot, with ' + c.fmt(Math.round(o.last)) + '/month in the last year. ' + stepUpPaidText(o, c) + ' That suits you if your pay rises at least that fast.</div>' : '')(stepUpOffer(r.sip, S.yearsToCollege, r.preRate)) + '</div>';
   return '<div class="result-scroll">' + advisorChipsHTML() + personaNoteHtml() +
     '<div class="result-intro">A college fund is one of the most plannable goals there is. Here is the number.</div>' +
     '<div class="edit-row">' +
@@ -1570,6 +1657,7 @@ function sResultsEducation() {
     '<div class="chart-caption">Rises every year because education costs keep going up</div>' +
     feeBarChart(r.feeYears, 'chart-secondary')+'</div>' +
     allocationCardHtml(r.preRate, r.d, rLabel) +
+    realityCardHtml(S.yearsToCollege, r.d, r.preRate, c, 'chart-card') +
     (!r.alreadyMet ? fdComparisonCardHtml(r.sip, S.yearsToCollege, r.gapCorpus, r.d, c) : '') +
     delayCard(r.delay, S.yearsToCollege) +
     '</div></div>' +
@@ -1608,7 +1696,8 @@ function sResultsGeneric() {
       '<div class="as">Your existing savings will grow to more than the inflated cost by then.</div></div>' :
       '<div class="action-card"><div class="al">Put away, starting now</div>' +
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
-      '<div class="as">For '+S.genYears+' years at "'+rLabel+'". Covers the gap after your existing savings grow.</div></div>'
+      '<div class="as">For '+S.genYears+' years at "'+rLabel+'". Covers the gap after your existing savings grow.</div>' +
+      (o => o ? '<div class="as" style="margin-top:8px">Or start at <b>' + c.fmt(Math.round(o.start)) + '/month</b> and raise it 10% every year: the same pot, with ' + c.fmt(Math.round(o.last)) + '/month in the last year. ' + stepUpPaidText(o, c) + ' That suits you if your pay rises at least that fast.</div>' : '')(stepUpOffer(r.sip, S.genYears, r.preRate)) + '</div>'
     ) +
     (r.accRows.length > 0 || r.gap > 0 || r.delay ?
       '<div class="assump-toggle detail-toggle" id="bt">'+caretSvg()+'See how we got this number: charts, allocation, comparisons</div>' +
@@ -1618,6 +1707,7 @@ function sResultsGeneric() {
         '<div class="chart-caption">The blue area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
         mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' : '') +
       (r.gap > 0 ? allocationCardHtml(r.preRate, r.d, rLabel) : '') +
+      (r.gap > 0 ? realityCardHtml(S.genYears, r.d, r.preRate, c, 'chart-card') : '') +
       (r.gap > 0 ? fdComparisonCardHtml(r.sip, S.genYears, r.gap, r.d, c) : '') +
       (r.delay ? delayCard(r.delay, S.genYears) : '') +
       '</div></div>' : '') +
@@ -2385,17 +2475,17 @@ function advisorGetResults() {
   if (S.goalType === 'retirement') {
     if (S.age == null || S.retireAge == null || S.monthlyExpense == null) return { ok:false, error:'Need age, retirement age and monthly expense first.' };
     const r = calcRetirement();
-    return { ok:true, result:{ goalType:'retirement', age:S.age, retireAge:S.retireAge, monthlyExpense:S.monthlyExpense, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), yearsToRetire:r.yrs, expectedReturnPct:(r.preRate*100).toFixed(1) }, flags:flags };
+    return { ok:true, result:{ goalType:'retirement', age:S.age, retireAge:S.retireAge, monthlyExpense:S.monthlyExpense, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), yearsToRetire:r.yrs, expectedReturnPct:(r.preRate*100).toFixed(1), stepUp10StartSIP:(o=>o?Math.round(o.start):null)(stepUpOffer(r.sip, r.yrs, r.preRate)) }, flags:flags };
   }
   if (S.goalType === 'education') {
     if (S.annualFee == null || S.yearsToCollege == null || S.courseDuration == null) return { ok:false, error:'Need annual fee, years until college and course duration first.' };
     const r = calcEducation();
-    return { ok:true, result:{ goalType:'education', annualFee:S.annualFee, yearsToCollege:S.yearsToCollege, courseDuration:S.courseDuration, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), expectedReturnPct:(r.preRate*100).toFixed(1) }, flags:flags };
+    return { ok:true, result:{ goalType:'education', annualFee:S.annualFee, yearsToCollege:S.yearsToCollege, courseDuration:S.courseDuration, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), expectedReturnPct:(r.preRate*100).toFixed(1), stepUp10StartSIP:(o=>o?Math.round(o.start):null)(stepUpOffer(r.sip, S.yearsToCollege, r.preRate)) }, flags:flags };
   }
   if (S.goalType === 'generic') {
     if (S.genAmount == null || S.genYears == null) return { ok:false, error:'Need goal amount and years until needed first.' };
     const r = calcGeneric();
-    return { ok:true, result:{ goalType:'generic', genType:S.genType, amountToday:S.genAmount, years:S.genYears, inflatedGoal:Math.round(r.inflatedGoal), monthlySIP:Math.round(r.sip), expectedReturnPct:(r.preRate*100).toFixed(1) }, flags:flags };
+    return { ok:true, result:{ goalType:'generic', genType:S.genType, amountToday:S.genAmount, years:S.genYears, inflatedGoal:Math.round(r.inflatedGoal), monthlySIP:Math.round(r.sip), expectedReturnPct:(r.preRate*100).toFixed(1), stepUp10StartSIP:(o=>o?Math.round(o.start):null)(stepUpOffer(r.sip, S.genYears, r.preRate)) }, flags:flags };
   }
   if (S.goalType === 'delay') return { ok:false, error:'The cost-of-delay comparison shows inside a real goal result. Pick retirement, education or a purchase first.' };
   return { ok:false, error:'Unknown goal type.' };

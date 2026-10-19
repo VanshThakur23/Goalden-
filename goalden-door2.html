@@ -111,6 +111,8 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .chip.sel{background:var(--gold);border-color:var(--gold);color:#fff}
 .slab-chips{margin:8px 0 0;gap:6px}
 .slab-chips .chip{padding:6px 10px;font-size:12px}
+.alloc-card .chart-title{font-family:'Newsreader',serif;font-size:15.5px;color:var(--paper);margin-bottom:2px}
+.alloc-card .chart-caption{font-size:12px;color:rgba(20,40,63,.74);margin-bottom:10px}
 .err{color:#9C4A2C;font-size:12px;font-family:'Spline Sans Mono',monospace;min-height:16px;margin-top:8px}
 
 /* --- two-column form --- */
@@ -1016,6 +1018,90 @@ document.addEventListener('click', e=>{
     if(card===tapped){ const again=fresh.querySelector('[data-fd-slab="'+G.taxSlab+'"]'); if(again) again.focus({preventScroll:true}); }
   });
 });
+// "Can I start smaller?" -- the same pot from a SIP that starts lower and
+// rises 10% once a year (stepUpAnnualPlan, engine). The target is what the
+// flat SIP itself grows to, so the two can never disagree about the goal.
+const STEP_UP = 0.10;
+// Starting lower is not cheaper: later money has less time to grow, so more
+// has to go in overall. The offer carries both totals so the card can say so.
+function stepUpOffer(sip, years, rate) {
+  years = Math.round(years);
+  if (!(sip > 0) || years < 3) return null;
+  const target = accumulationSchedule({ sip: sip, rate: effectiveMonthlyRate(rate), periods: years * 12, due: true, stepUp: 0 }).finalBalance;
+  const p = stepUpAnnualPlan(target, years, rate, STEP_UP);
+  return { start: p.startSip, last: p.yearlySip[years - 1], paid: p.totalPaid, flatPaid: sip * 12 * years };
+}
+function stepUpPaidText(o, c) {
+  return 'You would pay in ' + c.fmt(Math.round(o.paid)) + ' in total instead of ' + c.fmt(Math.round(o.flatPaid)) + ', because the later money has less time to grow.';
+}
+// "Is 12% a year from equity realistic?" -- answered from the real index
+// history the Case screen already uses (marketSeries), not from opinion.
+// Only the equity rate is tested: the debt and hybrid rates have no index
+// history here to test them against, and the card says so.
+const NUM_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+function realityCardHtml(years, d, blendRate, c, cardClass, horizonNote) {
+  if (!(years >= 3)) return '';
+  const country = G.country;
+  const series = marketSeries(country), name = marketName(country);
+  const rr = returnReality(series, years, d.equity);
+  const fy = y => country === 'US' ? String(y) : (y - 1) + '-' + String(y).slice(2);
+  const pct = v => (v * 100).toFixed(1) + '%';
+  const eq = (d.equity * 100).toFixed(0) + '%';
+  // A dot per stretch on one line: filled if it matched or beat the plan's
+  // rate, hollow if not (fill, not colour alone, so it reads in greyscale).
+  const single = rr.count === 1;
+  const W = 320, H = 60, pad = 16;
+  const vals = rr.windows.map(w => w.cagr);
+  const lo = Math.min.apply(null, vals.concat([d.equity])), hi = Math.max.apply(null, vals.concat([d.equity]));
+  const x = v => pad + (v - lo) / ((hi - lo) || 1) * (W - 2 * pad);
+  // Worst and best print as one label when there is a single stretch or the
+  // two sit within ~80 units (e.g. 15.3% and 15.4%): two labels that close
+  // overlap, and the right one runs off the edge.
+  const merged = single || x(rr.best.cagr) - x(rr.worst.cagr) < 80;
+  const mEnd = x(rr.best.cagr) > W / 2;
+  const mono = 'font-family="Spline Sans Mono, monospace"';
+  const dots = rr.windows.map(w => w.cagr >= d.equity - 1e-9
+    ? '<circle cx="' + x(w.cagr).toFixed(1) + '" cy="30" r="4" fill="#2557C7" fill-opacity=".7"/>'
+    : '<circle cx="' + x(w.cagr).toFixed(1) + '" cy="30" r="3.6" fill="none" stroke="#56698A" stroke-width="1.4"/>').join('');
+  const ax = x(d.equity), anchor = ax > W - 50 ? 'end' : (ax < 50 ? 'start' : 'middle');
+  const zero = lo < 0 && x(0) - x(lo) > 44 && x(hi) - x(0) > 44
+    ? '<line x1="' + x(0) + '" x2="' + x(0) + '" y1="20" y2="40" stroke="rgba(20,40,63,.3)"/><text x="' + x(0) + '" y="56" font-size="10.5" text-anchor="middle" fill="#56698A" ' + mono + '>0%</text>' : '';
+  const svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" style="display:block;margin:12px 0 4px;max-width:420px" aria-label="' +
+    (single
+      ? 'The one real ' + rr.years + '-year stretch of the ' + name + ' returned ' + pct(rr.worst.cagr) + ' a year, against the plan\'s ' + eq + '.'
+      : rr.count + ' real ' + rr.years + '-year stretches of the ' + name + ', from ' + pct(rr.worst.cagr) + ' to ' + pct(rr.best.cagr) + ' a year; ' + rr.beat + ' of them at or above the plan\'s ' + eq + '.') + '">' +
+    zero +
+    '<line x1="' + ax + '" x2="' + ax + '" y1="12" y2="44" stroke="#14283F" stroke-width="1.5" stroke-dasharray="3 2"/>' +
+    '<text x="' + ax + '" y="9" font-size="10.5" text-anchor="' + anchor + '" fill="#14283F" ' + mono + '>plan ' + eq + '</text>' +
+    dots +
+    (merged
+      ? '<text x="' + (mEnd ? x(rr.best.cagr) : x(rr.worst.cagr)) + '" y="56" font-size="10.5" text-anchor="' + (mEnd ? 'end' : 'start') + '" fill="#56698A" ' + mono + '>' + (single ? pct(rr.worst.cagr) : pct(rr.worst.cagr) + '\u2013' + pct(rr.best.cagr)) + '</text>'
+      : '<text x="' + x(rr.worst.cagr) + '" y="56" font-size="10.5" text-anchor="start" fill="#56698A" ' + mono + '>' + pct(rr.worst.cagr) + '</text>' +
+        '<text x="' + x(rr.best.cagr) + '" y="56" font-size="10.5" text-anchor="end" fill="#56698A" ' + mono + '>' + pct(rr.best.cagr) + '</text>') +
+    '</svg>';
+  const n = rr.years, sep = rr.separate;
+  const priceNote = country === 'US'
+    ? 'S&amp;P 500 figures to 2015 are price-only (2016 on include dividends), so the early stretches understate what a fund earned.'
+    : 'The Sensex figures are price-only: the dividends an index fund reinvests come on top.';
+  return '<div class="' + cardClass + '">' +
+    '<div class="chart-title">Is ' + eq + ' a year from equity realistic?</div>' +
+    '<div class="chart-caption">Your plan\'s equity rate, checked against ' + (single ? 'the one real ' : 'every real ') + n + '-year stretch of the ' + name + ', ' + fy(rr.first) + ' to ' + fy(rr.last) +
+      (rr.capped ? ' (your ' + years + ' years is longer than this history, so its longest stretch is used)' : (horizonNote || '')) + '.</div>' +
+    svg +
+    '<div class="alloc-return-row" style="grid-template-columns:repeat(' + (single ? 2 : 3) + ',minmax(0,1fr))">' +
+    (single
+      ? '<div><div class="alloc-return-label">That stretch</div><div class="alloc-return-value">' + pct(rr.worst.cagr) + '</div></div>'
+      : '<div><div class="alloc-return-label">Worst stretch</div><div class="alloc-return-value">' + pct(rr.worst.cagr) + '</div></div>' +
+        '<div><div class="alloc-return-label">Best stretch</div><div class="alloc-return-value">' + pct(rr.best.cagr) + '</div></div>') +
+    '<div><div class="alloc-return-label">At or above ' + eq + '</div><div class="alloc-return-value">' + rr.beat + ' of ' + rr.count + '</div></div>' +
+    '</div>' +
+    '<div class="gr-note" style="margin-top:10px">' + (single
+        ? 'A filled dot matched or beat ' + eq + ', a hollow one fell short. This stretch began in ' + fy(rr.worst.startYear) + '. This history holds only one ' + n + '-year period, so it shows a single outcome, not a range. '
+        : 'Filled dots matched or beat ' + eq + '. The worst ' + n + '-year stretch began in ' + fy(rr.worst.startYear) + ', the best in ' + fy(rr.best.startYear) + '. ' +
+          'The stretches overlap, so this history holds only ' + (NUM_WORDS[sep] || sep) + ' separate ' + n + '-year period' + (sep === 1 ? '' : 's') + ': it shows the range, it can\'t prove a rate. ') +
+      priceNote + ' Every historical figure here is before inflation and before a fund\'s costs. The plan\'s blended ' + pct(blendRate) + ' also counts ' + (d.debt * 100).toFixed(0) + '% for debt and ' + (d.hybrid * 100).toFixed(0) + '% for hybrid, which this doesn\'t test.</div>' +
+    '</div>';
+}
 function bucketRate(bid){
   const b=BUCKETS[bid]||BUCKETS.moderate,d=cfg().d;
   return b.eq*d.equity+b.de*d.debt+b.hy*d.hybrid;
@@ -1708,6 +1794,7 @@ function renderPlan(){
     <div class="gr-right">
       <div class="gr-sip">${c.fmt(sip)}/mo</div>
       <div class="gr-corpus">${c.compact(corpus)} corpus</div>
+      ${(o=>o?`<div class="gr-corpus"><span class="term" data-def="Start at ${c.fmt(Math.round(o.start))} a month and raise it 10% every year: it reaches the same corpus, with ${c.fmt(Math.round(o.last))} a month in the last year. ${stepUpPaidText(o,c)} That suits you if your pay rises at least that fast.">or ${c.fmt(Math.round(o.start))}, +10%/yr</span></div>`:'')(stepUpOffer(sip, g.years, rate))}
     </div>
     </div>
     ${chartsHtml}
@@ -1719,7 +1806,7 @@ function renderPlan(){
 
   // Accumulation chart of the total SIP
   const topGoal=plan.goals.length>0?plan.goals[0]:null;
-  let chartHtml='', fdCardHtml='';
+  let chartHtml='', fdCardHtml='', realityHtml='';
   if(topGoal&&plan.totalSIP>0){
     const mRate=effectiveMonthlyRate(bucketRate(G.bucket));
     const rows=accumulationSchedule({sip:plan.totalSIP,rate:mRate,periods:topGoal.years*12,due:true,stepUp:0}).rows;
@@ -1732,6 +1819,7 @@ function renderPlan(){
     // years, only the destination changes.
     const combinedActual = rows[rows.length-1].closeBal;
     fdCardHtml=fdCard2Html(plan.totalSIP, topGoal.years, combinedActual);
+    realityHtml=realityCardHtml(topGoal.years, cfg().d, bucketRate(G.bucket), c, 'alloc-card', ', the same horizon as the chart above');
   }
 
   // Your overall risk profile, as an actual allocation and return figure —
@@ -1806,7 +1894,7 @@ function renderPlan(){
   ${gapCard}
   ${(chartHtml||fdCardHtml)?`
   <div class="inst-toggle" id="bt">See the growth chart, FD comparison, and allocation</div>
-  <div class="inst-panel" id="bp">${chartHtml}${fdCardHtml}${allocCard}</div>` : allocCard}
+  <div class="inst-panel" id="bp">${chartHtml}${fdCardHtml}${allocCard}${realityHtml}</div>` : allocCard}
 
   <div class="alloc-card" style="text-align:center">
     <div class="section-head" style="margin-top:0">Want the deeper tools?</div>
