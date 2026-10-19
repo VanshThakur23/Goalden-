@@ -2865,3 +2865,53 @@ test('refinancing reaches the profile and every sentence passes the guardrail', 
   assert.ok(credit.collectProfileProse(bank).some((s) => /business model/.test(s)), 'the lender refusal must be linted');
 });
 
+/* ---- Real SIP backtest (handoff 12, with a stricter bad-price rule) ---- */
+test('xirr: one year at +10%, two years at 8%, and no answer when there is none', () => {
+  approx(engine.xirr([{ date: '2021-01-01', amount: -1000 }, { date: '2022-01-01', amount: 1100 }]), 0.10, 1e-8);
+  approx(engine.xirr([{ date: '2021-01-01', amount: -1000 }, { date: '2023-01-01', amount: 1166.4 }]), 0.08, 1e-8);
+  assert.strictEqual(engine.xirr([{ date: '2021-01-01', amount: -1000 }]), null);
+  assert.strictEqual(engine.xirr([{ date: '2021-01-01', amount: -1000 }, { date: '2022-01-01', amount: -5 }]), null);
+});
+
+test('sipBacktest: a flat price earns exactly nothing, and every buy is kept as a lot', () => {
+  const dates = [], px = [];
+  for (let t = Date.parse('2020-01-01'); t < Date.parse('2023-01-01'); t += 864e5) { dates.push(new Date(t).toISOString().slice(0, 10)); px.push([100]); }
+  const r = engine.sipBacktest(dates, px, [1], 1000);
+  assert.strictEqual(r.months, 36);
+  assert.strictEqual(r.lots.length, 36);
+  assert.strictEqual(r.paidIn, 36000);
+  assert.ok(Math.abs(r.final - 36000) < 1e-6);
+  assert.ok(Math.abs(r.xirr) < 1e-7);
+  assert.strictEqual(r.worst.gap, 0);
+});
+
+test('sipBacktest: a price compounding at 12%/yr gives a 12% XIRR, and 50/50 of the same thing changes nothing', () => {
+  const dates = [], px = [], t0 = Date.parse('2015-01-01');
+  for (let t = t0; t < Date.parse('2025-01-01'); t += 864e5) { dates.push(new Date(t).toISOString().slice(0, 10)); px.push([100 * Math.pow(1.12, (t - t0) / 864e5 / 365)]); }
+  const one = engine.sipBacktest(dates, px, [1], 5000);
+  approx(one.xirr, 0.12, 1e-5);
+  const two = engine.sipBacktest(dates, px.map(p => [p[0], p[0]]), [0.5, 0.5], 5000);
+  approx(two.final, one.final, 1e-9);
+});
+
+test('findRevertingSpikes: a 1/100 print and a split booked a day early are found', () => {
+  const glitch = [100, 101, 1.01, 1.02, 102, 103, 104].map(v => [v]);
+  assert.deepStrictEqual([...engine.findRevertingSpikes(glitch)].sort((a, b) => a - b), [2, 3]);
+  const split = [200, 202, 101, 203, 204].map(v => [v]);   // half for one day, then back
+  assert.deepStrictEqual([...engine.findRevertingSpikes(split)], [2]);
+  // found in whichever column it sits in, and only in the columns asked about
+  assert.deepStrictEqual([...engine.findRevertingSpikes(glitch.map(r => [50, r[0]]))].sort((a, b) => a - b), [2, 3]);
+  assert.strictEqual(engine.findRevertingSpikes(glitch.map(r => [50, r[0]]), [0]).size, 0);
+});
+
+test('findRevertingSpikes: real crashes stay in, even huge ones that rally back', () => {
+  // Yes Bank, Mar 2020 (rounded closes): -85% in a day, then a rally far above
+  // the old price -- never back within 5% of Rs 37 inside 3 days.
+  const yes = [37, 36.8, 5.65, 16.2, 21.5, 26.1, 28.0, 37.9, 58.6, 64.2, 45.4].map(v => [v]);
+  assert.strictEqual(engine.findRevertingSpikes(yes).size, 0);
+  // a lasting -40% fall
+  assert.strictEqual(engine.findRevertingSpikes([100, 101, 60, 61, 62, 63].map(v => [v])).size, 0);
+  // a -13% day that recovers (the Nifty, 23 Mar 2020) is nowhere near the bar
+  assert.strictEqual(engine.findRevertingSpikes([100, 87, 92, 99, 101].map(v => [v])).size, 0);
+});
+

@@ -306,6 +306,8 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
    grid-template-columns beat the 560px rule above, so phones squeezed
    four stats into one row ("CORRELATI / ON"). */
 .stat-row.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+/* Four stats in a card that is only ~400px wide on a desktop: always 2x2. */
+.stat-row.pairs{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:560px){.stat-row.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* A flat 1px border in one uniform grey read as barely-there -- a
    left-edge accent in the same blue as the rest of the app's emphasis
@@ -4798,6 +4800,127 @@ function liveEnsureFx(items){
     .then(()=>{ LIVE_WINDOW_CACHE.clear(); render(); });
 }
 function liveFxActive(items){ return liveNeedsFx(items) && L.live.fx && L.live.fx.status==='ready'; }
+// The currency every joint figure for these items is in: the home currency
+// once USD/INR conversion is active, else the single currency they share,
+// else null (mixed and not converted, so there is no one currency).
+function liveMixCurrency(items){
+  if(liveFxActive(items)) return liveHomeCurrency();
+  const cur=[...new Set(items.map(it=>L.live.data[it.key].currency||'INR'))];
+  return cur.length===1 ? cur[0] : null;
+}
+// "Missed gains": what the same money would have done in the plainest thing a
+// person could have bought instead, a broad index fund (the measure portfolio
+// reviews lead with). Picked by the mix's own currency, not the country
+// toggle, so an all-dollar mix is never compared with a rupee index (or the
+// reverse). Fetched once per benchmark through the same /api/history route
+// and indexed onto the mix's own dates, so it is like for like.
+const LIVE_BENCH = {
+  INR: { type:'fund',   symbol:'120716', label:'Nifty 50 index fund', a:'a',  short:'Nifty 50 fund', full:'UTI Nifty 50 Index Fund (Direct, Growth)' },
+  USD: { type:'equity', symbol:'SPY',    label:'S&P 500 ETF',          a:'an', short:'S&P 500 ETF',   full:'SPDR S&P 500 ETF (SPY)' },
+};
+// The money format for the lump-sum and SIP cards: the mix's own currency.
+// With the toggle on India and an all-dollar mix, nothing is converted (only
+// a mix of both currencies is), so the amounts are dollars and are shown as
+// dollars -- labelling a dollar return in rupees would leave out the rupee's
+// own move and call it a rupee result.
+function liveMoneyCfg(items){
+  const cur=liveMixCurrency(items);
+  if(!cur || cur===liveHomeCurrency()) return cfg();
+  return cur==='USD' ? C.US : C.IN;
+}
+function liveForeignMoneyNoteHTML(items){
+  const cur=liveMixCurrency(items);
+  if(!cur || cur===liveHomeCurrency()) return '';
+  const name=cur==='USD'?'US dollars':'rupees', home=liveHomeCurrency()==='INR'?'rupees':'US dollars';
+  return `<div class="cap" style="margin-top:8px">In ${name}: everything in this mix trades in ${name}, so no conversion is applied. Counted in ${home}, the result would also include the exchange rate’s move over these years.</div>`;
+}
+function liveBenchSpec(items){ const cur=liveMixCurrency(items); return cur ? LIVE_BENCH[cur] || null : null; }
+function liveEnsureBench(spec){
+  if(!spec) return;
+  L.live.bench = L.live.bench || {};
+  const b=L.live.bench[spec.symbol];
+  if(b && b.status!=='retry') return;            // ready, loading, or failed (until Retry)
+  L.live.bench[spec.symbol]={status:'loading'};
+  liveFetchHistory(spec)
+    .then(raw=>{ L.live.bench[spec.symbol]={status:'ready', prices:raw.prices.filter(p=>p.close>0)}; })
+    .catch(e=>{ L.live.bench[spec.symbol]={status:'error', error:(e&&e.message)||'Could not load the index fund.'}; })
+    .then(()=>render());
+}
+// Benchmark value on each of the mix's dates, indexed to 1 on the first one
+// (last close on or before each date). {ok:false, reason} when it can't cover
+// the window -- e.g. the UTI fund's history starts in Jan 2013.
+function liveBenchIndex(spec, dates){
+  const b=spec && L.live.bench && L.live.bench[spec.symbol];
+  if(!b || b.status!=='ready' || !dates.length) return null;
+  const px=b.prices; let j=-1; const out=[];
+  if(!px.length || px[0].date>dates[0]) return {ok:false, startsAfter: px.length ? px[0].date : null};
+  for(const d of dates){
+    while(j+1<px.length && px[j+1].date<=d) j++;
+    out.push(px[j].close);
+  }
+  return {ok:true, idx: out.map(v=>v/out[0])};
+}
+// A readable short name for chart end labels and captions: a fund's symbol
+// is its MFAPI scheme code ("120716"), which means nothing on a chart, so
+// funds use the start of their name ("UTI Nifty 50", "HDFC Gold ETF").
+function liveFundLabel(it){ const d=L.live.data[it.key]; return String((d&&d.label)||it.label||it.symbol); }
+// Long fund-house names cut first, so two funds from one house keep their
+// distinctive part ("ABSL Nifty 50" vs "ABSL Flexi Cap") instead of both
+// truncating to "Aditya Birla Sun..." and falling back to scheme codes.
+const LIVE_HOUSE_SHORT=[[/^Aditya Birla Sun Life\b/i,'ABSL'],[/^ICICI Prudential\b/i,'ICICI Pru'],[/^Nippon India\b/i,'Nippon'],[/^Kotak Mahindra\b/i,'Kotak'],[/^Mirae Asset\b/i,'Mirae'],[/^Motilal Oswal\b/i,'Motilal'],[/^Franklin India\b/i,'Franklin'],[/^Mahindra Manulife\b/i,'Mahindra'],[/^Canara Robeco\b/i,'Canara'],[/^Baroda BNP Paribas\b/i,'Baroda BNP'],[/^Invesco India\b/i,'Invesco'],[/^Bank of India\b/i,'BOI']];
+function liveFundBase(it){
+  let nm=liveFundLabel(it).split(/\s-|-\s|\(/)[0];
+  LIVE_HOUSE_SHORT.forEach(([re,sh])=>{ nm=nm.replace(re,sh); });
+  nm=nm.replace(/\b(Index Fund|Fund of Funds?|FoF|Fund|Plan|Growth|Direct|Regular)\b/gi,'').replace(/\s+/g,' ').replace(/[\s\-–:,]+$/,'').trim();
+  return nm.length>18 ? nm.slice(0,17).trim()+'…' : nm;
+}
+function liveShortName(it){
+  if(it.type!=='fund') return String(it.symbol).replace(/(-SM)?\.(NS|BO)$/,'');
+  const base=liveFundBase(it);
+  if(!base) return String(it.symbol);
+  // The Direct and Regular plans of one fund share a name, and the fee line
+  // invites exactly that comparison, so a clash adds the plan (or, when that
+  // doesn't separate them either, the scheme code).
+  const planOf=o=>{ const l=liveFundLabel(o); return /direct/i.test(l)?'Direct':/regular/i.test(l)?'Regular':''; };
+  const clashes=(L.live.items||[]).filter(o=>o.key!==it.key && o.type==='fund' && liveFundBase(o)===base);
+  if(!clashes.length) return base;
+  const plan=planOf(it);
+  return base+' ('+(plan && !clashes.some(o=>planOf(o)===plan) ? plan : it.symbol)+')';
+}
+// Which instruments the bad-print filter may look at: only ones the
+// data-quality audit already flagged for a jump, a split signature or bad
+// prices, or that are 'unusable' and were let through with "Use it anyway".
+// A clean series is never filtered.
+function liveSpikeCols(items){
+  const cols=[];
+  items.forEach((it,i)=>{
+    const q=L.live.data[it.key] && L.live.data[it.key].stats && L.live.data[it.key].stats.quality;
+    if(!q) return;
+    if(q.level==='unusable' || q.flags.some(f=>f.code==='JUMP'||f.code==='SPLITSIG'||f.code==='BADPRICE')) cols.push(i);
+  });
+  return cols;
+}
+// Shared by the lump-sum and SIP cards: the shared dates and prices, with any
+// bad prints left out (never repaired) and named.
+function liveCleanPanel(items){
+  const win=liveCommonWindow(items), conv=liveFxActive(items);
+  const maps=items.map(it=>new Map(liveItemPrices(it, conv).filter(p=>p.date>=win.start&&p.date<=win.end).map(p=>[p.date,p.close])));
+  // Dates every instrument traded on (calendars differ across exchanges).
+  let dates=[...maps[0].keys()].filter(d=>maps.every(m=>m.has(d))).sort();
+  let px=dates.map(d=>maps.map(m=>m.get(d)));
+  const cols=liveSpikeCols(items);
+  const bad = cols.length && typeof findRevertingSpikes==='function' ? findRevertingSpikes(px, cols) : new Set();
+  const culprits = bad.size ? cols.filter(i=>findRevertingSpikes(px, [i]).size>0).map(i=>liveShortName(items[i])) : [];
+  const dropped=[...bad].sort((a,b)=>a-b).map(k=>dates[k]);
+  if(bad.size){ dates=dates.filter((_,k)=>!bad.has(k)); px=px.filter((_,k)=>!bad.has(k)); }
+  return {dates, px, dropped, culprits};
+}
+function liveDroppedNoteHTML(panel){
+  if(!panel.dropped.length) return '';
+  const fmtD=d=>new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  const n=panel.dropped.length;
+  return `<div class="cap" style="margin-top:8px">${n} trading day${n>1?'s':''} left out (${panel.dropped.map(fmtD).join(', ')}): ${panel.culprits.join(' and ')} ${panel.culprits.length>1?'show prices':'shows a price'} there at least five times away from the last good price (or within 3% of a whole-number split ratio) that came back within three trading days. That is a bad print, not a price anyone could trade at. Nothing was changed; those days are simply not used.</div>`;
+}
 const LIVE_FX_CACHE = new Map();
 function liveItemPrices(it, convert){
   const d=L.live.data[it.key], cur=d.currency||'INR', home=liveHomeCurrency();
@@ -4872,13 +4995,8 @@ function liveWindowNoteHTML(items){
 // person can realistically do; the frontier maths assumes constant
 // weights, and yearly rebalancing is the closest honest equivalent.
 function liveGrowthDrawdown(items, weights){
-  const win=liveCommonWindow(items);
-  const conv=liveFxActive(items);
-  const maps=items.map(it=>new Map(liveItemPrices(it, conv).filter(p=>p.date>=win.start&&p.date<=win.end).map(p=>[p.date,p.close])));
-  // Dates every instrument traded on (calendars differ across exchanges).
-  const dates=[...maps[0].keys()].filter(d=>maps.every(m=>m.has(d))).sort();
+  const panel=liveCleanPanel(items), dates=panel.dates, px=panel.px;
   if(dates.length<60) return null;
-  const px=dates.map(d=>maps.map(m=>m.get(d)));
   let units=weights.map((w,i)=>w/px[0][i]); let lastYear=dates[0].slice(0,4);
   const mix=[], idx=items.map(()=>[]);
   dates.forEach((d,k)=>{
@@ -4892,58 +5010,210 @@ function liveGrowthDrawdown(items, weights){
   let recK=null; for(let k=worst.k;k<mix.length;k++){ if(mix[k]>=mix[worst.peakK]){ recK=k; break; } }
   const years=(new Date(dates[dates.length-1])-new Date(dates[0]))/(365.25*864e5);
   const cagr=Math.pow(mix[mix.length-1], 1/Math.max(years,0.05))-1;
-  return {dates, mix, idx, dd, worst, recK, years, cagr};
+  return {dates, mix, idx, dd, worst, recK, years, cagr, panel};
 }
 function liveGrowthCardHTML(items, weights){
+  L.live._vsIndex=null;
   const g=liveGrowthDrawdown(items, weights);
   if(!g) return '';
-  const c=cfg(), amt = c.code==='IN' ? 100000 : 1000;
+  const c=liveMoneyCfg(items), amt = c.code==='IN' ? 100000 : 1000;
+  const spec=liveBenchSpec(items);
+  liveEnsureBench(spec);
+  const bi=liveBenchIndex(spec, g.dates);
+  g.bench = bi && bi.ok ? bi.idx : null;
   const fmtD=d=>new Date(d).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
   const monthsBetween=(a,b)=>Math.max(0,Math.round((new Date(b)-new Date(a))/(30.44*864e5)));
   const w=g.worst, rec = g.recK!=null ? `back to its old high by ${fmtD(g.dates[g.recK])}` : 'still below its old high at the end of the data';
+  const mixEnd=amt*g.mix[g.mix.length-1];
+  const bState = spec && L.live.bench ? L.live.bench[spec.symbol] : null;
+  let benchStat='', benchCap='';
+  if(g.bench){
+    const benchEnd=amt*g.bench[g.bench.length-1], diff=mixEnd-benchEnd;
+    L.live._vsIndex={sig:liveMixSig(items, weights), benchmark:spec.full, from:g.dates[0], to:g.dates[g.dates.length-1], amount:amt, mixEnd:Math.round(mixEnd), benchEnd:Math.round(benchEnd), diff:Math.round(diff)};
+    // Direction is carried by the arrow and the words, never by red or green.
+    benchStat=`<div class="stat"><div class="stat-label">vs ${spec.a} ${spec.label}${infoIcon('The same amount, on the same dates, in '+spec.full+': the plainest alternative you could have bought. The gap is your mix’s gain minus the index fund’s gain.')}</div>
+      <div class="stat-value" style="font-size:20px">${diff>=0?'▲':'▼'} ${c.compact(Math.abs(diff))}</div>
+      <div class="stat-sub">${diff>=0?'ahead of':'behind'} it; the index fund grew to ${c.compact(benchEnd)}</div></div>`;
+    benchCap=`<div class="cap" style="margin-top:8px">Over these ${g.years.toFixed(1)} years, ${c.compact(amt)} in your mix became <b style="color:var(--paper)">${c.compact(mixEnd)}</b>; the same in ${spec.a} ${spec.label} became <b style="color:var(--paper)">${c.compact(benchEnd)}</b>, so the mix ${diff>=0?'beat it by':'missed out on'} ${c.compact(Math.abs(diff))}. Past prices only, not a forecast, and hindsight helps: picks chosen today from today’s winners tend to look better than they would have at the start.</div>`;
+  }else if(!spec){
+    benchStat=`<div class="stat"><div class="stat-label">vs an index fund</div><div class="stat-sub">Not compared: this mix is in more than one currency and the exchange rate isn’t loaded, so there is no like-for-like index.</div></div>`;
+  }else if(bi && !bi.ok){
+    benchStat=`<div class="stat"><div class="stat-label">vs ${spec.a} ${spec.label}</div><div class="stat-sub">Not compared: the index fund’s history starts ${bi.startsAfter?'in '+fmtD(bi.startsAfter):'later'}, after this window begins.</div></div>`;
+  }else if(bState && bState.status==='loading'){
+    benchStat=`<div class="stat"><div class="stat-label">vs ${spec.a} ${spec.label}</div><div class="stat-sub">Loading the index fund…</div></div>`;
+  }else if(bState && bState.status==='error'){
+    benchStat=`<div class="stat"><div class="stat-label">vs ${spec.a} ${spec.label}</div><div class="stat-sub">Couldn’t load it: ${advisorAttr(bState.error)}</div><button type="button" class="tglbtn" data-live-bench-retry="${spec.symbol}" style="margin-top:6px;border:1px solid rgba(37,87,199,.35);border-radius:3px;flex:0 0 auto">Try again</button></div>`;
+  }
   deferChartInit(()=>renderLiveGrowthChart('live-growth-echart', g, items, amt));
   return `<div class="card">
     <h4>What ${c.compact(amt)} would have become${infoIcon('Each line starts at the same amount on the first shared date. "Your mix" holds your current weights and is rebalanced back to them once a year. Past prices only: this is what happened, not a forecast.')}</h4>
-    <div class="stat-row" style="margin-bottom:10px">
-      <div class="stat"><div class="stat-label">Your mix grew to</div><div class="stat-value">${c.compact(amt*g.mix[g.mix.length-1])}</div><div class="stat-sub">${(g.cagr*100).toFixed(1)}%/yr over ${g.years.toFixed(1)} yrs</div></div>
-      <div class="stat"><div class="stat-label">Worst fall${infoIcon('The deepest drop from a previous high point to a later low, for your mix. Everyone who held through this period sat through it.')}</div><div class="stat-value" style="color:#9C4A2C">${(w.dd*100).toFixed(1)}%</div><div class="stat-sub">bottom in ${fmtD(g.dates[w.k])}</div></div>
-      <div class="stat"><div class="stat-label">Time to recover</div><div class="stat-value" style="font-size:20px">${g.recK!=null?monthsBetween(g.dates[w.k], g.dates[g.recK])+' months':'Not yet'}</div><div class="stat-sub">${rec}</div></div>
+    <div class="stat-row pairs" style="margin-bottom:10px">
+      <div class="stat"><div class="stat-label">Your mix grew to</div><div class="stat-value">${c.compact(mixEnd)}</div><div class="stat-sub">${(g.cagr*100).toFixed(1)}%/yr over ${g.years.toFixed(1)} yrs</div></div>
+      ${benchStat}
+      <div class="stat"><div class="stat-label">Worst fall${infoIcon('The deepest drop from a previous high point to a later low, for your mix. Everyone who held through this period sat through it.')}</div><div class="stat-value">${(w.dd*100).toFixed(1)}%</div><div class="stat-sub">bottom in ${fmtD(g.dates[w.k])}</div></div>
+      <div class="stat"><div class="stat-label">Time to recover</div><div class="stat-value" style="font-size:20px">${g.recK!=null?(m=>m+(m===1?' month':' months'))(monthsBetween(g.dates[w.k], g.dates[g.recK])):'Not yet'}</div><div class="stat-sub">${rec}</div></div>
     </div>
     <div id="live-growth-echart" class="echart" style="height:380px"></div>
+    ${benchCap}
+    ${liveMixCurrency(items) ? liveForeignMoneyNoteHTML(items) : (L.live.fx && L.live.fx.status==='loading' ? `<div class="cap" style="margin-top:8px">Loading the USD/INR rate to put these in one currency; until then each line grows in its own currency.</div>` : `<div class="cap" style="margin-top:8px">These instruments are in different currencies and aren’t converted here, so each line grows in its own currency: read the amounts as a growth multiple, not money.</div>`)}
+    ${liveDroppedNoteHTML(g.panel)}
   </div>`;
 }
 function renderLiveGrowthChart(chartId, g, items, amt){
-  const c=cfg();
+  const c=liveMoneyCfg(items);
   const dom=document.getElementById(chartId); const narrow=!!dom && dom.clientWidth<520;
+  const benchSpec=liveBenchSpec(items);
+  const benchInMix = benchSpec && items.some(it=>String(it.symbol)===benchSpec.symbol);
+  const longest=Math.max(8, ...items.map(it=>liveShortName(it).length), g.bench && !benchInMix ? benchSpec.short.length : 0);
+  const labelRoom=Math.round(narrow ? Math.max(70, longest*6.2+12) : Math.max(130, (longest+8)*6.2+12));
   // Weekly points keep ten years of daily data light to draw.
   const step=Math.max(1, Math.floor(g.dates.length/520));
   const keep=g.dates.map((_,k)=>k).filter(k=>k%step===0 || k===g.dates.length-1);
   const x=keep.map(k=>g.dates[k]);
-  const pal=['#8FA9DE','#E8977A','#5FA875','#C99A45'];
   const last=keep.length-1;
-  const series=items.map((it,i)=>({ name:it.symbol, type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.idx[i][k]),
-    lineStyle:{width:1.3, color:pal[i%pal.length]}, itemStyle:{color:pal[i%pal.length]},
-    endLabel:{show:true, formatter:p=>(narrow?'':it.symbol+' ')+c.compact(p.value), color:CHART_TEXT.muted, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} }));
+  // Instruments take palette slots 2-4; "Your mix" keeps slot 1 (solid blue,
+  // thickest). Lines show no point symbols on a daily series, so in greyscale
+  // they are told apart by dash pattern and width alone: dashed, dotted,
+  // dash-dot, and for a 4th instrument a thin solid slate (no 5th hue). The
+  // index fund is ink with a long dash, unlike any slot. Labels are ink text:
+  // the ochre and green slots are under 4.5:1 for small text.
+  const SLOTS=[{c:'#B8740F',t:[8,4],w:1.4},{c:'#1F8A70',t:[2,3],w:1.6},{c:'#8A4FBF',t:[8,3,2,3],w:1.4},{c:'#56698A',t:'solid',w:1}];
+  const series=items.map((it,i)=>{ const sl=SLOTS[i%SLOTS.length]; return { name:liveShortName(it), type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.idx[i][k]),
+    lineStyle:{width:sl.w, color:sl.c, type:sl.t}, itemStyle:{color:sl.c},
+    // On a phone the name goes on its own line above the value (no legend).
+    endLabel:{show:true, formatter:p=>liveShortName(it)+(narrow?'\n':' ')+c.compact(p.value), color:CHART_TEXT.ink, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} }; });
   series.push({ name:'Your mix', type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.mix[k]), lineStyle:{width:2.6, color:'#2557C7'}, itemStyle:{color:'#2557C7'}, z:5,
-    endLabel:{show:true, formatter:p=>(narrow?'':'Your mix ')+c.compact(p.value), color:CHART_TEXT.blue, fontWeight:700, fontSize:11, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} });
+    endLabel:{show:true, formatter:p=>'Your mix'+(narrow?'\n':' ')+c.compact(p.value), color:CHART_TEXT.blue, fontWeight:700, fontSize:11, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} });
+  if(g.bench && !benchInMix){
+    // A reference line, so ink with a long dash; it doesn't take a series slot.
+    // Skipped when the index fund is itself one of the instruments: its own
+    // line already is the index, and a second copy would sit right on top.
+    series.push({ name:benchSpec.short, type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.bench[k]),
+      lineStyle:{width:1.6, color:CHART_TEXT.ink, type:[16,6]}, itemStyle:{color:CHART_TEXT.ink}, z:4,
+      endLabel:{show:true, formatter:p=>benchSpec.short+(narrow?'\n':' ')+c.compact(p.value), color:CHART_TEXT.ink, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"},
+      labelLayout:{moveOverlap:'shiftY'} });
+  }
   const wk=keep.reduce((best,k,i)=>Math.abs(k-g.worst.k)<Math.abs(keep[best]-g.worst.k)?i:best,0);
+  // A drawdown is information, not a fired warning: slate, with an ink marker.
   series.push({ name:'Below previous peak', type:'line', xAxisIndex:1, yAxisIndex:1, showSymbol:false, data:keep.map(k=>+(g.dd[k]*100).toFixed(2)),
-    lineStyle:{width:1, color:'#D97757'}, areaStyle:{color:'rgba(217,119,87,.28)'}, itemStyle:{color:'#D97757'},
-    markPoint:{symbol:'circle', symbolSize:6, silent:true, itemStyle:{color:'#9C4A2C'}, data:[{coord:[wk, +(g.worst.dd*100).toFixed(2)]}],
-      label:valueTag('Worst '+(g.worst.dd*100).toFixed(1)+'%', CHART_TEXT.bad, wk>last*0.7?'left':'right')} });
+    lineStyle:{width:1, color:'#56698A'}, areaStyle:{color:'rgba(20,40,63,.12)'}, itemStyle:{color:'#56698A'},
+    markPoint:{symbol:'circle', symbolSize:6, silent:true, itemStyle:{color:CHART_TEXT.ink}, data:[{coord:[wk, +(g.worst.dd*100).toFixed(2)]}],
+      label:valueTag('Worst '+(g.worst.dd*100).toFixed(1)+'%', CHART_TEXT.ink, wk>last*0.7?'left':'right')} });
   initChart(chartId, {
-    // Room on the right for the end labels, narrower on a phone.
-    grid:[{left:8,right:narrow?62:130,top:narrow?40:12,height:narrow?'52%':'58%',containLabel:true},{left:8,right:narrow?62:130,top:'74%',bottom:24,containLabel:true}],
-    // On a phone the series names move into a legend so the line-end labels
-    // only carry values and fit.
-    legend: narrow ? {top:0, left:0, itemWidth:14, itemHeight:3, textStyle:{fontSize:10, color:CHART_TEXT.muted}, data:items.map(it=>it.symbol).concat(['Your mix'])} : {show:false},
+    // Room on the right for the end labels, sized to the longest name (the
+    // labels are 10px mono, ~6.2px a character) so "HDFC Gold ETF" isn't
+    // clipped; on a phone the value drops to its own line, so only the name
+    // has to fit.
+    grid:[{left:8,right:labelRoom,top:12,height:'58%',containLabel:true},{left:8,right:labelRoom,top:'74%',bottom:24,containLabel:true}],
+    legend:{show:false},
     xAxis:[{type:'category', data:x, gridIndex:0, boundaryGap:false, axisLabel:{show:false}, axisTick:{show:false}},
-           {type:'category', data:x, gridIndex:1, boundaryGap:false, axisLabel:{formatter:v=>v.slice(0,4), interval:Math.max(0,Math.floor(x.length/6)-1), color:CHART_TEXT.muted}, axisTick:{show:false}}],
+           {type:'category', data:x, gridIndex:1, boundaryGap:false, axisLabel:{formatter:v=>v.slice(0,4), interval:Math.max(0,Math.floor(x.length/(narrow?3:6))-1), hideOverlap:true, color:CHART_TEXT.muted}, axisTick:{show:false}}],
     yAxis:[{type:'value', gridIndex:0, scale:true, axisLabel:{formatter:v=>c.compact(v), color:CHART_TEXT.muted}},
            {type:'value', gridIndex:1, max:0, axisLabel:{formatter:v=>v+'%', color:CHART_TEXT.muted}, splitNumber:2}],
     axisPointer:{link:[{xAxisIndex:'all'}]},
     tooltip:{trigger:'axis', confine:true, formatter:ps=>{ const arr=Array.isArray(ps)?ps:[ps]; return (arr[0]?arr[0].axisValue:'')+'<br/>'+arr.map(p=>p.marker+p.seriesName+': '+(p.seriesName==='Below previous peak'?(+p.value).toFixed(1)+'%':c.compact(p.value))).join('<br/>'); }},
     series,
+  });
+}
+// "If I'd put Rs 10,000 a month into this, what would I have now?" -- the
+// question a SIP investor actually asks, which the lump-sum card above can't
+// answer. Same shared window, currency conversion and bad-print rule as the
+// lump-sum card. Leads with XIRR, not the total: a total flatters a SIP
+// because most of the money went in recently (+122% here is ~10.9%/yr).
+const LIVE_SIP_MONTHLY = { IN: 10000, US: 500 };
+// Typical extra yearly cost of a Regular plan over the Direct plan of the same
+// fund (distributor commission). Estimates, stated as such wherever shown.
+const LIVE_REGULAR_EXTRA = { active: 0.01, passive: 0.004 };
+function liveSipBacktest(items, weights){
+  const panel=liveCleanPanel(items);
+  if(panel.dates.length<250) return {tooShort:true, days:panel.dates.length};
+  const cm=liveMoneyCfg(items);
+  const monthly=LIVE_SIP_MONTHLY[cm.code]||LIVE_SIP_MONTHLY.IN;
+  const r=sipBacktest(panel.dates, panel.px, weights, monthly);
+  // The same monthly amount into the index fund, on the same buy dates. The
+  // index is indexed to 1, which is fine: a SIP only needs relative prices.
+  const spec=liveBenchSpec(items), bi=liveBenchIndex(spec, panel.dates);
+  const bench = bi && bi.ok ? sipBacktest(panel.dates, bi.idx.map(v=>[v]), [1], monthly) : null;
+  return { dates:panel.dates, panel, monthly, cm, r, bench, spec };
+}
+// Identifies the mix a snapshot was taken for, so the advisor never quotes
+// the last mix's figures after an instrument is removed or a weight moves.
+function liveMixSig(items, weights){
+  return items.map(it=>it.key).join('|')+'#'+(weights||[]).map(w=>Math.round(w*1000)).join(',');
+}
+function liveSipCardHTML(items, weights){
+  L.live._sip=null;
+  if(!liveMixCurrency(items)){
+    const loadingFx = L.live.fx && L.live.fx.status==='loading';
+    return `<div class="card"><h4>Every month into this mix</h4><div class="cap">${loadingFx ? 'Waiting for the USD/INR rate, to put every monthly buy in one currency…' : 'Not shown: these instruments are in different currencies that can’t be converted here, and a SIP has to be paid in one currency.'}</div></div>`;
+  }
+  const s=liveSipBacktest(items, weights);
+  const c=s.cm||liveMoneyCfg(items);
+  if(s.tooShort) return `<div class="card"><h4>${c.compact(LIVE_SIP_MONTHLY[c.code]||LIVE_SIP_MONTHLY.IN)} every month into this mix</h4><div class="cap">Not shown: these instruments share only ${s.days} trading days, under about a year, which is too few monthly buys to say anything about a SIP.</div></div>`;
+  const r=s.r, w=r.worst;
+  const fmtD=d=>new Date(d).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+  const first=s.dates[0], last=s.dates[s.dates.length-1];
+  const xirrPct = r.xirr==null ? null : r.xirr*100;
+  const total = (r.absReturn>=0?'+':'')+(r.absReturn*100).toFixed(1)+'%';
+  const mixLabel = items.map((it,i)=>`${Math.round(weights[i]*100)}% ${liveShortName(it)}`).join(' / ');
+  // The Retirement Lab's "Growth while saving" (a % number, default 10). If the
+  // user carried a rate over with the next-step button, this is that rate.
+  const assumed = (L.ret && typeof L.ret.preRate==='number') ? L.ret.preRate : null;
+  const vsPlan = (xirrPct==null || assumed==null) ? ''
+    : ` The Retirement Lab currently assumes <b>${assumed.toFixed(1)}%</b> a year while saving; this real SIP did <b>${Math.abs(xirrPct-assumed).toFixed(1)} points ${xirrPct>=assumed?'better':'worse'}</b>. That is one past window, with picks chosen today, so on its own it isn’t a reason to change the plan’s rate.`;
+  const worstLine = w.gap<0
+    ? ` The hardest moment was <b>${fmtD(s.dates[w.k])}</b>: ${c.compact(r.paid[w.k])} paid in was worth ${c.compact(r.value[w.k])}, ${c.compact(-w.gap)} (${(-w.pct*100).toFixed(1)}%) below what had gone in.`
+    : ' At no point was it worth less than the money paid in.';
+  const b=s.bench, bx = b && b.xirr!=null ? b.xirr*100 : null;
+  const benchLine = b ? ` The same ${c.compact(s.monthly)} a month into ${s.spec.a} ${s.spec.label}, on the same days, would be worth <b>${c.compact(b.final)}</b>${bx==null?'':' ('+bx.toFixed(1)+'% a year)'}, so this mix ${r.final>=b.final?'ended':'finished'} ${c.compact(Math.abs(r.final-b.final))} ${r.final>=b.final?'ahead':'behind'}.` : '';
+  L.live._sip={sig:liveMixSig(items, weights), monthly:s.monthly, currency:liveMixCurrency(items), from:first, to:last, months:r.months, paidIn:Math.round(r.paidIn), final:Math.round(r.final), xirr: xirrPct==null?null:+xirrPct.toFixed(2), lowestGap: Math.round(w.gap), lowestDate: s.dates[w.k], indexFundFinal: b?Math.round(b.final):null, indexFundXirr: bx==null?null:+bx.toFixed(2)};
+  deferChartInit(()=>renderLiveSipChart('live-sip-echart', s));
+  return `<div class="card">
+    <h4>${c.compact(s.monthly)} every month into this mix${infoIcon('Each month, '+c.compact(s.monthly)+' is split by your current weights and buys at that day’s real price (dividend-adjusted where the data provides it), on the first day every instrument traded. The pot already built is not rebalanced, which is how two separate SIPs actually behave. No costs, taxes or exit loads. Past prices only: what happened, not a forecast.')}</h4>
+    <div class="cap">${mixLabel}, bought on the first shared trading day of each month from ${fmtD(first)} to ${fmtD(last)}.</div>
+    <div class="stat-row pairs" style="margin:10px 0">
+      <div class="stat"><div class="stat-label">You put in</div><div class="stat-value">${c.compact(r.paidIn)}</div><div class="stat-sub">${r.months} monthly buys</div></div>
+      <div class="stat"><div class="stat-label">Worth at the end</div><div class="stat-value">${c.compact(r.final)}</div><div class="stat-sub">${total} in total</div></div>
+      <div class="stat"><div class="stat-label">Per year (XIRR)${infoIcon('Each monthly buy had a different amount of time to grow: the first one the whole period, the last one a few days. XIRR is the single yearly rate that turns all those buys into the final value. It is the figure mutual fund statements show, and the right one to compare with a plan’s assumed return. The total looks bigger because most of the money went in recently.')}</div><div class="stat-value">${xirrPct==null?'&mdash;':xirrPct.toFixed(1)+'%'}</div><div class="stat-sub">compare this with a plan</div></div>
+      <div class="stat"><div class="stat-label">Lowest point</div><div class="stat-value">${w.gap<0?'&minus;'+c.compact(-w.gap):'Never below'}</div><div class="stat-sub">${w.gap<0?'below paid in, '+fmtD(s.dates[w.k]):'what was paid in'}</div></div>
+    </div>
+    <div id="live-sip-echart" class="echart" style="height:300px" role="img" aria-label="Money paid in versus what it was worth, month by month. The numbers are in the text below."></div>
+    <div class="gr-note" style="margin-top:10px">${c.compact(s.monthly)} every month from ${fmtD(first)} to ${fmtD(last)}, ${c.compact(r.paidIn)} in all, would be worth <b>${c.compact(r.final)}</b>. That's ${total} in total, which is <b>${xirrPct==null?'not computable':xirrPct.toFixed(1)+'% a year'}</b> (XIRR) once you allow for each month's money being invested for a different length of time.${worstLine}${benchLine}${vsPlan}</div>
+    ${liveForeignMoneyNoteHTML(items)}
+    ${liveDroppedNoteHTML(s.panel)}
+  </div>`;
+}
+function renderLiveSipChart(chartId, s){
+  const c=s.cm||cfg(), r=s.r;
+  const dom=document.getElementById(chartId); const narrow=!!dom && dom.clientWidth<520;
+  // Weekly points keep ten years of daily data light to draw (same as the growth chart).
+  const n=s.dates.length, step=Math.max(1, Math.floor(n/520));
+  const keep=s.dates.map((_,k)=>k).filter(k=>k%step===0 || k===n-1 || k===r.worst.k);
+  const x=keep.map(k=>s.dates[k]), last=keep.length-1, wi=keep.indexOf(r.worst.k);
+  const endLabel=(name,color,bold)=>({show:true, formatter:p=>name+(narrow?'\n':' ')+c.compact(p.value), color, fontWeight:bold?700:500, fontSize:bold?11:10, fontFamily:"'Spline Sans Mono',monospace"});
+  const worth={ name:'Worth', type:'line', showSymbol:false, z:5, data:keep.map(k=>Math.round(r.value[k])),
+    lineStyle:{width:2.6, color:'#2557C7'}, itemStyle:{color:'#2557C7'},
+    endLabel:endLabel('Worth', CHART_TEXT.blue, true), labelLayout:{moveOverlap:'shiftY'} };
+  // Lowest point: ink, not red. Nothing has "gone wrong"; it is information.
+  if(r.worst.gap<0 && wi>=0) worth.markPoint={ symbol:'circle', symbolSize:7, silent:true, itemStyle:{color:CHART_TEXT.ink},
+    data:[{coord:[wi, Math.round(r.value[r.worst.k])]}],
+    label:valueTag('Lowest: '+c.compact(-r.worst.gap)+' below paid in', CHART_TEXT.ink, wi>last*0.7?'left':'right') };
+  initChart(chartId, {
+    grid:{left:8, right:narrow?62:120, top:18, bottom:24, containLabel:true},
+    xAxis:{type:'category', data:x, boundaryGap:false, axisTick:{show:false},
+      axisLabel:{formatter:v=>v.slice(0,4), interval:Math.max(0,Math.floor(x.length/(narrow?3:6))-1), hideOverlap:true, color:CHART_TEXT.muted}},
+    yAxis:{type:'value', axisLabel:{formatter:v=>c.compact(v), color:CHART_TEXT.muted}},
+    tooltip:{trigger:'axis', confine:true, formatter:ps=>{
+      const k=keep[(Array.isArray(ps)?ps[0]:ps).dataIndex], paid=r.paid[k], v=r.value[k];
+      return new Date(s.dates[k]).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+'<br/>Paid in: '+c.compact(paid)+'<br/>Worth: '+c.compact(v)+' ('+(v>=paid?'+':'')+((v/paid-1)*100).toFixed(1)+'%)'; }},
+    series:[
+      // Paid in: a dashed slate staircase, a reference line, so it differs from
+      // "Worth" in colour, dash AND shape (it steps once a month).
+      { name:'Paid in', type:'line', step:'end', showSymbol:false, data:keep.map(k=>r.paid[k]),
+        lineStyle:{width:1.4, color:'#56698A', type:[8,4]}, itemStyle:{color:'#56698A'},
+        endLabel:endLabel('Paid in', CHART_TEXT.muted, false), labelLayout:{moveOverlap:'shiftY'} },
+      worth,
+    ],
   });
 }
 function onLiveFrontierPick(w){ L.live.weight=Math.round(w*100); render(); }
@@ -5526,6 +5796,31 @@ function liveInstrumentStatsCardHTML(items){
     const d=L.live.data[it.key], s=d.stats, q=s.quality;
     const heldBack = q.level==='unusable' && !L.live.overrides[it.key];
     const cagrDisplay = s.geoAnnual==null ? '&mdash;' : (s.geoAnnual*100).toFixed(1)+'%';
+    // A Regular plan pays distributor commission on top of the Direct plan of
+    // the same fund. Claimed only when the name says "Regular" (and not
+    // "Direct"): older schemes often state neither, and those are left alone.
+    // The gap is roughly 1%/yr for an active equity fund and much less for an
+    // index fund or ETF, so the estimate uses the smaller figure for those.
+    const nm=String(d.label||'');
+    // Debt-type funds are left out: their Direct/Regular gap ranges from ~0.1%
+    // (liquid) to ~0.6%+ (credit), too wide for one honest figure.
+    const debtLike = /liquid|overnight|money market|debt|bond|gilt|duration|credit|arbitrage|floater|floating|treasury|banking (&|and) psu|corporate/i.test(nm);
+    const isRegular = it.type==='fund' && /regular/i.test(nm) && !/direct/i.test(nm) && !debtLike;
+    const extra = /index|nifty|sensex|etf/i.test(nm) ? LIVE_REGULAR_EXTRA.passive : LIVE_REGULAR_EXTRA.active;
+    const yrs = (new Date(s.endDate)-new Date(s.startDate))/(365.25*864e5);
+    const feeAmt = 100000;   // Indian mutual funds only, so always rupees
+    const feeLine = isRegular && s.geoAnnual!=null && yrs>=1
+      ? `<div class="cap" style="margin-top:4px">Regular plan: the Direct plan of the same fund typically costs about ${(extra*100).toFixed(1)}%/yr less. On ${C.IN.compact(feeAmt)} over these ${yrs.toFixed(1)} years that is roughly <b style="color:var(--paper)">${C.IN.compact(feeAmt*(Math.pow(1+s.geoAnnual+extra,yrs)-Math.pow(1+s.geoAnnual,yrs)))}</b> (an estimate; check the two plans' expense ratios for the exact gap).</div>` : '';
+    // An Indian listed company can be read in Read the Company (screener.in
+    // takes the bare trading code: RELIANCE.NS -> RELIANCE, SPEB-SM.NS -> SPEB).
+    // Only an operating company: ETFs, REITs and InvITs in the built-in list are
+    // tagged and skipped, and a ticker from the wider market is skipped when its
+    // name says it's a fund or trust.
+    const known = INSTRUMENT_INDEX_IN.find(x=>x.symbol===it.symbol);
+    const isCompany = it.type==='equity' && /\.(NS|BO)$/i.test(it.symbol) && !/^\^/.test(it.symbol)
+      && (known ? known.kind==='stock' : !/\b(ETF|BeES|REIT|InvIT|Fund|Trust)\b/i.test(nm));
+    const coCode = isCompany ? it.symbol.replace(/(-SM)?\.(NS|BO)$/i,'') : null;
+    const readCo = coCode ? `<button type="button" class="tglbtn" data-live-read-company="${advisorAttr(coCode)}" style="margin-top:8px;flex:0 0 auto;border:1px solid rgba(37,87,199,.35);border-radius:3px">Read this company’s numbers →</button>` : '';
     const flagsHtml = q.flags.length ? `<div class="live-inst-flags">${q.flags.map(f=>
       `<div class="live-flag live-flag-${q.level==='unusable'?'unusable':'caution'}">${f.msg}</div>`).join('')}</div>` : '';
     return `<div class="live-inst-row${heldBack?' live-inst-held':''}">
@@ -5539,13 +5834,18 @@ function liveInstrumentStatsCardHTML(items){
         <span class="cap">${s.n} days &middot; ${s.startDate} to ${s.endDate}</span>
       </div>
       ${d.sourceNote ? `<div class="cap" style="margin-top:4px">${advisorAttr(d.sourceNote)}</div>` : ''}
+      ${feeLine}
       ${flagsHtml}
+      ${readCo}
       ${heldBack ? `<button class="tglbtn" data-live-override="${it.key}" style="margin-top:8px">Use it anyway</button>` : ''}
     </div>`;
   }).join('');
   return rows;
 }
 function liveOutputHTML(ready, rfPct){
+  // Cleared on every render: the cards below set them again only if they
+  // draw, so a mix that no longer has two instruments leaves nothing stale.
+  L.live._vsIndex=null; L.live._sip=null;
   liveEnsureFx(ready); // async: re-renders once the USD/INR series settles
   const items=L.live.items;
   const errored=items.filter(it=>L.live.data[it.key] && L.live.data[it.key].status==='error');
@@ -5579,6 +5879,7 @@ function liveOutputHTML(ready, rfPct){
     : ((L.live.selectedWeights && L.live.selectedWeights.length===multiComputed.items.length) ? L.live.selectedWeights : multiComputed.items.map(()=>1/multiComputed.items.length));
   return errorBanner + (isTwoAsset ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(multiComputed, rfPct))
     + liveGrowthCardHTML(isTwoAsset ? ready : multiComputed.items, growthWeights)
+    + liveSipCardHTML(isTwoAsset ? ready : multiComputed.items, growthWeights)
     + instrumentDropdown
     + explainDropdown('Why do you show two different return numbers?', `
       The <b>expected-return</b> figure ((1+average daily move)<sup>trading days per year</sup> &minus; 1) is what the frontier, Sharpe ratio and tangency point below are built from. Mean-variance portfolio math needs a return figure that combines <i>linearly</i> across assets &ndash; a compounded return does not have that property, so the optimiser can't use it. This is also the convention used in the coursework this tool extends (a two-asset frontier worksheet), hand-checked against its own SBI figures (~29.9% return, ~21.3% risk over a comparable window) before being trusted here.<br><br>
@@ -6249,6 +6550,12 @@ function attach(){
       L.live.klassFilter = el.dataset.liveKlass;
       render();
     });
+  });
+  document.querySelectorAll('[data-live-bench-retry]').forEach(el=>{
+    el.addEventListener('click',()=>{ const sym=el.dataset.liveBenchRetry; if(L.live.bench && L.live.bench[sym]) L.live.bench[sym]={status:'retry'}; render(); });
+  });
+  document.querySelectorAll('[data-live-read-company]').forEach(el=>{
+    el.addEventListener('click',()=>advisorStatementsSetCompany(el.dataset.liveReadCompany));
   });
   document.querySelectorAll('[data-live-starter]').forEach(el=>{
     el.addEventListener('click',()=>{
@@ -9660,6 +9967,17 @@ function stateForAdvisor() {
       n: s.n, startDate: s.startDate, endDate: s.endDate, qualityLevel: s.quality ? s.quality.level : null,
     };
   });
+  // The figures the lump-sum and SIP cards last showed, so the advisor quotes
+  // the same numbers (null until those cards have rendered).
+  // Dropped if the mix has changed since (an advisor set_value can move a
+  // weight without the live tab re-rendering).
+  const nowSig = (() => { try {
+    const r = liveReadyItems(); if (r.length < 2) return null;
+    const w = r.length === 2 ? [L.live.weight/100, 1-L.live.weight/100]
+      : (L.live.selectedWeights && L.live.selectedWeights.length === r.length ? L.live.selectedWeights : r.map(() => 1/r.length));
+    return liveMixSig(r, w); } catch (e) { return null; } })();
+  live.vsIndex = L.live._vsIndex && L.live._vsIndex.sig === nowSig ? L.live._vsIndex : null;
+  live.sipBacktest = L.live._sip && L.live._sip.sig === nowSig ? L.live._sip : null;
   snapshot.live = live;
   // L.statements.data[sym].result carries a full parsed six-section
   // financial statement (~50 rows x ~13 periods) per loaded company --

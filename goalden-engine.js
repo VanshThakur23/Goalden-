@@ -77,6 +77,116 @@ function accumulationSchedule(o) {
   return { rows, finalBalance: bal };
 }
 
+/* ---------------------------------------------------------------------
+   XIRR: the annualised return of dated cash flows (money in negative,
+   money out positive) -- the figure fund statements report for a SIP.
+   365-day years, like Excel's XIRR. Bisection rather than Newton: a few
+   more iterations, but it cannot diverge or jump to a second root.
+   Returns null when no rate between -99.99% and +1000% fits.
+   --------------------------------------------------------------------- */
+function xirr(flows) {
+  if (!flows || flows.length < 2) return null;
+  const t0 = Date.parse(flows[0].date);
+  const yrs = flows.map(f => (Date.parse(f.date) - t0) / 864e5 / 365);
+  const npv = r => flows.reduce((s, f, i) => s + f.amount / Math.pow(1 + r, yrs[i]), 0);
+  let lo = -0.9999, hi = 10, fLo = npv(lo);
+  if (fLo * npv(hi) > 0) return null;
+  for (let i = 0; i < 200 && hi - lo > 1e-10; i++) {
+    const mid = (lo + hi) / 2, f = npv(mid);
+    if (f * fLo > 0) { lo = mid; fLo = f; } else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/* ---------------------------------------------------------------------
+   A monthly SIP run through real prices.
+   dates: sorted ISO dates every instrument traded on.
+   px[k][i]: price of instrument i on dates[k].  weights: fractions, sum 1.
+   Buys on the first shared trading day of each calendar month. Each
+   month's money is split by the weights; the pot already built is not
+   rebalanced, which is how separate SIPs into two funds really behave.
+   `lots` keeps every buy (date, price, units per instrument) so a caller
+   can work out tax lot by lot -- each instalment has its own holding clock.
+   --------------------------------------------------------------------- */
+function sipBacktest(dates, px, weights, monthly) {
+  const units = weights.map(() => 0), paid = [], value = [], flows = [], lots = [];
+  let total = 0, month = '';
+  for (let k = 0; k < dates.length; k++) {
+    if (dates[k].slice(0, 7) !== month) {
+      month = dates[k].slice(0, 7);
+      const bought = weights.map((w, i) => monthly * w / px[k][i]);
+      bought.forEach((u, i) => { units[i] += u; });
+      lots.push({ k, date: dates[k], units: bought, price: px[k].slice() });
+      total += monthly;
+      flows.push({ date: dates[k], amount: -monthly });
+    }
+    paid.push(total);
+    value.push(units.reduce((s, u, i) => s + u * px[k][i], 0));
+  }
+  const last = dates.length - 1;
+  // The worst moment, in the terms a SIP investor feels it: the biggest
+  // gap below the money they had put in so far.
+  let worst = { k: 0, gap: 0, pct: 0 };
+  value.forEach((v, k) => { if (v - paid[k] < worst.gap) worst = { k, gap: v - paid[k], pct: v / paid[k] - 1 }; });
+  return {
+    paid, value, lots, months: flows.length, paidIn: total, final: value[last],
+    absReturn: value[last] / total - 1,
+    xirr: xirr(flows.concat([{ date: dates[last], amount: value[last] }])),
+    worst,
+  };
+}
+
+/* ---------------------------------------------------------------------
+   Bad prints that revert: a price nobody could have traded at. A day is
+   flagged only when BOTH hold:
+     1. the price sits at least `big` times away from the last good price
+        (default 5x up or down: GOLDBEES.NS printed Rs 0.34 for Rs 33.6 on
+        19-20 Dec 2019), or within 3% of a whole-number split ratio
+        (1/2 ... 1/10 or 2x ... 10x: a split booked on the wrong day); and
+     2. it comes back to within 5% of that good price within `within`
+        trading days (default 3).
+   A real crash never passes both: Yes Bank fell from ~Rs 37 to ~Rs 5.6 on
+   6 Mar 2020 and rallied to ~Rs 58 within two weeks -- huge moves, but it
+   never snapped back to Rs 37 within 3 days, so those days stay in. An
+   earlier rule (any >35% move that reverts within a week) dropped them and
+   called them data errors, which hid a real low.
+   `cols` limits the check to the instruments the data-quality audit
+   already flagged (omit it to check every column). Returns the row
+   indices to leave out. Nothing is repaired; callers leave the days out
+   and say so, in line with the no-fabricated-data rule.
+   --------------------------------------------------------------------- */
+function findRevertingSpikes(px, cols, opts) {
+  opts = opts || {};
+  const big = opts.big || 5, within = opts.within || 3, backTol = 0.05, splitTol = 0.03;
+  const bad = new Set();
+  const n = px.length ? px[0].length : 0;
+  const check = cols || Array.from({ length: n }, (_, i) => i);
+  const looksBroken = r => {
+    if (!(r > 0)) return true;
+    if (r >= big || r <= 1 / big) return true;
+    for (let m = 2; m <= 10; m++) {
+      if (Math.abs(r * m - 1) <= splitTol || Math.abs(r / m - 1) <= splitTol) return true;
+    }
+    return false;
+  };
+  check.forEach(i => {
+    if (i < 0 || i >= n) return;
+    let good = px[0][i];
+    for (let k = 1; k < px.length; k++) {
+      const r = px[k][i] / good;
+      if (!looksBroken(r)) { good = px[k][i]; continue; }
+      let back = -1;
+      for (let j = k + 1; j <= Math.min(k + within, px.length - 1); j++) {
+        if (Math.abs(px[j][i] / good - 1) <= backTol) { back = j; break; }
+      }
+      if (back < 0) { good = px[k][i]; continue; }   // it stayed there: a real move
+      for (let j = k; j < back; j++) bad.add(j);
+      k = back - 1;
+    }
+  });
+  return bad;
+}
+
 /* =====================================================================
    REAL HISTORICAL MARKET DATA
    Sensex: fiscal-year (April-to-April) annual returns, FY1979-80 through
@@ -854,7 +964,7 @@ function filterToolsByQuery(tools, query, alreadyCalled, opts){
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     inflateExpense, realRate, corpusRequired, solveSIP, effectiveMonthlyRate,
-    accumulationSchedule,
+    accumulationSchedule, xirr, sipBacktest, findRevertingSpikes,
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,

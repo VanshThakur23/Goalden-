@@ -3690,7 +3690,70 @@ standing over the founder's shoulder.
   - Stat rows 2x2 at phone width.
   - Live re-check passed.
 
-### Next: Group 2 (Test Real Investments core)
-- 03 parts B, D, E, F, then 12 (stricter spike rule), then 04, then a new
-  after-tax line, then a new "Read this company" link.
+### Group 2: Test Real Investments core (reviewer NO-GO, fixed, then GO)
+- Engine: `xirr`, `sipBacktest` (keeps every buy as a lot, for the after-tax
+  line in Group 3) and `findRevertingSpikes`, plus 5 tests (187/187).
+- 12/13A bad-price rule, rewritten:
+  - A day is dropped only when the price is at least 5x away from the last
+    good price (or within 3% of a k:1 split ratio) AND it comes back within
+    5% inside 3 trading days.
+  - Only instruments the data-quality audit already flagged are checked,
+    and the note names them.
+  - The handoff's rule (any >35% move that reverts within a week) dropped
+    Yes Bank's real Mar 2020 crash. The new rule keeps it, and drops exactly
+    GOLDBEES' 19-20 Dec 2019 bad print.
+- 04 vs an index fund:
+  - The lump sum and the SIP are both compared with UTI Nifty 50 Index
+    (Direct) in INR, or SPY in USD, on the same dates.
+  - Separate messages for mixed currencies, an index history that starts too
+    late, loading, and error (with Try again).
+  - The index line isn't drawn twice when the index fund is in the mix.
+- 03F growth chart:
+  - Palette told apart by dash and width in greyscale (no point symbols on a
+    daily line); the index is ink with a long [16,6] dash.
+  - Ink end labels with readable names (fund names, not MFAPI codes;
+    "(Direct)"/"(Regular)" added when two plans of one fund are both in).
+  - No legend. Slate drawdown; "worst" in ink, not red.
+  - Label room sized to the longest name; year labels thinned on phones.
+- 12 SIP card:
+  - Rs 10,000/month (US: $500) into the mix: paid in, worth, XIRR and the
+    lowest point below paid in.
+  - The vs-plan sentence says it is one past window, not a reason to change
+    the plan's rate.
+  - Hidden, with the reason, under a year of data or when the currencies
+    can't be put into one.
+- Money is shown in the mix's own currency: an all-dollar mix with the
+  toggle on India shows dollars, with a note that a rupee view would add the
+  exchange rate's move.
+- Regular-plan fee line: shown only when the name says Regular, and not for
+  debt-type funds (their Direct/Regular gap is too varied for one figure).
+- "Read this company's numbers" button, for listed companies only (not ETFs).
+- The advisor sees vsIndex and sipBacktest. Each snapshot carries the mix's
+  signature and is dropped if the mix has changed since.
+- Stat boxes in both cards are 2x2 at every width (`.stat-row.pairs`).
+- Long fund-house names are shortened (ABSL, ICICI Pru, Nippon...) so two
+  funds from one house keep distinct labels.
+- Fixed in passing: the "Read this company" ETF name check had backspace
+  bytes where its two `\b` word boundaries should be (a shell heredoc ate
+  the backslash), so it never matched. Write patch scripts to files.
+- Checked on live data (local):
+  - 100% Nifty: SIP Rs 16.60 L in -> Rs 36.91 L, XIRR 10.89%; vs index 0.
+  - 50/50 Nifty/Gold: Rs 1 L -> Rs 4.53 L vs Rs 4.36 L. SIP Rs 46.58 L
+    (13.9%) vs Rs 36.91 L (10.9%) in the index fund.
+  - SPY+GLD, toggle India: $1.00K -> $3.83K vs $4.21K in SPY.
+  - YESBANK: nothing dropped. GOLDBEES (overridden): only 19-20 Dec 2019.
+  - Greyscale and phone width checked; no horizontal scroll.
+- Known, not done:
+  - The UTI Direct plan starts Jan 2013, so a window that begins earlier
+    (two old Regular plans) gets no index comparison. A Regular-plan
+    fallback, labelled as such, would cover it.
+  - A bad print on the first or last day can't be confirmed (nothing after
+    it to come back to), so it isn't dropped.
+  - The frontier and stats above the cards still use the uncleaned days.
+- Moved to Group 3: the after-tax line, which needs 06's dated `TAX_IN`.
+
+### Next: Group 3
+- After-tax line on the SIP card (lot by lot, 06's dated `TAX_IN`), then 06
+  post-tax FD (with its door2 crash fix and honest wording), then the return
+  reality check from `marketSeries`, then the step-up row.
 
