@@ -3650,3 +3650,47 @@ standing over the founder's shoulder.
   - Log the swallowed fetch error at worker.js:416.
   - Read focusYear at bind time at goalden-lab.html:7687.
   - smoke-16: add explicit asserts that the slice markers exist.
+
+## 2026-10-19 - Claude Code - Research handoffs reviewed; Group 1 built and deployed
+
+### Review of the research session's work
+- Four independent reviewers checked all 21 handoffs from
+  C:\Users\VANSH\Downloads\goalden-research against the current code and
+  re-ran the maths on live data.
+- None were stale. 17 of 21 needed fixes:
+  - three would crash a page (02, 06, 07);
+  - four had honesty slips: the bad-price filter drops real crashes (12/13A),
+    "Direct" inferred from a missing "Regular" (18), "overstates tax" (06/17),
+    "never sent to a server" (21).
+- Results, every fix per handoff, and a plan regrouped around the three
+  things retail investors come for (Test Real Investments, the corpus
+  calculator, Read the Company) are in HANDOFF-REVIEW.md, section 3a.
+
+### Group 1 (commit 79a1278, reviewer GO, deployed as version 678b6f39)
+- 09: starter pairs in Test Real Investments (LIVE_STARTERS, mutual funds for
+  India because Yahoo's NIFTYBEES/GOLDBEES split prices are broken); visible
+  button style.
+- Fund JUMP threshold in auditPriceSeries (Lab and engine): 0.10 -> 0.20.
+  10% flagged the Nifty's real -12.98% day on 23 Mar 2020; 15% still flagged
+  +17.7% on 18 May 2009; 20% is the NSE market-wide circuit breaker. Funds
+  now get "NAV discontinuity" wording instead of "corporate action".
+- 13 B: `.stat-row.four` class (4 places), so phones show 2x2.
+- 13 C: the advisor's "life expectancy 78/82" now matches the plan horizon
+  (85/90) and states the 78/82 fact correctly (typical lifespan at 60).
+- 13 D: landing-page link to Quick Calculate.
+- 19: personas Priya, Arjun and Rohan. Rohan replaces the handoff's US
+  persona because the audience is Indian.
+  - The note shows only while the plan still matches the persona.
+  - The advisor is told that a persona plan isn't the user's own.
+- Tests: 182/182; smokes 13/13. Browser check:
+  - Priya: Rs 4.02 Cr / Rs 24,808.
+  - Arjun: Rs 52.4 L / Rs 15,960.
+  - Rohan: Rs 5.93 Cr / Rs 45,687.
+  - Nifty+Gold starter: correlation -0.05, no flags.
+  - Stat rows 2x2 at phone width.
+  - Live re-check passed.
+
+### Next: Group 2 (Test Real Investments core)
+- 03 parts B, D, E, F, then 12 (stricter spike rule), then 04, then a new
+  after-tax line, then a new "Read this company" link.
+
