@@ -187,6 +187,135 @@ function findRevertingSpikes(px, cols, opts) {
   return bad;
 }
 
+/* ---------------------------------------------------------------------
+   India tax rules, in one dated place. FY 2026-27: Budget 2026 left the
+   capital-gains rates and the exemption as Budget 2024 set them (for sales
+   on or after 23 Jul 2024). Re-check after every Budget.
+   - Listed shares, equity funds/ETFs, REIT and InvIT units (s.111A/112A):
+     long term after 12 months, 12.5% on gains above Rs 1.25 lakh a year;
+     short term 20%.
+   - Other listed units (gold ETFs, international ETFs listed in India):
+     12.5% after 12 months, the investor's slab before.
+   - Unlisted holdings (gold and international funds of funds, foreign
+     shares): 12.5% after 24 months, the slab before.
+   - Debt funds and debt ETFs bought on/after 1 Apr 2023: the slab however
+     long they are held (s.50AA). Bought earlier: as the two lines above.
+   - FD interest: the slab, every year.
+   A 4% health and education cess applies on top of every rate. Surcharge
+   is not modelled (it starts above Rs 50 lakh of income). Section numbers
+   here are the 1961 Act's; the Income-tax Act 2025, in force from 1 Apr
+   2026, renumbered them without changing these rates.
+   Slab chips offer 0/15/20/25/30 only: under the new regime the s.87A
+   rebate makes slab-taxed income nil up to Rs 12 lakh of total income, so
+   nobody's FD interest is really taxed at the 5% or 10% band rates.
+   (The rebate does not cover 112A gains, and is not applied to them.)
+   --------------------------------------------------------------------- */
+const TAX_IN = {
+  asOf: 'FY 2026-27', cess: 0.04,
+  equityLtcg: 0.125, equityLtcgExemption: 125000, equityStcg: 0.20,
+  otherLtcg: 0.125,
+  grandfatherDate: '2018-01-31',   // s.112A: cost is stepped up to this day's price
+  debtSlabFrom: '2023-04-01',
+  newRegimeSlabs: [0, 15, 20, 25, 30],   // marginal rates that actually apply; see above
+  defaultSlab: 20,
+};
+
+// "More than N months": bought 19 Oct 2025, sold 19 Oct 2026 is still short
+// term; sold a day later it is long term.
+function holdsLongTerm(buyDate, sellDate, months) {
+  const b = new Date(buyDate + 'T00:00:00Z');
+  b.setUTCMonth(b.getUTCMonth() + months);
+  return Date.parse(sellDate + 'T00:00:00Z') > b.getTime();
+}
+
+/* ---------------------------------------------------------------------
+   Tax on selling every lot of a SIP on one day, lot by lot: each monthly
+   buy has its own holding clock, so a 10-year SIP sold today is mostly
+   long term with the last 12 (or 24) months short term.
+   lots: sipBacktest's [{date, units[], price[]}]; sellPx[i]: price on
+   sellDate; classes[i]: 'equity' | 'listed' | 'unlisted' | 'debtFund' |
+   'debtListed'; slab: the investor's slab as a fraction; gfPx[i]: the price
+   on 31 Jan 2018 (or null), for grandfathering equity lots bought by then.
+   Losses are set off the way the Act allows: a short-term loss against any
+   gain, a long-term loss only against long-term gains, highest rate first.
+   The Rs 1.25 lakh exemption is used once, i.e. nothing else is sold that
+   year. Returns gross value, tax, what is kept and the netted buckets.
+   --------------------------------------------------------------------- */
+function saleTaxIndia(lots, sellDate, sellPx, classes, slab, gfPx) {
+  const g = { stEq: 0, ltEq: 0, ltOther: 0, stSlab: 0 };
+  let gross = 0, grandfathered = false;
+  sellPx.forEach((p, i) => { gross += p * lots.reduce((u, l) => u + (l.units[i] || 0), 0); });
+  lots.forEach(lot => lot.units.forEach((u, i) => {
+    if (!(u > 0)) return;
+    let cls = classes[i];
+    if (cls === 'debtFund' || cls === 'debtListed') {
+      cls = lot.date >= TAX_IN.debtSlabFrom ? 'slab' : (cls === 'debtFund' ? 'unlisted' : 'listed');
+    }
+    let cost = lot.price[i];
+    if (cls === 'equity' && lot.date <= TAX_IN.grandfatherDate && gfPx && gfPx[i] > 0) {
+      const stepped = Math.max(cost, Math.min(gfPx[i], sellPx[i]));
+      if (stepped > cost) grandfathered = true;
+      cost = stepped;
+    }
+    const gain = u * (sellPx[i] - cost);
+    if (cls === 'slab') g.stSlab += gain;
+    else if (cls === 'equity') g[holdsLongTerm(lot.date, sellDate, 12) ? 'ltEq' : 'stEq'] += gain;
+    else g[holdsLongTerm(lot.date, sellDate, cls === 'listed' ? 12 : 24) ? 'ltOther' : 'stSlab'] += gain;
+  }));
+  const net = Object.assign({}, g);
+  const rate = { stSlab: slab, stEq: TAX_IN.equityStcg, ltOther: TAX_IN.otherLtcg, ltEq: TAX_IN.equityLtcg };
+  // Highest rate first. Long-term equity counts only its part above the
+  // Rs 1.25 lakh exemption at 12.5%; the exempt part is worth 0%, so it is
+  // offset last -- but it IS offset if a loss remains, because the Act
+  // requires set-off against the year's gains before anything carries
+  // forward. Equal rates keep the listed order (sort is stable).
+  const X = TAX_IN.equityLtcgExemption;
+  const room = t => t === 'ltEq' ? Math.max(0, net.ltEq - X) : Math.max(0, net[t]);
+  const absorb = (from, into) => {
+    into.slice().sort((a, b) => rate[b] - rate[a]).forEach(t => {
+      if (net[from] < 0 && room(t) > 0) { const m = Math.min(-net[from], room(t)); net[t] -= m; net[from] += m; }
+    });
+    into.forEach(t => {
+      if (net[from] < 0 && net[t] > 0) { const m = Math.min(-net[from], net[t]); net[t] -= m; net[from] += m; }
+    });
+  };
+  absorb('ltOther', ['ltEq']); absorb('ltEq', ['ltOther']);
+  absorb('stSlab', ['stEq', 'ltOther', 'ltEq']); absorb('stEq', ['stSlab', 'ltOther', 'ltEq']);
+  const exemptUsed = Math.min(Math.max(0, net.ltEq), TAX_IN.equityLtcgExemption);
+  const taxes = {
+    stEq: Math.max(0, net.stEq) * rate.stEq,
+    ltEq: Math.max(0, net.ltEq - TAX_IN.equityLtcgExemption) * rate.ltEq,
+    ltOther: Math.max(0, net.ltOther) * rate.ltOther,
+    stSlab: Math.max(0, net.stSlab) * slab,
+  };
+  Object.keys(taxes).forEach(k => { taxes[k] *= 1 + TAX_IN.cess; });
+  const tax = taxes.stEq + taxes.ltEq + taxes.ltOther + taxes.stSlab;
+  const lossLeft = -['stEq', 'ltEq', 'ltOther', 'stSlab'].reduce((a, k) => a + Math.min(0, net[k]), 0);
+  return { gross, tax, keep: gross - tax, gains: g, net, taxes, exemptUsed, grandfathered, lossLeft };
+}
+
+// The plan's value after tax if the whole pot is withdrawn in one year, the
+// handoff-06 model. The equity and hybrid share pays 12.5% above the
+// exemption (hybrid treated like equity: the plan's hybrid return assumes an
+// equity-oriented fund); the debt share pays the slab. One year and no
+// surcharge: a real one-year withdrawal this big would also pay surcharge,
+// while spreading it over years would use the exemption every year.
+function postTaxPlanValue(finalValue, paidIn, mix, slab) {
+  const gain = Math.max(0, finalValue - paidIn);
+  const eqGain = gain * ((mix.eq || 0) + (mix.hy || 0));
+  const debtGain = gain * (mix.de || 0);
+  const eqTax = Math.max(0, eqGain - TAX_IN.equityLtcgExemption) * TAX_IN.equityLtcg * (1 + TAX_IN.cess);
+  const debtTax = debtGain * slab * (1 + TAX_IN.cess);
+  return { value: finalValue - eqTax - debtTax, tax: eqTax + debtTax };
+}
+
+// FD interest is taxed every year at the slab, so the deposit compounds at
+// the after-tax rate. Same timing as the pre-tax comparison (monthly, due).
+function postTaxFdFinal(sip, years, fdRate, slab) {
+  const net = fdRate * (1 - slab * (1 + TAX_IN.cess));
+  return accumulationSchedule({ sip: sip, rate: effectiveMonthlyRate(net), periods: years * 12, due: true, stepUp: 0 }).finalBalance;
+}
+
 /* =====================================================================
    REAL HISTORICAL MARKET DATA
    Sensex: fiscal-year (April-to-April) annual returns, FY1979-80 through
@@ -965,6 +1094,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     inflateExpense, realRate, corpusRequired, solveSIP, effectiveMonthlyRate,
     accumulationSchedule, xirr, sipBacktest, findRevertingSpikes,
+    TAX_IN, holdsLongTerm, saleTaxIndia, postTaxPlanValue, postTaxFdFinal,
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,

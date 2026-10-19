@@ -109,6 +109,8 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .chip{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--paper);background:rgba(20,40,63,.08);border:1px solid rgba(20,40,63,.16);padding:8px 13px;border-radius:3px;cursor:pointer;transition:all .14s}
 .chip:active{transform:scale(.95)}
 .chip.sel{background:var(--gold);border-color:var(--gold);color:#fff}
+.slab-chips{margin:8px 0 0;gap:6px}
+.slab-chips .chip{padding:6px 10px;font-size:12px}
 .err{color:#9C4A2C;font-size:12px;font-family:'Spline Sans Mono',monospace;min-height:16px;margin-top:8px}
 
 /* --- two-column form --- */
@@ -624,8 +626,13 @@ function sCase() {
 
   // ---- Section 4 supporting stat: what an FD really keeps after inflation+tax ----
   const fdReal = realRate(c.d.fdRate, c.d.inflation);
-  // FD interest is taxed annually at slab rate; illustrate at a representative 30% slab.
-  const fdAfterTax = c.d.fdRate * (1-0.30);
+  // FD interest is taxed every year at the slab: the same slab the plan's
+  // FD card uses (20% until the person picks one there), plus 4% cess.
+  // The US has no slab chips and no cess: an illustrative 22% federal
+  // bracket (state tax left out), as a fixed example.
+  const caseIN = c.code === 'IN';
+  const caseSlab = caseIN ? fdSlabPct() : 22;
+  const fdAfterTax = c.d.fdRate * (1 - caseSlab/100 * (caseIN ? 1 + TAX_IN.cess : 1));
   const fdAfterTaxReal = realRate(fdAfterTax, c.d.inflation);
 
   // ---- Section 5: housing ----
@@ -686,7 +693,7 @@ function sCase() {
     <div class="case-cap">This is also exactly why a Fixed Deposit quietly loses, even though it feels "safe": it pays you a fixed rupee amount that has no claim on any of that growth.</div>
     <div class="compare-row">
       <div class="compare-card"><div class="cc-label">FD, AFTER INFLATION</div><div class="cc-val" style="color:${fdReal>0?'#256F55':'#9C4A2C'}">${(fdReal*100).toFixed(1)}%/yr</div><div class="cc-note">Before tax is even taken out</div></div>
-      <div class="compare-card"><div class="cc-label">FD, AFTER TAX &amp; INFLATION</div><div class="cc-val" style="color:${fdAfterTaxReal>0?'#256F55':'#9C4A2C'}">${(fdAfterTaxReal*100).toFixed(1)}%/yr</div><div class="cc-note">At a representative 30% slab, taxed every year regardless of whether you touch the money</div></div>
+      <div class="compare-card"><div class="cc-label">FD, AFTER TAX &amp; INFLATION</div><div class="cc-val" style="color:${fdAfterTaxReal>0?'#256F55':'#9C4A2C'}">${(fdAfterTaxReal*100).toFixed(1)}%/yr</div><div class="cc-note">${!caseIN ? 'At an illustrative 22% federal bracket (state tax not included), taxed every year whether or not you touch the money' : caseSlab===0 ? 'At a 0% slab there is no tax on it, so this is inflation alone' : 'At a '+caseSlab+'% slab plus 4% cess'+(G.taxSlab==null?' (pick yours on the plan’s FD card)':'')+', taxed every year whether or not you touch the money'}</div></div>
     </div>
     <div class="case-cap" style="margin-bottom:0">The "safety" of an FD is real (you will never see the number go down) &ndash; but the purchasing power sitting behind that number can still shrink every single year, silently, which a glance at the account balance will never show you.</div>
   </div>
@@ -874,6 +881,7 @@ const GOAL_TYPES = [
    ===================================================================== */
 const G = {
   country:null,
+  taxSlab:null, // income-tax slab %, for the after-tax FD card; null = TAX_IN.defaultSlab (20)
   capA:[null,null,null,null],
   tolA:[null,null,null,null,null],
   bucket:null,capScore:0,tolScore:0,
@@ -956,6 +964,58 @@ function scoreBuckets(){
   return{capScore:cs,tolScore:ts,finalScore:final,bucket:b};
 }
 
+// The plan's FD comparison, after tax (India). Rebuilt on its own when a
+// slab chip is tapped, from the figures it carries, so the open details
+// panel around it stays open. The combined SIP has no existing savings in
+// it (the rows above start from zero), so both sides start level.
+// A slab no longer offered (5% or 10%, saved by an older build) falls back to the default.
+function fdSlabPct(){ return TAX_IN.newRegimeSlabs.includes(G.taxSlab) ? G.taxSlab : TAX_IN.defaultSlab; }
+function fdCard2Html(sip, years, planValue){
+  const c=cfg(), d=c.d;
+  const fdFinal=accumulationSchedule({sip:sip,rate:effectiveMonthlyRate(d.fdRate),periods:years*12,due:true,stepUp:0}).finalBalance;
+  const preGap=planValue-fdFinal;
+  const head=`<div class="section-head" style="margin-top:0">The same ${c.fmt(sip)}/month, in a Fixed Deposit instead</div>`;
+  if(c.code!=='IN') return `<div class="alloc-card fd-card">${head}
+      <div class="gr-note" style="margin-top:0">A typical multi-year bank CD, around ${(d.fdRate*100).toFixed(1)}%/yr, before tax (tax is modelled for India only).</div>
+      <div class="alloc-return-row" style="margin-top:12px">
+        <div><div class="alloc-return-label">Your plan</div><div class="alloc-return-value">${c.compact(planValue)}</div></div>
+        <div><div class="alloc-return-label">Same money in a CD</div><div class="alloc-return-value">${c.compact(fdFinal)}</div></div>
+      </div>
+      <div class="gr-note" style="margin-top:10px">Over ${years} years, staying in a CD would leave you ${preGap>=0?'short by':'ahead by'} <b style="color:var(--paper)">${c.compact(Math.abs(preGap))}</b>, purely from the difference in return.</div>
+    </div>`;
+  const slabPct=fdSlabPct(), slab=slabPct/100;
+  // The mix is the profile's own; BUCKETS directly, not baseAlloc, which
+  // renderPlan declares further down (using it here threw a TDZ error).
+  const mix=BUCKETS[G.bucket]||BUCKETS.moderate;
+  const planPost=postTaxPlanValue(planValue, sip*12*years, mix, slab);
+  const fdPost=postTaxFdFinal(sip, years, d.fdRate, slab);
+  const postGap=planPost.value-fdPost;
+  const chips=TAX_IN.newRegimeSlabs.map(v=>`<button type="button" class="chip${v===slabPct?' sel':''}" data-fd-slab="${v}" aria-pressed="${v===slabPct}">${v===0?'0% (income up to ₹12 L)':v+'%'}</button>`).join('');
+  return `<div class="alloc-card fd-card" data-sip="${sip}" data-years="${years}" data-plan="${planValue}">${head}
+      <div class="gr-note" style="margin-top:0">A typical multi-year bank FD, around ${(d.fdRate*100).toFixed(1)}%/yr. Both sides after tax at your income-tax slab.</div>
+      <div class="gr-note" style="margin-top:8px">Your slab (new regime)${G.taxSlab==null?', '+slabPct+'% until you pick one':''}:</div>
+      <div class="chips slab-chips" role="group" aria-label="Your income-tax slab">${chips}</div>
+      <div class="alloc-return-row" style="margin-top:12px">
+        <div><div class="alloc-return-label">Your plan, after tax</div><div class="alloc-return-value">${c.compact(planPost.value)}</div></div>
+        <div><div class="alloc-return-label">Same money in an FD, after tax</div><div class="alloc-return-value">${c.compact(fdPost)}</div></div>
+      </div>
+      <div class="gr-note" style="margin-top:10px">After tax at ${slabPct}%, an FD would leave you ${postGap>=0?'short by':'ahead by'} <b style="color:var(--paper)">${c.compact(Math.abs(postGap))}</b> over ${years} years (${c.compact(Math.abs(preGap))} before tax${preGap>0 && Math.abs(postGap-preGap)<0.05*preGap?': tax barely moves the gap, because the FD pays tax every year and the plan pays once, at the end':''}).</div>
+      <div class="gr-note" style="margin-top:8px;font-size:11px">${TAX_IN.asOf + ' rules, new tax regime, 4% cess. FD interest is taxed every year at your slab. ' + 'The plan side is taxed once, as if the whole pot were withdrawn in one year: equity and hybrid gains at 12.5% above ₹1.25 lakh, debt gains at your slab. ' + 'A real one-year withdrawal this large would also pay surcharge and push the debt gains into a higher slab (more tax); spreading it over several years uses the ₹1.25 lakh exemption every year (less).'}</div>
+    </div>`;
+}
+document.addEventListener('click', e=>{
+  const b=e.target.closest('[data-fd-slab]');
+  if(!b) return;
+  const tapped=b.closest('.fd-card');
+  G.taxSlab=+b.dataset.fdSlab; persistState();
+  document.querySelectorAll('.fd-card[data-plan]').forEach(card=>{
+    const tmp=document.createElement('div');
+    tmp.innerHTML=fdCard2Html(+card.dataset.sip, +card.dataset.years, +card.dataset.plan);
+    const fresh=tmp.firstElementChild;
+    card.replaceWith(fresh);
+    if(card===tapped){ const again=fresh.querySelector('[data-fd-slab="'+G.taxSlab+'"]'); if(again) again.focus({preventScroll:true}); }
+  });
+});
 function bucketRate(bid){
   const b=BUCKETS[bid]||BUCKETS.moderate,d=cfg().d;
   return b.eq*d.equity+b.de*d.debt+b.hy*d.hybrid;
@@ -1671,18 +1731,7 @@ function renderPlan(){
     // "why bother investing at all." Same combined SIP, same number of
     // years, only the destination changes.
     const combinedActual = rows[rows.length-1].closeBal;
-    const mFd = effectiveMonthlyRate(cfg().d.fdRate);
-    const fdFinal = accumulationSchedule({sip:plan.totalSIP,rate:mFd,periods:topGoal.years*12,due:true,stepUp:0}).finalBalance;
-    const fdDiff = combinedActual - fdFinal;
-    fdCardHtml=`<div class="alloc-card">
-      <div class="section-head" style="margin-top:0">The same ${c.fmt(plan.totalSIP)}/month, in a Fixed Deposit instead</div>
-      <div class="gr-note" style="margin-top:0">A typical multi-year bank FD, around ${(cfg().d.fdRate*100).toFixed(1)}%/yr. FD interest is also fully taxed at your income slab every year, unlike long-term equity gains, which this comparison does not even account for.</div>
-      <div class="alloc-return-row" style="margin-top:12px">
-        <div><div class="alloc-return-label">Your plan</div><div class="alloc-return-value">${c.compact(combinedActual)}</div></div>
-        <div><div class="alloc-return-label">Same money in an FD</div><div class="alloc-return-value" style="color:#9C4A2C">${c.compact(fdFinal)}</div></div>
-      </div>
-      <div class="gr-note" style="margin-top:10px">Over ${topGoal.years} years, staying in a Fixed Deposit would leave you short by <b style="color:var(--paper)">${c.compact(fdDiff)}</b>, purely from the difference in return.</div>
-    </div>`;
+    fdCardHtml=fdCard2Html(plan.totalSIP, topGoal.years, combinedActual);
   }
 
   // Your overall risk profile, as an actual allocation and return figure —

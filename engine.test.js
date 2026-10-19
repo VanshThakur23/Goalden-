@@ -2915,3 +2915,74 @@ test('findRevertingSpikes: real crashes stay in, even huge ones that rally back'
   assert.strictEqual(engine.findRevertingSpikes([100, 87, 92, 99, 101].map(v => [v])).size, 0);
 });
 
+/* ---- India tax: lot-by-lot sale tax, post-tax plan and FD (Group 3) ---- */
+const lot = (date, units, price) => ({ date, units, price });
+test('holdsLongTerm: "more than 12 months" is strict', () => {
+  assert.strictEqual(engine.holdsLongTerm('2025-10-19', '2026-10-19', 12), false);
+  assert.strictEqual(engine.holdsLongTerm('2025-10-19', '2026-10-20', 12), true);
+  assert.strictEqual(engine.holdsLongTerm('2024-10-19', '2026-10-20', 24), true);
+});
+test('saleTaxIndia: long-term equity pays 12.5% above Rs 1.25 L, plus cess', () => {
+  const r = engine.saleTaxIndia([lot('2020-01-01', [2000], [100])], '2026-10-19', [200], ['equity'], 0.2, null);
+  // gain 2,00,000 -> (2,00,000 - 1,25,000) x 12.5% x 1.04 = 9,750
+  assert.strictEqual(Math.round(r.tax), 9750);
+  assert.strictEqual(r.gross, 400000);
+  assert.strictEqual(r.exemptUsed, 125000);
+});
+test('saleTaxIndia: short-term equity at 20%; a gold FoF bought 18 months ago at the slab', () => {
+  const st = engine.saleTaxIndia([lot('2026-06-01', [1000], [100])], '2026-10-19', [120], ['equity'], 0.3, null);
+  assert.strictEqual(Math.round(st.tax), 4160);                 // 20,000 x 20% x 1.04
+  const gold = engine.saleTaxIndia([lot('2025-04-01', [1000], [100])], '2026-10-19', [120], ['unlisted'], 0.3, null);
+  assert.strictEqual(Math.round(gold.tax), 6240);               // under 24 months: 20,000 x 30% x 1.04
+  const etf = engine.saleTaxIndia([lot('2025-04-01', [1000], [100])], '2026-10-19', [120], ['listed'], 0.3, null);
+  assert.strictEqual(Math.round(etf.tax), 2600);                // over 12 months: 20,000 x 12.5% x 1.04
+});
+test('saleTaxIndia: grandfathering steps the cost up to the 31 Jan 2018 price, never into a loss', () => {
+  const up = engine.saleTaxIndia([lot('2016-01-01', [10000], [50])], '2026-10-19', [100], ['equity'], 0.2, [80]);
+  assert.ok(up.grandfathered);
+  assert.strictEqual(Math.round(up.net.ltEq), 200000);           // (100 - 80) x 10,000
+  const below = engine.saleTaxIndia([lot('2016-01-01', [10000], [50])], '2026-10-19', [70], ['equity'], 0.2, [80]);
+  assert.strictEqual(Math.round(below.net.ltEq), 0);             // cost = max(50, min(80, 70)) = 70
+  const after = engine.saleTaxIndia([lot('2018-02-01', [10000], [50])], '2026-10-19', [100], ['equity'], 0.2, [80]);
+  assert.strictEqual(after.grandfathered, false);
+});
+test('saleTaxIndia: a debt fund is slab-taxed only for lots bought from 1 Apr 2023', () => {
+  const r = engine.saleTaxIndia([lot('2022-01-01', [1000], [100]), lot('2024-01-01', [1000], [100])], '2026-10-19', [130], ['debtFund'], 0.2, null);
+  assert.strictEqual(Math.round(r.net.ltOther), 30000);
+  assert.strictEqual(Math.round(r.net.stSlab), 30000);
+  assert.strictEqual(Math.round(r.tax), Math.round((30000 * 0.125 + 30000 * 0.2) * 1.04));
+});
+test('saleTaxIndia: a short-term loss offsets long-term gains; a long-term loss cannot offset short-term', () => {
+  // ST equity loss 50,000 against a gold FoF's LT gain of 1,00,000
+  const a = engine.saleTaxIndia([lot('2020-01-01', [0, 1000], [0, 100]), lot('2026-06-01', [1000, 0], [150, 0])], '2026-10-19', [100, 200], ['equity', 'unlisted'], 0.2, null);
+  assert.strictEqual(Math.round(a.net.ltOther), 50000);
+  assert.strictEqual(Math.round(a.tax), Math.round(50000 * 0.125 * 1.04));
+  // LT equity loss 50,000 stays against a ST equity gain of 1,00,000
+  const b = engine.saleTaxIndia([lot('2020-01-01', [1000, 0], [150, 0]), lot('2026-06-01', [0, 1000], [0, 100])], '2026-10-19', [100, 200], ['equity', 'equity'], 0.2, null);
+  assert.strictEqual(Math.round(b.tax), Math.round(100000 * 0.2 * 1.04));
+  assert.strictEqual(Math.round(b.lossLeft), 50000);
+});
+test('postTaxFdFinal: slab 0 equals the pre-tax FD; 20% slab lowers it', () => {
+  const pre = engine.accumulationSchedule({ sip: 10000, rate: engine.effectiveMonthlyRate(0.065), periods: 120, due: true, stepUp: 0 }).finalBalance;
+  assert.ok(Math.abs(engine.postTaxFdFinal(10000, 10, 0.065, 0) - pre) < 1);
+  assert.ok(engine.postTaxFdFinal(10000, 10, 0.065, 0.2) < pre);
+});
+test('postTaxPlanValue: under the exemption pays nothing; above it 12.5% + cess, debt at the slab', () => {
+  assert.strictEqual(engine.postTaxPlanValue(1100000, 1000000, { eq: 1, de: 0, hy: 0 }, 0.3).tax, 0);
+  const r = engine.postTaxPlanValue(2000000, 1000000, { eq: 0.5, de: 0.5, hy: 0 }, 0.2);
+  // eq gain 5 L -> (5 L - 1.25 L) x 0.125 x 1.04 = 48,750; debt gain 5 L x 0.2 x 1.04 = 1,04,000
+  assert.strictEqual(Math.round(r.tax), 152750);
+});
+test('saleTaxIndia: a short-term loss goes to taxed gains before the exempt Rs 1.25 L', () => {
+  // ST equity loss 50k, LT equity gain 1 L (all inside the exemption), a debt
+  // fund's slab gain 50k at 15%: the loss should wipe the slab gain -> no tax.
+  const r = engine.saleTaxIndia([
+    lot('2020-01-01', [1000, 0, 0], [100, 0, 0]),
+    lot('2026-06-01', [0, 1000, 0], [0, 150, 0]),
+    lot('2024-01-01', [0, 0, 1000], [0, 0, 100]),
+  ], '2026-10-19', [200, 100, 150], ['equity', 'equity', 'debtFund'], 0.15, null);
+  assert.strictEqual(Math.round(r.tax), 0);
+  assert.strictEqual(Math.round(r.net.ltEq), 100000);
+  assert.deepStrictEqual(engine.TAX_IN.newRegimeSlabs, [0, 15, 20, 25, 30]);
+});
+

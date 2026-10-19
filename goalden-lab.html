@@ -308,6 +308,8 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stat-row.four{grid-template-columns:repeat(4,minmax(0,1fr))}
 /* Four stats in a card that is only ~400px wide on a desktop: always 2x2. */
 .stat-row.pairs{grid-template-columns:repeat(2,minmax(0,1fr))}
+.slab-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.slab-chips .tglbtn{flex:0 0 auto;border:1px solid rgba(37,87,199,.35);border-radius:3px;padding:8px 10px;min-height:36px}
 @media(max-width:560px){.stat-row.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* A flat 1px border in one uniform grey read as barely-there -- a
    left-edge accent in the same blue as the rest of the app's emphasis
@@ -2019,6 +2021,7 @@ const L = {
     freeText:'', freeTextError:null, freeTextLoading:false,
     seed:19,
     overrides:{},        // key -> true once someone explicitly says "use it anyway" past an unusable data-quality flag
+    taxSlab:null,        // income-tax slab %, for the SIP card's after-tax line; null = TAX_IN.defaultSlab
   },
   statements:{
     // "Read the Company" -- see the stable-shell rendering note above initChart().
@@ -5141,6 +5144,85 @@ function liveSipBacktest(items, weights){
 function liveMixSig(items, weights){
   return items.map(it=>it.key).join('|')+'#'+(weights||[]).map(w=>Math.round(w*1000)).join(',');
 }
+// How India taxes each holding when it's sold (rules in TAX_IN, engine).
+// The built-in list is tagged by asset class; anything else is read from its
+// name. When the name can't settle it -- a hybrid fund whose equity share
+// isn't stated -- the tax is not worked out at all rather than guessed.
+function liveTaxClass(it){
+  const d=L.live.data[it.key]||{}, cur=d.currency||'INR';
+  // "Income Distribution cum Capital Withdrawal" (IDCW) is a payout option,
+  // not a debt fund: drop it before the debt test sees "income".
+  const nm=String(d.label||it.label||it.symbol).replace(/income distribution cum capital withdrawal|\bidcw\b/gi,'');
+  if(it.type==='fund'){
+    // "Emerging" alone is a domestic mid-cap style name (Kotak Emerging
+    // Equity); only "emerging market(s)" means abroad.
+    if(/nasdaq|fang|nyse|\b(us|u\.s\.|s&p 500|international|global|overseas|world|emerging markets?|feeder|china|japan|hang seng|taiwan|europe|asia)\b/i.test(nm)) return {cls:'unlisted', what:'an international fund (12.5% after 2 years, your slab before)'};
+    if(/gold|silver|precious/i.test(nm)) return {cls:'unlisted', what:'a gold or silver fund of funds (12.5% after 2 years, your slab before)'};
+    // Any other fund of funds is taxed by what it holds (an equity FoF,
+    // a debt FoF), which its name doesn't settle: refuse, as for hybrids.
+    // (A bond or gilt FoF is plainly debt and falls through to the debt test.)
+    if(/\bfo?f\b|fund of funds?/i.test(nm) && !/bond|gilt|debt|liquid/i.test(nm)) return {cls:null, what:'a fund of funds, taxed by what it holds, which its name doesn’t settle'};
+    if(/arbitrage/i.test(nm)) return {cls:'equity', what:'an arbitrage fund, taxed as equity'};
+    if(/equity savings|balanced|multi.?asset|conservative hybrid|dynamic asset|asset allocat|retirement|children|solution/i.test(nm)) return {cls:null, what:'a hybrid fund whose equity share its name doesn’t state, and that decides how it is taxed'};
+    if(/equity\s*(&|and)\s*debt|aggressive hybrid|\bequity\b|elss|tax saver/i.test(nm)) return {cls:'equity', what:'an equity fund'};
+    if(/liquid|overnight|money market|debt|bond|gilt|g-sec|duration|credit risk|floater|floating rate|treasury|banking (&|and) psu|corporate|\bincome (fund|plan)\b|savings fund|ultra short|target maturity|crisil|\bsdl\b/i.test(nm)) return {cls:'debtFund', what:'a debt fund (your slab if bought since Apr 2023)'};
+    return {cls:'equity', what:'an equity fund'};
+  }
+  if(cur!=='INR') return {cls:'unlisted', what:'a foreign share or ETF (12.5% after 2 years, your slab before)'};
+  if(/^\^/.test(it.symbol)) return {cls:'equity', what:'an index, taxed here as an index fund would be'};
+  const known=INSTRUMENT_INDEX_IN.find(x=>x.symbol===it.symbol);
+  const isEtf=/\betf\b|bees\b|exchange traded/i.test(nm);
+  const klass = known ? known.klass
+    : !isEtf ? 'equity'
+    : /gold|silver/i.test(nm) ? 'gold'
+    : /nasdaq|s&p|fang|hang seng|international|global/i.test(nm) ? 'intl'
+    : /gilt|g-sec|bond|liquid|\bsdl\b|debt/i.test(nm) ? 'debt' : 'equity';
+  if(klass==='gold') return {cls:'listed', what:'a gold or silver ETF (12.5% after a year, your slab before)'};
+  if(klass==='intl') return {cls:'listed', what:'an international ETF listed in India (12.5% after a year, your slab before)'};
+  if(klass==='debt') return {cls:'debtListed', what:'a debt ETF (your slab if bought since Apr 2023)'};
+  return {cls:'equity', what: known && known.kind==='etf' ? 'an equity ETF' : known && (known.kind==='reit'||known.kind==='invit') ? 'REIT/InvIT units, taxed like shares' : 'listed shares'};
+}
+// "What would I actually keep?" -- every monthly buy sold on the last day,
+// lot by lot (saleTaxIndia). Shown for an Indian investor with rupee figures
+// only: Indian tax is worked out on rupee gains.
+function liveSipTaxHTML(items, s){
+  if(cfg().code!=='IN') return '';
+  const c=s.cm||cfg();
+  if(liveMixCurrency(items)!=='INR') return `<div class="cap" style="margin-top:10px">After tax: not worked out, because Indian tax is on rupee gains and these figures aren’t in rupees.</div>`;
+  const classes=items.map(liveTaxClass);
+  const unknown=classes.findIndex(k=>!k.cls);
+  if(unknown>=0) return `<div class="cap" style="margin-top:10px">After tax: not worked out. ${liveShortName(items[unknown])} is ${classes[unknown].what}.</div>`;
+  const dates=s.dates, px=s.panel.px, last=dates.length-1;
+  let gk=-1; for(let k=0;k<dates.length && dates[k]<=TAX_IN.grandfatherDate;k++) gk=k;
+  // A slab no longer offered (5% or 10%, from an older build) falls back to the default.
+  const slabPct = TAX_IN.newRegimeSlabs.includes(L.live.taxSlab) ? L.live.taxSlab : TAX_IN.defaultSlab;
+  const t=saleTaxIndia(s.r.lots, dates[last], px[last], classes.map(k=>k.cls), slabPct/100, gk>=0 ? px[gk] : null);
+  const gain=t.gross-s.r.paidIn;
+  const fmtD=d=>new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  const n=t.net, parts=[];
+  if(n.ltEq>0) parts.push(`${c.compact(n.ltEq)} long-term equity gain (${c.compact(t.exemptUsed)} of it tax-free, the rest at 12.5%)`);
+  if(n.ltOther>0) parts.push(`${c.compact(n.ltOther)} other long-term gain at 12.5%`);
+  if(n.stEq>0) parts.push(`${c.compact(n.stEq)} short-term equity gain at 20%`);
+  if(n.stSlab>0) parts.push(`${c.compact(n.stSlab)} taxed at your ${slabPct}% slab`);
+  const slabMatters = t.gains.stSlab!==0;
+  const chips = slabMatters ? `<div class="cap" style="margin-top:8px" id="liveSlabLbl">Your income-tax slab (new regime):</div><div class="slab-chips" role="group" aria-labelledby="liveSlabLbl">${TAX_IN.newRegimeSlabs.map(v=>`<button type="button" class="tglbtn${v===slabPct?' active':''}" data-live-slab="${v}" aria-pressed="${v===slabPct}">${v===0?'0% (income up to ₹12 L)':v+'%'}</button>`).join('')}</div>` : '';
+  const anyListed = items.some(it=>it.type==='equity');
+  const notes=[
+    `${TAX_IN.asOf} rules, everything sold in one go with nothing else sold that year. The ₹1.25 L exemption is per year, so selling over several years would pay less. No surcharge, exit loads or transaction costs.`,
+    t.grandfathered ? 'Buys made before Feb 2018 use their 31 Jan 2018 price as cost (grandfathering), taken here from that day’s close.' : '',
+    anyListed ? 'Share and ETF prices here are dividend-adjusted, so dividends count as growth; in reality they are taxed at your slab in the year they are paid.' : '',
+    t.lossLeft>0 ? `${c.compact(t.lossLeft)} of losses can’t be set off here and would carry forward.` : '',
+  ].filter(Boolean).join(' ');
+  if(L.live._sip) L.live._sip.afterTax={asOf:TAX_IN.asOf, slabPct, sellDate:dates[last], tax:Math.round(t.tax), keep:Math.round(t.keep)};
+  return `<div style="margin-top:14px">
+    <div class="stat-row pairs">
+      <div class="stat"><div class="stat-label">Tax if sold on ${fmtD(dates[last])}${infoIcon('Every monthly buy is its own lot with its own holding period, so a long SIP sold today is mostly long term, with only the most recent buys short term. Each holding is taxed by its type, and losses are set off the way the Income Tax Act allows. Rates, cess and the exemption are kept in one dated table and need re-checking after each Budget.')}</div><div class="stat-value">${c.compact(t.tax)}</div><div class="stat-sub">${gain>0?((t.tax/gain)*100).toFixed(1)+'% of the '+c.compact(gain)+' gain, 4% cess included':t.tax>0?'a short-term gain is still taxed: long-term losses can’t be set against it':'no gain to tax'}</div></div>
+      <div class="stat"><div class="stat-label">You’d keep</div><div class="stat-value">${c.compact(t.keep)}</div><div class="stat-sub">of ${c.compact(t.gross)}</div></div>
+    </div>
+    <div class="cap" style="margin-top:8px">How each is taxed: ${items.map((it,i)=>`${liveShortName(it)} is ${classes[i].what}`).join('; ')}.${parts.length?' After set-off: '+parts.join(', ')+'.':''} ${notes}</div>
+    ${chips}
+  </div>`;
+}
 function liveSipCardHTML(items, weights){
   L.live._sip=null;
   if(!liveMixCurrency(items)){
@@ -5169,7 +5251,7 @@ function liveSipCardHTML(items, weights){
   L.live._sip={sig:liveMixSig(items, weights), monthly:s.monthly, currency:liveMixCurrency(items), from:first, to:last, months:r.months, paidIn:Math.round(r.paidIn), final:Math.round(r.final), xirr: xirrPct==null?null:+xirrPct.toFixed(2), lowestGap: Math.round(w.gap), lowestDate: s.dates[w.k], indexFundFinal: b?Math.round(b.final):null, indexFundXirr: bx==null?null:+bx.toFixed(2)};
   deferChartInit(()=>renderLiveSipChart('live-sip-echart', s));
   return `<div class="card">
-    <h4>${c.compact(s.monthly)} every month into this mix${infoIcon('Each month, '+c.compact(s.monthly)+' is split by your current weights and buys at that day’s real price (dividend-adjusted where the data provides it), on the first day every instrument traded. The pot already built is not rebalanced, which is how two separate SIPs actually behave. No costs, taxes or exit loads. Past prices only: what happened, not a forecast.')}</h4>
+    <h4>${c.compact(s.monthly)} every month into this mix${infoIcon('Each month, '+c.compact(s.monthly)+' is split by your current weights and buys at that day’s real price (dividend-adjusted where the data provides it), on the first day every instrument traded. The pot already built is not rebalanced, which is how two separate SIPs actually behave. No costs or exit loads; for India, tax on selling is worked out below. Past prices only: what happened, not a forecast.')}</h4>
     <div class="cap">${mixLabel}, bought on the first shared trading day of each month from ${fmtD(first)} to ${fmtD(last)}.</div>
     <div class="stat-row pairs" style="margin:10px 0">
       <div class="stat"><div class="stat-label">You put in</div><div class="stat-value">${c.compact(r.paidIn)}</div><div class="stat-sub">${r.months} monthly buys</div></div>
@@ -5179,6 +5261,7 @@ function liveSipCardHTML(items, weights){
     </div>
     <div id="live-sip-echart" class="echart" style="height:300px" role="img" aria-label="Money paid in versus what it was worth, month by month. The numbers are in the text below."></div>
     <div class="gr-note" style="margin-top:10px">${c.compact(s.monthly)} every month from ${fmtD(first)} to ${fmtD(last)}, ${c.compact(r.paidIn)} in all, would be worth <b>${c.compact(r.final)}</b>. That's ${total} in total, which is <b>${xirrPct==null?'not computable':xirrPct.toFixed(1)+'% a year'}</b> (XIRR) once you allow for each month's money being invested for a different length of time.${worstLine}${benchLine}${vsPlan}</div>
+    ${liveSipTaxHTML(items, s)}
     ${liveForeignMoneyNoteHTML(items)}
     ${liveDroppedNoteHTML(s.panel)}
   </div>`;
@@ -6553,6 +6636,10 @@ function attach(){
   });
   document.querySelectorAll('[data-live-bench-retry]').forEach(el=>{
     el.addEventListener('click',()=>{ const sym=el.dataset.liveBenchRetry; if(L.live.bench && L.live.bench[sym]) L.live.bench[sym]={status:'retry'}; render(); });
+  });
+  document.querySelectorAll('[data-live-slab]').forEach(el=>{
+    el.addEventListener('click',()=>{ L.live.taxSlab=+el.dataset.liveSlab; render();
+      const again=document.querySelector('[data-live-slab="'+L.live.taxSlab+'"]'); if(again) again.focus({preventScroll:true}); });
   });
   document.querySelectorAll('[data-live-read-company]').forEach(el=>{
     el.addEventListener('click',()=>advisorStatementsSetCompany(el.dataset.liveReadCompany));

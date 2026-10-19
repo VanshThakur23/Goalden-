@@ -3752,8 +3752,49 @@ standing over the founder's shoulder.
   - The frontier and stats above the cards still use the uncleaned days.
 - Moved to Group 3: the after-tax line, which needs 06's dated `TAX_IN`.
 
-### Next: Group 3
-- After-tax line on the SIP card (lot by lot, 06's dated `TAX_IN`), then 06
-  post-tax FD (with its door2 crash fix and honest wording), then the return
-  reality check from `marketSeries`, then the step-up row.
+### Group 3a: after tax (reviewer NO-GO on six items, fixed, re-check GO)
+- Engine: `TAX_IN` (FY 2026-27, one dated table), `holdsLongTerm`,
+  `saleTaxIndia`, `postTaxPlanValue`, `postTaxFdFinal`, plus 9 tests
+  (196/196).
+  - `saleTaxIndia` taxes every SIP buy as its own lot:
+    - listed shares, equity funds/ETFs and REIT/InvIT units: 20% short term,
+      12.5% long term after 12 months above Rs 1.25 L;
+    - gold and international ETFs listed in India: 12.5% after 12 months,
+      slab before;
+    - gold/international FoFs and foreign shares: 12.5% after 24 months,
+      slab before;
+    - debt funds and debt ETFs: slab for lots bought since 1 Apr 2023.
+  - Grandfathering for equity lots bought by 31 Jan 2018.
+  - Loss set-off as the Act allows, highest rate first. The exempt Rs 1.25 L
+    is offset last, but still offset (set-off is mandatory).
+  - Slab chips are 0/15/20/25/30. Under the new regime the 87A rebate makes
+    slab income nil up to Rs 12 L, so 5% and 10% never really apply.
+  - The reviewer checked the law against the ICICI Pru 2026-27 tax
+    reckoner, Value Research and Quantum's factsheet: all confirmed.
+- Lab, SIP card: "Tax if sold on <last day>" and "You'd keep".
+  - Each holding's tax type is named, with the netted buckets.
+  - Slab chips appear only when a slab-taxed gain exists.
+  - Tax type comes from the built-in list's asset class, else the name.
+    Hybrids and funds of funds whose holdings the name doesn't settle are
+    refused, not guessed.
+  - Name rules fixed after review: "Emerging Equity" is domestic, IDCW
+    isn't debt, and "Global Health" / "Goldiam" / "Bondada" are shares.
+  - 50/50 Nifty/Gold: tax Rs 3.57 L, keep Rs 43.00 L of Rs 46.58 L.
+- 06 FD card, both doors, after tax:
+  - Slab chips, default 20% (new regime). A tap redraws only the FD cards,
+    so the details panel stays open.
+  - Only the SIP on both sides: existing savings used to count on the plan
+    side only.
+  - The method note says what the one-year model leaves out: surcharge and
+    a higher slab (more tax), or yearly exemptions (less).
+  - The Full Plan's `baseAlloc` TDZ crash from the handoff is avoided.
+  - "The Case": the FD after-tax figure uses the same slab (it was a fixed
+    30%); the US uses an illustrative 22% federal bracket, no cess.
+  - Priya: Rs 3.3 Cr vs Rs 1.7 Cr after tax at 20%. Arjun: Rs 40.0 L vs
+    Rs 31.6 L. The gap barely moves with tax, and the card says why.
+
+### Next: Group 3b
+- "Is 12% a year realistic?" from the real Sensex/S&P history
+  (`returnReality`), and the step-up row ("or start at Rs X, +10% a year",
+  `stepUpAnnualPlan` moved from the Lab to the engine).
 

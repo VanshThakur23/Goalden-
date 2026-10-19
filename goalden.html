@@ -92,6 +92,8 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 .chip{font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--paper);background:rgba(20,40,63,.08);border:1px solid rgba(20,40,63,.18);padding:9px 15px;border-radius:3px;cursor:pointer;transition:all .15s}
 .chip:active{transform:scale(.95)}
 .chip.selected{background:var(--gold);border-color:var(--gold);color:#fff}
+.slab-chips{margin-top:8px;gap:6px}
+.slab-chips .chip{padding:6px 10px;font-size:12px}
 .inline-error{color:#9C4A2C;font-size:13px;margin-top:14px;font-family:'Spline Sans Mono',monospace;min-height:16px}
 .value-slider{margin:18px 0 8px}
 .value-slider input[type=range]{width:100%;accent-color:var(--gold);height:22px;cursor:pointer}
@@ -474,6 +476,7 @@ const S = {
   genType: null, genAmount: null, genYears: null, existingSavings: 0,
   risk: null, si: 0, quickEdit: false,
   persona: null, // id of the example person a plan was opened from (PERSONAS)
+  taxSlab: null,  // income-tax slab %, for the after-tax FD card; null = TAX_IN.defaultSlab (20)
   // Advanced, opt-in overrides for the flat post-goal rate (d.postRet /
   // d.debt). null = use the flat default; {eq,de,hy} once the user has
   // picked a custom post-goal mix via the "Advanced" control under the
@@ -1235,17 +1238,46 @@ function allocationCardHtml(preRate, d, rLabel) {
 // current typical multi-year bank FD rates (verified against several
 // major banks, mid-2026), not the best promotional rate available, nor
 // the lowest.
-function fdComparisonCardHtml(sip, years, actualCorpus, d, c) {
+// A slab no longer offered (5% or 10%, saved by an older build) falls back to the default.
+function fdSlabPct() { return TAX_IN.newRegimeSlabs.includes(S.taxSlab) ? S.taxSlab : TAX_IN.defaultSlab; }
+// planSipValue is what the monthly SIP alone grows to in the plan (gapCorpus
+// for retirement and education, gap for a purchase goal). Savings the person
+// already has are left out of BOTH sides: before, the plan side got them and
+// the FD side didn't, which flattered the plan.
+function fdComparisonCardHtml(sip, years, planSipValue, d, c) {
   const mFd = effectiveMonthlyRate(d.fdRate);
   const fdFinal = accumulationSchedule({sip: sip, rate: mFd, periods: years*12, due: true, stepUp: 0}).finalBalance;
-  const diff = actualCorpus - fdFinal;
-  return '<div class="chart-card"><div class="chart-title">The same ' + c.fmt(Math.round(sip)) + '/month, in a Fixed Deposit instead</div>' +
-    '<div class="chart-caption">A typical multi-year bank FD, around ' + (d.fdRate*100).toFixed(1) + '%/yr. FD interest is also fully taxed at your income slab every year, unlike long-term equity gains, which this comparison does not even account for.</div>' +
-    '<div class="alloc-return-row">' +
-    '<div><div class="alloc-return-label">This plan</div><div class="alloc-return-value">' + c.compact(actualCorpus) + '</div></div>' +
-    '<div><div class="alloc-return-label">Same money in an FD</div><div class="alloc-return-value" style="color:#9C4A2C">' + c.compact(fdFinal) + '</div></div>' +
+  const preGap = planSipValue - fdFinal;
+  const title = '<div class="chart-title">The same ' + c.fmt(Math.round(sip)) + '/month, in a Fixed Deposit instead</div>';
+  const savedNote = (S.existingSavings || 0) > 0 ? ' Only the monthly SIP is compared; savings you already have are left out of both sides.' : '';
+  if (c.code !== 'IN') {
+    return '<div class="chart-card fd-card">' + title +
+      '<div class="chart-caption">A typical multi-year bank CD, around ' + (d.fdRate*100).toFixed(1) + '%/yr, before tax (tax is modelled for India only).</div>' +
+      '<div class="alloc-return-row">' +
+      '<div><div class="alloc-return-label">This SIP in the plan</div><div class="alloc-return-value">' + c.compact(planSipValue) + '</div></div>' +
+      '<div><div class="alloc-return-label">Same money in a CD</div><div class="alloc-return-value">' + c.compact(fdFinal) + '</div></div>' +
+      '</div>' +
+      '<div class="gr-note" style="margin-top:10px">Over ' + years + ' years, staying in a CD would leave you ' + (preGap >= 0 ? 'short by' : 'ahead by') + ' <b style="color:var(--paper)">' + c.compact(Math.abs(preGap)) + '</b>, purely from the difference in return.' + savedNote + '</div>' +
+      '</div>';
+  }
+  const slabPct = fdSlabPct(), slab = slabPct / 100;
+  const plan = postTaxPlanValue(planSipValue, sip * 12 * years, riskAllocation(), slab);
+  const fdPost = postTaxFdFinal(sip, years, d.fdRate, slab);
+  const postGap = plan.value - fdPost;
+  const chips = TAX_IN.newRegimeSlabs.map(v => '<button type="button" class="chip' + (v === slabPct ? ' selected' : '') + '" data-fd-slab="' + v + '" aria-pressed="' + (v === slabPct) + '">' + (v === 0 ? '0% (income up to ₹12 L)' : v + '%') + '</button>').join('');
+  // The figures that rebuild this card on a chip tap ride on the card itself,
+  // so the tap redraws only the card: a full render() would close the
+  // details panel it sits in and jump to the top.
+  return '<div class="chart-card fd-card" data-sip="' + sip + '" data-years="' + years + '" data-plan="' + planSipValue + '">' + title +
+    '<div class="chart-caption">A typical multi-year bank FD, around ' + (d.fdRate*100).toFixed(1) + '%/yr. Both sides after tax at your income-tax slab.</div>' +
+    '<div class="hero-sub" style="text-align:left;margin-top:8px">Your slab (new regime)' + (S.taxSlab == null ? ', ' + slabPct + '% until you pick one' : '') + ':</div>' +
+    '<div class="chips slab-chips" role="group" aria-label="Your income-tax slab">' + chips + '</div>' +
+    '<div class="alloc-return-row" style="margin-top:12px">' +
+    '<div><div class="alloc-return-label">This SIP in the plan, after tax</div><div class="alloc-return-value">' + c.compact(plan.value) + '</div></div>' +
+    '<div><div class="alloc-return-label">Same money in an FD, after tax</div><div class="alloc-return-value">' + c.compact(fdPost) + '</div></div>' +
     '</div>' +
-    '<div class="gr-note" style="margin-top:10px">Over ' + years + ' years, staying in a Fixed Deposit would leave you short by <b style="color:var(--paper)">' + c.compact(diff) + '</b>, purely from the difference in return. That gap is the cost of playing it safe with money that has this much time to work.</div>' +
+    '<div class="gr-note" style="margin-top:10px">After tax at ' + slabPct + '%, an FD would leave you ' + (postGap >= 0 ? 'short by' : 'ahead by') + ' <b style="color:var(--paper)">' + c.compact(Math.abs(postGap)) + '</b> over ' + years + ' years (' + c.compact(Math.abs(preGap)) + ' before tax' + (preGap > 0 && Math.abs(postGap - preGap) < 0.05 * preGap ? ': tax barely moves the gap, because the FD pays tax every year and the plan pays once, at the end' : '') + ').' + savedNote + '</div>' +
+    '<div class="hero-sub" style="text-align:left;margin-top:8px;font-size:11px">' + TAX_IN.asOf + ' rules, new tax regime, 4% cess. FD interest is taxed every year at your slab. ' + 'The plan side is taxed once, as if the whole pot were withdrawn in one year: equity and hybrid gains at 12.5% above ₹1.25 lakh, debt gains at your slab. ' + 'A real one-year withdrawal this large would also pay surcharge and push the debt gains into a higher slab (more tax); spreading it over several years uses the ₹1.25 lakh exemption every year (less).' + '</div>' +
     '</div>';
 }
 
@@ -1287,8 +1319,13 @@ function sCase() {
 
   // ---- Section 4 supporting stat: what an FD really keeps after inflation+tax ----
   const fdReal = realRate(c.d.fdRate, c.d.inflation);
-  // FD interest is taxed annually at slab rate; illustrate at a representative 30% slab.
-  const fdAfterTax = c.d.fdRate * (1-0.30);
+  // FD interest is taxed every year at the slab: the same slab the results'
+  // FD card uses (20% until the person picks one there), plus 4% cess.
+  // The US has no slab chips and no cess: an illustrative 22% federal
+  // bracket (state tax left out), as a fixed example.
+  const caseIN = c.code === 'IN';
+  const caseSlab = caseIN ? fdSlabPct() : 22;
+  const fdAfterTax = c.d.fdRate * (1 - caseSlab/100 * (caseIN ? 1 + TAX_IN.cess : 1));
   const fdAfterTaxReal = realRate(fdAfterTax, c.d.inflation);
 
   // ---- Section 5: housing ----
@@ -1349,7 +1386,7 @@ function sCase() {
     <div class="case-cap">This is also exactly why a Fixed Deposit quietly loses, even though it feels "safe": it pays you a fixed rupee amount that has no claim on any of that growth.</div>
     <div class="compare-row">
       <div class="compare-card"><div class="cc-label">FD, AFTER INFLATION</div><div class="cc-val" style="color:${fdReal>0?'#256F55':'#9C4A2C'}">${(fdReal*100).toFixed(1)}%/yr</div><div class="cc-note">Before tax is even taken out</div></div>
-      <div class="compare-card"><div class="cc-label">FD, AFTER TAX &amp; INFLATION</div><div class="cc-val" style="color:${fdAfterTaxReal>0?'#256F55':'#9C4A2C'}">${(fdAfterTaxReal*100).toFixed(1)}%/yr</div><div class="cc-note">At a representative 30% slab, taxed every year regardless of whether you touch the money</div></div>
+      <div class="compare-card"><div class="cc-label">FD, AFTER TAX &amp; INFLATION</div><div class="cc-val" style="color:${fdAfterTaxReal>0?'#256F55':'#9C4A2C'}">${(fdAfterTaxReal*100).toFixed(1)}%/yr</div><div class="cc-note">${!caseIN ? 'At an illustrative 22% federal bracket (state tax not included), taxed every year whether or not you touch the money' : caseSlab===0 ? 'At a 0% slab there is no tax on it, so this is inflation alone' : 'At a '+caseSlab+'% slab plus 4% cess'+(S.taxSlab==null?' (pick yours on the results’ FD card)':'')+', taxed every year whether or not you touch the money'}</div></div>
     </div>
     <div class="case-cap" style="margin-bottom:0">The "safety" of an FD is real (you will never see the number go down) &ndash; but the purchasing power sitting behind that number can still shrink every single year, silently, which a glance at the account balance will never show you.</div>
   </div>
@@ -1479,7 +1516,7 @@ function sResultsRetirement() {
     '<div class="chart-caption">Built to last until age '+r.d.lifeExp+'</div>' +
     potChart(r.drawRows, c, 'chart-secondary')+'</div>' +
     allocationCardHtml(r.preRate, r.d, rLabel) +
-    (!r.alreadyMet ? fdComparisonCardHtml(r.sip, r.yrs, r.corpus, r.d, c) : '') +
+    (!r.alreadyMet ? fdComparisonCardHtml(r.sip, r.yrs, r.gapCorpus, r.d, c) : '') +
     retireAgeCompareCard(calcRetireAgeCompare(), c) +
     delayCard(r.delay, r.yrs) +
     '</div></div>' +
@@ -1533,7 +1570,7 @@ function sResultsEducation() {
     '<div class="chart-caption">Rises every year because education costs keep going up</div>' +
     feeBarChart(r.feeYears, 'chart-secondary')+'</div>' +
     allocationCardHtml(r.preRate, r.d, rLabel) +
-    (!r.alreadyMet ? fdComparisonCardHtml(r.sip, S.yearsToCollege, r.corpus, r.d, c) : '') +
+    (!r.alreadyMet ? fdComparisonCardHtml(r.sip, S.yearsToCollege, r.gapCorpus, r.d, c) : '') +
     delayCard(r.delay, S.yearsToCollege) +
     '</div></div>' +
     '<div class="assump-toggle" id="st">'+caretSvg()+'See the full year-by-year schedule</div>' +
@@ -1694,6 +1731,22 @@ function advance() {
    page.
    ===================================================================== */
 const STATE_KEY = 'goaldenD1State';
+// Slab chips on the FD card (results and the advisor's canvas): redraw
+// that one card in place, scoped with closest() because the card can appear
+// twice on a page.
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-fd-slab]');
+  if (!b) return;
+  const tapped = b.closest('.fd-card');
+  S.taxSlab = +b.dataset.fdSlab; persistState();
+  document.querySelectorAll('.fd-card[data-plan]').forEach(card => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = fdComparisonCardHtml(+card.dataset.sip, +card.dataset.years, +card.dataset.plan, cfg().d, cfg());
+    const fresh = tmp.firstElementChild;
+    card.replaceWith(fresh);
+    if (card === tapped) { const again = fresh.querySelector('[data-fd-slab="' + S.taxSlab + '"]'); if (again) again.focus({ preventScroll: true }); }
+  });
+});
 function persistState() { try { localStorage.setItem(STATE_KEY, JSON.stringify(Object.assign({}, S, { _savedAt: Date.now() }))); } catch (e) {} }
 function clearSavedState() { try { localStorage.removeItem(STATE_KEY); } catch (e) {} }
 
@@ -2414,12 +2467,12 @@ function resultCanvasFd() {
   if (S.goalType === 'retirement') {
     if (S.age == null || S.retireAge == null || S.monthlyExpense == null) return '<div class="gr-note">Fill in your retirement inputs first.</div>';
     const r = calcRetirement();
-    return r.alreadyMet ? '<div class="gr-note">No SIP needed, so there is nothing to compare against an FD.</div>' : fdComparisonCardHtml(r.sip, r.yrs, r.corpus, r.d, c);
+    return r.alreadyMet ? '<div class="gr-note">No SIP needed, so there is nothing to compare against an FD.</div>' : fdComparisonCardHtml(r.sip, r.yrs, r.gapCorpus, r.d, c);
   }
   if (S.goalType === 'generic') {
     if (S.genAmount == null || S.genYears == null) return '<div class="gr-note">Fill in your goal amount and years first.</div>';
     const r = calcGeneric();
-    return r.sip <= 0 ? '<div class="gr-note">No SIP needed, so there is nothing to compare.</div>' : fdComparisonCardHtml(r.sip, S.genYears, r.inflatedGoal, r.d, c);
+    return r.sip <= 0 ? '<div class="gr-note">No SIP needed, so there is nothing to compare.</div>' : fdComparisonCardHtml(r.sip, S.genYears, r.gap, r.d, c);
   }
   return '<div class="gr-note">The FD comparison applies to retirement or purchase goals.</div>';
 }
