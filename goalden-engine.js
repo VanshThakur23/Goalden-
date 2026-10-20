@@ -1168,19 +1168,19 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         itemStyle:{color:'#14283F', borderColor:'#14283F', borderWidth:1}, z:4,
         label:{show:true, formatter:`RISK-FREE ${(rfPoint.ret*100).toFixed(1)}%`, position:'right', distance:8, color:'rgba(20,40,63,.6)', fontWeight:700, fontSize:11, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
-        itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1},
+        itemStyle:{color:'#1F8A70', borderColor:'#14283F', borderWidth:1},
         label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? ap.label : ''; }, position:'top', color:'rgba(20,40,63,.6)', fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, z:3 },
       { name:'Tangency', type:'scatter', data:[[tangencyPoint.vol,tangencyPoint.ret]], symbolSize:11,
         itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
         label:{show:!tangencyIsCurrent, formatter:'BEST BALANCE', position:'bottom', distance:9, color:'#14283F', fontWeight:700, fontSize:11, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} },
       ...(showSafest ? [{ name:'Safest', type:'scatter', data:[[minVarPoint.vol,minVarPoint.ret]], symbolSize:10,
-        itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1.5}, z:4,
+        symbol:'diamond', itemStyle:{color:'#8A4FBF', borderColor:'#14283F', borderWidth:1.5}, z:4,
         label:{show:true, formatter:'SAFEST', position:'top', distance:9, color:'#14283F', fontWeight:700, fontSize:11, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} }] : []),
       { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
-        itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, z:5,
-        label:{show:true, formatter:yourMixLabel, position:'top', distance:10, color:'#D97757', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
+        itemStyle:{color:'transparent', borderColor:'#B8740F', borderWidth:2.5}, z:5,
+        label:{show:true, formatter:yourMixLabel, position:'top', distance:10, color:'#14283F', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Your mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
-        itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:5 },
+        itemStyle:{color:'#B8740F'}, tooltip:{show:false}, silent:true, z:5 },
     ],
   };
 }
@@ -1195,10 +1195,24 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
    --------------------------------------------------------------------- */
 function barComparisonChartOption(assetPoints){
   const labels = assetPoints.map(function(a){ return a.label; });
+  // No legend: every bar prints its value, and the first pair also prints the
+  // series name above it (name over value). Left to centre on their own bars the
+  // Return and Risk labels, side by side, print on top of each other, so the first
+  // pair's labels are pinned to the pair's outer edges: Return's ends at the right
+  // edge of its bar and Risk's starts at the left edge of its bar, which leaves
+  // exactly the gap between the bars between them. A crowded chart (4+ assets)
+  // drops the decimal so neighbouring values still fit; the tooltip keeps two.
+  // The text is ink: the bar colours are fills, and ochre is under 4.5:1 for small text.
+  const dp = assetPoints.length > 3 ? 0 : 1;
+  const barLabel = function(name){ return { show:true, position:'top', fontSize:10, lineHeight:12, color:'#14283F', fontFamily:"'Spline Sans Mono',monospace",
+    formatter:function(p){ return (p.dataIndex === 0 ? name + '\n' : '') + (p.value*100).toFixed(dp) + '%'; } }; };
+  const pinFirstPair = function(side){ return function(p){
+    if (p.dataIndex !== 0) return {};
+    return { x: side === 'right' ? p.rect.x + p.rect.width : p.rect.x, y: p.rect.y - 4, align: side, verticalAlign:'bottom' };
+  }; };
   return {
     animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
-    grid:{left:54,right:20,top:36,bottom:40,containLabel:true},
-    legend:{top:0, textStyle:{fontSize:10.5,color:'rgba(20,40,63,.6)',fontFamily:"'Spline Sans Mono',monospace"}},
+    grid:{left:54,right:20,top:44,bottom:40,containLabel:true},
     xAxis:{type:'category', data:labels, axisLabel:{fontSize:10.5,color:'rgba(20,40,63,.6)'}},
     yAxis:{type:'value', name:'PER YEAR', nameLocation:'middle', nameGap:44,
       nameTextStyle:{fontSize:10.5,color:'rgba(20,40,63,.5)'}, axisLabel:{formatter:function(v){ return (v*100).toFixed(0)+'%'; }},
@@ -1206,8 +1220,8 @@ function barComparisonChartOption(assetPoints){
     tooltip:{trigger:'axis', confine:true, textStyle:{fontFamily:"'Figtree',sans-serif", fontSize:12},
       valueFormatter:function(v){ return (v*100).toFixed(2)+'%'; }},
     series:[
-      { name:'Return', type:'bar', data:assetPoints.map(function(a){ return a.ret; }), itemStyle:{color:'#2557C7'}, barGap:'20%' },
-      { name:'Risk', type:'bar', data:assetPoints.map(function(a){ return a.vol; }), itemStyle:{color:'#D97757'} },
+      { name:'Return', type:'bar', data:assetPoints.map(function(a){ return a.ret; }), itemStyle:{color:'#2557C7'}, barGap:'20%', label:barLabel('Return'), labelLayout:pinFirstPair('right') },
+      { name:'Risk', type:'bar', data:assetPoints.map(function(a){ return a.vol; }), itemStyle:{color:'#B8740F'}, label:barLabel('Risk'), labelLayout:pinFirstPair('left') },
     ],
   };
 }

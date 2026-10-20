@@ -158,7 +158,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .case-section .case-cap{font-size:12.5px;color:rgba(20,40,63,.74);line-height:1.5;margin-bottom:14px}
 .race-legend{display:flex;gap:14px;justify-content:center;margin:8px 0 14px;flex-wrap:wrap}
 .race-legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace}
-.race-legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.race-legend i{width:18px;height:0;display:inline-block}
 .race-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
 .race-stat{background:rgba(20,40,63,.05);border-radius:3px 10px 10px 10px;padding:11px 9px;text-align:center}
 .race-stat .rs-label{font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;color:rgba(20,40,63,.74);margin-bottom:5px}
@@ -166,10 +166,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .case-slider-row{margin:14px 0 6px}
 .case-slider-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:rgba(20,40,63,.74);margin-bottom:8px}
 .case-slider-label b{color:var(--gold);font-family:'Spline Sans Mono',monospace}
-.case-callout{background:rgba(232,151,122,.1);border:1px solid rgba(232,151,122,.3);border-radius:3px 12px 12px 12px;padding:12px 14px;margin-top:10px;font-size:12.5px;line-height:1.5;color:rgba(20,40,63,.85)}
-.case-callout.good{background:rgba(143,199,142,.1);border-color:rgba(143,199,142,.3)}
+.case-callout{background:rgba(184,116,15,.08);border:1px solid rgba(184,116,15,.3);border-radius:3px 12px 12px 12px;padding:12px 14px;margin-top:10px;font-size:12.5px;line-height:1.5;color:rgba(20,40,63,.85)}
+.case-callout.good{background:rgba(31,138,112,.08);border-color:rgba(31,138,112,.3)}
 .holdbar-track{display:flex;height:26px;border-radius:3px;overflow:hidden;margin:12px 0 6px}
 .holdbar-seg{transition:width .2s ease}
+.holdbar-seg + .holdbar-seg{box-shadow:inset 2px 0 0 #fff}   /* the two colours are close in greyscale; the seam and the legend under the bar tell them apart */
 .holdbar-legend{display:flex;justify-content:space-between;font-size:11px;color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace}
 .growth-chain{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:14px 0;font-size:12.5px}
 .growth-chain .gc-node{background:rgba(37,87,199,.12);border:1px solid rgba(37,87,199,.3);border-radius:3px 9px 9px 9px;padding:7px 11px;color:rgba(20,40,63,.85)}
@@ -182,7 +183,6 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .case-back-row{padding:16px 0 8px;text-align:center}
 .case-back-row button{background:none;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
 .term-i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.4);color:rgba(20,40,63,.74);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:pointer;position:relative;margin-left:2px;vertical-align:middle}
-.term-i-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--card);border:1px solid rgba(37,87,199,.3);box-shadow:0 8px 20px rgba(20,40,63,.14);border-radius:9px;padding:9px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:20;pointer-events:none;width:220px;line-height:1.45;font-family:'Figtree',sans-serif;font-weight:400;text-align:left;white-space:normal}
 .chart-title{font-family:'Newsreader',serif;font-size:15.5px;color:var(--paper);margin-bottom:2px}
 .chart-caption{font-size:12px;color:rgba(20,40,63,.74);margin-bottom:10px}
 /* allocation strip (replaces the donut and its legend); capped like the other charts so it does not stretch across a wide monitor */
@@ -313,8 +313,76 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .persona span{font-size:12.5px;line-height:1.4;color:var(--body)}
 .persona:hover{border-color:var(--gold)}
 .persona:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.country-card:focus-visible,.goal-card:focus-visible,.gen-card:focus-visible,.risk-card:focus-visible,.chip:focus-visible,.edit-chip:focus-visible,.assump-toggle:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+/* render() lands focus on the new screen's heading; it is a landing point, not a control, so no ring. */
+.q-title[tabindex="-1"]:focus,.hero-label[tabindex="-1"]:focus,.case-title[tabindex="-1"]:focus{outline:none}
 .persona-note{font-size:12.5px;line-height:1.5;color:var(--body);background:rgba(37,87,199,.06);border-left:2px solid var(--gold);border-radius:0 8px 8px 0;padding:8px 12px;margin:0 0 12px}
 .persona-note b{color:var(--paper)}
+.sum-wrap{position:sticky;top:0;height:0;z-index:4}
+/* left/right 0, not a few px outside the column: an overhang here made a horizontal scrollbar flicker in and out on Windows Chrome. */
+.sum-bar{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:var(--bg);border:1px solid var(--rule);border-radius:3px 12px 12px 12px;box-shadow:0 6px 16px -12px rgba(20,40,63,.5)}
+.sum-bar[hidden]{display:none}
+.sum-txt{font-family:'Newsreader',serif;font-weight:600;font-size:16px;line-height:1.2;color:var(--paper);font-variant-numeric:tabular-nums}
+.sum-btns{display:flex;gap:6px;flex-shrink:0}
+.sum-btn{min-height:32px;padding:5px 10px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--gold);background:none;border:1px solid rgba(37,87,199,.35);border-radius:3px;cursor:pointer}
+.sum-btn[hidden]{display:none}
+.sum-btn:focus-visible,.jump-bar button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.jump-bar{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px}
+.jump-bar button{min-height:32px;padding:5px 11px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--paper);background:rgba(20,40,63,.06);border:1px solid rgba(20,40,63,.16);border-radius:999px;cursor:pointer}
+.jump-bar button:hover{border-color:var(--gold)}
+.chart-card,.delay-card{scroll-margin-top:64px}
+/* The Back-to-top and jump buttons land focus on a heading or the hero: landing points, not controls, so no ring. */
+.hero-number[tabindex="-1"]:focus,.chart-title[tabindex="-1"]:focus,.delay-title[tabindex="-1"]:focus{outline:none}
+.restart-row #shareBtn{margin-right:6px;color:var(--gold);border-color:rgba(37,87,199,.35)}
+.restart-row button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.share-url{display:block;width:100%;margin:10px 0 0;padding:8px 10px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--paper);background:#fff;border:1px solid var(--rule);border-radius:6px}
+.share-note{margin:10px auto 0;max-width:420px;font-size:12px;line-height:1.5;color:rgba(20,40,63,.74)}
+.plan-notice{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:950;width:max-content;max-width:min(92vw,420px);padding:10px 14px;font-size:13px;line-height:1.45;color:var(--paper);background:#fff;border:1px solid rgba(37,87,199,.4);border-radius:3px 8px 8px 8px;box-shadow:0 6px 18px rgba(20,40,63,.16)}
+.share-note:empty{display:none}
+.lc{flex-shrink:0;background:var(--card);border-top:1px solid var(--rule);box-shadow:0 -8px 20px -14px rgba(20,40,63,.45);position:relative;z-index:5}
+.lc[hidden]{display:none}
+.lc-bar{width:100%;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;background:none;border:0;font:inherit;color:var(--paper);cursor:pointer;text-align:left}
+.lc-bar:focus-visible{outline:2px solid var(--gold);outline-offset:-3px}
+.lc-sum{font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lc-cta{font-weight:700;font-size:13px;color:var(--gold);white-space:nowrap}
+.lc-cta::after{content:' \25B4'}
+.lc-bar[aria-expanded="true"] .lc-cta::after{content:' \25BE'}
+.lc-body{max-height:min(52vh,420px);overflow-y:auto;padding:2px 20px 16px}
+.lc-out{font-size:13.5px;line-height:1.5;color:var(--paper);margin:0 0 8px}
+.lc-out b{font-family:'Newsreader',serif;font-size:19px}
+.lc-delta{font-family:'Spline Sans Mono',monospace;font-size:11.5px;color:var(--body);white-space:nowrap}
+.lc-undo{background:none;border:0;border-bottom:1px solid currentColor;padding:0;font:inherit;font-size:12px;color:var(--gold);cursor:pointer}
+.lc-row{display:grid;grid-template-columns:110px 1fr 96px;align-items:center;gap:10px;padding:5px 0}
+.lc-row label,.lc-label{font-size:12.5px;color:var(--body)}
+.lc-row input[type=range]{width:100%;height:28px;accent-color:var(--gold);cursor:pointer}
+.lc-num{width:100%;min-height:36px;padding:6px 8px;font:inherit;font-size:14px;text-align:right;color:var(--paper);background:#fff;border:1px solid var(--rule);border-radius:6px}
+.lc-risk{grid-column:2 / 4;display:flex;flex-wrap:wrap;gap:6px}
+.lc-risk button{flex:1;min-height:36px;padding:6px 10px;font-family:'Spline Sans Mono',monospace;font-size:12px;color:var(--paper);background:rgba(20,40,63,.06);border:1px solid rgba(20,40,63,.18);border-radius:3px;cursor:pointer}
+.lc-risk button[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#fff}
+.lc input:focus-visible,.lc-risk button:focus-visible,.lc-undo:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+/* On a phone the open panel must leave the result room to show: label and exact box share a line, the slider sits under them, and the body is shorter (it scrolls). */
+@media(max-width:480px){
+  .lc-row{grid-template-columns:1fr 88px;column-gap:10px;row-gap:0;padding:4px 0}
+  .lc-row label,.lc-label{grid-column:1;grid-row:1;align-self:end}
+  .lc-row input[type=range]{grid-column:1;grid-row:2}
+  .lc-num{grid-column:2;grid-row:1 / 3;align-self:center}
+  .lc-risk{grid-column:1 / -1;grid-row:2;margin-top:2px}
+  .lc-body{max-height:min(44vh,340px)}
+}
+/* The advisor's chat button sits bottom-right; keep it above the panel. Its floating panels only
+   move at desktop width: on a phone they are full-width sheets that cover the bar by design. */
+body.lc-on #advisorFab{bottom:calc(var(--lc-h,48px) + 14px)}
+@media(min-width:481px){
+  body.lc-on #resultCanvas{bottom:calc(var(--lc-h,48px) + 14px)}
+  body.lc-on #advisorPanel:not(.mode-dock):not(.mode-focus){bottom:calc(var(--lc-h,48px) + 82px)}
+}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.hero-figure,.action-card .af{font-variant-numeric:tabular-nums}
+.scrub-readout{display:flex;flex-wrap:wrap;gap:2px 14px;min-height:22px;margin:2px 0 6px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+.scrub-readout b{color:var(--paper);font-weight:600}
+/* One line per value on a phone, so the number of lines never changes as the pointer moves (a line wrapping in or out would shift the chart under a finger). */
+@media(max-width:520px){.scrub-readout{flex-direction:column;flex-wrap:nowrap}.scrub-readout span{white-space:nowrap}}
+.echart[tabindex]:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
 </style>
 </head>
 <body>
@@ -331,7 +399,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 'use strict';
 
 echarts.registerTheme('goalden', {
-  color: ['#2557C7','#8FC79E','#D97757','#5FA875','#E8977A','#14283F'],
+  // The four palette slots (blue, ochre, green, violet), then two neutrals, so a
+  // series that sets no colour of its own never gets a generated hue.
+  color: ['#2557C7','#B8740F','#1F8A70','#8A4FBF','#56698A','#14283F'],
   backgroundColor: 'transparent',
   textStyle: { fontFamily: "'Spline Sans Mono', monospace", color: 'rgba(20,40,63,.75)' },
   title: { textStyle: { fontFamily: "'Newsreader', serif", color: '#14283F', fontWeight: 600 } },
@@ -341,6 +411,8 @@ echarts.registerTheme('goalden', {
   tooltip: { backgroundColor:'#FFFFFF', borderColor:'rgba(37,87,199,.4)', borderWidth:1, textStyle:{color:'#14283F', fontFamily:"'Spline Sans Mono',monospace", fontSize:11}, extraCssText:'border-radius:3px 8px 8px 8px;box-shadow:0 6px 18px rgba(20,40,63,.16)' },
 });
 const chartInstances = {};
+// True while a quiet (in-place) render is drawing: see render() and initChart().
+let chartQuiet = false;
 function initChart(id, option, optsOverride){
   const dom = document.getElementById(id);
   if(!dom) return null;
@@ -358,11 +430,53 @@ function initChart(id, option, optsOverride){
       ro.observe(dom); entry.ro=ro;
     }
   }
-  entry.inst.setOption(option, true);
+  // An in-place update (a slider drag, a what-if tap) redraws every chart on the result;
+  // animating each one on every tick is noise, and reduced motion asks for none at all.
+  const still = chartQuiet || (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  entry.inst.setOption(still ? Object.assign({ animation: false }, option) : option, true);
   return entry.inst;
 }
 function disposeChart(id){ if(chartInstances[id]){ if(chartInstances[id].ro) chartInstances[id].ro.disconnect(); chartInstances[id].inst.dispose(); delete chartInstances[id]; } }
 function deferChartInit(fn){ setTimeout(fn, 0); }
+// The headline follows the pointer: a readout above the chart (never under a
+// finger) shows every value at the year being looked at. The chart is also a
+// keyboard slider: arrows move one point, Page Up/Down move 5% of the way,
+// Home/End jump to the ends, and a screen reader hears the same words as the
+// slider's value text. (It is role="slider", not "img": an element that takes
+// arrow keys has to say so.) describe(i) returns [[label, value], ...] for
+// point i of `count`; `start` is the point shown when nothing is being looked at.
+function wireChartScrub(inst, chartId, count, describe, start, seriesIndex){
+  const dom = document.getElementById(chartId), ro = document.getElementById(chartId + '-ro');
+  if (!inst || !dom || !ro || count < 2) return;
+  let idx = start;
+  const paint = i => {
+    idx = i;
+    const parts = describe(i);
+    ro.textContent = '';
+    parts.forEach(([k, v]) => { const s = document.createElement('span'), b = document.createElement('b'); b.textContent = v; s.append(k + ' ', b); ro.append(s); });
+    dom.setAttribute('aria-valuenow', i);
+    dom.setAttribute('aria-valuetext', parts.map(([k, v]) => k + ' ' + v).join(', '));
+  };
+  dom.tabIndex = 0;
+  dom.setAttribute('role', 'slider');
+  dom.setAttribute('aria-valuemin', 0);
+  dom.setAttribute('aria-valuemax', count - 1);
+  paint(start);
+  inst.off('updateAxisPointer'); inst.getZr().off('globalout');
+  inst.on('updateAxisPointer', e => { const a = e.axesInfo && e.axesInfo[0]; if (a && typeof a.value === 'number' && a.value !== idx) paint(a.value); });
+  inst.getZr().on('globalout', () => { if (document.activeElement !== dom) paint(start); });
+  // Properties, not addEventListener: a re-render cannot stack a second handler.
+  dom.onkeydown = e => {
+    const big = Math.max(1, Math.round(count / 20));
+    const to = { ArrowRight: idx + 1, ArrowUp: idx + 1, ArrowLeft: idx - 1, ArrowDown: idx - 1, PageUp: idx + big, PageDown: idx - big, Home: 0, End: count - 1 }[e.key];
+    if (to == null) return;
+    e.preventDefault();
+    const i = Math.max(0, Math.min(count - 1, to));
+    inst.dispatchAction({ type: 'showTip', seriesIndex, dataIndex: i });
+    paint(i);
+  };
+  dom.onblur = () => { inst.dispatchAction({ type: 'hideTip' }); paint(start); };
+}
 
 /* =====================================================================
    ENGINE — the shared financial math now lives in goalden-engine.js
@@ -705,11 +819,33 @@ function valueTag(text, color, position){
     fontFamily:"'Spline Sans Mono',monospace", fontSize:10.5, fontWeight:600,
     backgroundColor:'rgba(255,255,255,.88)', padding:[2,5], borderRadius:3};
 }
-function mountainChart(rows, chartId) {
-  deferChartInit(()=>renderMountainChartOption(chartId, rows));
-  return `<div id="${chartId}" class="echart" style="height:200px"></div>`;
+// The plan you just left through a "what if I retired at ..." tap, drawn on "How the pot
+// grows" as a dotted line, so the tap shows what it changed. It is only true while every
+// other answer is unchanged, so it carries a signature of them and is ignored the moment any
+// differs: nothing has to clear it by hand in each of the places an answer can change.
+// Not saved: it only makes sense within one visit to the result.
+let planGhost = null;   // {retireAge, rows, end, sig, to}; `to` is the age the tap moved to
+function ghostSig() { return JSON.stringify([S.country, S.age, S.monthlyExpense, S.risk, S.existingSavings, S.postRetAlloc, S.acc]); }
+function rememberGhost() {
+  if (S.goalType !== 'retirement') { planGhost = null; return; }
+  const r = calcRetirement(), rows = yearlyMountainRows(r.accRows);
+  planGhost = r.alreadyMet || !rows.length ? null : { retireAge: S.retireAge, rows, end: rows[rows.length - 1].closeBal, sig: ghostSig() };
 }
-function renderMountainChartOption(chartId, rows){
+// `to` matters because the retire age is the one answer the signature leaves out: if the live canvas or the
+// advisor moves it again (55 to 58), the line is no longer "the plan you had a moment ago".
+function activeGhost() { return planGhost && S.goalType === 'retirement' && planGhost.retireAge !== S.retireAge && planGhost.to === S.retireAge && planGhost.sig === ghostSig() ? planGhost : null; }
+// The caption says what the dotted line is, from the same numbers the line's own label carries.
+function ghostCaption(c) {
+  const g = activeGhost();
+  return g ? ' The dotted line is the plan you had a moment ago, retiring at ' + g.retireAge + ', which builds to ' + c.compact(g.end) + '.' : '';
+}
+function mountainChart(rows, chartId, opts) {
+  const withGhost = !!(opts && opts.ghost);
+  deferChartInit(()=>renderMountainChartOption(chartId, rows, withGhost));
+  return `<div class="scrub-readout" id="${chartId}-ro" aria-hidden="true"></div>` +
+    `<div id="${chartId}" class="echart" style="height:200px" aria-label="How the pot grows, year by year. Use the left and right arrow keys to step through the years."></div>`;
+}
+function renderMountainChartOption(chartId, rows, withGhost){
   const c = cfg();
   const n=rows.length, last=rows[n-1]||{closeBal:0};
   const hasContrib = last.contributed!=null;
@@ -720,19 +856,44 @@ function renderMountainChartOption(chartId, rows){
   series.push({ name:'Grows to', type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#2557C7', width:1.5},
     areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(37,87,199,.85)'},{offset:1,color:'rgba(37,87,199,.08)'}]}}, z:2,
     markPoint:{symbol:'circle', symbolSize:6, silent:true, itemStyle:{color:'#2557C7'}, data:[{coord:[n-1,last.closeBal]}], label:valueTag('Grows to '+c.compact(last.closeBal), CHART_TEXT.blue)} });
-  initChart(chartId, {
+  const ghost = withGhost ? activeGhost() : null;
+  const N = Math.max(n, ghost ? ghost.rows.length : 0);
+  if (ghost) {
+    // Slate and dotted with no fill, so it reads as "the other plan" in greyscale too; the current plan stays blue, solid, filled.
+    const gl = ghost.rows.length;
+    series.push({ name:'Before', type:'line', data:ghost.rows.map(r=>r.closeBal), showSymbol:false, silent:true, z:3,
+      lineStyle:{color:'#56698A', width:1.8, type:[2,3]},
+      markPoint:{symbol:'circle', symbolSize:5, silent:true, itemStyle:{color:'#56698A'}, data:[{coord:[gl-1, ghost.end]}],
+        label:valueTag('Retire '+ghost.retireAge+': '+c.compact(ghost.end), CHART_TEXT.muted, gl-1 > N*0.7 ? 'left' : 'right')} });
+  }
+  const inst = initChart(chartId, {
     grid:{left:2,right:2,top:growthShare!=null?24:12,bottom:20,containLabel:false},
-    xAxis:{type:'category', data:rows.map((r,i)=>i+1), boundaryGap:false,
-      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, formatter:v=>'Year '+v, color:CHART_TEXT.muted, fontSize:10, alignMinLabel:'left', alignMaxLabel:'right'},
+    xAxis:{type:'category', data:Array.from({length:N}, (_, i)=>i+1), boundaryGap:false,
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===N-1, formatter:v=>'Year '+v, color:CHART_TEXT.muted, fontSize:10, alignMinLabel:'left', alignMaxLabel:'right'},
       axisLine:{show:false}, axisTick:{show:false}},
     yAxis:{type:'value', show:false, min:0},
     tooltip:{trigger:'axis', formatter(params){
-      const grown=params.find(p=>p.seriesName==='Grows to'), contrib=params.find(p=>p.seriesName==='Contributed');
-      return `Year ${grown.axisValueLabel}<br/>Grows to: ${c.compact(grown.value)}`+(contrib?`<br/>Contributed: ${c.compact(contrib.value)}`:'');
+      const grown=params.find(p=>p.seriesName==='Grows to'), contrib=params.find(p=>p.seriesName==='Contributed'), before=params.find(p=>p.seriesName==='Before');
+      if(!grown && !before) return '';
+      return `Year ${(grown||before).axisValueLabel}`+(grown?`<br/>Grows to: ${c.compact(grown.value)}`:'')+(contrib?`<br/>Contributed: ${c.compact(contrib.value)}`:'')+(before?`<br/>Retire ${ghost.retireAge}: ${c.compact(before.value)}`:'');
     }},
     graphic: growthShare!=null ? [{type:'text', left:2, top:2, style:{text:'Growth is '+growthShare+'% of the final pot', fill:CHART_TEXT.good, fontSize:11, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace"}}] : [],
     series,
   });
+  const describe = i => {
+    const parts = [['Year', i + 1]];
+    if (i < n) {
+      const r = rows[i];
+      parts.push(['pot', c.compact(r.closeBal)]);
+      if (hasContrib) {
+        parts.push(['paid in', c.compact(r.contributed)]);
+        parts.push(['from growth', (r.closeBal > 0 ? Math.round(Math.max(0, r.closeBal - r.contributed) / r.closeBal * 100) : 0) + '%']);
+      }
+    }
+    if (ghost && i < ghost.rows.length) parts.push(['Retire ' + ghost.retireAge, c.compact(ghost.rows[i].closeBal)]);
+    return parts;
+  };
+  wireChartScrub(inst, chartId, N, describe, n - 1, series.findIndex(s => s.name === 'Grows to'));
 }
 
 // Part-to-whole as one labelled strip. Replaces the donut + legend, which the
@@ -830,8 +991,8 @@ function renderPotChartOption(chartId, rows, c){
   const startVal = rows[0].openBal;
   const endVal = rows[n-1].closeBal;
   const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal));
-  const endLabelColor = prematureDepletion ? '#E8977A' : '#8FC79E';
-  const endTextColor = prematureDepletion ? CHART_TEXT.bad : CHART_TEXT.good; // AA text; the dot keeps the pastel
+  const endLabelColor = prematureDepletion ? '#9C4A2C' : '#1F8A70';
+  const endTextColor = prematureDepletion ? CHART_TEXT.bad : CHART_TEXT.good; // AA text tokens; the dot wears the chart colour
   initChart(chartId, {
     grid:{left:2,right:2,top:26,bottom:20,containLabel:false},
     xAxis:{type:'category', data:rows.map((r,i)=>'Yr '+(r.year!==undefined?r.year:i+1)), boundaryGap:false,
@@ -844,8 +1005,8 @@ function renderPotChartOption(chartId, rows, c){
     }},
     graphic:[{type:'text', left:2, top:2, style:{text:'Starts at '+fmt(startVal), fill:CHART_TEXT.muted, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace"}}],
     series:[
-      { type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#8FC79E', width:1.5},
-        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(61,122,79,.7)'},{offset:1,color:'rgba(61,122,79,.05)'}]}},
+      { type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#1F8A70', width:1.5},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(31,138,112,.5)'},{offset:1,color:'rgba(31,138,112,.05)'}]}},
         markPoint:{symbol:'circle', symbolSize:8,
           data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
           label:{show:true, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endTextColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:10.5}} },
@@ -875,11 +1036,11 @@ function renderRaceChartOption(chartId, marketPath, goldPath, fdPath){
       return `Year ${m.axisValueLabel}<br/>Market: ${c.compact(m.value)}<br/>Gold: ${c.compact(g.value)}<br/>Bank FD: ${c.compact(f.value)}`;
     }},
     series:[
-      { name:'Bank FD', type:'line', data:fdPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#E8977A', width:1.5, type:'dashed'}, z:1 },
-      { name:'Gold', type:'line', data:goldPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#2557C7', width:1.5, type:'dashed'}, z:2 },
-      { name:'Market', type:'line', data:marketPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#8FC79E', width:2.25},
-        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(143,199,158,.35)'},{offset:1,color:'rgba(143,199,158,0)'}]}}, z:3,
-        markPoint:{symbol:'circle', symbolSize:7, itemStyle:{color:'#8FC79E'}, label:{show:false}, data:[{coord:[marketPath.length-1, marketPath[marketPath.length-1].v]}]} },
+      { name:'Bank FD', type:'line', data:fdPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#B8740F', width:1.75, type:[8,4]}, z:1 },
+      { name:'Gold', type:'line', data:goldPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#2557C7', width:1.75}, z:2 },
+      { name:'Market', type:'line', data:marketPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#1F8A70', width:2.5},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(31,138,112,.28)'},{offset:1,color:'rgba(31,138,112,0)'}]}}, z:3,
+        markPoint:{symbol:'circle', symbolSize:7, itemStyle:{color:'#1F8A70'}, label:{show:false}, data:[{coord:[marketPath.length-1, marketPath[marketPath.length-1].v]}]} },
     ],
   });
 }
@@ -893,9 +1054,11 @@ function timeMachineChart(path, chartId, h) {
 function renderTimeMachineChartOption(chartId, path){
   const c = cfg();
   const finalUp = path[path.length-1].v >= path[0].v;
-  const lineColor = finalUp ? '#8FC79E' : '#E8977A';
-  const fillTop = finalUp ? 'rgba(143,199,158,.4)' : 'rgba(232,151,122,.4)';
-  const fillBot = finalUp ? 'rgba(143,199,158,0)' : 'rgba(232,151,122,0)';
+  // Green for a window that ended up, ochre for one that ended down. Ending down is
+  // a fact about history, not a fired warning, so it does not get the warning red.
+  const lineColor = finalUp ? '#1F8A70' : '#B8740F';
+  const fillTop = finalUp ? 'rgba(31,138,112,.35)' : 'rgba(184,116,15,.35)';
+  const fillBot = finalUp ? 'rgba(31,138,112,0)' : 'rgba(184,116,15,0)';
   initChart(chartId, {
     grid:{left:2,right:2,top:6,bottom:2,containLabel:false},
     xAxis:{type:'category', data:path.map((pt,i)=>i+1), show:false, boundaryGap:false},
@@ -934,7 +1097,7 @@ function riskShrinkPctAt(series, selectedYears){
 function riskShrinkMarkerOption(selectedYears, pct){
   return { id:'risk',
     markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(20,40,63,.3)', type:'dashed'}, data:[{xAxis:selectedYears}]},
-    markPoint:{symbol:'circle', symbolSize:9, itemStyle:{color:'#D97757', borderColor:'var(--ink)', borderWidth:1.5}, label:{show:false}, data:[{coord:[selectedYears, pct]}]},
+    markPoint:{symbol:'circle', symbolSize:9, itemStyle:{color:'#B8740F', borderColor:'var(--ink)', borderWidth:1.5}, label:{show:false}, data:[{coord:[selectedYears, pct]}]},
   };
 }
 function riskShrinkChart(series, maxYears, chartId, h, selectedYears) {
@@ -953,8 +1116,8 @@ function renderRiskShrinkChartOption(chartId, series, maxYears, selectedYears){
       const p=params.find(pp=>pp.seriesId==='risk')||params[0];
       return `${p.value[0]}-year holds<br/>${p.value[1].toFixed(0)}% ended down`;
     }},
-    series:[Object.assign({ id:'risk', type:'line', data:points, showSymbol:false, lineStyle:{color:'#D97757', width:2},
-      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(217,119,87,.35)'},{offset:1,color:'rgba(217,119,87,0)'}]}} },
+    series:[Object.assign({ id:'risk', type:'line', data:points, showSymbol:false, lineStyle:{color:'#B8740F', width:2},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(184,116,15,.3)'},{offset:1,color:'rgba(184,116,15,0)'}]}} },
       riskShrinkMarkerOption(selectedYears, selPct))],
   });
 }
@@ -1190,13 +1353,13 @@ function sAge() {
   return '<div class="q-eyebrow">Question 1</div>' +
     '<div class="q-title">How old are you, and when do you want to stop working?</div>' +
     '<div class="q-body">' +
-    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="30" value="'+(S.age||'')+'"><span class="num-suffix">years old today</span></div>' +
+    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="30" aria-label="Your age today" value="'+(S.age||'')+'"><span class="num-suffix">years old today</span></div>' +
     valueSlider('inpSlider', S.age||30, 18, 70, 1, '18', '70') +
     '<div class="chips-label">Or pick a common age</div>' +
     '<div class="chips">'+c.ageChips.map(a=>'<div class="chip'+(S.age===a?' selected':'')+'" data-age="'+a+'">'+a+'</div>').join('')+'</div>' +
     '<div class="inline-error" id="err"></div>' +
     '<div class="optional-field"><div class="optional-label">When do you want to stop working?</div>' +
-    '<div class="num-wrap"><input class="num-input" id="inp2" type="number" inputmode="numeric" placeholder="60" value="'+(S.retireAge||'')+'"><span class="num-suffix">years old</span></div>' +
+    '<div class="num-wrap"><input class="num-input" id="inp2" type="number" inputmode="numeric" placeholder="60" aria-label="Age you want to stop working" value="'+(S.retireAge||'')+'"><span class="num-suffix">years old</span></div>' +
     valueSlider('inpSlider2', S.retireAge||60, retMin, 85, 1, retMin, '85') +
     '<div class="chips-label">Or pick a common age</div>' +
     '<div class="chips">'+c.retireChips.map(a=>'<div class="chip'+(S.retireAge===a?' selected':'')+'" data-retire="'+a+'">'+a+'</div>').join('')+'</div>' +
@@ -1249,7 +1412,7 @@ function sEduYears() {
   return '<div class="q-eyebrow">Education fund · step 2</div>' +
     '<div class="q-title">How many years until college starts, and how long is the course?</div>' +
     '<div class="q-body">' +
-    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="10" value="'+(S.yearsToCollege||'')+'"><span class="num-suffix">years until it starts</span></div>' +
+    '<div class="num-wrap"><input class="num-input" id="inp" type="number" inputmode="numeric" placeholder="10" aria-label="Years until college starts" value="'+(S.yearsToCollege||'')+'"><span class="num-suffix">years until it starts</span></div>' +
     valueSlider('inpSlider', S.yearsToCollege||10, 1, 22, 1, '1', '22') +
     '<div class="chips-label">Or pick a common span</div>' +
     '<div class="chips">'+c.collegeChips.map(a=>'<div class="chip'+(S.yearsToCollege===a?' selected':'')+'" data-cy="'+a+'">'+a+' yrs</div>').join('')+'</div>' +
@@ -1547,11 +1710,11 @@ function sCase() {
     <h4>The race: ${c.compact(raceAmt)}, three destinations</h4>
     <div class="case-cap">The same lump sum, placed in ${firstYear} and left completely untouched for ${nYears} years, through every real ${name} up-year and down-year in between.</div>
     ${raceChart(racePath, goldPath, fdPath, 'case-race')}
-    <div class="race-legend"><span><i style="background:#8FC79E"></i>${name}</span><span><i style="background:#2557C7"></i>Gold</span><span><i style="background:#E8977A"></i>Bank FD</span></div>
+    <div class="race-legend"><span><i style="border-top:3px solid #1F8A70"></i>${name}</span><span><i style="border-top:2px solid #2557C7"></i>Gold</span><span><i style="border-top:2px dashed #B8740F"></i>Bank FD</span></div>
     <div class="race-stats">
       <div class="race-stat"><div class="rs-label">${name}</div><div class="rs-val" style="color:#256F55">${c.compact(marketFinal)}</div></div>
       <div class="race-stat"><div class="rs-label">GOLD</div><div class="rs-val" style="color:var(--gold)">${c.compact(goldFinal)}</div></div>
-      <div class="race-stat"><div class="rs-label">BANK FD</div><div class="rs-val" style="color:#9C4A2C">${c.compact(fdFinal)}</div></div>
+      <div class="race-stat"><div class="rs-label">BANK FD</div><div class="rs-val" style="color:#8A5608">${c.compact(fdFinal)}</div></div>
     </div>
     <div class="case-cap" style="margin-bottom:0">${firstYear} to ${lastYear}, ${nYears} years. ${name} figure uses the real annual return each year, compounded, not an average smoothed into a straight line ${infoIconD1('Source: '+(S.country==='US'?'a compiled S&P 500 annual-return series, 1928-2015 price return, 2016-2024 total return with dividends reinvested.':'a compiled Sensex fiscal-year (April-April) return series, freefincal.com, 1979-80 through 2022-23, sourced from BSE closing values.'))}. Gold: ${(GOLD_RATE[S.country]*100).toFixed(1)}%/yr, ${S.country==='US'?'NYU Stern (Damodaran) historical dataset, 1928-2024.':'RBI Handbook of Statistics gold price data, 42-year CAGR to April 2026.'} FD: ${(c.d.fdRate*100).toFixed(1)}%/yr, a typical current multi-year bank rate held constant for illustration, which is generous to the FD since real FD rates have varied a lot across these decades.</div>
   </div>
@@ -1636,8 +1799,8 @@ function renderHoldResult(years){
   const pct = Math.round(100*losing/w.length);
   const worst = worstWindow(series, years);
   return `<div class="holdbar-track">
-    <div class="holdbar-seg" style="width:${100-pct}%;background:#5FA875"></div>
-    <div class="holdbar-seg" style="width:${pct}%;background:#D97757"></div>
+    <div class="holdbar-seg" style="width:${100-pct}%;background:#1F8A70"></div>
+    <div class="holdbar-seg" style="width:${pct}%;background:#B8740F"></div>
   </div>
   <div class="holdbar-legend"><span>${100-pct}% ended with more money</span><span>${pct}% ended with less</span></div>
   <div class="case-callout ${pct===0?'good':''}" style="margin-top:12px">
@@ -1674,17 +1837,7 @@ function attachCaseHandlers(){
   }
   const backBtn2 = document.getElementById('caseBackBtn');
   if (backBtn2) backBtn2.addEventListener('click', () => { S.si = flow().indexOf('results'); render(); });
-  document.querySelectorAll('.term-i').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      document.querySelectorAll('.term-i-tip').forEach(t=>t.remove());
-      const tip = document.createElement('div');
-      tip.className = 'term-i-tip';
-      tip.textContent = el.dataset.def;
-      el.appendChild(tip);
-    });
-  });
-  document.addEventListener('click', () => document.querySelectorAll('.term-i-tip').forEach(t=>t.remove()), {once:true});
+  // The "i" tips (.term-i) open from gtip.js, which delegates from document: nothing to wire per render.
 }
 
 
@@ -1817,6 +1970,61 @@ function retirementAccountsHtml(r, c) {
     '</form></div>';
 }
 
+/* Sticky summary and section jump bar. The retirement result is long; once the
+   big number scrolls away, a slim bar keeps "pot by age · monthly SIP" in view,
+   with a way back up (and to the Adjust panel, once the live canvas exists).
+   Inside the details panel, a row of section buttons jumps to each card. Both are
+   built from what is on screen, so cards added or renamed later are picked up
+   without changes here. */
+function sumBarHtml(r, c) {
+  // Non-breaking spaces inside each half, so on a phone the only place the line can wrap is at the dot: both numbers stay whole.
+  const txt = c.compact(r.corpus) + '\u00a0by\u00a0' + S.retireAge + ' · ' + (r.alreadyMet ? 'no\u00a0SIP\u00a0needed' : c.fmt(Math.round(r.sip)) + '/mo');
+  // A zero-height sticky wrapper: showing or hiding the bar never moves the page.
+  return '<div class="sum-wrap"><div class="sum-bar" id="sumBar" hidden><span class="sum-txt" aria-hidden="true">' + txt + '</span>' +
+    '<span class="sum-btns"><button type="button" class="sum-btn" data-sum="adjust" hidden>Adjust</button><button type="button" class="sum-btn" data-sum="top">Back to top</button></span></div></div>';
+}
+let resultNavObserver = null;
+const JUMP_LABELS = [[/grows/i, 'Growth'], [/spent/i, 'Spending'], [/fixed deposit/i, 'vs FD'], [/would sit|\bmix\b/i, 'Mix'], [/realistic/i, 'Realistic?'], [/allowance|tax/i, 'Tax'], [/different age/i, 'Other ages'], [/waited/i, 'Waiting']];
+function wireResultNav() {
+  const sc = document.querySelector('#stage .result-scroll'), bar = document.getElementById('sumBar'), hero = document.querySelector('#stage .hero-number');
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (sc && bar && hero && 'IntersectionObserver' in window) {
+    if (resultNavObserver) resultNavObserver.disconnect();   // the result is re-rendered by every what-if tap
+    resultNavObserver = new IntersectionObserver(([e]) => { bar.hidden = e.isIntersecting || e.boundingClientRect.top > e.rootBounds.top; }, { root: sc, threshold: 0 });
+    resultNavObserver.observe(hero);
+    // "Adjust" opens the live canvas's panel once that exists (looked up on click: it is built after this runs).
+    const adj = bar.querySelector('[data-sum="adjust"]');
+    if (adj && typeof liveCanvasSync === 'function') {
+      adj.hidden = false;
+      adj.addEventListener('click', () => {
+        const lcBar = document.querySelector('#liveCanvas .lc-bar');
+        if (!lcBar) return;
+        if (lcBar.getAttribute('aria-expanded') !== 'true') lcBar.click();
+        lcBar.focus();
+      });
+    }
+    bar.querySelector('[data-sum="top"]').addEventListener('click', () => { sc.scrollTo({ top: 0, behavior: still ? 'auto' : 'smooth' }); hero.setAttribute('tabindex', '-1'); hero.focus({ preventScroll: true }); });
+  }
+  const inner = document.querySelector('#bp .assump-inner');
+  if (!inner) return;
+  const titles = [...inner.querySelectorAll('.chart-title, .delay-title')];
+  if (titles.length < 3) return;
+  const nav = document.createElement('nav');
+  nav.className = 'jump-bar'; nav.setAttribute('aria-label', 'Jump to a section');
+  titles.forEach((t) => {
+    const text = t.textContent.trim(), hit = JUMP_LABELS.find(([re]) => re.test(text));
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = hit ? hit[1] : text.split(' ').slice(0, 3).join(' ');
+    b.setAttribute('aria-label', 'Jump to: ' + text);
+    b.addEventListener('click', () => {
+      const card = t.closest('.chart-card, .delay-card') || t;
+      card.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+      t.setAttribute('tabindex', '-1'); t.focus({ preventScroll: true });
+    });
+    nav.append(b);
+  });
+  inner.prepend(nav);
+}
 function sResultsRetirement() {
   const c = cfg(), r = calcRetirement();
   const rLabel = RISK.find(x => x.id === S.risk).title.toLowerCase();
@@ -1836,6 +2044,7 @@ function sResultsRetirement() {
       (o => o ? '<div class="as" style="margin-top:8px">Or start at <b>' + c.fmt(Math.round(o.start)) + '/month</b> and raise it 10% every year: the same pot, with ' + c.fmt(Math.round(o.last)) + '/month in the last year. ' + stepUpPaidText(o, c) + ' That suits you if your pay rises at least that fast.</div>' : '')(stepUpOffer(r.sip, r.yrs, r.preRate)) + '</div>';
   return '<div class="result-scroll">' + advisorChipsHTML() + personaNoteHtml() +
     '<div class="result-intro">Good news: this is a solvable problem. Here is exactly what it takes.</div>' +
+    sumBarHtml(r, c) +
     '<div class="edit-row">' +
     '<div class="edit-chip" data-jump="age">Age '+S.age+'</div>' +
     '<div class="edit-chip" data-jump="age">Retire '+S.retireAge+'</div>' +
@@ -1851,8 +2060,8 @@ function sResultsRetirement() {
     '<div class="assump-toggle detail-toggle" id="bt">'+caretSvg()+'See how we got this number: charts, allocation, comparisons</div>' +
     '<div class="assump-panel detail-panel" id="bp"><div class="assump-inner">' +
     (noBuild ? '' : '<div class="chart-card"><div class="chart-title">How the pot grows</div>' +
-    '<div class="chart-caption">The blue area is growth your money earned on its own. The pale area underneath is what you actually paid in.' + accBuildNote(r, c) + '</div>' +
-    mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>') +
+    '<div class="chart-caption">The blue area is growth your money earned on its own. The pale area underneath is what you actually paid in.' + accBuildNote(r, c) + ghostCaption(c) + '</div>' +
+    mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain', {ghost:true})+'</div>') +
     '<div class="chart-card"><div class="chart-title">How the pot gets spent</div>' +
     '<div class="chart-caption">Built to last until age '+r.d.lifeExp+'</div>' +
     potChart(r.drawRows, c, 'chart-secondary')+'</div>' +
@@ -1877,7 +2086,7 @@ function sResultsRetirement() {
     '<div class="assump-panel" id="ap"><div class="assump-inner">'+assumpRetirement(r)+'</div></div>' +
     labStressCardHtml(r) +
     '<div class="case-cta"><div class="cta-eyebrow">Before you close this tab</div><div class="cta-q">Why should you trust markets with this money at all, instead of a Fixed Deposit?</div><button id="caseBtn">Show me the actual numbers</button></div>' +
-    '<div class="restart-row"><button id="rb">Start over</button></div>' +
+    '<div class="restart-row"><button id="shareBtn" type="button">Copy a link to this plan</button> <button id="rb">Start over</button><div class="share-note" id="shareNote" aria-live="polite"></div></div>' +
     '</div>';
 }
 
@@ -1927,7 +2136,7 @@ function sResultsEducation() {
     '<div class="assump-toggle" id="at">What assumptions did we use?</div>' +
     '<div class="assump-panel" id="ap"><div class="assump-inner">'+assumpEducation(r)+'</div></div>' +
     '<div class="case-cta"><div class="cta-eyebrow">Before you close this tab</div><div class="cta-q">Why should you trust markets with this money at all, instead of a Fixed Deposit?</div><button id="caseBtn">Show me the actual numbers</button></div>' +
-    '<div class="restart-row"><button id="rb">Start over</button></div>' +
+    '<div class="restart-row"><button id="shareBtn" type="button">Copy a link to this plan</button> <button id="rb">Start over</button><div class="share-note" id="shareNote" aria-live="polite"></div></div>' +
     '</div>';
 }
 
@@ -1978,7 +2187,7 @@ function sResultsGeneric() {
     '<div class="assump-toggle" id="at">What assumptions did we use?</div>' +
     '<div class="assump-panel" id="ap"><div class="assump-inner">'+assumpGeneric(r)+'</div></div>' +
     '<div class="case-cta"><div class="cta-eyebrow">Before you close this tab</div><div class="cta-q">Why should you trust markets with this money at all, instead of a Fixed Deposit?</div><button id="caseBtn">Show me the actual numbers</button></div>' +
-    '<div class="restart-row"><button id="rb">Start over</button></div>' +
+    '<div class="restart-row"><button id="shareBtn" type="button">Copy a link to this plan</button> <button id="rb">Start over</button><div class="share-note" id="shareNote" aria-live="polite"></div></div>' +
     '</div>';
 }
 
@@ -2053,6 +2262,7 @@ function go(delta) {
 // Reached results, want to fix one answer without re-walking every question
 // after it: jump straight to that screen, keeping every other answer intact.
 function jumpEdit(screenName) {
+  planGhost = null;
   S.quickEdit = true;
   S.si = flow().indexOf(screenName);
   render();
@@ -2337,12 +2547,113 @@ function syncHistory() {
   try { history.pushState({ si: S.si }, '', hash); } catch (e) {}
 }
 
+/* ---- Keyboard and screen-reader access -------------------------------------
+   Most choices here (country, goal, risk cards, quick-pick chips, the edit chips,
+   the "See how we got this number" toggles) are <div>s with click handlers, so
+   Tab skipped them and Enter/Space did nothing. Rewriting ~25 templates as
+   <button>s would restyle them all, so instead: after each render every one of
+   them is given tabindex, role and state (enhancePressables), one key handler on
+   the stage presses them on Enter/Space, and focus survives the re-render that
+   most picks cause (a re-render throws the focused element away). */
+const PRESSABLE = '.country-card,.goal-card,.gen-card,.risk-card,.chip,.edit-chip,.assump-toggle,[data-retire-preview]';
+// Choose-one cards re-render on a pick, so aria-pressed is true from the render.
+// The quick-pick chips only fill a box and never re-render, so they carry no
+// pressed state (it would go stale the moment one was tapped).
+const CHOICE_CARD = '.country-card,.goal-card,.gen-card,.risk-card';
+const SCREEN_HEADING = '.q-title,.hero-label,.case-title';
+let shownScreen = null;   // the screen the last render() drew; null before the first one
+function togglePanelOf(t) {
+  const panel = Object.keys(RESULT_PANELS).find(p => RESULT_PANELS[p] === t.id);
+  return panel ? document.getElementById(panel) : null;
+}
+function syncExpanded(t) {
+  const p = togglePanelOf(t);
+  if (p) { t.setAttribute('aria-expanded', p.classList.contains('open')); t.setAttribute('aria-controls', p.id); }
+}
+function enhancePressables(root) {
+  root.querySelectorAll(PRESSABLE).forEach(el => {
+    if (el.tagName === 'BUTTON') return;
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    if (el.matches(CHOICE_CARD)) el.setAttribute('aria-pressed', el.classList.contains('selected'));
+    if (el.matches('.assump-toggle')) syncExpanded(el);
+  });
+  // A bare "30" chip means nothing read out alone, so each row of chips says what it picks.
+  root.querySelectorAll('.chips-label + .chips').forEach(g => {
+    if (g.hasAttribute('role')) return;
+    g.setAttribute('role', 'group'); g.setAttribute('aria-label', g.previousElementSibling.textContent.trim());
+  });
+}
+// A selector that finds "the same choice" again after a re-render: its id, or
+// all of its data-* attributes together. null when that would match more than one.
+function focusKeyOf(el) {
+  if (!el || el === document.body || !stage.contains(el)) return null;
+  let sel = null;
+  if (el.id) sel = '#' + CSS.escape(el.id);
+  else {
+    // data-gtip is added by gtip.js after the element exists, so a key that included it would never match the re-rendered copy.
+    const attrs = [...el.attributes].filter(a => a.name.startsWith('data-') && a.name !== 'data-gtip');
+    if (attrs.length) sel = attrs.map(a => '[' + a.name + '="' + String(a.value).replace(/["\\]/g, '\\$&') + '"]').join('');
+  }
+  return sel && stage.querySelectorAll(sel).length === 1 ? sel : null;
+}
+// A name for every slider and number box, from the text already beside it, and
+// a spoken value for sliders whose label carries a bold readout. The nearest
+// ancestor with a label-like child wins; a slider shares its number box's name.
+const FIELD_LABEL = ':scope > label, :scope > .adv-label, :scope > .optional-label, :scope > .q-title, :scope > .case-slider-label';
+function fieldLabelOf(el) {
+  for (let n = el.parentElement; n && n !== stage.parentElement; n = n.parentElement) {
+    const l = n.querySelector(FIELD_LABEL);
+    if (l) return l;
+  }
+  return null;
+}
+function nameFields(root) {
+  root.querySelectorAll('input[type=number], input[type=range]').forEach(el => {
+    const lab = fieldLabelOf(el);
+    syncValueText(el, lab);
+    if ((el.labels && el.labels.length) || el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')) return;
+    const vs = el.closest('.value-slider'), twin = vs && vs.previousElementSibling && vs.previousElementSibling.querySelector('input[type=number]');
+    let text = twin && twin.getAttribute('aria-label') || '';
+    if (!text && lab) {
+      const copy = lab.cloneNode(true);
+      copy.querySelectorAll('b, .info-icon, .term-i').forEach(x => x.remove());
+      text = copy.textContent.replace(/\s+/g, ' ').trim();
+    }
+    if (text) el.setAttribute('aria-label', text);
+  });
+}
+// A slider whose label carries a bold readout ("Equity kept at this stage 60%")
+// speaks that instead of the bare number.
+function syncValueText(el, lab) {
+  const b = el.type === 'range' && (lab || fieldLabelOf(el)) && (lab || fieldLabelOf(el)).querySelector('b');
+  if (b) el.setAttribute('aria-valuetext', b.textContent.trim());
+}
+stage.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && !e.repeat && e.target.matches(PRESSABLE) && e.target.tagName !== 'BUTTON') {
+    e.preventDefault(); e.target.click();
+  }
+});
+// Toggles don't re-render; their own handler has already run by the time a click
+// reaches the stage, so aria-expanded can be read off the panel's state.
+stage.addEventListener('click', e => { const t = e.target.closest('.assump-toggle'); if (t) syncExpanded(t); });
+stage.addEventListener('input', e => { if (e.target.type === 'range') syncValueText(e.target); });
+
 // opts.quiet: an in-place update (a what-if tap on the results screen), not a
 // move to another screen. It skips the 0.3s slide-in, which on a screen the
 // person is already looking at reads as the page being thrown away and rebuilt.
 function render(opts) {
   const quiet = !!(opts && opts.quiet === true);
+  chartQuiet = quiet;
   const f = flow(), screen = f[S.si];
+  // Focus inside the old screen is about to be thrown away with it. (Focus in the
+  // advisor panel, or anywhere outside the stage, is left alone.)
+  const prevFocus = document.activeElement;
+  const hadFocus = !prevFocus || prevFocus === document.body || stage.contains(prevFocus);
+  const keepKey = focusKeyOf(prevFocus);
+  const screenChanged = shownScreen !== null && shownScreen !== screen;
+  // A question screen that re-renders on a pick would start its scroller at the top again (see goalden-door2.html).
+  const oldBody = stage.querySelector('.q-body'), keepScroll = !screenChanged && oldBody ? oldBody.scrollTop : 0;
   let html = '';
   if (screen==='country')      html = sCountry();
   else if (screen==='goal')    html = sGoal();
@@ -2375,8 +2686,212 @@ function render(opts) {
   if (screen==='case') window.scrollTo(0,0);
   renderProgress();
   attach(screen);
+  enhancePressables(stage);
+  nameFields(stage);
+  // Made focusable now, not a microtask later, so a focused "i" or term can be given focus back below.
+  if (window.gtipEnhance) gtipEnhance(stage);
+  if (keepScroll) { const nb = wrap.querySelector('.q-body'); if (nb) nb.scrollTop = keepScroll; }
+  // After attach(), so a screen's own focus handling (the what-if row, the EPF
+  // form) wins; this only fills in when focus was simply lost.
+  if (hadFocus && (!document.activeElement || document.activeElement === document.body)) {
+    if (screenChanged) {
+      // A new screen: land on its heading, not on the Continue button that was just
+      // pressed (which has the same id on the next screen), so the next Tab starts
+      // at the top of what is new and a screen reader says what the question is.
+      const h = wrap.querySelector(SCREEN_HEADING);
+      if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); }
+    } else if (keepKey) {
+      const el = stage.querySelector(keepKey);
+      if (el) el.focus({ preventScroll: true });
+    }
+  }
+  shownScreen = screen;
   persistState();
   syncHistory();
+  // The charts are drawn from callbacks queued above (deferChartInit); this one is queued after them.
+  setTimeout(() => { chartQuiet = false; }, 0);
+  liveCanvasSync(screen);
+}
+
+/* =====================================================================
+   LIVE RESULT CANVAS
+   Wizard first, live after. The questions stay one per screen for a first
+   visit; once the retirement result is up, a docked "Adjust" panel lets you
+   change any answer and watch the plan respond. The panel lives OUTSIDE
+   #stage, so re-rendering the result never interrupts a drag, and no focus
+   bookkeeping is needed. The result re-renders quietly (no slide-in) through
+   refreshResultsInPlace, which keeps the scroll position and any open panels;
+   the two big numbers then roll to their new values.
+   ===================================================================== */
+let lcEl = null, lcTimer = null, lcStart = null;
+const LC_KEYS = ['age', 'retireAge', 'monthlyExpense', 'existingSavings', 'risk'];
+function lcFields() {
+  const c = cfg(), b = sliderBounds(c.expChips), bs = sliderBounds(c.amtChips, 6, 0);
+  return [
+    { k:'age', label:'Age today', min:18, max:70, step:1 },
+    { k:'retireAge', label:'Retire at', min:35, max:85, step:1 },
+    { k:'monthlyExpense', label:'Spend a month', min:Math.max(1, b.min), max:b.max, step:b.step },
+    { k:'existingSavings', label:'Already saved', min:0, max:bs.max, step:bs.step },
+  ];
+}
+// What "where you started" means: the five answers on this panel plus the two
+// things the result's own controls can change, so Undo really goes back to the
+// plan that was first on screen.
+function lcSnap() {
+  const snap = {};
+  LC_KEYS.forEach(k => { snap[k] = S[k]; });
+  snap.acc = S.acc ? JSON.parse(JSON.stringify(S.acc)) : null;
+  snap.postRetAlloc = S.postRetAlloc ? Object.assign({}, S.postRetAlloc) : null;
+  return snap;
+}
+const lcSip = r => r.alreadyMet ? 0 : r.sip;
+function lcSummary() {
+  const c = cfg(), r = RISK.find(x => x.id === S.risk);
+  return 'Age ' + S.age + ' · retire ' + S.retireAge + ' · ' + c.compact(S.monthlyExpense) + '/mo · ' + (r ? r.id[0].toUpperCase() + r.id.slice(1) : '');
+}
+function lcOutputHtml() {
+  const c = cfg(), r = calcRetirement(), sip = lcSip(r);
+  const now = r.alreadyMet ? 'No SIP needed' : '<b>' + c.fmt(Math.round(sip)) + '</b> a month';
+  let delta = '';
+  if (lcStart && Math.round(sip) !== Math.round(lcStart.sip)) {
+    const move = lcStart.sip === 0 ? '▲ was no SIP needed at the start'
+      : sip === 0 ? '▼ was ' + c.fmt(Math.round(lcStart.sip)) + '/mo at the start'
+      : (sip > lcStart.sip ? '▲ ' : '▼ ') + c.fmt(Math.abs(Math.round(sip - lcStart.sip))) + '/mo vs where you started';
+    delta = ' · <span class="lc-delta">' + move + '</span> <button type="button" class="lc-undo" data-lc-undo>Undo changes</button>';
+  }
+  return 'Now: ' + now + ' · pot ' + c.compact(r.corpus) + ' by ' + S.retireAge + delta;
+}
+function lcSetOpen(open) {
+  const bar = lcEl.querySelector('.lc-bar'), body = lcEl.querySelector('.lc-body');
+  bar.setAttribute('aria-expanded', open ? 'true' : 'false'); body.hidden = !open;
+  lcLift();
+}
+function lcBuild() {
+  lcEl = document.createElement('section');
+  lcEl.className = 'lc';
+  lcEl.id = 'liveCanvas';
+  lcEl.dataset.country = S.country;   // the slider ranges and currency are baked in below; a new country needs a new panel
+  lcEl.setAttribute('aria-label', 'Adjust your plan');
+  lcEl.innerHTML = '<button type="button" class="lc-bar" aria-expanded="false" aria-controls="lcBody"><span class="lc-sum"></span><span class="lc-cta">Adjust</span></button>' +
+    '<div class="lc-body" id="lcBody" hidden>' +
+    '<p class="lc-out" aria-live="polite"></p>' +
+    lcFields().map(f => '<div class="lc-row"><label for="lc-' + f.k + '">' + f.label + '</label>' +
+      '<input type="range" id="lc-' + f.k + '" data-lc="' + f.k + '" min="' + f.min + '" max="' + f.max + '" step="' + f.step + '">' +
+      '<input type="number" class="lc-num" data-lc-num="' + f.k + '" step="' + f.step + '" inputmode="numeric" aria-label="' + f.label + ', exact"></div>').join('') +
+    '<div class="lc-row"><span class="lc-label" id="lcRiskLabel">Ups and downs</span><div class="lc-risk" role="group" aria-labelledby="lcRiskLabel">' +
+    RISK.map(r => '<button type="button" data-lc-risk="' + r.id + '" aria-pressed="false">' + r.id[0].toUpperCase() + r.id.slice(1) + '</button>').join('') + '</div></div>' +
+    '</div>';
+  stage.after(lcEl);
+  const bar = lcEl.querySelector('.lc-bar');
+  bar.addEventListener('click', () => lcSetOpen(bar.getAttribute('aria-expanded') !== 'true'));
+  lcEl.addEventListener('input', e => {
+    const k = e.target.dataset.lc;
+    if (k) lcSet(k, Number(e.target.value));
+  });
+  lcEl.addEventListener('change', e => {
+    const k = e.target.dataset.lcNum;
+    if (!k || e.target.value === '') return;
+    lcSet(k, Number(e.target.value));
+    e.target.value = S[k];   // show the value that was kept, not the one that was typed (they differ when it was clamped)
+  });
+  lcEl.addEventListener('click', e => {
+    const risk = e.target.closest('[data-lc-risk]');
+    if (risk) { S.risk = risk.dataset.lcRisk; lcApply(); return; }
+    if (e.target.closest('[data-lc-undo]') && lcStart) {
+      Object.assign(S, lcStart.snap);
+      lcApply();
+      lcEl.querySelector('.lc-bar').focus();   // the Undo button has just been replaced; keep focus somewhere real
+    }
+  });
+  lcEl.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && bar.getAttribute('aria-expanded') === 'true') { lcSetOpen(false); bar.focus(); }
+  });
+}
+// One rule set for every way in (drag or type), and it is the advisor's and the
+// share link's: ADVISOR_FIELDS. Typed values may go past the slider's ends,
+// within those limits; retire stays after age.
+function lcSet(k, v) {
+  const spec = ADVISOR_FIELDS.find(f => f.name === k);
+  if (!spec || !isFinite(v)) return;
+  S[k] = Math.round(Math.max(k === 'monthlyExpense' ? 1 : spec.min, Math.min(spec.max, v)));
+  if ((k === 'age' || k === 'retireAge') && S.retireAge <= S.age) S.retireAge = Math.min(85, S.age + 1);
+  lcFill();
+  clearTimeout(lcTimer);
+  lcTimer = setTimeout(lcApply, 120);
+}
+// Write S into the panel, except into the control the person is using right now.
+function lcFill() {
+  if (!lcEl) return;
+  lcEl.querySelector('.lc-sum').textContent = lcSummary();
+  lcFields().forEach(f => {
+    const sl = lcEl.querySelector('[data-lc="' + f.k + '"]'), num = lcEl.querySelector('[data-lc-num="' + f.k + '"]');
+    if (f.k === 'retireAge') sl.min = Math.max(35, S.age + 1);
+    if (document.activeElement !== sl) sl.value = Math.min(f.max, Math.max(+sl.min, S[f.k] || 0));
+    if (document.activeElement !== num) num.value = S[f.k] == null ? '' : S[f.k];
+    sl.setAttribute('aria-valuetext', f.k === 'monthlyExpense' || f.k === 'existingSavings' ? cfg().compact(S[f.k] || 0) : String(S[f.k]));
+  });
+  lcEl.querySelectorAll('[data-lc-risk]').forEach(b => b.setAttribute('aria-pressed', b.dataset.lcRisk === S.risk));
+  lcEl.querySelector('.lc-out').innerHTML = lcOutputHtml();
+  lcLift();
+}
+// Re-render the result in place, then roll the two big numbers from where they
+// were to where they are now.
+function lcApply() {
+  clearTimeout(lcTimer);
+  // The timer can fire after the person has left the result (or the advisor has moved them).
+  if (!lcStart || flow()[S.si] !== 'results' || S.goalType !== 'retirement') return;
+  const wasCorpus = lcStart.lastCorpus, wasSip = lcStart.lastSip;
+  refreshResultsInPlace();
+  const c = cfg(), r = calcRetirement();
+  countTo(document.querySelector('#stage .hero-figure'), wasCorpus, r.corpus, v => c.compact(v));
+  if (!r.alreadyMet && wasSip > 0) countTo(document.querySelector('#stage .action-card .af'), wasSip, r.sip, v => c.fmt(Math.round(v)) + ' / month');
+  lcStart.lastCorpus = r.corpus; lcStart.lastSip = lcSip(r);
+}
+// Called at the end of every render(): show the panel on a retirement result,
+// hide it everywhere else, and keep it in step with S (the advisor, the
+// wizard and the result's own controls can all change S too).
+function liveCanvasSync(screen) {
+  // Element.after() is missing from the agent-evals DOM stub, where there is no panel to keep in step.
+  if (typeof stage.after !== 'function') return;
+  const on = screen === 'results' && S.goalType === 'retirement';
+  document.body.classList.toggle('lc-on', on);
+  if (!on) {
+    if (lcEl) { lcEl.hidden = true; lcSetOpen(false); }   // collapsed again for the next result
+    lcStart = null;
+    return;
+  }
+  if (lcEl && lcEl.dataset.country !== S.country) { lcEl.remove(); lcEl = null; lcStart = null; }
+  if (!lcEl) lcBuild();
+  lcEl.hidden = false;
+  if (!lcStart) {
+    const r = calcRetirement();
+    lcStart = { snap: lcSnap(), sip: lcSip(r), lastSip: lcSip(r), lastCorpus: r.corpus };
+  }
+  lcFill();
+}
+// The advisor's round chat button sits fixed at the bottom right; keep it (and
+// its panels) just above this panel, however tall the panel is.
+function lcLift() {
+  if (lcEl && !lcEl.hidden) document.body.style.setProperty('--lc-h', lcEl.offsetHeight + 'px');
+}
+window.addEventListener('resize', lcLift);
+// A number rolls from one value to the next in 450ms (ease-out) so the eye
+// sees what changed. Reduced motion: it just jumps. Screen readers get only
+// the final text; the rolling copy is aria-hidden. setTimeout, not
+// requestAnimationFrame: rAF does not fire reliably on a backgrounded tab.
+function countTo(el, from, to, fmt) {
+  if (!el || from === to || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const final = el.textContent;
+  const roll = document.createElement('span'), real = document.createElement('span');
+  roll.setAttribute('aria-hidden', 'true'); real.className = 'sr-only'; real.textContent = final;
+  el.textContent = ''; el.append(roll, real);
+  const t0 = Date.now();
+  (function step() {
+    const p = Math.min(1, (Date.now() - t0) / 450);
+    if (p >= 1 || !el.isConnected) { el.textContent = final; return; }
+    roll.textContent = fmt(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+    setTimeout(step, 30);
+  })();
 }
 
 /* =====================================================================
@@ -2398,7 +2913,9 @@ function retireWhatIf(el) {
   const card = el.closest('.retire-compare-card'), scroller = document.querySelector('.result-scroll');
   const keep = !!(el.closest('#bp') && card && scroller);
   resultKeep = keep ? { offset: el.getBoundingClientRect().top - scroller.getBoundingClientRect().top, from: S.retireAge } : null;
+  rememberGhost();
   S.retireAge = parseInt(el.dataset.retirePreview, 10);
+  if (planGhost) planGhost.to = S.retireAge;
   render(keep ? { quiet: true } : undefined);
 }
 function restoreResultPlace() {
@@ -2421,7 +2938,7 @@ function restoreResultPlace() {
 let resultReopen = null;   // {open:[panel ids], anchor, focus, offset, top}: consumed once by attach('results')
 const RESULT_PANELS = { bp: 'bt', sp: 'st', dp: 'dt', ap: 'at', accp: 'acct' };
 function refreshResultsInPlace(anchorId, focusId) {
-  const scroller = document.querySelector('.result-scroll'), anchor = document.getElementById(anchorId);
+  const scroller = document.querySelector('.result-scroll'), anchor = anchorId ? document.getElementById(anchorId) : null;
   resultReopen = {
     open: Object.keys(RESULT_PANELS).filter(id => { const p = document.getElementById(id); return p && p.classList.contains('open'); }),
     anchor: anchorId, focus: focusId,
@@ -2442,9 +2959,9 @@ function reopenResultPanels() {
     void p.offsetHeight; p.style.transition = '';
   });
   scroller.scrollTop = keep.top;
-  const anchor = document.getElementById(keep.anchor);
+  const anchor = keep.anchor ? document.getElementById(keep.anchor) : null;
   if (anchor) scroller.scrollTop += anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top - keep.offset;
-  const f = document.getElementById(keep.focus);
+  const f = keep.focus ? document.getElementById(keep.focus) : null;
   if (f) f.focus({ preventScroll: true });
 }
 function attach(screen) {
@@ -2600,11 +3117,8 @@ function attach(screen) {
 
   if (screen==='results') {
     document.querySelectorAll('[data-jump]').forEach(el => el.addEventListener('click', () => jumpEdit(el.dataset.jump)));
-    document.querySelectorAll('[data-retire-preview]').forEach(el => {
-      el.addEventListener('click', () => retireWhatIf(el));
-      // The rows are role="button": Enter and Space press them like a click.
-      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retireWhatIf(el); } });
-    });
+    // The rows are role="button"; the stage's key handler presses them on Enter and Space.
+    document.querySelectorAll('[data-retire-preview]').forEach(el => el.addEventListener('click', () => retireWhatIf(el)));
     const at = document.getElementById('at'), ap = document.getElementById('ap');
     if (at && ap) at.addEventListener('click', () => ap.classList.toggle('open'));
     const st = document.getElementById('st'), sp = document.getElementById('sp');
@@ -2614,12 +3128,12 @@ function attach(screen) {
     const bt = document.getElementById('bt'), bp = document.getElementById('bp');
     if (bt && bp) bt.addEventListener('click', () => { bp.classList.toggle('open'); bt.classList.toggle('open'); });
     wireAdvAlloc('ret'); wireAdvAlloc('edu');
+    if (S.goalType === 'retirement') wireResultNav();
     // EPF / PPF / NPS panel (see retirementAccountsHtml).
     const acct = document.getElementById('acct'), accp = document.getElementById('accp'), accForm = document.getElementById('accForm');
     if (acct && accp) {
       const flip = () => { const open = accp.classList.toggle('open'); acct.classList.toggle('open', open); acct.setAttribute('aria-expanded', open); };
-      acct.addEventListener('click', flip);
-      acct.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+      acct.addEventListener('click', flip);   // Enter and Space come through the stage's key handler
     }
     if (accForm) {
       accForm.addEventListener('submit', e => {
@@ -2643,8 +3157,32 @@ function attach(screen) {
     if (resultReopen) reopenResultPanels();
     const rb = document.getElementById('rb');
     if (rb) rb.addEventListener('click', () => {
+      planGhost = null;
       Object.assign(S, {country:null,goalType:null,age:null,retireAge:null,monthlyExpense:null,annualFee:null,yearsToCollege:null,courseDuration:null,genType:null,genAmount:null,genYears:null,existingSavings:0,risk:null,si:0,quickEdit:false,postRetAlloc:null,eduAlloc:null,persona:null,acc:null});
       render();
+    });
+    const shareBtn = document.getElementById('shareBtn');
+    if (shareBtn) shareBtn.addEventListener('click', () => {
+      const url = planLink(), note = document.getElementById('shareNote');
+      // The wizard accepts a few numbers the link reader's limits refuse (a goal 35 years away, say). Find out now,
+      // not on the recipient's screen, where the link would silently open on a blank start.
+      if (!readPlanLink(url.slice(url.indexOf('#')))) {
+        if (note) note.textContent = "One of the numbers in this plan is outside what a link can carry (for example a goal more than 30 years away), so there is no link to copy. Bring it within range and try again.";
+        return;
+      }
+      const done = ok => {
+        shareBtn.textContent = ok ? 'Link copied' : 'Copy this link:';
+        // The numbers are in the link, not on Goalden's server; the rest is the honest other half: who else ends up holding them.
+        if (note) note.textContent = (ok ? 'Copied. ' : 'Your browser would not copy it for you: select the link above and copy it. ') + "Your numbers travel inside the link, after the #, which browsers never send to a server, so Goalden's server never sees the link itself. Wherever you paste it keeps a copy, and anyone who has it can read them. If you chat with the advisor, your plan is sent to it so it can answer.";
+        if (!ok && note && !document.querySelector('.share-url')) {
+          const box = document.createElement('input');
+          box.className = 'share-url'; box.readOnly = true; box.value = url; box.setAttribute('aria-label', 'Link to this plan');
+          note.before(box); box.select();
+        }
+        if (ok) setTimeout(() => { shareBtn.textContent = 'Copy a link to this plan'; }, 2500);
+      };
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(() => done(true), () => done(false));
+      else done(false);
     });
     const caseBtn = document.getElementById('caseBtn');
     if (caseBtn) caseBtn.addEventListener('click', () => { S.viewingCase = true; S.si = flow().indexOf('case'); render(); });
@@ -2684,6 +3222,11 @@ backBtn.addEventListener('click', () => {
 // from flow() (dynamic screens like 'case'), fall back to Back-button
 // behaviour rather than rendering a blank screen.
 window.addEventListener('popstate', () => {
+  // A plan link opened while this page is already open arrives as a hash change, not a fresh load.
+  const linked = readPlanLink(location.hash);
+  if (linked) { applyPlanLink(linked); history.replaceState(null, '', location.pathname + location.search); render(); return; }
+  // A plan link that failed the checks is ignored: stay on the screen the person is on, rather than let the Back fallback below move them.
+  if ((location.hash || '').indexOf('#plan:') === 0) { history.replaceState(null, '', location.pathname + location.search + '#' + (flow()[S.si] || '')); planLinkRefusedNotice(); return; }
   const name = (location.hash || '').slice(1);
   const idx = flow().indexOf(name);
   if (idx >= 0) { S.quickEdit = false; S.viewingCase = name === 'case'; S.si = idx; render(); }
@@ -3160,14 +3703,107 @@ window.GOALDEN_ADVISOR_CONFIG = {
   placeholder: 'Ask, or tap the mic…',
   showDisclaimer: false
 };
+/* Shareable plan link. The answers ride in the URL fragment (#plan:...).
+   Browsers never send the fragment to a server, so the link needs no backend and
+   nothing is stored. Opening one re-checks every value against the limits the
+   advisor is held to (ADVISOR_FIELDS) and the rules the wizard enforces, then
+   lands on the result. Only numbers travel, never a name. Optional refinements
+   (custom post-goal equity mix, EPF/PPF/NPS balances, tax slab) ride along only
+   when set, so a shared plan shows the sender's numbers and a plain link stays
+   short. The format key v exists so a later change to the format can refuse old
+   links instead of misreading them. */
+const PLAN_VERSION = '1';
+const PLAN_KEYS = { c:'country', g:'goalType', a:'age', r:'retireAge', e:'monthlyExpense', s:'existingSavings', k:'risk',
+  f:'annualFee', y:'yearsToCollege', d:'courseDuration', t:'genType', m:'genAmount', n:'genYears' };
+const PLAN_NEEDS = { retirement:['age','retireAge','monthlyExpense','risk'], education:['annualFee','yearsToCollege','courseDuration','risk'], generic:['genType','genAmount','genYears','risk'] };
+const PLAN_ACC = { ab:'epfBal', ac:'epfBasic', pb:'ppfBal', py:'ppfYearly', nb:'npsBal', nm:'npsMonthly' };
+// Digits only: Number() would let "0x20" or "1e1" through as 32 and 10.
+function planInt(raw, lo, hi) { return /^\d{1,10}$/.test(raw) && +raw >= lo && +raw <= hi ? +raw : null; }
+function planLink() {
+  const p = new URLSearchParams();
+  p.set('v', PLAN_VERSION);
+  const keep = ['country', 'goalType', 'existingSavings'].concat(PLAN_NEEDS[S.goalType] || []);
+  Object.entries(PLAN_KEYS).forEach(([short, key]) => { if (keep.includes(key) && S[key] != null && S[key] !== 0) p.set(short, S[key]); });
+  if (S.goalType === 'retirement' && S.postRetAlloc) p.set('pe', Math.round(S.postRetAlloc.eq * 100));
+  if (S.goalType === 'education' && S.eduAlloc) p.set('ee', Math.round(S.eduAlloc.eq * 100));
+  const acc = S.goalType === 'retirement' && S.country === 'IN' ? accClean(S.acc) : null;
+  if (acc) {
+    Object.entries(PLAN_ACC).forEach(([short, key]) => { if (acc[key] > 0) p.set(short, acc[key]); });
+    if (acc.epfWage === 'ceiling') p.set('aw', 'c');
+  }
+  if (S.country === 'IN' && TAX_IN.newRegimeSlabs.includes(S.taxSlab)) p.set('x', S.taxSlab);
+  // href, not origin: origin is the string "null" for a page opened from disk.
+  return location.href.split('#')[0].split('?')[0] + '#plan:' + p.toString();
+}
+function readPlanLink(hash) {
+  if (!hash || hash.indexOf('#plan:') !== 0) return null;
+  const p = new URLSearchParams(hash.slice(6)), out = {};
+  if (p.get('v') !== PLAN_VERSION) return null;   // another format, or a hand-typed fragment: refused, never guessed at
+  for (const [short, key] of Object.entries(PLAN_KEYS)) {
+    if (!p.has(short)) continue;
+    const spec = ADVISOR_FIELDS.find(f => f.name === key), raw = p.get(short);
+    if (!spec) return null;
+    if (spec.enum) { if (!spec.enum.includes(raw)) return null; out[key] = raw; continue; }
+    const v = planInt(raw, spec.min, spec.max);
+    if (v == null) return null;
+    out[key] = v;
+  }
+  const needs = PLAN_NEEDS[out.goalType];
+  if (!out.country || !needs || needs.some(k => out[k] == null)) return null;
+  if (out.goalType === 'retirement' && !(out.retireAge > out.age && out.monthlyExpense > 0)) return null;
+  if (out.goalType === 'education' && !(out.annualFee > 0)) return null;
+  if (out.goalType === 'generic' && !(out.genAmount > 0)) return null;
+  // The refinements. Equity mixes stay as percentages here: the split of the rest depends on the risk answer, which applyPlanLink has set by then.
+  out.alloc = { ret: null, edu: null };
+  if (p.has('pe') && (out.alloc.ret = planInt(p.get('pe'), 0, 100)) == null) return null;
+  if (p.has('ee') && (out.alloc.edu = planInt(p.get('ee'), 0, 100)) == null) return null;
+  if (p.has('x')) { const x = planInt(p.get('x'), 0, 100); if (x == null || !TAX_IN.newRegimeSlabs.includes(x)) return null; out.taxSlab = x; }
+  const acc = {};
+  for (const [short, key] of Object.entries(PLAN_ACC)) {
+    if (!p.has(short)) continue;
+    const v = planInt(p.get(short), 1, 1e9);
+    if (v == null) return null;
+    acc[key] = v;
+  }
+  if (p.has('aw')) { if (p.get('aw') !== 'c') return null; acc.epfWage = 'ceiling'; }
+  out.acc = out.country === 'IN' && out.goalType === 'retirement' ? accClean(acc) : null;
+  return out;
+}
+// Start from a clean slate, so nothing from a plan already on this device leaks in.
+function applyPlanLink(linked) {
+  const fields = Object.assign({}, linked), alloc = fields.alloc;
+  delete fields.alloc;
+  Object.assign(S, { age:null, retireAge:null, monthlyExpense:null, annualFee:null, yearsToCollege:null, courseDuration:null,
+    genType:null, genAmount:null, genYears:null, existingSavings:0, risk:null, postRetAlloc:null, eduAlloc:null,
+    acc:null, taxSlab:null, persona:null, quickEdit:false, viewingCase:false }, fields);
+  if (alloc.ret != null && S.goalType === 'retirement') S.postRetAlloc = allocFromEquityPct(alloc.ret, riskAllocation());
+  if (alloc.edu != null && S.goalType === 'education') S.eduAlloc = allocFromEquityPct(alloc.edu, riskAllocation());
+  planGhost = null;
+  lcStart = null;   // the canvas's "vs where you started" and Undo belong to the plan being replaced
+  S.si = flow().indexOf('results');
+}
+// A link that fails its checks is not guessed at, but the person who clicked it is told, rather than left on a blank start.
+function planLinkRefusedNotice() {
+  const n = document.createElement('div');
+  n.className = 'plan-notice'; n.setAttribute('role', 'status');
+  n.textContent = 'That plan link could not be opened: it was cut short or holds a number outside the allowed range. Ask whoever sent it for the link again.';
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 9000);
+}
 (function boot() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(STATE_KEY) || 'null'); } catch (e) {}
+  // A shared plan link wins over "pick up where you left off": the person
+  // clicked a link to see that plan. Read it before the hash is wiped below.
+  const linked = readPlanLink(location.hash), refused = !linked && (location.hash || '').indexOf('#plan:') === 0;
   // A stale #hash from a previous session (e.g. #results with an empty S)
   // would otherwise let popstate jump a fresh visitor onto a blank screen —
   // wipe it before the first render lays down a clean history entry.
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
-  if (saved && typeof saved.si === 'number' && saved.si > 0) {
+  if (linked) {
+    applyPlanLink(linked);
+    render();
+  } else if (saved && typeof saved.si === 'number' && saved.si > 0) {
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(20,40,63,.45);z-index:900;display:flex;align-items:center;justify-content:center';
     const card = document.createElement('div');
@@ -3200,9 +3836,11 @@ window.GOALDEN_ADVISOR_CONFIG = {
   } else {
     render();
   }
+  if (refused) planLinkRefusedNotice();
 })();
 
 </script>
+<script src="gtip.js"></script>
 <script src="advisor.js"></script>
 </body>
 </html>

@@ -2689,8 +2689,11 @@ function marginBridgeOption(profitLoss, schema, yearsBack) {
   const fy = (y) => 'FY' + String(y).slice(-2);
   // |v| < 0.05 prints as ₹0.0, never "−₹0.0" (TCS other income: −₹124 Cr on ₹2.67L Cr of sales).
   const fmt = (v) => (v <= -0.05 ? '−' : '') + '₹' + Math.abs(v).toFixed(1);
-  const fill = { total: '#2557C7', final: '#256F55', up: '#5FA875', down: '#D97757' };
-  const text = { total: '#1E4FBE', final: '#256F55', up: '#256F55', down: '#9C4A2C' };
+  // Costs are ochre, not red: every cost step in a margin bridge points down, so
+  // red here would be red by default. The final bar is ink so it does not read as
+  // one more green step (the labels are dark text colours; the fills are marks).
+  const fill = { total: '#2557C7', final: '#14283F', up: '#1F8A70', down: '#B8740F' };
+  const text = { total: '#1E4FBE', final: '#14283F', up: '#256F55', down: '#14283F' };
   const data = now.steps.map((st, i) => {
     const prev = then && then.steps[i] && then.steps[i].key === st.key ? then.steps[i] : null;
     return { value: [i, Math.min(st.start, st.end), Math.max(st.start, st.end), st.value, prev ? prev.value : null], kind: st.kind };

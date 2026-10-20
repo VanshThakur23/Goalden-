@@ -4134,9 +4134,157 @@ standing over the founder's shoulder.
 - Tests: 224/224 (10 new: 5 for EPF/PPF/NPS, 5 for harvesting incl. its year-end rule).
   All 15 smokes pass, plus the new smoke-18 (50 structural checks for 05, 16
   and 17).
+- Committed as 1f91b82, pushed and deployed as Worker version
+  2f1d58ca-dee8-4200-a064-111c96a44592.
 
-### Next: Group 8
-- 10 keyboard (including the Quick Calculate "See how we got this number"
-  toggles, which are divs and cannot be opened from the keyboard), 03 A theme,
-  14 live canvas, 20, 21, 07, and 08's ghost line / scrub chart.
+### Group 8: keyboard, one palette, summary bar, share link, live canvas, term tips, explorable growth chart
+- **10, keyboard and slider names (all three doors).** In Quick Calculate the
+  choice cards, chips, "what if" rows and the "See how we got this number"
+  toggles were `<div>`s with click handlers and could not be reached from the
+  keyboard. Rewriting about 25 templates as `<button>`s would restyle them all,
+  so after each render they are given a tab stop, a role and state
+  (`enhancePressables`), one key handler on the stage presses them on
+  Enter/Space (the per-element key handlers it replaces are gone, so a press
+  can no longer fire twice), and focus survives the re-render most picks cause.
+  `aria-expanded` / `aria-controls` on the toggles, `aria-pressed` on the
+  choice cards. Every slider and number box is
+  named from the label beside it, with a spoken value where the label carries a
+  bold readout. `focusKeyOf` (Quick Calculate and Full Plan) keys on ALL the
+  `data-*` attributes together, so a batched Full Plan question no longer puts
+  focus on the wrong option. A new screen focuses its own heading, not the
+  repeated Next button. The Lab's `render()` replaces `#main` 130 ms after each
+  slider input, which dropped keyboard focus on every arrow press; it now keeps
+  focus (`labFocusKey` / `labRestoreFocus`, keyed within `#main` / `#tabbar`).
+- **03 A, one palette.** The old terracotta/sage colours are gone from every
+  page (the smoke checks #D97757, #8FC79E, #E8977A and #5FA875 are not there
+  any more). The ECharts theme's default series colours are now the one
+  palette (blue, ochre, green, violet, slate, ink), so a series with no colour
+  of its own is still on-palette, and the charts that compare lines tell them
+  apart by dash as well (blue solid, ochre `[8,4]`, green `[2,3]`, violet
+  `[8,3,2,3]`), so they read in greyscale. Red is left for warnings that
+  actually fire. In the engine's charts: the asset return/risk bars lose their
+  legend (the first pair names the series, labels pinned to the pair's outer
+  edges so they cannot overprint; four or more assets drop the decimal), and
+  the margin bridge's cost steps are ochre, not red (every cost step points
+  down, so red would be red by default). The existing engine test for the bars
+  chart now pins the labels, colours and the no-legend rule.
+  - Deviations from the handoff, on purpose: the two-line pinned labels from
+    handoff E; the race chart (`#8FC79E` / `#E8977A`, `.race-legend`) was
+    recoloured too; green means "better than the comparison" and ochre "the
+    comparison" throughout; labels under 4.5:1 contrast (ochre 3.8, green 4.3)
+    are printed in ink and only the line carries the colour. Some UI tints
+    (backgrounds, borders) that are not chart series were left alone.
+- **20, sticky summary and jump bar (Quick Calculate result).** Once the big
+  number scrolls out of view a one-line bar appears ("Rs 4.7 Cr by 60 · Rs
+  22,906/mo") with Adjust and Back to top; inside the details a "Jump to a
+  section" bar lets you go straight to Growth, Spending, vs FD, Mix, Realistic?,
+  Tax, Other ages or Waiting. `left:0;right:0` (not the -4px overhang that
+  flickers a horizontal scrollbar on Windows Chrome). The observer is
+  disconnected before it is re-created (every what-if tap re-renders the
+  result). Reduced motion jumps instead of scrolling. The bar's text is
+  `aria-hidden`: the hero number already says it.
+- **21, share link.** "Copy a link to this plan" on the three result types
+  writes `#plan:v=1&...`. The fragment is never sent to a server, so there is
+  no backend. Opening a link re-checks every value against `ADVISOR_FIELDS`
+  (digits only: `0x20` and `1e1` are refused), the wizard's own rules
+  (retire age above age, amounts above zero), the tax-slab table and 0-100 for
+  the equity shares, and refuses anything else outright instead of guessing.
+  `v=1` is a format key so a later change refuses old links. The custom
+  post-goal mix, EPF/PPF/NPS balances and tax slab ride along when set. Where
+  the clipboard is not available the link is shown in a box to copy by hand.
+  - The note says "Your numbers travel inside the link, after the #, which
+    browsers never send to a server. Anyone you send it to can read them."
+    (Not "nothing leaves your device": the chat app stores a link you paste,
+    and the advisor sends the state if you chat.)
+  - Trade-off, on purpose: opening a link replaces a half-finished plan saved
+    on this device, because the person clicked a link to see that plan.
+- **14, live result canvas (Quick Calculate, retirement).** A collapsed bar
+  under the result ("Age 30 · retire 55 · Rs 50,000/mo · Balanced · Adjust")
+  opens a panel of the sliders behind the plan; every change redraws the
+  result IN PLACE (no new screen, no scroll jump), numbers roll to their new
+  values, and the panel keeps an Undo and a "vs where you started" line. It is
+  also what the advisor's `set_value` now drives. Limits come from
+  `ADVISOR_FIELDS` (one table; the handoff's second table disagreed on the
+  spending cap). It exists only on a retirement result, is rebuilt if the
+  country changes, and `liveCanvasSync` returns at once when the DOM has no
+  `Element.after` (the agent-evals stub).
+  - Phones: the advisor button and panel are only lifted above the bar from
+    481px; below that the lift would push the chat header off-screen.
+  - Quiet renders (a canvas change, the Group 6 what-if, the EPF update) skip
+    the charts' one-second grow-in (`chartQuiet`, reset after the deferred
+    chart inits), and reduced motion always does.
+- **07, accessible term tips (all three doors).** One shared `gtip.js` replaces
+  three hand-rolled tooltips (CSS `:hover` boxes that touch could not open and
+  the keyboard could not reach). Works on the existing `.term`, `.info-icon`
+  and `.term-i` markup: hover on a mouse, focus (`:focus-visible`) from the
+  keyboard, tap or Enter/Space to pin, Esc to close, `aria-describedby` while
+  open. `position:fixed`, clamped inside the window, above the trigger unless
+  there is no room. A tip never opens inside another tip.
+  - Deviations from the handoff, on purpose: one shared file instead of three
+    pasted copies (the three pages still do not import each other); the
+    MutationObserver watches `#stage` / `#main` only (watching body fires on
+    every ECharts frame); each trigger's accessible name is read from the
+    label before it (a heading may be up to 90 characters, a sentence is cut to
+    its last words), and the Lab's portfolio rows name their fund explicitly
+    because "typically 12.0%/yr" does not say which; the two "That amount is
+    in" buttons lost their `i` icons (a button inside a button) and a caption
+    under them says what each means.
+  - Fixes to the handoff's own snippets: `currentSharpe` does not exist in
+    `frontierTakeawayHTML` (it is `sharpe`); the worst-fall sentence runs from
+    the PEAK (`g.mix[w.peakK]`) to the bottom (`g.mix[w.k]`), not from the
+    start. Three tips carry a sentence worked out from the user's own numbers
+    (`data-you`): Sharpe, Worst fall (rupee figures at the high and at the
+    bottom) and Correlation (this pair's number in words, including negative).
+- **08, "How the pot grows" explorable (Quick Calculate).**
+  - A readout above the chart follows the pointer (year, pot, paid in, share
+    from growth) and the chart is a keyboard slider (arrows, Page Up/Down,
+    Home/End; `role="slider"`, not "img", with `aria-valuetext`). On a phone
+    the readout is one value per line so its height never changes under a
+    finger.
+  - After a "what if I retired at 55" tap, the plan you just left is drawn as a
+    dotted slate line labelled "Retire 60: Rs 4.7 Cr", with a caption saying
+    what it is. The ghost is kept with a signature of every other answer and
+    ignored the moment any of them differs, so nothing has to clear it by hand
+    at each place an answer can change; retirement only.
+  - Left out on purpose: the action-card ghost note and a "Back to 60" button;
+    the live canvas's Undo and "vs where you started", and the what-if rows,
+    already do that job.
+- **Opus review**: seven must-fix items, all fixed, plus three small ones:
+  (1) answering a question on a tall batched Full Plan screen re-rendered it
+  with the scroller back at the top, so the focused option was out of view (the
+  scroll is now put back, in Quick Calculate too); (2) the "before" line was
+  not dropped when the live canvas or the advisor moved the retire age again
+  (55 then 58), so the caption described a plan that was no longer "a moment
+  ago" (it now also records the age the tap moved to); (3) the wizard accepts a
+  few numbers the link reader refuses (a goal 35 years away), so a sender got
+  "Link copied" and the recipient a blank start (the share button now reads its
+  own link back first and says so, and a refused incoming link shows a short
+  notice instead of failing silently); (4) a Lab caption said "Red dots" for
+  fee withdrawals that are now ochre; (5) the step-up chart's "behind" marker
+  was red although a gap is the normal case, not a fired warning (ochre dot,
+  ink label); (6) the share note did not say that wherever the link is pasted
+  keeps a copy, or that chatting with the advisor sends the plan (now says
+  both); (7) opening a link did not reset the live canvas's starting point, so
+  Undo could write the old plan over the linked one.
+  Small ones: Esc on a hover-opened tip no longer pulls focus out of another
+  field; the focus keys leave out `data-gtip` (added by gtip.js after the
+  element exists, so a focused term never got focus back; tips are also made
+  focusable before focus is restored); the Lab captions that called the
+  "your mix" ring orange now say "the ringed marker labelled YOUR MIX".
+- Not done: the step-up chart's "behind" label can still be clipped at the left
+  edge on a very narrow chart (it was before this group too).
+- Checked in a real browser: Quick Calculate result at 1024px and 375px (tap
+  "Retire at 55": dotted line, caption, readout, hover and keyboard stepping,
+  no console errors), tips in all three doors, all 11 Lab tabs render with no
+  console errors and no nested tips. Not checked by eye: every chart in the Lab
+  after the palette change (read through in code only), and the Full Plan at
+  375px.
+- Tests: 224/224 engine tests. All 15 earlier smokes pass, plus the new
+  smoke-19 (113 checks: the share link's read/write pair is run for real
+  in a vm, with 14 refused links, a round trip and a generic goal; the rest
+  are structural). Its first draft used the wrong shape for the post-retirement
+  mix ({eq, debt, hybrid}, the page's is {eq, de, hy}); fixed.
 
+### Next: Group 9
+- B1 holdings review, B2 cover, B3 regime, B4 retirement income, B5 yearly
+  review, B6 loans (the "beyond the three pillars" set).

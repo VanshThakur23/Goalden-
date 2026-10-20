@@ -279,6 +279,18 @@ test('barComparisonChartOption: one series per metric, one bar per asset', () =>
   assert.strictEqual(opt.xAxis.data.length, 2, 'one category per asset');
   assert.deepStrictEqual(opt.series[0].data, [0.24, 0.11]);
   assert.deepStrictEqual(opt.series[1].data, [0.27, 0.24]);
+  assert.strictEqual(opt.legend, undefined, 'no legend: names ride on the first pair of bars');
+  assert.strictEqual(opt.series[0].label.formatter({ value: 0.24, dataIndex: 0 }), 'Return\n24.0%', 'the first bar names its series');
+  assert.strictEqual(opt.series[0].label.formatter({ value: 0.11, dataIndex: 1 }), '11.0%', 'later bars carry only their value');
+  assert.strictEqual(opt.series[1].label.formatter({ value: 0.27, dataIndex: 0 }), 'Risk\n27.0%');
+  assert.notStrictEqual(opt.series[0].itemStyle.color, opt.series[1].itemStyle.color, 'two series, two colours');
+  // the first pair's labels are pinned to the pair's outer edges so the two names cannot overprint
+  const bar = { x: 40, y: 90, width: 20, height: 60 };
+  assert.deepStrictEqual(opt.series[0].labelLayout({ dataIndex: 0, rect: bar }), { x: 60, y: 86, align: 'right', verticalAlign: 'bottom' }, 'Return ends at its bar\'s right edge');
+  assert.deepStrictEqual(opt.series[1].labelLayout({ dataIndex: 0, rect: bar }), { x: 40, y: 86, align: 'left', verticalAlign: 'bottom' }, 'Risk starts at its bar\'s left edge');
+  assert.deepStrictEqual(opt.series[0].labelLayout({ dataIndex: 1, rect: bar }), {}, 'later bars keep the default placement');
+  const crowded = engine.barComparisonChartOption([1, 2, 3, 4].map((i) => ({ label: 'A' + i, ret: 0.1 * i, vol: 0.05 * i })));
+  assert.strictEqual(crowded.series[0].label.formatter({ value: 0.123, dataIndex: 1 }), '12%', 'four or more assets drop the decimal so neighbours fit');
 });
 
 test('profileComparisonChartOption: 3 metric columns, one row per asset plus 2 blends', () => {

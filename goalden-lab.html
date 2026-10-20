@@ -400,6 +400,8 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 /* One line per value on a phone, so the number of lines never changes as the pointer moves (a line wrapping in or out would shift the chart under a finger). */
 @media(max-width:520px){.scrub-readout{flex-direction:column;flex-wrap:nowrap}.scrub-readout span{white-space:nowrap}}
 .echart[tabindex]:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
+/* render() focuses <main> itself when a card opens another tool (see labRestoreFocus); it is a landing point, not a control, so no ring. */
+#main:focus,#main:focus-visible{outline:none}
 .verdicts{margin:12px 0 4px;display:grid;gap:8px}
 .verdict{display:grid;grid-template-columns:minmax(110px,150px) 1fr;gap:4px 14px;padding:10px 0;border-top:1px solid rgba(20,40,63,.1)}
 .verdict dt{font-family:'Spline Sans Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);padding-top:3px}
@@ -447,9 +449,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .pf-preset-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px}
 .pf-preset-btn{font-family:'Spline Sans Mono',monospace;font-size:10.5px;padding:9px 4px;border-radius:2px 10px 10px 10px;border:1px solid rgba(20,40,63,.16);background:rgba(20,40,63,.04);color:rgba(20,40,63,.75);cursor:pointer;text-align:center;border-left-width:3px;transition:all .15s}
 .pf-preset-btn:hover{background:rgba(20,40,63,.08);color:var(--paper)}
-.pf-preset-btn[data-pfpreset=conservative]{border-left-color:#5FA875}
+.pf-preset-btn[data-pfpreset=conservative]{border-left-color:#1F8A70}
 .pf-preset-btn[data-pfpreset=balanced]{border-left-color:var(--gold)}
-.pf-preset-btn[data-pfpreset=aggressive]{border-left-color:var(--red)}
+.pf-preset-btn[data-pfpreset=aggressive]{border-left-color:#B8740F}   /* a preset is a choice, not a fired warning, so no red */
 .pf-preset-btn[data-pfpreset=equal]{border-left-color:rgba(20,40,63,.35)}
 .port-cluster-toggle{display:flex;align-items:center;gap:8px;width:100%;font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:rgba(20,40,63,.75);background:transparent;border:none;border-top:1px dashed rgba(20,40,63,.14);padding:12px 2px 10px;margin:0;cursor:pointer;text-align:left}
 .port-cluster:first-child .port-cluster-toggle{border-top:none}
@@ -495,8 +497,8 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .fc-dest-nums{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:rgba(20,40,63,.74)}
 .fc-dest-rec{border-color:rgba(37,87,199,.45);background:rgba(37,87,199,.06)}
 .fc-dest-rec .fc-dest-label{color:var(--gold)}
-.fc-dest.is-current{border-color:rgba(217,119,87,.6);box-shadow:inset 0 0 0 1px rgba(217,119,87,.3)}
-.fc-dest.is-current .fc-dest-label{color:#9C4A2C}
+.fc-dest.is-current{border-color:rgba(184,116,15,.6);box-shadow:inset 0 0 0 1px rgba(184,116,15,.3)}
+.fc-dest.is-current .fc-dest-label{color:#14283F}
 @media(max-width:860px){.fc-dests{grid-template-columns:1fr}}
 .fc-diversify{background:rgba(37,87,199,.06);border:1px solid rgba(37,87,199,.25);border-left:3px solid rgba(37,87,199,.55);border-radius:2px 2px 10px 10px;padding:14px;margin-bottom:14px}
 .fc-diversify-stat{font-family:'Newsreader',serif;font-size:22px;font-weight:700;color:var(--gold);margin-bottom:6px}
@@ -542,8 +544,8 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .rc-bar-track{height:5px;background:rgba(20,40,63,.06);border-radius:2px;overflow:hidden}
 .rc-bar{height:100%;border-radius:2px}
 .rc-money{background:#2557C7}
-.rc-risk{background:#D97757}
-.rc-risk-neg{background:#5FA875}
+.rc-risk{background:#B8740F}
+.rc-risk-neg{background:#1F8A70}
 .rc-vals{grid-column:2/3;grid-row:1/3;font-size:10.5px;color:rgba(20,40,63,.74);text-align:right;font-family:'Spline Sans Mono',monospace;line-height:1.4}
 .rc-flag-hot{color:#9C4A2C}
 .rc-flag-cool{color:#256F55}
@@ -553,13 +555,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 /* --- info icon hover tooltip (for stat labels, term explanations) --- */
 .info-icon{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.35);color:rgba(20,40,63,.74);font-size:9.5px;font-family:'Spline Sans Mono',monospace;font-style:normal;cursor:help;margin-left:5px;position:relative;flex-shrink:0}
 .info-icon:hover{border-color:var(--gold);color:var(--gold)}
-.info-icon .ii-tip{display:none;position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#FFFFFF;border:1px solid rgba(37,87,199,.4);border-radius:3px 8px 8px 8px;padding:9px 12px;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:400;color:rgba(20,40,63,.85);width:220px;line-height:1.5;text-align:left;z-index:30;box-shadow:0 6px 18px rgba(20,40,63,.16);white-space:normal}
-.info-icon:hover .ii-tip{display:block}
+/* The tip text stays in the DOM, hidden: gtip.js reads it when the icon is opened and shows it in its own box. */
+.info-icon .ii-tip{display:none}
 .stat-label{display:flex;align-items:center}
 
 .term{border-bottom:1px dashed rgba(37,87,199,.6);cursor:help;position:relative}
-.term::after{content:attr(data-def);display:none;position:absolute;bottom:calc(100% + 7px);left:0;background:#FFFFFF;border:1px solid rgba(37,87,199,.4);border-radius:3px 8px 8px 8px;padding:9px 12px;font-family:'Figtree',sans-serif;font-size:11.5px;font-weight:400;color:rgba(20,40,63,.85);width:240px;line-height:1.5;white-space:normal;z-index:30;box-shadow:0 6px 18px rgba(20,40,63,.16)}
-.term:hover::after{display:block}
 .term:hover{border-bottom-color:var(--gold);color:var(--gold)}
 
 /* --- cluster-grouped portfolio sliders --- */
@@ -660,7 +660,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .live-chip{display:flex;align-items:center;gap:8px;background:rgba(37,87,199,.1);border:1px solid rgba(37,87,199,.4);border-radius:3px 12px 12px 12px;padding:7px 8px 7px 12px;font-size:12px;color:var(--paper)}
 .live-chip-status{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .live-chip-status.st-loading{background:var(--gold);animation:live-pulse 1s ease-in-out infinite}
-.live-chip-status.st-ready{background:#8FC79E}
+.live-chip-status.st-ready{background:#1F8A70}
 .live-chip-status.st-error{background:var(--red)}
 .live-chip-status.st-caution{background:var(--warn)}
 .live-chip-status.st-held{background:var(--red)}
@@ -1241,7 +1241,9 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
    output vector-sharp instead of a rasterized canvas snapshot.
    ===================================================================== */
 echarts.registerTheme('goalden', {
-  color: ['#2557C7','#8FC79E','#D97757','#5FA875','#E8977A','#14283F'],
+  // The four palette slots (blue, ochre, green, violet), then two neutrals, so a
+  // series that sets no colour of its own never gets a generated hue.
+  color: ['#2557C7','#B8740F','#1F8A70','#8A4FBF','#56698A','#14283F'],
   backgroundColor: 'transparent',
   textStyle: { fontFamily: "'Spline Sans Mono', monospace", color: 'rgba(20,40,63,.75)' },
   title: { textStyle: { fontFamily: "'Newsreader', serif", color: '#14283F', fontWeight: 600 } },
@@ -2141,8 +2143,11 @@ function cfg(){ return C[L.country]; }
    CHARTS
    ===================================================================== */
 
-function infoIcon(text){
-  return `<span class="info-icon">i<span class="ii-tip">${text}</span></span>`;
+// `you` (optional) is one sentence worked out from this user's own numbers; gtip.js shows it under the definition.
+// `name` (optional) is what the icon explains, for a screen reader, where the words just before it say
+// something else (a row's "typically 12.0%/yr" does not say which fund). Otherwise gtip.js reads the label before it.
+function infoIcon(text, you, name){
+  return `<span class="info-icon"${you?` data-you="${advisorAttr(you)}"`:''}${name?` aria-label="More about ${advisorAttr(name)}"`:''}>i<span class="ii-tip">${text}</span></span>`;
 }
 // A closed-by-default, open/close explainer for anything that deserves
 // more than a short tap-tooltip: a proper paragraph or two of teaching,
@@ -2265,14 +2270,14 @@ function renderDrawdownChartOption(chartId, rows, c){
   const startVal=Math.max(rows[0].openBal, 0);
   const endVal=rows[n-1].closeBal;
   const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal));
-  const endLabelColor = prematureDepletion ? '#E8977A' : '#8FC79E';
-  // Text needs the AA-contrast versions; the pastels stay for the marker dot.
+  const endLabelColor = prematureDepletion ? '#9C4A2C' : '#1F8A70';
+  // Text needs the AA-contrast versions; the marker dot wears the chart colour.
   const endLabelText_color = prematureDepletion ? '#9C4A2C' : '#256F55';
   const shockPoints = rows.map((r,i)=>(r.rate!==undefined && r.rate<-0.05) ? [i, r.closeBal] : null).filter(Boolean);
   const series=[
     { name:'Balance', type:'line', data:rows.map(r=>r.closeBal), showSymbol:false,
-      lineStyle:{color:'#8FC79E', width:1.75},
-      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(61,122,79,.55)'},{offset:1,color:'rgba(61,122,79,.04)'}]}},
+      lineStyle:{color:'#1F8A70', width:1.75},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(31,138,112,.45)'},{offset:1,color:'rgba(31,138,112,.04)'}]}},
       markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(20,40,63,.35)', type:'dashed'}, data:[{yAxis:0}]},
       markPoint:{symbol:'circle', symbolSize:9,
         data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
@@ -2281,7 +2286,7 @@ function renderDrawdownChartOption(chartId, rows, c){
         label:{show:true, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endLabelText_color, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:12}},
       z:2 },
   ];
-  if(shockPoints.length) series.push({ name:'Shock year', type:'scatter', data:shockPoints, symbolSize:8, itemStyle:{color:'#E8977A'}, z:3,
+  if(shockPoints.length) series.push({ name:'Shock year', type:'scatter', data:shockPoints, symbolSize:8, itemStyle:{color:'#B8740F'}, z:3,
     tooltip:{formatter:p=>`Shock year<br/>Balance: ${fmt(p.value[1])}`} });
   initChart(chartId, {
     grid:{left:4,right:4,top:28,bottom:24,containLabel:false},
@@ -2300,8 +2305,8 @@ function renderDrawdownChartOption(chartId, rows, c){
 
 // Shared on-chart value tag: the owner's standing complaint was that
 // every number sat behind a hover, which also means nothing on a phone or
-// in a printed PDF. Dark AA text colours only -- the pastel series colours
-// (#8FC79E 1.8:1, #E8977A 2.2:1) are fills, never text.
+// in a printed PDF. Dark AA text colours only -- the palette's ochre (#B8740F,
+// 3.8:1) and green (#1F8A70, 4.3:1) are fills and lines, never small text.
 const CHART_TEXT={ink:'#14283F', blue:'#1E4FBE', good:'#256F55', bad:'#9C4A2C', muted:'#56698A'};
 function valueTag(text, color, position){
   return {show:true, formatter:text, position:position||'left', distance:6, color:color||CHART_TEXT.ink,
@@ -2371,11 +2376,11 @@ function renderTwinFatesChartOption(chartId, rowsA, rowsB){
       return `Year ${a.axisValueLabel}<br/>Flat: ${c.compact(a.value)}<br/>Step-up: ${c.compact(b.value)}`;
     }},
     series:[
-      { name:'Flat SIP', type:'line', data:A.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#E8977A', width:2},
+      { name:'Flat SIP', type:'line', data:A.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#B8740F', width:2, type:[8,4]},
         markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(20,40,63,.3)', type:'dashed'}, data:[{yAxis:0}]},
-        markPoint:(n && gap>0)?{symbol:'circle', symbolSize:6, itemStyle:{color:'#D97757'}, silent:true,
-          data:[{coord:[gapIdx, A[gapIdx].closeBal]}], label:valueTag(`Year ${gapIdx+1}: step-up pot ${c.compact(gap)} behind`, CHART_TEXT.bad, gapIdx>n*0.6?'left':'top')}:undefined, z:2 },
-      { name:'Step-up SIP', type:'line', data:B.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#5FA875', width:2}, z:2,
+        markPoint:(n && gap>0)?{symbol:'circle', symbolSize:6, itemStyle:{color:'#B8740F'}, silent:true,
+          data:[{coord:[gapIdx, A[gapIdx].closeBal]}], label:valueTag(`Year ${gapIdx+1}: step-up pot ${c.compact(gap)} behind`, CHART_TEXT.ink, gapIdx>n*0.6?'left':'top')}:undefined, z:2 },
+      { name:'Step-up SIP', type:'line', data:B.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#1F8A70', width:2}, z:2,
         markPoint:n?{symbol:'circle', symbolSize:7, itemStyle:{color:'#256F55'}, silent:true,
           data:[{coord:[n-1, B[n-1].closeBal]}], label:valueTag('Both reach '+c.compact(B[n-1].closeBal), CHART_TEXT.good)}:undefined },
     ],
@@ -2392,12 +2397,12 @@ function renderStepPathChart(chartId, yearlySip, flatSip){
     tooltip:{trigger:'axis', confine:true, formatter:ps=>ps[0].axisValue+'<br/>'+ps.map(p=>p.marker+p.seriesName+': '+c.fmt(Math.round(p.value))+'/mo').join('<br/>')},
     series:[
       { name:'Step-up SIP', type:'bar', data:yearlySip.map(v=>Math.round(v)), barMaxWidth:18,
-        itemStyle:{color:p=>p.dataIndex>=cross && cross>=0 ? '#D97757' : '#5FA875', borderRadius:[2,2,0,0]},
+        itemStyle:{color:p=>p.dataIndex>=cross && cross>=0 ? '#B8740F' : '#1F8A70', borderRadius:[2,2,0,0]},
         markPoint:{silent:true, symbolSize:1, data:[{coord:[0,Math.round(yearlySip[0])]},{coord:[n-1,Math.round(yearlySip[n-1])]}],
           label:{show:true, position:'top', formatter:p=>c.fmt(p.data.coord[1]), color:CHART_TEXT.ink, fontSize:10.5, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace"}} },
       { name:'Flat SIP', type:'line', data:yearlySip.map(()=>Math.round(flatSip)), showSymbol:false, lineStyle:{color:'#14283F', width:1.5, type:'dashed'},
         endLabel:{show:true, formatter:()=>'Flat '+c.fmt(Math.round(flatSip)), color:CHART_TEXT.ink, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace", offset:[-110,-12]},
-        markLine: cross>=0 ? {silent:true, symbol:'none', lineStyle:{color:'#9C4A2C', type:'dotted'}, label:{formatter:'overtakes flat in year '+(cross+1), color:CHART_TEXT.bad, fontSize:10.5, position:'end', align:cross>n*0.6?'right':'left'}, data:[{xAxis:cross}]} : undefined },
+        markLine: cross>=0 ? {silent:true, symbol:'none', lineStyle:{color:'#14283F', type:'dotted'}, label:{formatter:'overtakes flat in year '+(cross+1), color:CHART_TEXT.ink, fontSize:10.5, position:'end', align:cross>n*0.6?'right':'left'}, data:[{xAxis:cross}]} : undefined },
     ],
   });
 }
@@ -2529,7 +2534,7 @@ function renderDDMCBody(res){
       const mRate=effectiveMonthlyRate(r.preRate/100);
       const existingFV=(r.existingSavings||0)*Math.pow(1+mRate, res.yrs*12);
       const sip90=solveSIP(mRate, res.yrs*12, Math.max(0, target-existingFV), r.due);
-      marginHtml=`<div class="gr-note" style="margin-top:10px;border-left-color:#5FA875">For <b>9-in-10</b> survival in these same simulated markets: aim for <b>${c.compact(target)}</b> (${k.toFixed(2)}&times; the plan's corpus), which means a SIP of <b>${c.fmt(Math.round(sip90))}/mo</b> instead of ${c.fmt(Math.round(res.sip))}/mo.</div>`;
+      marginHtml=`<div class="gr-note" style="margin-top:10px;border-left-color:#1F8A70">For <b>9-in-10</b> survival in these same simulated markets: aim for <b>${c.compact(target)}</b> (${k.toFixed(2)}&times; the plan's corpus), which means a SIP of <b>${c.fmt(Math.round(sip90))}/mo</b> instead of ${c.fmt(Math.round(res.sip))}/mo.</div>`;
     }
   }
   const html=`<div class="stat-row" style="margin-top:10px">
@@ -2600,9 +2605,12 @@ function renderRetirement(){
     <div class="field"><label>Target pot at retirement <b>${c.compact(r.customCorpus)}</b></label><input type="range" min="${ccMin}" max="${ccMax}" step="${ccStep}" value="${r.customCorpus}" data-k="customCorpus"></div>
     <div class="section-label">That amount is in</div>
     <div class="toggle-row">
-      <button class="tglbtn${r.customBasis==='future'?' active':''}" data-toggle="customBasis" data-val="future">Future money${infoIcon('The literal figure in the account on the day you retire. If you want exactly this number sitting there, pick this.')}</button>
-      <button class="tglbtn${r.customBasis==='today'?' active':''}" data-toggle="customBasis" data-val="today">Today's money${infoIcon('The amount in current purchasing power. The plan inflates it to the retirement date for you, so what you can actually buy with it matches what that figure buys now.')}</button>
+      <button class="tglbtn${r.customBasis==='future'?' active':''}" data-toggle="customBasis" data-val="future">Future money</button>
+      <button class="tglbtn${r.customBasis==='today'?' active':''}" data-toggle="customBasis" data-val="today">Today's money</button>
     </div>
+    <div class="cap" style="margin:8px 0 10px">${r.customBasis==='today'
+      ? `<b style="color:var(--paper)">Today's money.</b> The amount in current purchasing power. The plan inflates it to the retirement date for you, so what you can actually buy with it matches what that figure buys now.`
+      : `<b style="color:var(--paper)">Future money.</b> The literal figure in the account on the day you retire. If you want exactly this number sitting there, pick this.`}</div>
     <div class="gr-note">The plan now solves backwards: given this pot, it works out both the SIP needed to build it and the monthly spending it can sustain to age ${r.lifeExp}.</div>
     `}
 
@@ -2798,7 +2806,7 @@ function renderStepUp(){
     </div>
     <div class="card is-primary">
       <h4>Both reach the same target, at a different starting cost</h4>
-      <div class="cap">Orange line = flat SIP · green line = step-up SIP, rising ${s.stepUpPct}%/yr</div>
+      <div class="cap">Dashed ochre line = flat SIP · solid green line = step-up SIP, rising ${s.stepUpPct}%/yr</div>
       ${twinFatesChart(
         flatAcc.map(r=>({openBal:0,closeBal:r.closeBal})),
         stepAcc.map(r=>({openBal:0,closeBal:r.closeBal})),
@@ -2884,8 +2892,8 @@ function renderFxBridge(chartId, principal, res, homeC, awayC){
     {label:'Went abroad', lo:0, hi:res.crossBorderFV, v:res.crossBorderFV, kind:'final'},
     {label:'Stayed home', lo:0, hi:res.domesticFV, v:res.domesticFV, kind:'compare'},
   ];
-  const fill={total:'#2557C7', up:'#5FA875', down:'#D97757', final:'#1E4FBE', compare:'#B6C2D6'};
-  const text={total:CHART_TEXT.blue, up:CHART_TEXT.good, down:CHART_TEXT.bad, final:CHART_TEXT.blue, compare:CHART_TEXT.ink};
+  const fill={total:'#2557C7', up:'#1F8A70', down:'#B8740F', final:'#1E4FBE', compare:'#B6C2D6'};
+  const text={total:CHART_TEXT.blue, up:CHART_TEXT.good, down:CHART_TEXT.ink, final:CHART_TEXT.blue, compare:CHART_TEXT.ink};
   const fmt=(st)=>(st.kind==='up'?'+':st.kind==='down'?'−':'')+homeC.compact(Math.abs(st.v));
   initChart(chartId, {
     grid:{left:8,right:8,top:30,bottom:30,containLabel:true},
@@ -3014,10 +3022,11 @@ let frontierJumpHandler = null;
 function frontierTakeawayHTML(currentPoint, sharpe, frontier, onJump){
   const gap = frontierGap(frontier, currentPoint);
   const pct = v=>(v*100).toFixed(1)+'%';
-  // Verdict colour is #5FA875 (on-frontier, good news) or #D97757 (gap,
-  // room to improve) -- never --red, which this app reserves for actual
-  // errors, not "you could be doing better."
-  const verdictColor = gap ? '#9C4A2C' : '#256F55'; // AA text tokens; the pastels (2.9:1 / 2.5:1) were unreadable as text
+  // Verdict colour is the green text token (on-frontier, good news) or the
+  // warning token (a gap, room to improve) -- never --red, which this app reserves
+  // for actual errors, not "you could be doing better." AA text tokens; the
+  // chart's own greens and ochres are marks, not text.
+  const verdictColor = gap ? '#9C4A2C' : '#256F55';
   const verdictText = gap
     ? `You're leaving <b style="color:${verdictColor}">${(gap.gapPct*100).toFixed(1)} points</b> of return on the table at this risk level.`
     : `This mix is already on the best line available &ndash; nothing here earns more for the risk you're taking.`;
@@ -3033,7 +3042,7 @@ function frontierTakeawayHTML(currentPoint, sharpe, frontier, onJump){
     jumpBtn = `<button class="fc-action" data-frontier-jump>Move to the best mix at this risk &rarr;</button>`;
   }
 
-  const detail = `<div>This mix earns <b style="color:var(--paper)">${pct(currentPoint.ret)}</b> a year for <b style="color:var(--paper)">${pct(currentPoint.vol)}</b> risk &ndash; a <span class="term" data-def="Return earned per unit of risk, above a safe baseline (a bank FD). Higher is better: above 1 is generally good, above 2 very good, for a real portfolio over a full market cycle.">Sharpe ratio</span> of <b style="color:var(--gold)">${sharpe.toFixed(2)}</b>. In plain terms: for every extra point of risk this mix takes on above safe cash, it earns about ${sharpe.toFixed(2)} points of extra return.</div>
+  const detail = `<div>This mix earns <b style="color:var(--paper)">${pct(currentPoint.ret)}</b> a year for <b style="color:var(--paper)">${pct(currentPoint.vol)}</b> risk &ndash; a <span class="term" data-def="Return earned per unit of risk, above a safe baseline (a bank FD). Higher is better: above 1 is generally good, above 2 very good, for a real portfolio over a full market cycle." data-you="${advisorAttr('This mix scores '+sharpe.toFixed(2)+' on that scale; a plain bank deposit scores 0, because it earns only the baseline.')}">Sharpe ratio</span> of <b style="color:var(--gold)">${sharpe.toFixed(2)}</b>. In plain terms: for every extra point of risk this mix takes on above safe cash, it earns about ${sharpe.toFixed(2)} points of extra return.</div>
   <div style="margin-top:8px">${gap
     ? `The blue line is the <i>most</i> return possible at each risk level. At this exact risk (${pct(currentPoint.vol)}), the best mix on it earns <b style="color:#256F55">${pct(gap.frontierRetHere)}</b> &ndash; <b style="color:#256F55">${(gap.gapPct*100).toFixed(1)} points more</b> than this mix, for the identical risk. Click any point on the blue line, or the button above, to move there.`
     : `This mix already sits right on the blue line &ndash; for the risk being taken, it's already earning about as much as this combination can give.`}</div>`;
@@ -3127,7 +3136,7 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf){
         emphasis:{itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}}, z:2,
         markLine },
       { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
-        itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1},
+        itemStyle:{color:'#1F8A70', borderColor:'#14283F', borderWidth:1},
         // Points built without a showLabel flag (e.g. the Test Real
         // Investments chart, which reuses this same option builder but
         // never applies the Portfolio tab's decluttering) always label --
@@ -3158,15 +3167,15 @@ function frontierChartOption(cloud, frontier, assetPoints, currentPoint, rf){
         // sliding over the marker's column covers nothing).
         labelLayout:p=>({moveOverlap:'shiftY', dx: p.labelRect.x<40 ? 40-p.labelRect.x : 0}) }] : []),
       { name:'Current mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:18,
-        itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, silent:true, z:4,
+        itemStyle:{color:'transparent', borderColor:'#B8740F', borderWidth:2.5}, silent:true, z:4,
         // Below the ring when there's a gap arrow (its "+x% possible" label
         // sits at the top end), so the two never print on each other.
         label:{show:true, position:gap?'bottom':'left', distance:10, fontFamily:"'Spline Sans Mono',monospace",
           formatter:`{t|YOUR MIX}\n{v|${(currentPoint.ret*100).toFixed(1)}% · ${(currentPoint.vol*100).toFixed(1)}% risk}`,
           backgroundColor:'rgba(255,255,255,.85)', padding:[3,5], borderRadius:3,
-          rich:{t:{color:'#D97757', fontWeight:700, fontSize:10}, v:{color:'#B85C3E', fontSize:10, padding:[2,0,0,0]}}} },
+          rich:{t:{color:'#14283F', fontWeight:700, fontSize:10}, v:{color:'#14283F', fontSize:10, padding:[2,0,0,0]}}} },
       { name:'Current mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
-        itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:4 },
+        itemStyle:{color:'#B8740F'}, tooltip:{show:false}, silent:true, z:4 },
     ],
   };
 }
@@ -3200,9 +3209,9 @@ function frontierChart(cloud, frontier, assetPoints, currentPoint, chartId, onPo
     <div id="${chartId}" class="echart" style="height:400px"></div>
     <div class="fx-legend">
       <span><i style="background:#2557C7"></i>The frontier: the best return possible at each risk level</span>
-      <span><i style="background:#8FC79E;border-radius:50%"></i>A single building block on its own</span>
+      <span><i style="background:#1F8A70;border-radius:50%"></i>A single building block on its own</span>
       ${rf!=null ? `<span><i style="border:2px solid #2557C7;background:#14283F"></i>Best return for the risk you're taking, after a safe cash baseline</span>` : ''}
-      <span><i style="border:2px solid #D97757;background:transparent"></i>Your current mix</span>
+      <span><i style="border:2px solid #B8740F;background:transparent"></i>Your current mix</span>
       <span><i style="border-top:2px dashed rgba(20,40,63,.7);background:transparent"></i>Return left on the table at this risk level &middot; click any point to try that mix</span>
     </div>
   </div>`;
@@ -3236,7 +3245,7 @@ function renderFanChartOption(chartId, yearBands, yMax){
   };
   pushEnd(last.p90,'P90','rgba(20,40,63,.6)',500);
   pushEnd(last.p50,'Median','#1E4FBE',700);
-  pushEnd(last.p10,'P10','#B85C3E',600);
+  pushEnd(last.p10,'P10','#14283F',600);
   initChart(chartId, {
     grid:{left:4,right:4,top:18,bottom:20,containLabel:false},
     xAxis:{type:'category', data:yearBands.map((b,i)=>i===0?'Now':'Yr '+i), boundaryGap:false,
@@ -3276,8 +3285,8 @@ function renderJointTimelineChartOption(chartId, rows, children){
   // Each child's college years shaded and named, so "why does the balance
   // fall here" is answered on the chart instead of in a tooltip.
   const areas=(children||[]).map((ch,k)=>[{xAxis:ch.yearsToStart, name:'Child '+(k+1)+' in college',
-      itemStyle:{color:k%2?'rgba(217,119,87,.10)':'rgba(95,168,117,.12)'},
-      label:{color:k%2?CHART_TEXT.bad:CHART_TEXT.good, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace", position:'insideBottom'}},
+      itemStyle:{color:k%2?'rgba(184,116,15,.10)':'rgba(31,138,112,.12)'},
+      label:{color:k%2?CHART_TEXT.ink:CHART_TEXT.good, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace", position:'insideBottom'}},
     {xAxis:Math.min(n-1, ch.yearsToStart+ch.duration-1)}]);
   const series=[
     { name:'Balance', type:'line', data:rows.map(r=>r.close), showSymbol:false,
@@ -3287,7 +3296,7 @@ function renderJointTimelineChartOption(chartId, rows, children){
       markPoint:n?{symbol:'circle', symbolSize:7, itemStyle:{color:'#2557C7'}, silent:true,
         data:[{coord:[peakIdx, rows[peakIdx].close]}], label:valueTag('Peak '+c.compact(rows[peakIdx].close)+', yr '+(peakIdx+1), CHART_TEXT.blue, peakIdx>n*0.6?'left':(peakIdx<n*0.25?'right':'top'))}:undefined },
   ];
-  if(feePoints.length) series.push({ name:'Fee withdrawal', type:'scatter', data:feePoints, symbolSize:7, itemStyle:{color:'#D97757'}, z:2,
+  if(feePoints.length) series.push({ name:'Fee withdrawal', type:'scatter', data:feePoints, symbolSize:7, itemStyle:{color:'#B8740F'}, z:2,
     tooltip:{formatter:p=>`Fee withdrawal<br/>Balance: ${c.compact(p.value[1])}`} });
   initChart(chartId, {
     grid:{left:4,right:4,top:22,bottom:22,containLabel:false},
@@ -3360,7 +3369,7 @@ function renderJoint(){
     <div class="field"><label>Education inflation <b>${j.eduInflation}%</b></label><input type="range" min="4" max="16" step="0.5" value="${j.eduInflation}" data-k="eduInflation" data-tab="joint"></div>
     <div class="field"><label>Growth while saving <b>${j.preRate}%</b></label><input type="range" min="4" max="16" step="0.1" value="${j.preRate}" data-k="preRate" data-tab="joint"></div>
     <div class="field"><label>Parking rate near/during college${infoIcon('Once the first child is within a year of starting college, the whole pot moves out of growth assets into safer holdings. This is the return assumed on that safer parking, typically a liquid or short-duration debt rate.')} <b>${j.parkRate}%</b></label><input type="range" min="3" max="10" step="0.1" value="${j.parkRate}" data-k="parkRate" data-tab="joint"></div>
-    <div class="gr-note">Rule: the whole corpus shifts to the parking rate once the FIRST child is within a year of starting. A single pot means one risk profile for everyone in it. Red dots on the chart mark fee-withdrawal years.</div>
+    <div class="gr-note">Rule: the whole corpus shifts to the parking rate once the FIRST child is within a year of starting. A single pot means one risk profile for everyone in it. Dots on the chart mark fee-withdrawal years.</div>
   </div>
   <div class="output">
     <div class="stat-row">
@@ -3596,14 +3605,14 @@ function renderRiskBarOption(chartId, decomp, concentratedDecomp){
     }},
     series:[
       { name:'Systematic', type:'bar', stack:'risk', data:[sysPct], barWidth:30,
-        itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#8FC79E'},{offset:1,color:'#5FA875'}]}, borderRadius:[3,0,0,3]},
+        itemStyle:{color:'#1F8A70', borderRadius:[3,0,0,3]},
         label:{show:sysPct>14, formatter:()=>sysPct.toFixed(0)+'%', color:'#FFFFFF', fontWeight:700, fontFamily:"'Spline Sans Mono',monospace", position:'inside'},
         markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'#14283F', type:'dashed', width:1.5},
           label:{formatter:`all in biggest holding: ${markerPct.toFixed(0)}% market`, position:'end', distance:3, align:markerPct>70?'right':(markerPct<30?'left':'center'), color:'rgba(20,40,63,.7)', fontSize:10, fontFamily:"'Spline Sans Mono',monospace"},
           data:[{xAxis:markerPct}]} },
       { name:'Unsystematic', type:'bar', stack:'risk', data:[unsysPct], barWidth:30,
-        itemStyle:{color:{type:'linear',x:0,y:0,x2:1,y2:0,colorStops:[{offset:0,color:'#E8977A'},{offset:1,color:'#D97757'}]}, borderRadius:[0,3,3,0]},
-        label:{show:unsysPct>10, formatter:()=>unsysPct.toFixed(0)+'%', color:'#FFFFFF', fontWeight:700, fontFamily:"'Spline Sans Mono',monospace", position:'inside'} },
+        itemStyle:{color:'#B8740F', borderRadius:[0,3,3,0]},
+        label:{show:unsysPct>10, formatter:()=>unsysPct.toFixed(0)+'%', color:'#14283F', fontWeight:700, fontFamily:"'Spline Sans Mono',monospace", position:'inside'} },
     ],
   });
 }
@@ -3705,8 +3714,8 @@ function portfolioStatsHTML(d){
 }
 
 function riskBarLegendHTML(d){
-  return `<span><i style="background:#5FA875"></i>Systematic ${(d.decomp.systematicPct*100).toFixed(0)}% (${(d.decomp.systematicVol*100).toFixed(1)}% volatility): market-wide risk from stock prices and interest rates, which you can't remove</span>
-    <span><i style="background:#D97757"></i>Unsystematic ${(d.decomp.unsystematicPct*100).toFixed(0)}% (${(d.decomp.unsystematicVol*100).toFixed(1)}% volatility): specific to your mix, this is what diversifying reduces</span>`;
+  return `<span><i style="background:#1F8A70"></i>Systematic ${(d.decomp.systematicPct*100).toFixed(0)}% (${(d.decomp.systematicVol*100).toFixed(1)}% volatility): market-wide risk from stock prices and interest rates, which you can't remove</span>
+    <span><i style="background:#B8740F"></i>Unsystematic ${(d.decomp.unsystematicPct*100).toFixed(0)}% (${(d.decomp.unsystematicVol*100).toFixed(1)}% volatility): specific to your mix, this is what diversifying reduces</span>`;
 }
 function portfolioRiskBarHTML(d){
   return `${riskCompositionBar(d.decomp, d.concentratedDecomp, 'pf-riskbar-echart')}
@@ -3754,7 +3763,7 @@ function portfolioRiskContribHTML(d, assets, corr){
       <div class="rc-vals ${flagClass}">${r.moneyPct}% money &middot; ${r.riskPct.toFixed(1)}% risk</div>
     </div>`;
   }).join('');
-  return `<div class="rc-legend"><span><i style="background:#2557C7"></i>Share of your money</span><span><i style="background:#D97757"></i>Share of your risk</span></div>
+  return `<div class="rc-legend"><span><i style="background:#2557C7"></i>Share of your money</span><span><i style="background:#B8740F"></i>Share of your risk</span></div>
   ${body}`;
 }
 // Approximate stress-test: scale each real historical crash episode's
@@ -3897,7 +3906,7 @@ function updatePortfolioLive(){
     const el=document.querySelector(`[data-cluster-total="${cl}"]`);
     if(el) el.textContent = clusterPct[cl]+'%';
   });
-  // .term and .info-icon tooltips are pure CSS (:hover), so no JS re-attachment is needed here
+  // .term and .info-icon tooltips are handled by gtip.js, delegated from document: no re-attachment needed here
 }
 
 let portfolioChartTimer=null;
@@ -3953,7 +3962,7 @@ function renderPortfolio(){
     idxs.forEach(i=>{
       const a=assets[i];
       fields+=`<div class="field">
-        <label class="port-asset-label">${a.name}<span class="port-asset-meta">typically ${(a.ret*100).toFixed(1)}%/yr${infoIcon('The illustrative long-run expected return for this building block, same figure used everywhere else in Goalden. This is what actually moves your overall expected return when you drag its bar.'+(a.note?' '+a.note:''))} &middot; ${(a.vol*100).toFixed(0)}% volatility, how much a bad year here typically swings${a.tag?` &middot; <i>${a.tag}</i>`:''}</span></label>
+        <label class="port-asset-label">${a.name}<span class="port-asset-meta">typically ${(a.ret*100).toFixed(1)}%/yr${infoIcon('The illustrative long-run expected return for this building block, same figure used everywhere else in Goalden. This is what actually moves your overall expected return when you drag its bar.'+(a.note?' '+a.note:''), '', 'the expected return of '+a.name)} &middot; ${(a.vol*100).toFixed(0)}% volatility, how much a bad year here typically swings${a.tag?` &middot; <i>${a.tag}</i>`:''}</span></label>
         <div class="port-pct-row"><span class="port-pct-badge" data-pf-label="${i}">${pct[i]}%</span><span class="port-pct-of">of your total portfolio</span></div>
         <div class="slider-row">
           <input type="range" min="0" max="100" value="${rawW[i]}" data-portidx="${i}">
@@ -3990,7 +3999,7 @@ function renderPortfolio(){
 
     <div class="card is-primary">
       <h4>The risk-return map <span style="color:rgba(20,40,63,.74);font-weight:400;font-size:13px">(finance calls this curve the "efficient frontier")</span></h4>
-      <div class="cap">Each faint dot is one possible mix of these ${assets.length} building blocks. Higher up is more return; further right is more risk. The blue line traces the best return achievable at each risk level &ndash; your orange marker is where you actually stand right now. Hover any point, or click one, to try that mix.</div>
+      <div class="cap">Each faint dot is one possible mix of these ${assets.length} building blocks. Higher up is more return; further right is more risk. The blue line traces the best return achievable at each risk level &ndash; the ringed marker labelled YOUR MIX is where you actually stand right now. Hover any point, or click one, to try that mix.</div>
       <div class="pf-map-toolbar">
         <button class="pf-map-btn" id="pfResetBtn">Reset</button>
         <button class="pf-map-btn" id="reseedFrontierBtn">Resample the cloud</button>
@@ -5236,7 +5245,7 @@ function liveGrowthCardHTML(items, weights){
     <div class="stat-row pairs" style="margin-bottom:10px">
       <div class="stat"><div class="stat-label">Your mix grew to</div><div class="stat-value">${c.compact(mixEnd)}</div><div class="stat-sub">${(g.cagr*100).toFixed(1)}%/yr over ${g.years.toFixed(1)} yrs</div></div>
       ${benchStat}
-      <div class="stat"><div class="stat-label">Worst fall${infoIcon('The deepest drop from a previous high point to a later low, for your mix. Everyone who held through this period sat through it.')}</div><div class="stat-value">${(w.dd*100).toFixed(1)}%</div><div class="stat-sub">bottom in ${fmtD(g.dates[w.k])}</div></div>
+      <div class="stat"><div class="stat-label">Worst fall${infoIcon('The deepest drop from a previous high point to a later low, for your mix. Everyone who held through this period sat through it.', c.compact(amt*g.mix[w.peakK])+' at the high ('+fmtD(g.dates[w.peakK])+') fell to '+c.compact(amt*g.mix[w.k])+' at the bottom ('+fmtD(g.dates[w.k])+').')}</div><div class="stat-value">${(w.dd*100).toFixed(1)}%</div><div class="stat-sub">bottom in ${fmtD(g.dates[w.k])}</div></div>
       <div class="stat"><div class="stat-label">Time to recover</div><div class="stat-value" style="font-size:20px">${g.recK!=null?(m=>m+(m===1?' month':' months'))(monthsBetween(g.dates[w.k], g.dates[g.recK])):'Not yet'}</div><div class="stat-sub">${rec}</div></div>
     </div>
     <div class="scrub-readout" id="live-growth-echart-ro" aria-hidden="true"></div>
@@ -5879,7 +5888,7 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         itemStyle:{color:'#14283F', borderColor:'#14283F', borderWidth:1}, z:4,
         label:{show:true, formatter:`RISK-FREE ${(rfPoint.ret*100).toFixed(1)}%`, position:'right', distance:8, color:'#56698A', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
       { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
-        itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1},
+        itemStyle:{color:'#1F8A70', borderColor:'#14283F', borderWidth:1},
         // Points built without a showLabel flag (e.g. the Test Real
         // Investments chart, which reuses this same option builder but
         // never applies the Portfolio tab's decluttering) always label --
@@ -5889,13 +5898,13 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
         itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
         label:Object.assign({show:true, position:tanLeft?'left':'right', distance:10, formatter:`{t|BEST BALANCE}\n{v|${rv(tangencyPoint)}}${tanSplit}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:11}, v:{color:'#14283F', fontSize:11, padding:[2,0,0,0]}, s:{color:'#56698A', fontSize:10, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
       ...(showSafest ? [{ name:'Safest', type:'scatter', data:[[minVarPoint.vol,minVarPoint.ret]], symbolSize:10,
-        itemStyle:{color:'#8FC79E', borderColor:'#14283F', borderWidth:1.5}, z:4,
+        symbol:'diamond', itemStyle:{color:'#8A4FBF', borderColor:'#14283F', borderWidth:1.5}, z:4,
         label:Object.assign({show:true, position:'left', distance:10, formatter:`{t|SAFEST}\n{v|${rv(minVarPoint)}}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:11}, v:{color:'#14283F', fontSize:11, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} }] : []),
       { name:'Your mix', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:16,
-        itemStyle:{color:'transparent', borderColor:'#D97757', borderWidth:2.5}, z:5,
-        label:Object.assign({show:true, position:yourPos, distance:12, formatter:`{t|YOUR MIX}\n{v|${rv(currentPoint)}}`, rich:{t:{color:'#9C4A2C', fontWeight:700, fontSize:11}, v:{color:'#9C4A2C', fontSize:11, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
+        itemStyle:{color:'transparent', borderColor:'#B8740F', borderWidth:2.5}, z:5,
+        label:Object.assign({show:true, position:yourPos, distance:12, formatter:`{t|YOUR MIX}\n{v|${rv(currentPoint)}}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:11}, v:{color:'#14283F', fontSize:11, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
       { name:'Your mix dot', type:'scatter', data:[[currentPoint.vol,currentPoint.ret]], symbolSize:6,
-        itemStyle:{color:'#D97757'}, tooltip:{show:false}, silent:true, z:5 },
+        itemStyle:{color:'#B8740F'}, tooltip:{show:false}, silent:true, z:5 },
     ],
   };
 }
@@ -5940,9 +5949,9 @@ function liveFrontierChart(frontier, assetPoints, currentPoint, cal, tangencyPoi
       <span><i style="background:#2557C7"></i>The frontier: every possible split</span>
       <span><i style="border:2px solid #14283F;background:#14283F;border-radius:50%"></i>Risk-free rate (${rfPct}%) &middot; 0% risk by definition, where the dashed line starts</span>
       <span><i style="border-top:2px dashed rgba(20,40,63,.9);background:transparent"></i>Capital Allocation Line: the risk-free rate blended with Best Balance, from all cash to fully invested</span>
-      <span><i style="background:#8FC79E;border-radius:50%"></i>Each instrument alone</span>
+      <span><i style="background:#1F8A70;border-radius:50%"></i>Each instrument alone</span>
       <span><i style="border:2px solid #14283F;background:#14283F"></i>Best balance of risk and reward</span>
-      <span><i style="border:2px solid #D97757;background:transparent"></i>Your mix &middot; hover for detail, click the curve to move it</span>
+      <span><i style="border:2px solid #B8740F;background:transparent"></i>Your mix &middot; hover for detail, click the curve to move it</span>
     </div>
   </div>`;
 }
@@ -6043,7 +6052,7 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
   const tanSharpe = tanVol>0 ? (tanRet-rf)/tanVol : 0;
   const sharpeGap = tanSharpe - currentSharpe;
   const hasGap = sharpeGap > 0.05;
-  const verdictColor = hasGap ? '#D97757' : '#5FA875';
+  const verdictColor = hasGap ? '#9C4A2C' : '#256F55';   // text, so the AA tokens
   const verdictText = hasGap
     ? `The best trade-off between risk and reward here is <b style="color:${verdictColor}">${(wTan*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:${verdictColor}">${((1-wTan)*100).toFixed(0)}% ${b.symbol}</b> &ndash; your split earns less reward per unit of risk than that.`
     : `Your split is already close to the best trade-off between risk and reward these two instruments can offer.`;
@@ -6180,7 +6189,7 @@ function liveTwoAssetHTML(items, rfPct){
   const minVarRet=portfolioReturn([wMinVar,1-wMinVar],[sa.annualReturn,sb.annualReturn]);
   const minVarVol=Math.sqrt(portfolioVariance([wMinVar,1-wMinVar],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
   return `${liveWindowNoteHTML(items)}${liveNudgesHTML(items, [sa.annualVol, sb.annualVol], [[1,c12],[c12,1]], [w, 1-w])}<div class="stat-row four">
-    <div class="stat"><div class="stat-label">Correlation</div><div class="stat-value">${c12.toFixed(2)}</div>${advisorAskLink('What does this correlation mean?')}</div>
+    <div class="stat"><div class="stat-label"><span class="term" data-def="How closely two investments moved together, from −1 (always opposite) through 0 (unrelated) to +1 (in lockstep)." data-you="${advisorAttr(liveShortName(a)+' and '+liveShortName(b)+': '+c12.toFixed(2)+(c12<-0.3?' — they tended to move in opposite directions, which is why mixing them smooths the ride.':c12<0.3?' — they moved almost independently, which is why mixing them smooths the ride.':c12>0.85?' — they moved together most of the time, so the second adds little protection.':' — partly related.'))}">Correlation</span></div><div class="stat-value">${c12.toFixed(2)}</div>${advisorAskLink('What does this correlation mean?')}</div>
     <div class="stat"><div class="stat-label">Your mix return</div><div class="stat-value">${(currentRet*100).toFixed(1)}%</div></div>
     <div class="stat"><div class="stat-label">Your mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
     <div class="stat"><div class="stat-label">Compounded equivalent${infoIcon('An approximation of what this mix would actually compound to over time: expected return minus half the variance (μ − σ²/2). Not a substitute for the exact per-instrument compounded figures above, but a quick read on how much the expected-return figure overstates real growth for a mix this volatile.')}</div><div class="stat-value">${(compoundedApprox*100).toFixed(1)}%</div></div>
@@ -6194,7 +6203,7 @@ function liveTwoAssetHTML(items, rfPct){
   </div>
   <div class="card">
     <h4>Weight: <b>${(w*100).toFixed(0)}% ${a.symbol}</b> / <b>${((1-w)*100).toFixed(0)}% ${b.symbol}</b></h4>
-    <div class="slider-row"><input type="range" min="0" max="100" step="1" value="${L.live.weight}" data-live-weight></div>
+    <div class="slider-row"><input type="range" min="0" max="100" step="1" value="${L.live.weight}" data-live-weight aria-label="Weight of ${advisorAttr(a.symbol)} against ${advisorAttr(b.symbol)}" aria-valuetext="${(w*100).toFixed(0)}% ${advisorAttr(a.symbol)}, ${((1-w)*100).toFixed(0)}% ${advisorAttr(b.symbol)}"></div>
     <div class="gr-note" style="margin-top:10px">Best Sharpe ratio at <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> &middot; minimum risk at <b style="color:#256F55">${(wMinVar*100).toFixed(0)}% ${a.symbol}</b>.</div>
   </div>
   <div class="card">
@@ -6235,7 +6244,7 @@ function liveMultiAssetHTML(computed, rfPct){
   </div>
   <div class="card is-primary">
     <h4>Efficient frontier${infoIcon('The faint dots are 3,000 random weight combinations (seeded, so they repeat identically), to show the range of mixes you could hold. The blue line is solved exactly: for each risk level it is the long-only mix with the highest possible return, the same method Build a Portfolio uses.')}</h4>
-    <div class="cap">Annualised from real daily prices over the shared window: ${items.map(it=>it.symbol).join(', ')}. Higher up is more return, further right is more risk &ndash; the blue line is the best you could have done at each risk level, and your orange marker is where this exact mix actually sits.</div>
+    <div class="cap">Annualised from real daily prices over the shared window: ${items.map(it=>it.symbol).join(', ')}. Higher up is more return, further right is more risk &ndash; the blue line is the best you could have done at each risk level, and the ringed marker labelled YOUR MIX is where this exact mix actually sits.</div>
     ${frontierChart(cloud, frontier, assetPoints, currentPoint, 'live-multi-frontier-echart', onLiveMultiFrontierPick, rf)}
     <div class="gr-note" style="margin-top:10px">${frontierTakeawayHTML(currentPoint, currentSharpe, frontier, onLiveMultiFrontierPick)}</div>
     ${moneyLine}
@@ -6599,10 +6608,80 @@ let stmtChromeAutoCollapsed=false;
 // #stmtRoot so a check in DevTools or a test can confirm it stays flat
 // across hover/pin/focus interactions, which must only ever patch DOM.
 window.__statementsRenderCount=0;
+
+/* ---- Keyboard focus across render() --------------------------------------
+   render() replaces #main wholesale, and 130ms after every slider move. A
+   keyboard user who pressed an arrow on a slider lost focus when it was
+   thrown away, so each slider could be moved exactly one step before the next
+   key press went nowhere. This notes which control had focus (by its data-*
+   attributes, which are what the templates give each one a stable identity
+   with) and puts focus back on the same control in the new DOM. */
+let lastRenderedTab=null;
+function labDataSel(el){
+  // data-gtip is added by gtip.js after the element exists, so a key that included it would never match the re-rendered copy.
+  const attrs=[...el.attributes].filter(a=>a.name.startsWith('data-') && a.name!=='data-gtip');
+  if(!attrs.length) return null;
+  return el.tagName.toLowerCase()+attrs.map(a=>'['+a.name+'="'+String(a.value).replace(/["\\]/g,'\\$&')+'"]').join('');
+}
+function labFocusKey(el){
+  const root=el && el!==document.body && el.closest ? el.closest('#main, #tabbar') : null;
+  if(!root) return null;
+  let sel=null;
+  if(el.id) sel='#'+CSS.escape(el.id);
+  else if(el.classList.contains('field-num') && el.previousElementSibling && el.previousElementSibling.matches('input[type=range]')){
+    // the number box attach() adds beside a slider has no attributes of its own
+    const s=labDataSel(el.previousElementSibling); sel=s && s+' + .field-num';
+  } else sel=labDataSel(el);
+  if(!sel) return null;
+  const full='#'+root.id+' '+sel;
+  return document.querySelectorAll(full).length===1 ? { root:'#'+root.id, sel:full } : null;
+}
+function labRestoreFocus(key, tabChanged){
+  const now=document.activeElement;
+  if(now && now!==document.body) return;        // something already took focus on purpose
+  const el=key ? document.querySelector(key.sel) : null;
+  if(el){ el.focus({preventScroll:true}); return; }
+  // The control is gone (another tool opened from a card in the page): put focus
+  // at the top of the new view so the next Tab goes into it, not back to the top
+  // of the document.
+  if(tabChanged && key && key.root==='#main'){ const m=document.getElementById('main'); m.tabIndex=-1; m.focus({preventScroll:true}); }
+}
+
+/* ---- Names for sliders and number boxes ---------------------------------
+   A slider's label is a sibling, not a <label for>, so a screen reader said
+   "slider, 30" with no question attached. This names each from the label that
+   sits above it (without the bold readout and the (i) icon), and gives sliders
+   the readout as their spoken value ("Rs 50,000" rather than 50000). */
+function labFieldLabel(el){
+  for(let n=el.parentElement; n && n!==document.body; n=n.parentElement){
+    const l=n.querySelector(':scope > label');
+    if(l) return l;
+  }
+  return null;
+}
+function nameFields(root){
+  root.querySelectorAll('input[type=range], input[type=number]').forEach(el=>{
+    const named=(el.labels && el.labels.length) || el.getAttribute('aria-label') || el.getAttribute('aria-labelledby');
+    const slider=el.type==='range' ? el : (el.previousElementSibling && el.previousElementSibling.matches('input[type=range]') ? el.previousElementSibling : null);
+    const lab=labFieldLabel(slider||el);
+    if(!lab) return;
+    if(!named){
+      const copy=lab.cloneNode(true);
+      copy.querySelectorAll('b, .info-icon, .port-asset-meta').forEach(n=>n.remove());
+      const text=copy.textContent.replace(/\s+/g,' ').trim();
+      if(text) el.setAttribute('aria-label', slider&&el!==slider ? text+' (type a number)' : text);
+    }
+    const b=lab.querySelector('b');
+    if(b && el.type==='range') el.setAttribute('aria-valuetext', b.textContent.trim());
+  });
+}
+
 // opts.quiet: an in-place update (a period pill), not a move to another view.
 // It skips the fade-in, which on a screen the person is already reading looks
 // like the page being thrown away and rebuilt.
 function render(opts){
+  const keepFocus=labFocusKey(document.activeElement);
+  const tabBefore=lastRenderedTab;
   renderTabs();
   const main=document.getElementById('main');
   // "Read the Company" is a dedicated full-width reading surface, not one of
@@ -6651,8 +6730,13 @@ function render(opts){
     '<div class="pt">Goalden Lab &middot; '+tabLabel+'</div>'+
     '<div class="ps">'+cfg().name+' &middot; printed '+new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})+'</div>';
   attach();
+  nameFields(main);
+  // Made focusable now, not a microtask later, so a focused "i" or term can be given focus back below.
+  if(window.gtipEnhance) gtipEnhance(main);
   syncStickyPanels();
   persistLabState();
+  lastRenderedTab=L.tab;
+  labRestoreFocus(keepFocus, tabBefore!==null && tabBefore!==L.tab);
 }
 
 // The inputs panel is hidden in print, so a printout showed results with
@@ -9759,7 +9843,7 @@ function updateStatementsUI(){
         yAxis:{type:'value', axisLabel:{formatter:v=>v+'%', color:'#56698A'}, splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}},
         tooltip:{trigger:'axis', confine:true, formatter:ps=>{ const p=ds[ps[0].dataIndex]; return `${fy(p.year)}<br/>ROE ${pct(p.roe)} = ${pct(p.margin)} &times; ${x(p.turnover)} &times; ${x(p.leverage)}`; }},
         series:[{ type:'bar', name:'ROE', data:ds.map(p=>+(p.roe*100).toFixed(1)), barMaxWidth:34,
-          itemStyle:{color:p=>ds[p.dataIndex].roe<0?'#D97757':'#2557C7', borderRadius:[3,3,0,0]},
+          itemStyle:{color:p=>ds[p.dataIndex].roe<0?'#9C4A2C':'#2557C7', borderRadius:[3,3,0,0]},
           label:{show:true, position:'top', formatter:p=>p.value.toFixed(0)+'%', fontSize:10, color:'#14283F', fontFamily:"'Spline Sans Mono',monospace"} }],
         graphic:[{type:'text', left:8, top:2, style:{text:'Return on equity each year', fill:'#56698A', fontSize:11, fontFamily:"'Spline Sans Mono',monospace"}}],
       });
@@ -11182,7 +11266,7 @@ function advisorReadCurrentChart() {
     const minVar = fd.frontier.reduce(function (m, x) { return x.vol < m.vol ? x : m; }, fd.frontier[0]);
     if (minVar) points.push({ label:'lowest risk', value:'return '+(minVar.ret*100).toFixed(1)+'%, risk '+(minVar.vol*100).toFixed(1)+'%' });
     return { ok:true, tool:'Build a Portfolio', charts:[
-      { kind:'efficient-frontier', title:'The efficient frontier', xAxis:'risk (volatility per year)', yAxis:'expected return per year', note:'blue curve = best return at each risk level; your mix is the orange marker', points: points },
+      { kind:'efficient-frontier', title:'The efficient frontier', xAxis:'risk (volatility per year)', yAxis:'expected return per year', note:'blue curve = best return at each risk level; your mix is the ringed marker labelled YOUR MIX', points: points },
     ] };
   }
   if (tab === 'livefrontier') {
@@ -11215,7 +11299,7 @@ function advisorReadCurrentChart() {
     const flatSip = solveSIP(mRate, s.years*12, s.corpus, true);
     const steppedSip = stepUpAnnualPlan(s.corpus, s.years, s.preRate/100, s.stepUpPct/100).startSip;
     return { ok:true, tool:'Step-Up SIP', charts:[
-      { kind:'comparison', title:'Flat vs step-up SIP', xAxis:'years (0 → '+s.years+')', yAxis:'balance (both reach '+c.compact(s.corpus)+')', note:'red = flat SIP, green = step-up', points:[{ label:'flat SIP', value:c.fmt(Math.round(flatSip))+'/mo' }, { label:'step-up SIP (starting)', value:c.fmt(Math.round(steppedSip))+'/mo' }, { label:'year-1 saving', value:c.fmt(Math.round(flatSip-steppedSip))+'/mo' }] },
+      { kind:'comparison', title:'Flat vs step-up SIP', xAxis:'years (0 → '+s.years+')', yAxis:'balance (both reach '+c.compact(s.corpus)+')', note:'dashed ochre = flat SIP, solid green = step-up', points:[{ label:'flat SIP', value:c.fmt(Math.round(flatSip))+'/mo' }, { label:'step-up SIP (starting)', value:c.fmt(Math.round(steppedSip))+'/mo' }, { label:'year-1 saving', value:c.fmt(Math.round(flatSip-steppedSip))+'/mo' }] },
     ] };
   }
   if (tab === 'swp') {
@@ -11800,6 +11884,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
 
 render();
 </script>
+<script src="gtip.js"></script>
 <script src="advisor.js"></script>
 </body>
 </html>

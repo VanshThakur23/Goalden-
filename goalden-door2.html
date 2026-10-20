@@ -24,6 +24,8 @@ h1,h2,h3{line-height:1.25}
 
 @media(prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}}
 :is(button,a,input,[tabindex]):focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+/* render() lands focus on the new screen's heading; it is a landing point, not a control, so no ring. */
+.qtitle[tabindex="-1"]:focus,.qtitle[tabindex="-1"]:focus-visible,.eyebrow[tabindex="-1"]:focus,.eyebrow[tabindex="-1"]:focus-visible,.case-title[tabindex="-1"]:focus,.case-title[tabindex="-1"]:focus-visible{outline:none}
 
 /* --- chrome --- */
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 20px 8px;flex-shrink:0}
@@ -148,9 +150,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .lower-note{font-size:12.5px;color:rgba(20,40,63,.74);background:rgba(20,40,63,.05);border-radius:8px;padding:10px 12px;margin-bottom:18px;border-left:2px solid var(--gold);line-height:1.5}
 
 /* --- term chips --- */
-.term{border-bottom:1px dashed rgba(37,87,199,.65);cursor:pointer;position:relative;display:inline}
-.term-tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--card);border:1px solid rgba(37,87,199,.3);box-shadow:0 8px 20px rgba(20,40,63,.14);border-radius:9px;padding:8px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:10;pointer-events:none;width:200px;line-height:1.45;font-style:normal;font-family:'Figtree',sans-serif}
-.term.open .term-tip{display:block}
+.term{border-bottom:1px dashed rgba(37,87,199,.65);cursor:help;position:relative;display:inline}
 
 /* --- goal pills on hub screen --- */
 .goal-hub{display:flex;flex-direction:column;gap:11px}
@@ -199,7 +199,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .case-section .case-cap{font-size:12.5px;color:rgba(20,40,63,.74);line-height:1.5;margin-bottom:14px}
 .race-legend{display:flex;gap:14px;justify-content:center;margin:8px 0 14px;flex-wrap:wrap}
 .race-legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace}
-.race-legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.race-legend i{width:18px;height:0;display:inline-block}
 .race-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
 .race-stat{background:rgba(20,40,63,.05);border-radius:3px 10px 10px 10px;padding:11px 9px;text-align:center}
 .race-stat .rs-label{font-family:'Spline Sans Mono',monospace;font-size:9px;letter-spacing:.04em;color:rgba(20,40,63,.74);margin-bottom:5px}
@@ -207,10 +207,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .case-slider-row{margin:14px 0 6px}
 .case-slider-label{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:rgba(20,40,63,.74);margin-bottom:8px}
 .case-slider-label b{color:var(--gold);font-family:'Spline Sans Mono',monospace}
-.case-callout{background:rgba(232,151,122,.1);border:1px solid rgba(232,151,122,.3);border-radius:3px 12px 12px 12px;padding:12px 14px;margin-top:10px;font-size:12.5px;line-height:1.5;color:rgba(20,40,63,.85)}
-.case-callout.good{background:rgba(143,199,142,.1);border-color:rgba(143,199,142,.3)}
+.case-callout{background:rgba(184,116,15,.08);border:1px solid rgba(184,116,15,.3);border-radius:3px 12px 12px 12px;padding:12px 14px;margin-top:10px;font-size:12.5px;line-height:1.5;color:rgba(20,40,63,.85)}
+.case-callout.good{background:rgba(31,138,112,.08);border-color:rgba(31,138,112,.3)}
 .holdbar-track{display:flex;height:26px;border-radius:3px;overflow:hidden;margin:12px 0 6px}
 .holdbar-seg{transition:width .2s ease}
+.holdbar-seg + .holdbar-seg{box-shadow:inset 2px 0 0 #fff}   /* the two colours are close in greyscale; the seam and the legend under the bar tell them apart */
 .holdbar-legend{display:flex;justify-content:space-between;font-size:11px;color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace}
 .growth-chain{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:14px 0;font-size:12.5px}
 .growth-chain .gc-node{background:rgba(37,87,199,.12);border:1px solid rgba(37,87,199,.3);border-radius:3px 9px 9px 9px;padding:7px 11px;color:rgba(20,40,63,.85)}
@@ -223,7 +224,6 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .case-back-row{padding:16px 0 8px;text-align:center}
 .case-back-row button{background:none;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
 .term-i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid rgba(20,40,63,.4);color:rgba(20,40,63,.74);font-size:9px;font-family:'Spline Sans Mono',monospace;cursor:pointer;position:relative;margin-left:2px;vertical-align:middle}
-.term-i-tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--card);border:1px solid rgba(37,87,199,.3);box-shadow:0 8px 20px rgba(20,40,63,.14);border-radius:9px;padding:9px 12px;font-size:11.5px;color:rgba(20,40,63,.85);z-index:20;pointer-events:none;width:220px;line-height:1.45;font-family:'Figtree',sans-serif;font-weight:400;text-align:left;white-space:normal}
 .section-head{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin:20px 0 10px}
 .goal-row{display:flex;justify-content:space-between;align-items:flex-start;padding:13px 15px;background:rgba(20,40,63,.05);border-radius:3px 13px 13px 13px;margin-bottom:0}
 .goal-row-wrap{margin-bottom:10px}
@@ -246,7 +246,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .inst-risk.high{background:rgba(160,58,34,.18);color:#9C4A2C}
 .inst-note{font-size:12px;color:rgba(20,40,63,.74);line-height:1.6;padding:10px 12px;margin:8px 2px 2px;background:rgba(20,40,63,.04);border-left:2px solid rgba(20,40,63,.2);border-radius:0 8px 8px 0}
 .inst-note.warn{border-left-color:var(--gold);background:rgba(37,87,199,.08)}
-.inst-note.stretch{border-left-color:#8FC79E;background:rgba(61,122,79,.1)}
+.inst-note.stretch{border-left-color:#1F8A70;background:rgba(61,122,79,.1)}
 .inst-note b{color:var(--paper)}
 .gr-left .gr-name{font-family:'Newsreader',serif;font-size:15px;color:var(--paper)}
 .gr-left .gr-meta{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);margin-top:3px;line-height:1.5}
@@ -364,7 +364,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 'use strict';
 
 echarts.registerTheme('goalden', {
-  color: ['#2557C7','#8FC79E','#D97757','#5FA875','#E8977A','#14283F'],
+  // The four palette slots (blue, ochre, green, violet), then two neutrals, so a
+  // series that sets no colour of its own never gets a generated hue.
+  color: ['#2557C7','#B8740F','#1F8A70','#8A4FBF','#56698A','#14283F'],
   backgroundColor: 'transparent',
   textStyle: { fontFamily: "'Spline Sans Mono', monospace", color: 'rgba(20,40,63,.75)' },
   title: { textStyle: { fontFamily: "'Newsreader', serif", color: '#14283F', fontWeight: 600 } },
@@ -522,11 +524,11 @@ function renderRaceChartOption(chartId, marketPath, goldPath, fdPath){
       return `Year ${m.axisValueLabel}<br/>Market: ${c.compact(m.value)}<br/>Gold: ${c.compact(g.value)}<br/>Bank FD: ${c.compact(f.value)}`;
     }},
     series:[
-      { name:'Bank FD', type:'line', data:fdPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#E8977A', width:1.5, type:'dashed'}, z:1 },
-      { name:'Gold', type:'line', data:goldPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#2557C7', width:1.5, type:'dashed'}, z:2 },
-      { name:'Market', type:'line', data:marketPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#8FC79E', width:2.25},
-        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(143,199,158,.35)'},{offset:1,color:'rgba(143,199,158,0)'}]}}, z:3,
-        markPoint:{symbol:'circle', symbolSize:7, itemStyle:{color:'#8FC79E'}, label:{show:false}, data:[{coord:[marketPath.length-1, marketPath[marketPath.length-1].v]}]} },
+      { name:'Bank FD', type:'line', data:fdPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#B8740F', width:1.75, type:[8,4]}, z:1 },
+      { name:'Gold', type:'line', data:goldPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#2557C7', width:1.75}, z:2 },
+      { name:'Market', type:'line', data:marketPath.map(pt=>pt.v), showSymbol:false, lineStyle:{color:'#1F8A70', width:2.5},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(31,138,112,.28)'},{offset:1,color:'rgba(31,138,112,0)'}]}}, z:3,
+        markPoint:{symbol:'circle', symbolSize:7, itemStyle:{color:'#1F8A70'}, label:{show:false}, data:[{coord:[marketPath.length-1, marketPath[marketPath.length-1].v]}]} },
     ],
   });
 }
@@ -540,9 +542,11 @@ function timeMachineChart(path, chartId, h) {
 function renderTimeMachineChartOption(chartId, path){
   const c = cfg();
   const finalUp = path[path.length-1].v >= path[0].v;
-  const lineColor = finalUp ? '#8FC79E' : '#E8977A';
-  const fillTop = finalUp ? 'rgba(143,199,158,.4)' : 'rgba(232,151,122,.4)';
-  const fillBot = finalUp ? 'rgba(143,199,158,0)' : 'rgba(232,151,122,0)';
+  // Green for a window that ended up, ochre for one that ended down. Ending down is
+  // a fact about history, not a fired warning, so it does not get the warning red.
+  const lineColor = finalUp ? '#1F8A70' : '#B8740F';
+  const fillTop = finalUp ? 'rgba(31,138,112,.35)' : 'rgba(184,116,15,.35)';
+  const fillBot = finalUp ? 'rgba(31,138,112,0)' : 'rgba(184,116,15,0)';
   initChart(chartId, {
     grid:{left:2,right:2,top:6,bottom:2,containLabel:false},
     xAxis:{type:'category', data:path.map((pt,i)=>i+1), show:false, boundaryGap:false},
@@ -580,7 +584,7 @@ function riskShrinkPctAt(series, selectedYears){
 function riskShrinkMarkerOption(selectedYears, pct){
   return { id:'risk',
     markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(20,40,63,.3)', type:'dashed'}, data:[{xAxis:selectedYears}]},
-    markPoint:{symbol:'circle', symbolSize:9, itemStyle:{color:'#D97757', borderColor:'var(--ink)', borderWidth:1.5}, label:{show:false}, data:[{coord:[selectedYears, pct]}]},
+    markPoint:{symbol:'circle', symbolSize:9, itemStyle:{color:'#B8740F', borderColor:'var(--ink)', borderWidth:1.5}, label:{show:false}, data:[{coord:[selectedYears, pct]}]},
   };
 }
 function riskShrinkChart(series, maxYears, chartId, h, selectedYears) {
@@ -599,8 +603,8 @@ function renderRiskShrinkChartOption(chartId, series, maxYears, selectedYears){
       const p=params.find(pp=>pp.seriesId==='risk')||params[0];
       return `${p.value[0]}-year holds<br/>${p.value[1].toFixed(0)}% ended down`;
     }},
-    series:[Object.assign({ id:'risk', type:'line', data:points, showSymbol:false, lineStyle:{color:'#D97757', width:2},
-      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(217,119,87,.35)'},{offset:1,color:'rgba(217,119,87,0)'}]}} },
+    series:[Object.assign({ id:'risk', type:'line', data:points, showSymbol:false, lineStyle:{color:'#B8740F', width:2},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(184,116,15,.3)'},{offset:1,color:'rgba(184,116,15,0)'}]}} },
       riskShrinkMarkerOption(selectedYears, selPct))],
   });
 }
@@ -667,11 +671,11 @@ function sCase() {
     <h4>The race: ${c.compact(raceAmt)}, three destinations</h4>
     <div class="case-cap">The same lump sum, placed in ${firstYear} and left completely untouched for ${nYears} years, through every real ${name} up-year and down-year in between.</div>
     ${raceChart(racePath, goldPath, fdPath, 'case-race')}
-    <div class="race-legend"><span><i style="background:#8FC79E"></i>${name}</span><span><i style="background:#2557C7"></i>Gold</span><span><i style="background:#E8977A"></i>Bank FD</span></div>
+    <div class="race-legend"><span><i style="border-top:3px solid #1F8A70"></i>${name}</span><span><i style="border-top:2px solid #2557C7"></i>Gold</span><span><i style="border-top:2px dashed #B8740F"></i>Bank FD</span></div>
     <div class="race-stats">
       <div class="race-stat"><div class="rs-label">${name}</div><div class="rs-val" style="color:#256F55">${c.compact(marketFinal)}</div></div>
       <div class="race-stat"><div class="rs-label">GOLD</div><div class="rs-val" style="color:var(--gold)">${c.compact(goldFinal)}</div></div>
-      <div class="race-stat"><div class="rs-label">BANK FD</div><div class="rs-val" style="color:#9C4A2C">${c.compact(fdFinal)}</div></div>
+      <div class="race-stat"><div class="rs-label">BANK FD</div><div class="rs-val" style="color:#8A5608">${c.compact(fdFinal)}</div></div>
     </div>
     <div class="case-cap" style="margin-bottom:0">${firstYear} to ${lastYear}, ${nYears} years. ${name} figure uses the real annual return each year, compounded, not an average smoothed into a straight line ${infoIconD1('Source: '+(G.country==='US'?'a compiled S&P 500 annual-return series, 1928-2015 price return, 2016-2024 total return with dividends reinvested.':'a compiled Sensex fiscal-year (April-April) return series, freefincal.com, 1979-80 through 2022-23, sourced from BSE closing values.'))}. Gold: ${(GOLD_RATE[G.country]*100).toFixed(1)}%/yr, ${G.country==='US'?'NYU Stern (Damodaran) historical dataset, 1928-2024.':'RBI Handbook of Statistics gold price data, 42-year CAGR to April 2026.'} FD: ${(c.d.fdRate*100).toFixed(1)}%/yr, a typical current multi-year bank rate held constant for illustration, which is generous to the FD since real FD rates have varied a lot across these decades.</div>
   </div>
@@ -763,8 +767,8 @@ function renderHoldResult(years){
   const pct = Math.round(100*losing/w.length);
   const worst = worstWindow(series, years);
   return `<div class="holdbar-track">
-    <div class="holdbar-seg" style="width:${100-pct}%;background:#5FA875"></div>
-    <div class="holdbar-seg" style="width:${pct}%;background:#D97757"></div>
+    <div class="holdbar-seg" style="width:${100-pct}%;background:#1F8A70"></div>
+    <div class="holdbar-seg" style="width:${pct}%;background:#B8740F"></div>
   </div>
   <div class="holdbar-legend"><span>${100-pct}% ended with more money</span><span>${pct}% ended with less</span></div>
   <div class="case-callout ${pct===0?'good':''}" style="margin-top:12px">
@@ -801,17 +805,7 @@ function attachCaseHandlers(){
   }
   const backBtn2 = document.getElementById('caseBackBtn');
   if (backBtn2) backBtn2.addEventListener('click', () => { G.si = flow().indexOf('plan'); render(); });
-  document.querySelectorAll('.term-i').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      document.querySelectorAll('.term-i-tip').forEach(t=>t.remove());
-      const tip = document.createElement('div');
-      tip.className = 'term-i-tip';
-      tip.textContent = el.dataset.def;
-      el.appendChild(tip);
-    });
-  });
-  document.addEventListener('click', () => document.querySelectorAll('.term-i-tip').forEach(t=>t.remove()), {once:true});
+  // The "i" tips (.term-i) open from gtip.js, which delegates from document: nothing to wire per render.
 }
 
 
@@ -1410,8 +1404,8 @@ function renderPotChartOption(chartId, rows, c){
   const startVal = rows[0].openBal;
   const endVal = rows[n-1].closeBal;
   const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal));
-  const endLabelColor = prematureDepletion ? '#E8977A' : '#8FC79E';
-  const endTextColor = prematureDepletion ? CHART_TEXT.bad : CHART_TEXT.good; // AA text; the dot keeps the pastel
+  const endLabelColor = prematureDepletion ? '#9C4A2C' : '#1F8A70';
+  const endTextColor = prematureDepletion ? CHART_TEXT.bad : CHART_TEXT.good; // AA text tokens; the dot wears the chart colour
   initChart(chartId, {
     grid:{left:2,right:2,top:26,bottom:20,containLabel:false},
     xAxis:{type:'category', data:rows.map((r,i)=>'Yr '+(r.year!==undefined?r.year:i+1)), boundaryGap:false,
@@ -1424,8 +1418,8 @@ function renderPotChartOption(chartId, rows, c){
     }},
     graphic:[{type:'text', left:2, top:2, style:{text:'Starts at '+fmt(startVal), fill:CHART_TEXT.muted, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace"}}],
     series:[
-      { type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#8FC79E', width:1.4},
-        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(61,122,79,.65)'},{offset:1,color:'rgba(61,122,79,.05)'}]}},
+      { type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#1F8A70', width:1.4},
+        areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(31,138,112,.5)'},{offset:1,color:'rgba(31,138,112,.05)'}]}},
         markPoint:{symbol:'circle', symbolSize:7, data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
           label:{show:true, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endTextColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:10.5}} },
     ],
@@ -1469,15 +1463,14 @@ function renderQGroup(section,indices){
   const allAnswered=indices.every(idx=>(section==='cap'?G.capA[idx]:G.tolA[idx])!=null);
   // One shared .qbody for the whole group (not one per question) -- .qbody
   // is the screen's single flex/scroll container everywhere else in this
-  // file, and .term-tip's clipping-safety is only proven inside that one
-  // container (see the profile screen), not inside a stack of nested ones.
+  // file.
   const blocks=indices.map((idx,n)=>{
     const q=qs[idx], saved=section==='cap'?G.capA[idx]:G.tolA[idx];
     // The why sentence used to sit under the title on its own dedicated
     // screen; stacking 2-3 of those in full on one screen would just
     // reintroduce the wall of text the batching was meant to cut, so it's
     // tap-to-reveal now via the same .term pattern already used elsewhere
-    // in this file (attach() wires it up screen-agnostically already).
+    // in this file (gtip.js wires it up screen-agnostically).
     return `<div class="qgroup-item${n>0?' qgroup-item-sep':''}">
     <div class="qgroup-title">${q.title}${q.why?` <span class="term" data-def="${q.why.replace(/"/g,'&quot;')}">why we ask</span>`:''}</div>
     ${q.opts.map(o=>`
@@ -1801,7 +1794,7 @@ function advGoalAllocControl(g,i){
   return `<div class="adv-toggle${active?' adv-active open':''}" id="advToggle-${i}"><span class="tog-caret">&#9662;</span>Advanced: customize this rate${active?' <span class="adv-badge">customized</span>':''}</div>
   <div class="adv-panel${active?' open':''}" id="advPanel-${i}"><div class="adv-inner">
     <label class="adv-label">Equity kept at this stage <b id="advVal-${i}">${eqPct}%</b></label>
-    <input type="range" id="advSlider-${i}" min="0" max="100" step="5" value="${eqPct}">
+    <input type="range" id="advSlider-${i}" min="0" max="100" step="5" value="${eqPct}" aria-label="Equity kept at this stage, ${g.label}">
     <div class="adv-preview" id="advPreview-${i}">New rate: <b>${(previewRate*100).toFixed(1)}%</b> a year (was ${(flatRate*100).toFixed(1)}%)</div>
     <div class="adv-btn-row"><button data-adv-apply="${i}">Use this mix</button>${active?`<button data-adv-reset="${i}" class="adv-btn-ghost">Reset to default</button>`:''}</div>
   </div></div>`;
@@ -2268,8 +2261,109 @@ function syncHistory(){
   try{ history.pushState({si:G.si},'',hash); }catch(e){}
 }
 
+/* ---- Keyboard and screen-reader access -------------------------------------
+   The answer options, country cards, quick-pick chips, "add a goal" and the plan's
+   toggles are <div>s with click handlers, so Tab skipped them and Enter/Space did
+   nothing. Rewriting ~25 templates as <button>s would restyle them all, so
+   instead: after each render every one of them is given tabindex, role and state
+   (enhancePressables), one key handler on the stage presses them on Enter/Space,
+   and focus survives the re-render that each pick causes (a re-render throws the
+   focused element away). Same idea as goalden.html; this page's names differ. */
+const PRESSABLE = '.ccrd,.opt,.mg,.chip,.add-goal-btn,.assump-toggle,.inst-toggle,.adv-toggle';
+// Choose-one options re-render on a pick, so aria-pressed is true from the render.
+// The quick-pick chips only fill a box and never re-render, so they carry no
+// pressed state (it would go stale the moment one was tapped).
+const CHOICE = '.ccrd,.opt,.mg';
+let shownScreen = null;   // the screen the last render() drew; null before the first one
+// toggle id -> the panel it opens
+const TOGGLE_PANELS = [[/^at$/, 'ap'], [/^bt$/, 'bp'], [/^it-(\d+)$/, 'ip-$1'], [/^dd-(\d+)$/, 'ddp-$1'], [/^advToggle-(\d+)$/, 'advPanel-$1']];
+function togglePanelOf(t) {
+  for (const [re, to] of TOGGLE_PANELS) if (re.test(t.id)) return document.getElementById(t.id.replace(re, to));
+  return null;
+}
+function syncExpanded(t) {
+  const p = togglePanelOf(t);
+  if (p) { t.setAttribute('aria-expanded', p.classList.contains('open')); t.setAttribute('aria-controls', p.id); }
+}
+function enhancePressables(root) {
+  root.querySelectorAll(PRESSABLE).forEach(el => {
+    if (el.tagName === 'BUTTON') return;
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    if (el.matches(CHOICE)) el.setAttribute('aria-pressed', el.classList.contains('sel'));
+    if (el.matches('.assump-toggle,.inst-toggle,.adv-toggle')) syncExpanded(el);
+  });
+  // A bare "30" chip means nothing read out alone, so each row of chips says what it picks.
+  root.querySelectorAll('.chips-label + .chips').forEach(g => {
+    if (g.hasAttribute('role')) return;
+    g.setAttribute('role', 'group'); g.setAttribute('aria-label', g.previousElementSibling.textContent.trim());
+  });
+}
+// A selector that finds "the same choice" again after a re-render: its id, or all
+// of its data-* attributes together (an answer option is told apart by score, section
+// and question number, not by its score alone). null when that would match more than one.
+function focusKeyOf(el) {
+  if (!el || el === document.body || !stage.contains(el)) return null;
+  let sel = null;
+  if (el.id) sel = '#' + CSS.escape(el.id);
+  else {
+    // data-gtip is added by gtip.js after the element exists, so a key that included it would never match the re-rendered copy.
+    const attrs = [...el.attributes].filter(a => a.name.startsWith('data-') && a.name !== 'data-gtip');
+    if (attrs.length) sel = attrs.map(a => '[' + a.name + '="' + String(a.value).replace(/["\\]/g, '\\$&') + '"]').join('');
+  }
+  return sel && stage.querySelectorAll(sel).length === 1 ? sel : null;
+}
+// A name for every slider and number box, from the text already beside it, and
+// a spoken value for sliders whose label carries a bold readout. The nearest
+// ancestor with a label-like child wins; a slider shares its number box's name.
+const FIELD_LABEL = ':scope > label, :scope > .qtitle';
+function fieldLabelOf(el) {
+  for (let n = el.parentElement; n && n !== stage.parentElement; n = n.parentElement) {
+    const l = n.querySelector(FIELD_LABEL);
+    if (l) return l;
+  }
+  return null;
+}
+function syncValueText(el, lab) {
+  const l = el.type === 'range' && (lab || fieldLabelOf(el)), b = l && l.querySelector('b');
+  if (b) el.setAttribute('aria-valuetext', b.textContent.trim());
+}
+function nameFields(root) {
+  root.querySelectorAll('input[type=number], input[type=range]').forEach(el => {
+    const lab = fieldLabelOf(el);
+    syncValueText(el, lab);
+    if ((el.labels && el.labels.length) || el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')) return;
+    const vs = el.closest('.value-slider'), twin = vs && vs.previousElementSibling && vs.previousElementSibling.querySelector('input[type=number]');
+    let text = twin && twin.getAttribute('aria-label') || '';
+    if (!text && lab) {
+      const copy = lab.cloneNode(true);
+      copy.querySelectorAll('b, .info-icon, .term-i').forEach(x => x.remove());
+      text = copy.textContent.replace(/\s+/g, ' ').trim();
+    }
+    if (text) el.setAttribute('aria-label', text);
+  });
+}
+stage.addEventListener('keydown', e => {
+  if ((e.key === 'Enter' || e.key === ' ') && !e.repeat && e.target.matches(PRESSABLE) && e.target.tagName !== 'BUTTON') {
+    e.preventDefault(); e.target.click();
+  }
+});
+// Toggles don't re-render; their own handler has already run by the time a click
+// reaches the stage, so aria-expanded can be read off the panel's state.
+stage.addEventListener('click', e => { const t = e.target.closest('.assump-toggle,.inst-toggle,.adv-toggle'); if (t) syncExpanded(t); });
+stage.addEventListener('input', e => { if (e.target.type === 'range') syncValueText(e.target); });
+
 function render(){
   const screen=flow()[G.si];
+  // Focus inside the old screen is about to be thrown away with it. (Focus in the
+  // advisor panel, or anywhere outside the stage, is left alone.)
+  const prevFocus=document.activeElement;
+  const hadFocus=!prevFocus || prevFocus===document.body || stage.contains(prevFocus);
+  const keepKey=focusKeyOf(prevFocus);
+  const screenChanged=shownScreen!==null && shownScreen!==screen;
+  // Answering a question on a tall (batched) screen re-renders it, and the fresh .qbody starts
+  // at the top: the option just chosen would be left out of view. Same screen: put the scroll back.
+  const oldBody=stage.querySelector('.qbody'), keepScroll=!screenChanged && oldBody ? oldBody.scrollTop : 0;
   const wrap=document.createElement('div');
   wrap.className='screen';
   wrap.innerHTML=renderScreen(screen);
@@ -2285,6 +2379,24 @@ function render(){
   wrap.classList.add('active');
   updateProgress();
   attach(screen);
+  enhancePressables(stage);
+  nameFields(stage);
+  // Made focusable now, not a microtask later, so a focused term can be given focus back below.
+  if(window.gtipEnhance) gtipEnhance(stage);
+  if(keepScroll){ const nb=wrap.querySelector('.qbody'); if(nb) nb.scrollTop=keepScroll; }
+  if(hadFocus && (!document.activeElement || document.activeElement===document.body)){
+    if(screenChanged){
+      // A new screen: land on its heading, not on the Continue button that was just
+      // pressed (which has the same id on the next screen), so the next Tab starts
+      // at the top of what is new and a screen reader says what the question is.
+      const h=wrap.querySelector('.qtitle') || wrap.querySelector('.case-title') || wrap.querySelector('.eyebrow');
+      if(h){ h.tabIndex=-1; h.focus({preventScroll:true}); }
+    } else if(keepKey){
+      const el=stage.querySelector(keepKey);
+      if(el) el.focus({preventScroll:true});
+    }
+  }
+  shownScreen=screen;
   persistState();
   syncHistory();
 }
@@ -2295,17 +2407,8 @@ function render(){
 function attach(screen){
   const nb=document.getElementById('nb');
 
-  // term chips — reveal plain-language definition on tap
-  document.querySelectorAll('.term').forEach(el=>{
-    if(!el.querySelector('.term-tip')){
-      const tip=document.createElement('span');
-      tip.className='term-tip';
-      tip.textContent=el.dataset.def||'';
-      el.appendChild(tip);
-    }
-    el.addEventListener('click',e=>{e.stopPropagation();el.classList.toggle('open');});
-  });
-  document.addEventListener('click',()=>{document.querySelectorAll('.term.open').forEach(e=>e.classList.remove('open'));},{once:false});
+  // term chips (.term) open from gtip.js, which delegates from document. This block used to add a
+  // fresh document click listener on every render, which piled up.
 
   if(screen==='country'){
     document.querySelectorAll('[data-country]').forEach(el=>el.addEventListener('click',()=>{G.country=el.dataset.country;render();}));
@@ -3211,6 +3314,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
   }
 })();
 </script>
+<script src="gtip.js"></script>
 <script src="advisor.js"></script>
 </body>
 </html>
