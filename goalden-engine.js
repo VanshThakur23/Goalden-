@@ -359,7 +359,7 @@ const RETIRE_ACCOUNTS_IN = {
   epf: { rate: 0.0825, rateFor: 'FY 2025-26', employee: 0.12, employer: 0.12, epsShare: 0.0833,
          epsWageCap: 15000, wageCeiling: 25000, ceilingFrom: '17 September 2026' },
   ppf: { rate: 0.071, rateFor: 'Oct-Dec 2026', yearlyMax: 150000 },
-  nps: { shareAt60: 0.6, shareBefore60: 0.2 },
+  nps: { shareAt60: 0.6, shareBefore60: 0.2, minAnnuityShare: 0.2 },
 };
 // A negative, missing or non-numeric box counts as nothing (values can come
 // back from saved browser state, so they are never trusted as numbers).
@@ -497,6 +497,169 @@ function harvestPlan(o) {
   const value = plain.reduce((s, l) => s + l.units * nav(o.years * 12), 0);
   return { years, value, paidIn: o.monthly * 12 * o.years, booked: bookedTotal, harvests,
     taxPlain: end.taxPlain, taxHarvested: end.taxHarvested, saved: end.taxPlain - end.taxHarvested };
+}
+
+/* ---------------------------------------------------------------------
+   Retirement income: how to DRAW the money, not only how much. Five pieces,
+   each returning both sides of a comparison and never a recommendation:
+     incomeBuckets    the pot split by when each part is needed
+     incomeStrategies the bucket plan and one rebalanced pot, year by year,
+                      through the SAME returns (so the same crash)
+     incomeDrawPlan   the same pot drawn as an SWP from a fund, or as FD
+                      interest, with the tax on each
+     incomeSwitchTax  the tax to sell a fund pot so it can go into an FD
+     npsAnnuityPlan   the part of NPS that has to buy a pension
+   All withdrawals are at the start of the year (the Lab's "due" timing) and
+   all steps are yearly. No surcharge (see TAX_IN).
+   --------------------------------------------------------------------- */
+function incomeBuckets(o) {
+  const years = Math.max(1, Math.round(o.years) || 1);
+  const L = Math.min(years, Math.max(1, Math.round(o.liquidYears == null ? 2 : o.liquidYears)));
+  const D = Math.min(years - L, Math.max(0, Math.round(o.debtYears == null ? 5 : o.debtYears)));
+  const infl = Number(o.inflation) || 0, spend = accNum(o.annualSpend), corpus = accNum(o.corpus);
+  // The year-k spend is spend x (1+infl)^(k-1); a bucket holds the sum of the years it covers. What it
+  // earns in the meantime is not counted, which errs on the side of holding enough.
+  const need = (from, n) => { let t = 0; for (let k = from; k < from + n; k++) t += spend * Math.pow(1 + infl, k); return t; };
+  const liquidNeed = need(0, L), debtNeed = need(L, D);
+  const liquid = Math.min(corpus, liquidNeed);
+  const debt = Math.min(corpus - liquid, debtNeed);
+  const equity = corpus - liquid - debt;
+  return { corpus, liquid, debt, equity, liquidYears: L, debtYears: D, liquidNeed, debtNeed,
+    shortfall: Math.max(0, liquidNeed + debtNeed - corpus), covered: liquidNeed + debtNeed <= corpus + 1e-6,
+    equityShare: corpus > 0 ? equity / corpus : 0 };
+}
+
+/* The bucket plan against one pot that is rebalanced to the same starting mix every year. Both
+   spend the same inflation-raised amount through the same returns; only equity's return changes
+   year to year (every year earns o.equityRate, except o.shock.year which earns o.shock.equityReturn).
+   Buckets: spend from liquid, then debt, then equity. At each year end: top liquid up to the
+   next liquidYears of spending from debt; then, if equity had a non-negative year, top debt
+   back up to the next debtYears from equity (and liquid again, if debt had run too short to fill
+   it the first time). A down year takes nothing out of equity.
+   o = { corpus, annualSpend, inflation, years, liquidYears, debtYears,
+         liquidRate, debtRate, equityRate, shock: { year, equityReturn } | null } */
+function incomeStrategies(o) {
+  const years = Math.max(1, Math.round(o.years) || 1), infl = Number(o.inflation) || 0, spend = accNum(o.annualSpend);
+  const sizes = incomeBuckets(o);
+  const shock = o.shock && o.shock.year >= 1 && o.shock.year <= years ? o.shock : null;
+  const rl = Number(o.liquidRate) || 0, rd = Number(o.debtRate) || 0, re = Number(o.equityRate) || 0;
+  const eqRet = y => (shock && y === shock.year) ? shock.equityReturn : re;
+  const spendIn = y => spend * Math.pow(1 + infl, y - 1);
+  const need = (fromYear, n) => { let t = 0; for (let y = fromYear; y < fromYear + n && y <= years; y++) t += spendIn(y); return t; };
+
+  const bucketRows = []; let b = { liquid: sizes.liquid, debt: sizes.debt, equity: sizes.equity }, bRan = null;
+  for (let y = 1; y <= years; y++) {
+    const pay = spendIn(y), total = b.liquid + b.debt + b.equity;
+    if (bRan === null && total - pay < -1) bRan = y;
+    if (bRan !== null) { bucketRows.push({ year: y, spend: 0, close: 0 }); continue; }
+    let left = pay;
+    ['liquid', 'debt', 'equity'].forEach(k => { const t = Math.min(b[k], left); b[k] -= t; left -= t; });
+    const e = eqRet(y);
+    b.liquid *= 1 + rl; b.debt *= 1 + rd; b.equity *= 1 + e;
+    if (y < years) {
+      const t1 = need(y + 1, sizes.liquidYears), t2 = need(y + 1 + sizes.liquidYears, sizes.debtYears);
+      const fillLiquid = () => { if (b.liquid < t1) { const m = Math.min(t1 - b.liquid, b.debt); b.liquid += m; b.debt -= m; } };
+      fillLiquid();
+      if (e >= 0 && b.debt < t2) { const m = Math.min(t2 - b.debt, b.equity); b.debt += m; b.equity -= m; fillLiquid(); }
+    }
+    bucketRows.push({ year: y, spend: pay, close: b.liquid + b.debt + b.equity, liquid: b.liquid, debt: b.debt, equity: b.equity });
+  }
+
+  const wl = sizes.corpus > 0 ? sizes.liquid / sizes.corpus : 0, wd = sizes.corpus > 0 ? sizes.debt / sizes.corpus : 0, we = 1 - wl - wd;
+  const mixRows = []; let tot = sizes.corpus, mRan = null;
+  for (let y = 1; y <= years; y++) {
+    const pay = spendIn(y);
+    if (mRan === null && tot - pay < -1) mRan = y;
+    if (mRan !== null) { mixRows.push({ year: y, spend: 0, close: 0 }); continue; }
+    tot = (tot - pay) * (1 + wl * rl + wd * rd + we * eqRet(y));
+    mixRows.push({ year: y, spend: pay, close: tot });
+  }
+  const last = rows => rows.length ? rows[rows.length - 1].close : 0;
+  return { sizes, shockYear: shock ? shock.year : null,
+    buckets: { rows: bucketRows, ranOutYear: bRan, finalBalance: bRan === null ? last(bucketRows) : 0 },
+    mix: { rows: mixRows, ranOutYear: mRan, finalBalance: mRan === null ? last(mixRows) : 0, weights: { liquid: wl, debt: wd, equity: we } } };
+}
+
+/* One pot, drawn two ways. kind 'fd': interest is taxed every year at the slab on whatever is left
+   after the withdrawal, so the pot compounds at the after-tax rate. kind 'swpEquity' / 'swpDebt':
+   a withdrawal is part cost and part gain, and only the gain is taxed -- 12.5% above the Rs 1.25
+   lakh a year for an equity fund, the slab for a debt fund. The part that is gain is the pot's gain
+   share (value minus cost, over value), and each withdrawal removes cost in the same proportion
+   (average cost; a real redemption sells specific units, so this is an approximation). The
+   withdrawal is sized so that what is LEFT AFTER TAX equals the spend wanted that year.
+   Each row also carries the pot's cost basis (cost) and what the pot would be worth after the tax
+   still owed on its gains if it were sold that year (ifSold), so an SWP pot and an FD pot can be
+   compared as what a person could actually keep.
+   o = { kind, corpus, ownShare (0-1: the part of the pot that is your own money), netSpend (year 1,
+         after tax), inflation, years, rate, slab }. */
+function incomeDrawPlan(o) {
+  const t = TAX_IN, cess = 1 + t.cess, years = Math.max(1, Math.round(o.years) || 1);
+  const infl = Number(o.inflation) || 0, rate = Number(o.rate) || 0, slab = Number(o.slab) || 0;
+  const kind = o.kind === 'fd' || o.kind === 'swpDebt' ? o.kind : 'swpEquity';
+  let V = accNum(o.corpus), B = V * Math.min(1, Math.max(0, o.ownShare == null ? 1 : o.ownShare));
+  // What the whole pot would owe if sold now. An SWP leaves its unsold gains untaxed, so its pot is bigger than
+  // what the person could keep; an FD's interest was taxed every year and owes nothing more. ifSold puts the two on
+  // one footing. The Rs 1.25 lakh exemption is counted once, as if nothing else were sold that year.
+  const exitTax = (v, cost) => {
+    if (kind === 'fd') return 0;
+    const gain = Math.max(0, v - cost);
+    return (kind === 'swpEquity' ? Math.max(0, gain - t.equityLtcgExemption) * t.equityLtcg : gain * slab) * cess;
+  };
+  const rows = []; let ranOut = null, totalTax = 0;
+  for (let y = 1; y <= years; y++) {
+    const net = accNum(o.netSpend) * Math.pow(1 + infl, y - 1);
+    if (ranOut !== null) { rows.push({ year: y, open: 0, gross: 0, net: 0, tax: 0, close: 0, cost: 0, ifSold: 0 }); continue; }
+    let gross, tax, close;
+    if (kind === 'fd') {
+      gross = net;
+      if (V - gross < -1) { ranOut = y; rows.push({ year: y, open: V, gross: V, net: V, tax: 0, close: 0, cost: 0, ifSold: 0 }); V = 0; continue; }
+      const rem = Math.max(0, V - gross);
+      tax = rem * rate * slab * cess;
+      close = rem * (1 + rate) - tax;
+    } else {
+      const gs = V > 0 ? Math.max(0, (V - B) / V) : 0;
+      const tau = (kind === 'swpEquity' ? t.equityLtcg : slab) * cess, ex = kind === 'swpEquity' ? t.equityLtcgExemption : 0;
+      gross = net * gs <= ex ? net : (net - ex * tau) / (1 - gs * tau);
+      if (V - gross < -1) { ranOut = y; rows.push({ year: y, open: V, gross: V, net: V, tax: 0, close: 0, cost: 0, ifSold: 0 }); V = 0; continue; }
+      gross = Math.min(gross, V);
+      tax = gross - net;
+      B *= V > 0 ? 1 - gross / V : 0;
+      close = (V - gross) * (1 + rate);
+    }
+    totalTax += tax;
+    rows.push({ year: y, open: V, gross, net, tax, close, cost: B, ifSold: close - exitTax(close, B) });
+    V = close;
+  }
+  return { rows, ranOutYear: ranOut, totalTax, firstTax: rows.length ? rows[0].tax : 0, finalBalance: ranOut === null ? V : 0,
+    finalExitTax: ranOut === null ? exitTax(V, B) : 0, finalIfSold: ranOut === null ? V - exitTax(V, B) : 0 };
+}
+
+/* Moving a fund pot into an FD means selling the fund first, and the gains are taxed on the way
+   out. Without this the FD route would start the comparison with no tax owed on a pot the SWP route
+   still owes tax on. from 'swpEquity': 12.5% on the gain above the Rs 1.25 lakh; 'swpDebt': the slab.
+   o = { corpus, ownShare (0-1), from, slab } */
+function incomeSwitchTax(o) {
+  const t = TAX_IN, cess = 1 + t.cess, corpus = accNum(o.corpus);
+  const own = Math.min(1, Math.max(0, o.ownShare == null ? 1 : Number(o.ownShare) || 0));
+  const gain = corpus * (1 - own);
+  return o.from === 'swpDebt' ? gain * (Number(o.slab) || 0) * cess
+    : Math.max(0, gain - t.equityLtcgExemption) * t.equityLtcg * cess;
+}
+
+/* The NPS pot at retirement: at least minAnnuityShare of it must buy an annuity (the income is
+   taxed at the slab, and a standard annuity pays the same amount every year); the rest is cash.
+   Cash up to shareAt60 of the pot is tax-free (s.10(12A)); whether cash above that is taxed at the
+   slab has not been settled by an amendment, so the cautious case is shown.
+   annuityRate is an ASSUMPTION the person overwrites with a real quote, never a market figure.
+   o = { pot, annuityShare, annuityRate (yearly, on the amount used to buy the annuity), slab }. */
+function npsAnnuityPlan(o) {
+  const n = RETIRE_ACCOUNTS_IN.nps, cess = 1 + TAX_IN.cess, pot = accNum(o.pot), slab = Number(o.slab) || 0;
+  const share = Math.min(1, Math.max(n.minAnnuityShare, Number(o.annuityShare) || n.minAnnuityShare));
+  const buy = pot * share, lump = pot - buy;
+  const lumpTaxable = Math.max(0, lump - pot * n.shareAt60), lumpTax = lumpTaxable * slab * cess;
+  const annual = buy * accNum(o.annuityRate), annualTax = annual * slab * cess;
+  return { share, annuityBuy: buy, lump, lumpTaxFree: lump - lumpTaxable, lumpTaxable, lumpTax, lumpKept: lump - lumpTax,
+    monthlyBefore: annual / 12, monthlyAfter: (annual - annualTax) / 12 };
 }
 
 /* =====================================================================
@@ -1402,6 +1565,7 @@ if (typeof module !== 'undefined' && module.exports) {
     accumulationSchedule, xirr, sipBacktest, findRevertingSpikes,
     TAX_IN, holdsLongTerm, saleTaxIndia, postTaxPlanValue, postTaxFdFinal, harvestPlan,
     RETIRE_ACCOUNTS_IN, epfMonthlyContribution, epfFutureValue, ppfFutureValue, npsFutureValue, npsCountedShare, retirementAccountsFV,
+    incomeBuckets, incomeStrategies, incomeDrawPlan, incomeSwitchTax, npsAnnuityPlan,
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow, rollingReturns, annualisedVol, returnReality, stepUpAnnualPlan,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,

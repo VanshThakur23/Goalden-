@@ -194,7 +194,7 @@ is the agentic workflow your college wants.
 | 6 | 08 keep-place fix, 18 verdicts and consistency, 15 pills and readout, 11 nudges | done (Lab "At a glance" card, period pills, overlap nudges; Quick Calculate keeps its place) |
 | 7 | 16 EPF/PPF/NPS, 17 harvesting, 05 stress test | done (accounts panel, harvest card, stress-test hand-off to the Lab) |
 | 8 | 10 keyboard, 03 A theme, 14 live canvas, 20, 21, 07 (+ 08 ghost line and scrub chart) | done (shared `gtip.js` for the tips; share link `#plan:v=1`; live canvas; one palette) |
-| 9 | Beyond: B1 holdings review, B2 cover, B3 regime, B4 retirement income, B5 yearly review, B6 loans | |
+| 9 | Beyond: B1 holdings review, B2 cover, B3 regime, B4 retirement income, B5 yearly review, B6 loans | 9a B4 done (Lab tab "Retirement Income"); 9b B6/B3/B2, 9c B1, 9d B5 to do |
 
 Each group gets the same treatment: tests, an independent reviewer, deploy,
 then a live check.

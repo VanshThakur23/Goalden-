@@ -4285,6 +4285,86 @@ standing over the founder's shoulder.
   are structural). Its first draft used the wrong shape for the post-retirement
   mix ({eq, debt, hybrid}, the page's is {eq, de, hy}); fixed.
 
-### Next: Group 9
-- B1 holdings review, B2 cover, B3 regime, B4 retirement income, B5 yearly
-  review, B6 loans (the "beyond the three pillars" set).
+### Group 9a: Retirement Income in the Lab (B4)
+- **Group 8 shipped:** commit `0827ba5`, Worker `4cad522a-2419-49f7-9f66-4b09e1bd7afa`,
+  live-checked on goalden.vanshsingh23.workers.dev.
+- **Group 9 is the "beyond the three pillars" set.** Order: 9a B4 retirement income
+  (this entry), then 9b B6 loans, B3 tax regime, B2 cover; 9c B1 holdings review;
+  9d B5 yearly review. B7 rent-vs-buy only if time is left after those.
+  Rules that hold for all of it: no invented data (no insurance premiums, no fund
+  ratings), dated rules checked at build time with a re-check note, data stays in
+  the browser, break-evens rather than verdicts.
+- **New Lab tab "Retirement Income" (India only; other countries get a note and a
+  one-click switch, never wrong numbers).** It answers "I have the pot, how do I
+  draw it?" in four cards, each showing both sides and picking neither:
+  1. *Three buckets*: liquid / debt / equity, sized on the monthly spend and its
+     inflation, with a refill rule in plain words and a warning when the pot is too
+     small to fill the near buckets.
+  2. *An SWP or FD interest*: year-1 tax, whole-period tax, and the two balances
+     over time. An SWP taxes only the gain part of each sale; FD interest is taxed
+     in full at the slab; moving a fund pot into an FD costs tax to sell it first.
+  3. *A crash through buckets and one pot*: one historical episode (2008 / 2013 /
+     2020, any year) run through the bucket plan and through a single rebalanced
+     pot with the same money and returns.
+  4. *NPS pension*: how much of the pot must buy an annuity, the pension after tax,
+     the cash kept, and what a flat pension buys after years of inflation.
+- **Engine (goalden-engine.js, all exported, 250 tests):** `incomeBuckets`,
+  `incomeStrategies`, `incomeDrawPlan`, `incomeSwitchTax`, `npsAnnuityPlan`.
+  `incomeDrawPlan` sizes each sale so what is left AFTER tax is the spend asked
+  for, tracks the average cost of the units still held, and returns each year's
+  `cost` and `ifSold` (the pot less the tax that selling all of it would trigger),
+  plus `finalExitTax` / `finalIfSold`.
+- **Opus review, and what it found (all fixed):**
+  - The SWP line was the raw pot, which an SWP leaves with its gains untaxed, while
+    the FD pot was already taxed every year: that made the SWP look about 10x
+    better than it is. Both lines and both end figures are now "what you would
+    have left after tax if everything were sold that year" (`ifSold`), and both
+    start at the pot less the tax of selling the fund today. Default case: SWP
+    pot Rs 13.51 Cr but Rs 11.83 Cr after the Rs 1.67 Cr still owed on its gains.
+  - The bucket refill ran in the wrong order (debt from equity, then liquid from
+    debt). It is now liquid from debt first, then, after an up year, debt from
+    equity, then liquid again if debt had run short. A test checks the debt bucket
+    is back at its full N years every year in an up run.
+  - The crash caption claimed a mechanism ("the buckets keep a steady cheque") that
+    the numbers did not always support. It now compares with the same two plans in
+    a calm run and says "the crash reversed the order", "widened its lead", or
+    "it was ahead with no crash too, so the crash did not build that lead; it cost
+    the buckets X and the one pot Y". The caption also names the equity-share drift
+    (the bucket plan averages about 78% equity across a calm run, the single pot 73%).
+  - The whole-period tax sentence compared unlike things and made a causal claim; it
+    now states each route's tax, counting the tax still owed on the SWP's unsold
+    gains and the tax to sell the fund first on the FD side.
+  - NPS: the 20% minimum annuity share is for non-government subscribers
+    (government employees still need at least 40%; small pots have their own
+    rules). The caption no longer says to subtract the pension from the spending
+    (a flat pension against rising spending is a growing gap); it says what the
+    pension buys "on the day you retire".
+  - "Use my Retirement Lab numbers" silently cut a plan that did not fit the sliders.
+    The draw years now go to 50 and a note says which values were cut (and why),
+    shown only while the numbers still match what the button set.
+  - Smaller: an FD's rate is "fixed only until it matures", not "guaranteed"; the
+    debt-fund note names the 1 April 2023 rule; the advisor chips no longer
+    presume which side wins; the fund-type and crash button groups have a group
+    name for screen readers.
+- **Advisor:** 13 `income.*` fields it can set, `run_full_analysis` accepts tab
+  `income`, it can read both the numbers and the charts, "Twelve tools" in its
+  knowledge text, and highlight targets for the two new charts.
+- **Not done:** Rent-vs-buy (B7). No BRIEFING_SECTIONS entry for this tab. When a
+  plan runs out in year 1 the caption shows Rs 0 tax. The engine does not sanitise
+  NaN for inputs the sliders can never produce. The step-up chart's "behind"
+  label can still clip on a very narrow chart (was already so).
+- **Checked in a real browser:** the tab at 1280px and 375px (no horizontal
+  overflow), default case and seven edge cases (0% slab, debt fund, 100% own money,
+  small spend, no crash, 2008 in year 10, 2013 in year 3), the cut-to-fit note
+  appearing and disappearing, no console errors. Whole-Lab sweep of 12 tabs in both
+  countries earlier in the group.
+- **Tests:** 250/250 engine tests; all earlier smokes pass; new smoke-20 (62 checks:
+  the page's own `clampIncome` is run for real in a vm, the year-1 SWP tax is
+  checked against an independent formula, the rest are structural).
+
+### Next: Group 9b
+- B6 loans (prepay vs invest with a break-even; most expensive debt first; the
+  Rs 2 L old-regime home-loan interest deduction), B3 old vs new tax regime (FY
+  2026-27 figures must come from a primary government source and be dated like
+  `TAX_IN`, with a re-check note), B2 cover (term and health gap sized from the goal
+  pots, no premiums).

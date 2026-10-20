@@ -3340,3 +3340,249 @@ test('annualised vol: too few days gives null', () => {
   const a = smoothSeries(0.10, 2015, 2016);
   assert.strictEqual(engine.annualisedVol(a.dates.slice(0, 10), a.values.slice(0, 10)), null);
 });
+
+// ---- Group 9a: retirement income (buckets, SWP vs FD after tax, a crash through two strategies, NPS annuity) ----
+const INC = { corpus: 3e7, annualSpend: 960000, inflation: 0.06, years: 25, liquidRate: 0.065, debtRate: 0.07, equityRate: 0.11 };
+test('income buckets: liquid holds the first two years of spending, debt the next five, equity the rest', () => {
+  const b = engine.incomeBuckets(INC), sp = k => 960000 * Math.pow(1.06, k);
+  approx(b.liquid, sp(0) + sp(1));
+  approx(b.debt, sp(2) + sp(3) + sp(4) + sp(5) + sp(6));
+  approx(b.liquid + b.debt + b.equity, 3e7);
+  approx(b.equityShare, b.equity / 3e7);
+  assert.strictEqual(b.covered, true);
+  assert.strictEqual(b.shortfall, 0);
+  assert.strictEqual(b.liquidYears, 2);
+  assert.strictEqual(b.debtYears, 5);
+});
+test('income buckets: a pot too small for seven years fills the near buckets first and reports the shortfall', () => {
+  const b = engine.incomeBuckets(Object.assign({}, INC, { corpus: 5e6 }));
+  approx(b.liquid, 960000 + 960000 * 1.06);
+  approx(b.liquid + b.debt, 5e6);
+  assert.strictEqual(b.equity, 0);
+  assert.strictEqual(b.covered, false);
+  approx(b.shortfall, b.liquidNeed + b.debtNeed - 5e6);
+  // too small even for the liquid bucket: it takes everything
+  const c = engine.incomeBuckets(Object.assign({}, INC, { corpus: 1e6 }));
+  approx(c.liquid, 1e6);
+  assert.strictEqual(c.debt, 0);
+});
+test('income buckets: a short horizon caps the buckets at the years that exist', () => {
+  const b = engine.incomeBuckets(Object.assign({}, INC, { years: 4 }));
+  assert.strictEqual(b.liquidYears, 2);
+  assert.strictEqual(b.debtYears, 2, 'only two years are left after the liquid bucket');
+  const one = engine.incomeBuckets(Object.assign({}, INC, { years: 1 }));
+  assert.strictEqual(one.liquidYears, 1);
+  assert.strictEqual(one.debtYears, 0);
+});
+test('income buckets: negative, missing or non-numeric inputs count as nothing and never give NaN', () => {
+  const b = engine.incomeBuckets({ corpus: -5, annualSpend: 'abc', inflation: NaN, years: 20 });
+  [b.liquid, b.debt, b.equity, b.equityShare, b.shortfall].forEach(v => assert.ok(Number.isFinite(v) && v === 0));
+});
+
+test('income strategies: with no growth, no inflation and no shock, both plans end at the pot minus the spending', () => {
+  const o = Object.assign({}, INC, { inflation: 0, liquidRate: 0, debtRate: 0, equityRate: 0, shock: null });
+  const r = engine.incomeStrategies(o);
+  approx(r.buckets.finalBalance, 3e7 - 25 * 960000);
+  approx(r.mix.finalBalance, 3e7 - 25 * 960000);
+  assert.strictEqual(r.buckets.ranOutYear, null);
+  assert.strictEqual(r.mix.ranOutYear, null);
+  assert.strictEqual(r.buckets.rows.length, 25);
+  assert.strictEqual(r.mix.rows.length, 25);
+});
+test('income strategies: the single pot follows the closed form (pay, then earn the starting mix)', () => {
+  const r = engine.incomeStrategies(Object.assign({}, INC, { shock: null })), w = r.mix.weights;
+  const blend = w.liquid * 0.065 + w.debt * 0.07 + w.equity * 0.11;
+  let t = 3e7;
+  for (let y = 1; y <= 25; y++) { t = (t - 960000 * Math.pow(1.06, y - 1)) * (1 + blend); approx(r.mix.rows[y - 1].close, t, 1e-9); }
+  approx(w.liquid + w.debt + w.equity, 1);
+});
+test('income strategies: the bucket plan pays a crash year from the other buckets and leaves equity alone', () => {
+  const r = engine.incomeStrategies(Object.assign({}, INC, { shock: { year: 1, equityReturn: -0.5 } }));
+  assert.strictEqual(r.shockYear, 1);
+  approx(r.buckets.rows[0].equity, r.sizes.equity * 0.5);
+  // the single pot takes the same crash on its equity share
+  const w = r.mix.weights, blend = w.liquid * 0.065 + w.debt * 0.07 + w.equity * -0.5;
+  approx(r.mix.rows[0].close, (3e7 - 960000) * (1 + blend));
+});
+test('income strategies: the near buckets are kept topped up while equity grows, and a down year takes nothing from equity', () => {
+  const up = engine.incomeStrategies(Object.assign({}, INC, { shock: null }));
+  const sp = y => 960000 * Math.pow(1.06, y - 1);
+  for (let y = 1; y <= 15; y++) {
+    const row = up.buckets.rows[y - 1];
+    assert.ok(row.liquid >= sp(y + 1) + sp(y + 2) - 1, 'year ' + y + ': liquid still holds the next two years');
+  }
+  // some equity has been skimmed to refill debt by year 15, so equity grew by less than its full 11% a year
+  assert.ok(up.buckets.rows[14].equity < up.sizes.equity * Math.pow(1.11, 15));
+  // after the refill the debt bucket holds its full five years again (liquid is filled first, then debt from equity)
+  for (let y = 1; y <= 15; y++) {
+    const next5 = [0, 1, 2, 3, 4].reduce((t, k) => t + sp(y + 3 + k), 0);
+    approx(up.buckets.rows[y - 1].debt, next5, 1e-9);
+  }
+  // a crash in year 3: equity goes exactly to half of where it stood after year 2, nothing is taken out of it
+  const down = engine.incomeStrategies(Object.assign({}, INC, { shock: { year: 3, equityReturn: -0.5 } }));
+  approx(down.buckets.rows[2].equity, down.buckets.rows[1].equity * 0.5);
+});
+test('income strategies: a pot that cannot fund the spending reports the year it fails and stays at zero after', () => {
+  const r = engine.incomeStrategies(Object.assign({}, INC, { corpus: 8e6, shock: null }));
+  ['buckets', 'mix'].forEach(k => {
+    const y = r[k].ranOutYear;
+    assert.ok(y > 1 && y < 25, k + ' runs out part-way');
+    assert.strictEqual(r[k].finalBalance, 0);
+    r[k].rows.slice(y - 1).forEach(row => assert.strictEqual(row.close, 0));
+    assert.ok(r[k].rows[y - 2].close > 0);
+  });
+});
+test('income strategies: a shock outside the horizon is ignored, and an empty pot gives no NaN', () => {
+  const late = engine.incomeStrategies(Object.assign({}, INC, { shock: { year: 30, equityReturn: -0.5 } }));
+  const none = engine.incomeStrategies(Object.assign({}, INC, { shock: null }));
+  assert.strictEqual(late.shockYear, null);
+  approx(late.buckets.finalBalance, none.buckets.finalBalance);
+  const empty = engine.incomeStrategies(Object.assign({}, INC, { corpus: 0, shock: null }));
+  [empty.buckets.finalBalance, empty.mix.finalBalance].forEach(v => assert.ok(Number.isFinite(v)));
+  assert.strictEqual(empty.buckets.ranOutYear, 1);
+});
+
+const DRAW = { corpus: 1e7, ownShare: 0.5, netSpend: 4e5, inflation: 0.06, years: 20, rate: 0.07, slab: 0.3 };
+test('income draw: FD interest is taxed in full at the slab on what is left after the withdrawal', () => {
+  const r = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'fd' })).rows[0], rem = 1e7 - 4e5;
+  approx(r.tax, rem * 0.07 * 0.3 * 1.04);
+  approx(r.close, rem * (1 + 0.07) - r.tax);
+  approx(r.gross, 4e5);
+});
+test('income draw: an equity-fund SWP is taxed only on the gain part, 12.5% above the 1.25 lakh a year', () => {
+  const r = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpEquity' })).rows[0];
+  const gs = 0.5, tau = 0.125 * 1.04;
+  approx(r.gross, (4e5 - 125000 * tau) / (1 - gs * tau));
+  approx(r.tax, (r.gross * gs - 125000) * tau);
+  approx(r.gross - r.tax, 4e5, 1e-12);
+});
+test('income draw: gains under the 1.25 lakh a year exemption pay nothing', () => {
+  const r = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpEquity', ownShare: 0.9, netSpend: 5e5 })).rows[0];
+  assert.strictEqual(r.tax, 0);
+  approx(r.gross, 5e5);
+});
+test('income draw: a debt-fund SWP is taxed at the slab on its gain part, with no exemption', () => {
+  const r = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpDebt' })).rows[0], gs = 0.5, tau = 0.3 * 1.04;
+  approx(r.gross, 4e5 / (1 - gs * tau));
+  approx(r.gross - r.tax, 4e5, 1e-12);
+});
+test('income draw: money that is all your own (no gain) is withdrawn untaxed', () => {
+  const r = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpEquity', ownShare: 1 })).rows[0];
+  assert.strictEqual(r.tax, 0);
+});
+test('income draw: what is left after tax is the spend wanted, every year, for all three', () => {
+  ['fd', 'swpEquity', 'swpDebt'].forEach(kind => {
+    const r = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind }));
+    assert.strictEqual(r.ranOutYear, null, kind);
+    r.rows.forEach((row, i) => {
+      approx(row.net, 4e5 * Math.pow(1.06, i), 1e-12);
+      if (kind !== 'fd') approx(row.gross - row.tax, row.net, 1e-9);
+    });
+    assert.strictEqual(r.rows.length, 20);
+  });
+});
+test('income draw: the tax is worked out from the gain share, and the cost basis shrinks with every sale (checked year by year)', () => {
+  ['swpEquity', 'swpDebt'].forEach(kind => {
+    const r = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind }));
+    const tau = (kind === 'swpEquity' ? 0.125 : 0.3) * 1.04, ex = kind === 'swpEquity' ? 125000 : 0;
+    let B = DRAW.corpus * DRAW.ownShare;
+    r.rows.forEach((row, i) => {
+      const gs = (row.open - B) / row.open;
+      // tax from the gain share of THIS year's sale, independent of how the sale was sized
+      approx(row.tax, Math.max(0, row.gross * gs - ex) * tau, 1e-9);
+      B = B * (1 - row.gross / row.open);
+      approx(row.cost, B, 1e-9);
+      if (i === 1) assert.ok(row.cost < DRAW.corpus * DRAW.ownShare, kind + ': the basis has already shrunk by year 2');
+    });
+  });
+});
+test('income draw: ifSold is the pot after the tax still owed on its unsold gains; an FD owes nothing more', () => {
+  const sw = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpEquity' }));
+  const last = sw.rows[19];
+  approx(sw.finalExitTax, Math.max(0, last.close - last.cost - 125000) * 0.125 * 1.04);
+  approx(sw.finalIfSold, sw.finalBalance - sw.finalExitTax);
+  assert.ok(sw.finalIfSold < sw.finalBalance);
+  const sd = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpDebt' }));
+  approx(sd.finalExitTax, Math.max(0, sd.rows[19].close - sd.rows[19].cost) * 0.3 * 1.04);
+  const fd = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'fd' }));
+  assert.strictEqual(fd.finalExitTax, 0);
+  approx(fd.finalIfSold, fd.finalBalance);
+  fd.rows.forEach(row => approx(row.ifSold, row.close));
+  // all your own money: nothing unrealised, so nothing owed
+  const own = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpEquity', ownShare: 1, rate: 0 }));
+  assert.strictEqual(own.finalExitTax, 0);
+  // a pot that ran out is worth nothing, before or after tax
+  const dead = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpEquity', netSpend: 2e6 }));
+  assert.strictEqual(dead.finalIfSold, 0);
+  assert.strictEqual(dead.rows[19].ifSold, 0);
+});
+test('income draw: at the same rate the SWP pays less tax than FD interest and keeps a bigger pot', () => {
+  const fd = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'fd' }));
+  const sw = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpEquity' }));
+  const sd = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpDebt' }));
+  assert.ok(sw.totalTax < fd.totalTax);
+  assert.ok(sw.finalBalance > fd.finalBalance);
+  // a debt fund also taxes only the gain part, so its first years pay far less; the gains it lets build up are
+  // taxed later, which is why its total over a long drawdown is not compared here
+  assert.ok(sd.firstTax < fd.firstTax);
+});
+test('income switch: selling a fund pot to buy an FD pays tax on the gain first', () => {
+  const o = { corpus: 1e7, ownShare: 0.5, slab: 0.3 };
+  approx(engine.incomeSwitchTax(Object.assign({ from: 'swpEquity' }, o)), (5e6 - 125000) * 0.125 * 1.04);
+  approx(engine.incomeSwitchTax(Object.assign({ from: 'swpDebt' }, o)), 5e6 * 0.3 * 1.04);
+  assert.strictEqual(engine.incomeSwitchTax(Object.assign({ from: 'swpEquity' }, o, { ownShare: 1 })), 0, 'all your own money: no gain, no tax');
+  assert.strictEqual(engine.incomeSwitchTax({ from: 'swpEquity', corpus: 1e7, ownShare: 0.99, slab: 0.3 }), 0, 'a gain under the exemption pays nothing');
+  assert.strictEqual(engine.incomeSwitchTax({ from: 'swpDebt', corpus: 'x', ownShare: NaN, slab: undefined }), 0);
+});
+test('income draw: tax rises with the slab, and a zero slab leaves FD interest untaxed', () => {
+  const t = s => engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'fd', slab: s })).totalTax;
+  assert.ok(t(0.2) < t(0.3) && t(0.3) < t(0.3 + 1e-3));
+  assert.strictEqual(t(0), 0);
+  const free = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'fd', slab: 0 })).rows[0];
+  approx(free.close, (1e7 - 4e5) * 1.07);
+});
+test('income draw: a pot that cannot fund the spending says when, and stays at zero after', () => {
+  ['fd', 'swpEquity', 'swpDebt'].forEach(kind => {
+    const r = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind, netSpend: 2e6 }));
+    assert.ok(r.ranOutYear > 1 && r.ranOutYear < 20, kind);
+    assert.strictEqual(r.finalBalance, 0);
+    assert.strictEqual(r.rows.length, 20);
+    r.rows.slice(r.ranOutYear).forEach(row => assert.strictEqual(row.close, 0));
+  });
+});
+test('income draw: no spending just compounds the pot; bad inputs give no NaN', () => {
+  const r = engine.incomeDrawPlan(Object.assign({}, DRAW, { kind: 'swpEquity', netSpend: 0 }));
+  approx(r.finalBalance, 1e7 * Math.pow(1.07, 20));
+  assert.strictEqual(r.totalTax, 0);
+  const bad = engine.incomeDrawPlan({ kind: 'nonsense', corpus: -1, netSpend: 'x', years: 5 });
+  assert.ok(Number.isFinite(bad.totalTax) && Number.isFinite(bad.finalBalance));
+});
+
+test('NPS annuity: at least 20% must buy a pension, and at 40% all the cash is tax-free', () => {
+  assert.strictEqual(engine.RETIRE_ACCOUNTS_IN.nps.minAnnuityShare, 0.2);
+  const low = engine.npsAnnuityPlan({ pot: 5e6, annuityShare: 0.05, annuityRate: 0.06, slab: 0.3 });
+  assert.strictEqual(low.share, 0.2, 'a share below the minimum is raised to it');
+  const r = engine.npsAnnuityPlan({ pot: 5e6, annuityShare: 0.4, annuityRate: 0.06, slab: 0.3 });
+  approx(r.annuityBuy, 2e6);
+  approx(r.lump, 3e6);
+  assert.strictEqual(r.lumpTaxable, 0);
+  assert.strictEqual(r.lumpTax, 0);
+  approx(r.monthlyBefore, 2e6 * 0.06 / 12);
+  approx(r.monthlyAfter, 2e6 * 0.06 * (1 - 0.3 * 1.04) / 12);
+});
+test('NPS annuity: cash above the 60% tax-free limit is shown taxed at the slab', () => {
+  const r = engine.npsAnnuityPlan({ pot: 5e6, annuityShare: 0.2, annuityRate: 0.06, slab: 0.3 });
+  approx(r.lump, 4e6);
+  approx(r.lumpTaxFree, 3e6);
+  approx(r.lumpTaxable, 1e6);
+  approx(r.lumpTax, 1e6 * 0.3 * 1.04);
+  approx(r.lumpKept, 4e6 - r.lumpTax);
+  const all = engine.npsAnnuityPlan({ pot: 5e6, annuityShare: 2, annuityRate: 0.06, slab: 0 });
+  assert.strictEqual(all.share, 1, 'a share above 100% is held at 100%');
+  assert.strictEqual(all.lump, 0);
+});
+test('NPS annuity: an empty or garbled pot gives zeros, not NaN', () => {
+  const r = engine.npsAnnuityPlan({ pot: 'x', annuityShare: 'y', annuityRate: NaN, slab: undefined });
+  Object.values(r).forEach(v => assert.ok(Number.isFinite(v)));
+  assert.strictEqual(r.monthlyAfter, 0);
+});

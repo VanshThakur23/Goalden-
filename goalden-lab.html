@@ -310,6 +310,24 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stat-row.pairs{grid-template-columns:repeat(2,minmax(0,1fr))}
 .slab-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .slab-chips .tglbtn{flex:0 0 auto;border:1px solid rgba(37,87,199,.35);border-radius:3px;padding:8px 10px;min-height:36px}
+/* Retirement Income: the three buckets as one strip in time order. The keys sit in a grid below it, not under their own
+   segment, so a thin segment (a small liquid bucket) never squeezes its label. Fills differ by hatch as well as colour,
+   so the three still read apart in greyscale. */
+.inc-strip{display:flex;gap:2px;height:28px;margin:6px 0 12px}
+.inc-seg{min-width:3px;border-radius:2px}
+.inc-liq{background:repeating-linear-gradient(135deg,rgba(255,255,255,.38) 0 2px,transparent 2px 7px),#56698A}
+.inc-debt{background:repeating-linear-gradient(45deg,rgba(255,255,255,.38) 0 2px,transparent 2px 7px),#B8740F}
+.inc-eq{background:#2557C7}
+.inc-keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.inc-key{font-size:12px;line-height:1.5;color:rgba(20,40,63,.8);border-left:3px solid;padding-left:8px;min-width:0}
+.inc-key.inc-liq{border-color:#56698A;background:none}
+.inc-key.inc-debt{border-color:#B8740F;background:none}
+.inc-key.inc-eq{border-color:#2557C7;background:none}
+.inc-key b{display:block;font-family:'Newsreader',serif;font-size:17px;font-weight:600;line-height:1.25;color:var(--paper)}
+.inc-key .inc-when{font-family:'Spline Sans Mono',monospace;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:rgba(20,40,63,.74)}
+.inc-rules{margin:4px 0 0;padding-left:18px;font-size:12.5px;line-height:1.6;color:rgba(20,40,63,.8)}
+.inc-rules li{margin-bottom:4px}
+@media(max-width:560px){.inc-keys{grid-template-columns:1fr}}
 @media(max-width:560px){.stat-row.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* A flat 1px border in one uniform grey read as barely-there -- a
    left-edge accent in the same blue as the rest of the app's emphasis
@@ -2084,6 +2102,16 @@ const L = {
   },
   mc:{ sip:200000, years:20, meanReturn:10, volatility:15, regime:'normal', seed:42 },
   health:{ capacity:40000, totalSIP:35000, emergencyStatus:'partial' },
+  // Retirement Income. spend is a MONTHLY amount to live on after tax, in the money of the day you retire. slab null =
+  // TAX_IN.defaultSlab. fdRate 6.5 is the country's own fdRate (C.IN.d.fdRate), which the liquid bucket also earns.
+  // npsPot is a separate pot from corpus. annuityRate is the person's own assumption (never a market figure).
+  // retNote is set only when "Use my Retirement Lab numbers" had to cut a value to fit a slider; it is shown while the
+  // numbers still match what the button set, so it never outlives the situation it explains.
+  income:{ corpus:30000000, spend:80000, years:25, inflation:6, slab:null,
+           liquidYears:2, debtYears:5,
+           kind:'swpEquity', fundRate:10, fdRate:6.5, ownShare:50,
+           equityRate:11, shock:{ epId:'2008', year:1 },
+           npsPot:2000000, annuityShare:40, annuityRate:6, retNote:null },
   snapshots:[], // up to 2 saved Retirement Lab states, for side-by-side comparison
   instCategory:'all',
   instSearch:'',
@@ -2188,7 +2216,7 @@ function nextStepCard(items){
 // tab's own state is reset without touching any other tab's inputs or
 // the global country/currency choice.
 const TAB_STATE_KEYS={
-  retirement:['ret'], stepup:['step'], swp:['swp'], fx:['fx'], joint:['joint'],
+  retirement:['ret'], stepup:['step'], swp:['swp'], income:['income'], fx:['fx'], joint:['joint'],
   mc:['mc'], portfolio:['portfolio'], livefrontier:['live'],
   instruments:['instCategory','instSearch'], health:['health'],
   statements:['statements'],
@@ -2874,6 +2902,328 @@ function renderSWP(){
     ])}
   </div>
   </div>`;
+}
+
+/* =====================================================================
+   TAB: RETIREMENT INCOME (how to draw the money, once there is a pot)
+   The sums are goalden-engine.js (incomeBuckets, incomeStrategies, incomeDrawPlan,
+   incomeSwitchTax, npsAnnuityPlan); this is inputs, cards and charts. Indian tax
+   rules only (TAX_IN), so other countries get a note instead of wrong numbers.
+   Nothing here picks for the person: each card shows both sides of a comparison.
+   ===================================================================== */
+function incClamp(v,lo,hi,d){ v=Number(v); return isFinite(v) ? Math.min(hi,Math.max(lo,v)) : d; }
+function incomeSlabPct(s){ return TAX_IN.newRegimeSlabs.includes(s.slab) ? s.slab : TAX_IN.defaultSlab; }
+// State can come back from anywhere (an old handoff, a typed number), so it is brought inside the sliders' ranges here.
+function clampIncome(s){
+  const D=L_DEFAULTS.income;
+  s.corpus=incClamp(s.corpus,1e6,5e8,D.corpus);
+  s.spend=incClamp(s.spend,5000,1e6,D.spend);
+  s.years=Math.round(incClamp(s.years,5,50,D.years));
+  s.inflation=incClamp(s.inflation,2,12,D.inflation);
+  s.liquidYears=Math.round(incClamp(s.liquidYears,1,3,D.liquidYears));
+  s.debtYears=Math.round(incClamp(s.debtYears,2,6,D.debtYears));
+  s.kind=s.kind==='swpDebt'?'swpDebt':'swpEquity';
+  s.fundRate=incClamp(s.fundRate,3,14,D.fundRate);
+  s.fdRate=incClamp(s.fdRate,3,10,D.fdRate);
+  s.ownShare=incClamp(s.ownShare,0,100,D.ownShare);
+  s.equityRate=incClamp(s.equityRate,4,14,D.equityRate);
+  s.npsPot=incClamp(s.npsPot,0,5e7,D.npsPot);
+  s.annuityShare=incClamp(s.annuityShare,20,100,D.annuityShare);
+  s.annuityRate=incClamp(s.annuityRate,3,9,D.annuityRate);
+  const ep=s.shock && cfg().episodes.find(e=>e.id===s.shock.epId);
+  if(!ep) s.shock=null; else s.shock.year=Math.round(incClamp(s.shock.year,1,s.years,1));
+}
+// "3.2%": one decimal, dropping a trailing .0
+function incPct(x){ return (x*100).toFixed(1).replace(/\.0$/,'')+'%'; }
+
+// Everything the tab shows, in one place, so the page and the advisor read the same numbers.
+function computeIncome(){
+  const c=cfg(), s=L.income; clampIncome(s);
+  const infl=s.inflation/100, slabPct=incomeSlabPct(s), slab=slabPct/100, annual=s.spend*12, own=s.ownShare/100;
+  const bk=incomeBuckets({corpus:s.corpus, annualSpend:annual, inflation:infl, years:s.years, liquidYears:s.liquidYears, debtYears:s.debtYears});
+  const swOpts={kind:s.kind, corpus:s.corpus, ownShare:own, netSpend:annual, inflation:infl, years:s.years, slab};
+  const sw=incomeDrawPlan(Object.assign({rate:s.fundRate/100}, swOpts));
+  const swSame=incomeDrawPlan(Object.assign({rate:s.fdRate/100}, swOpts));
+  const sell=incomeSwitchTax({corpus:s.corpus, ownShare:own, from:s.kind, slab});
+  const fd=incomeDrawPlan({kind:'fd', corpus:Math.max(0,s.corpus-sell), netSpend:annual, inflation:infl, years:s.years, rate:s.fdRate/100, slab});
+  const ep=s.shock ? c.episodes.find(e=>e.id===s.shock.epId) : null;
+  const common={corpus:s.corpus, annualSpend:annual, inflation:infl, years:s.years, liquidYears:s.liquidYears, debtYears:s.debtYears,
+    liquidRate:c.d.fdRate, debtRate:c.d.debt, equityRate:s.equityRate/100};
+  const calm=incomeStrategies(Object.assign({}, common, {shock:null}));
+  const hit=ep ? incomeStrategies(Object.assign({}, common, {shock:{year:s.shock.year, equityReturn:ep.rate}})) : calm;
+  const nps=npsAnnuityPlan({pot:s.npsPot, annuityShare:s.annuityShare/100, annuityRate:s.annuityRate/100, slab});
+  return {c, s, infl, slabPct, slab, annual, own, bk, sw, swSame, sell, fd, ep, calm, hit, nps};
+}
+
+// Two year-by-year balances on one chart, each labelled at its own end (no legend). A and B are
+// { name, values (index 0 = the start, then each year's end), ranOut (year or null), color, dash, text }.
+// extra: { markYear, markText } draws a dotted vertical line (the crash year).
+function incomeLinesChart(chartId, A, B, extra, h){
+  if(h===undefined) h=240;
+  deferChartInit(()=>renderIncomeLinesOption(chartId, A, B, extra));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderIncomeLinesOption(chartId, A, B, extra){
+  const c=cfg(), n=A.values.length;
+  const aHigher=A.values[n-1]>=B.values[n-1];
+  const bothRan=A.ranOut!=null && B.ranOut!=null && A.ranOut===B.ranOut;
+  // The lower line's tag goes under its point only if there is room: a point near the baseline has the x-axis labels
+  // right below it, so there the tag goes above the point instead (stacked higher still if the two ends are close).
+  const ymax=Math.max.apply(null, A.values.concat(B.values, [1]));
+  const endGap=Math.abs((A.ranOut!=null?0:A.values[n-1])-(B.ranOut!=null?0:B.values[n-1]))/ymax;
+  const line=(S, higher, lift)=>{
+    const ran=S.ranOut, idx=ran!=null?ran:n-1, val=ran!=null?0:S.values[n-1];
+    const text=ran!=null ? `${S.name}: runs out, yr ${ran}` : `${S.name}: ${c.compact(val)}`;
+    const nearBase=val/ymax<0.12;
+    if(!higher && !lift && nearBase && endGap<0.2) lift=true;
+    const lbl=valueTag(text, ran!=null?CHART_TEXT.bad:S.text, (higher||ran!=null||val<=0||nearBase)?'top':'bottom');
+    lbl.align=idx>n*0.55?'right':(idx<n*0.25?'left':'center');
+    if(lift) lbl.offset=[0,-18];
+    return { name:S.name, type:'line', data:S.values, showSymbol:false, z:2,
+      lineStyle:{color:S.color, width:2, type:S.dash||'solid'},
+      markPoint:{symbol:'circle', symbolSize:7, itemStyle:{color:ran!=null?'#9C4A2C':S.color}, silent:true, data:[{coord:[idx,val]}], label:lbl} };
+  };
+  const sA=line(A, aHigher, false), sB=line(B, !aHigher, bothRan);
+  const marks=[{yAxis:0, label:{show:false}}];
+  if(extra && extra.markYear!=null) marks.push({xAxis:extra.markYear, lineStyle:{color:'#14283F', type:'dotted'},
+    label:{show:true, formatter:extra.markText, position:'end', align:extra.markYear>n*0.6?'right':'left', color:CHART_TEXT.ink, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace"}});
+  sA.markLine={silent:true, symbol:['none','none'], lineStyle:{color:'rgba(20,40,63,.3)', type:'dashed'}, data:marks};
+  initChart(chartId, {
+    grid:{left:4,right:4,top:30,bottom:22,containLabel:false},
+    xAxis:{type:'category', data:A.values.map((_,i)=>'Yr '+i), boundaryGap:false,
+      axisLabel:{show:true, interval:(idx)=>idx===0||idx===n-1, color:CHART_TEXT.muted, fontSize:10.5, alignMinLabel:'left', alignMaxLabel:'right'},
+      axisLine:{show:false}, axisTick:{show:false}},
+    yAxis:{type:'value', show:false, min:0},
+    tooltip:{trigger:'axis', confine:true, formatter(params){
+      return `${params[0].axisValueLabel}<br/>`+params.map(p=>`${p.marker}${p.seriesName}: ${c.compact(p.value)}`).join('<br/>');
+    }},
+    series:[sA, sB],
+  });
+}
+
+function incomeIndiaOnly(){
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
+  <div class="panel">${panelHead('Retirement income', 'income')}</div>
+  <div class="output"><div class="card is-primary"><h4>This tool uses Indian tax rules</h4>
+    <div class="cap">Retirement income here is worked out with India's capital-gains rates, income-tax slabs and the NPS pension rule, so the numbers would be wrong for another country. Switch to India to use it.</div>
+    <div class="slab-chips"><button type="button" class="tglbtn active" data-country="IN">Switch to India</button></div>
+  </div></div></div>`;
+}
+
+function renderIncome(){
+  if(L.country!=='IN') return incomeIndiaOnly();
+  const R=computeIncome(), c=R.c, s=R.s, bk=R.bk, sw=R.sw, fd=R.fd, nps=R.nps, ep=R.ep, hit=R.hit, calm=R.calm;
+  const drawRate=R.annual/s.corpus;
+  const money=v=>c.fmt(Math.round(v));
+  const endCell=plan=>plan.ranOutYear ? `<span style="color:#9C4A2C">Runs out, yr ${plan.ranOutYear}</span>` : c.compact(plan.finalBalance);
+
+  // ---- card 1: buckets
+  const seg=(cls,v)=>v>0?`<span class="inc-seg ${cls}" style="flex:${Math.max(v/bk.corpus,0.001)}"></span>`:'';
+  const yrs=(a,b)=>a===b?`year ${a}`:`years ${a}-${b}`;
+  const L1=bk.liquidYears, D1=bk.debtYears;
+  const shortNote=bk.covered ? '' : `<div class="gr-note" style="border-left-color:#9C4A2C;margin-bottom:12px">The pot does not cover ${L1+D1} years of spending: it is short by ${c.compact(bk.shortfall)}. The liquid and debt buckets take all of it and nothing is left in equity to grow. Lower the spending, draw for fewer buckets, or build a bigger pot.</div>`;
+  const bucketsCard=`<div class="card is-primary">
+      <h4>Three buckets: what is needed when</h4>
+      <div class="cap">Sized on the ${c.fmt(s.spend)} a month you want to spend, rising ${s.inflation}% a year, without counting what each bucket earns meanwhile. The tax on selling comes on top: see the next card.</div>
+      ${shortNote}
+      <div class="inc-strip" role="img" aria-label="Liquid ${c.compact(bk.liquid)}, debt ${c.compact(bk.debt)}, equity ${c.compact(bk.equity)}">${seg('inc-liq',bk.liquid)}${seg('inc-debt',bk.debt)}${seg('inc-eq',bk.equity)}</div>
+      <div class="inc-keys">
+        <div class="inc-key inc-liq"><span class="inc-when">${yrs(1,L1)}</span><b>${c.compact(bk.liquid)}</b>Liquid: a liquid or money market fund</div>
+        <div class="inc-key inc-debt"><span class="inc-when">${D1>0?yrs(L1+1,L1+D1):'no years'}</span><b>${c.compact(bk.debt)}</b>Debt or hybrid: short duration, banking and PSU, or conservative hybrid fund</div>
+        <div class="inc-key inc-eq"><span class="inc-when">year ${L1+D1+1} onward</span><b>${c.compact(bk.equity)}</b>Equity: a flexi cap, index or aggressive hybrid fund</div>
+      </div>
+      <div class="section-label" style="margin-top:6px">A common refill rule</div>
+      <ol class="inc-rules">
+        <li>Spend from the liquid bucket. At each year end it is filled back up from debt to the next ${L1===1?'year':L1+' years'} of spending.</li>
+        <li>After a year when equity ended up, also move enough from equity to fill the debt bucket back to its next ${D1} years.</li>
+        <li>After a down year, leave equity alone. The debt bucket keeps paying while equity recovers.</li>
+        <li>If both near buckets run dry, equity is sold, as in any plan.</li>
+      </ol>
+    </div>`;
+
+  // ---- card 2: SWP vs FD
+  const kindWord=s.kind==='swpDebt'?'a debt fund':'an equity fund';
+  const swRow=sw.rows[0];
+  let drawCap=`To spend ${money(s.spend)} a month, an SWP from ${kindWord} sells ${money(swRow.gross)} in year 1 and ${money(sw.firstTax)} of it is tax; FD interest at ${s.fdRate}% pays ${money(fd.firstTax)} of tax in year 1.`;
+  // An SWP leaves its unsold gains untaxed inside the pot, so its raw balance would read as more than anyone could spend.
+  // Both lines and both end figures are therefore what would be LEFT AFTER TAX if everything were sold that year.
+  drawCap+=` Over the whole period the SWP route pays ${c.compact(sw.totalTax)} in tax as it goes${sw.finalExitTax>0?` and would owe ${c.compact(sw.finalExitTax)} more on the gains still in the pot`:''}; the FD route pays ${c.compact(fd.totalTax)} on its interest${R.sell>0?`, plus ${c.compact(R.sell)} to sell the fund first`:''}.`;
+  if(s.kind==='swpDebt') drawCap+=` A debt fund defers tax rather than avoiding it: the gains pile up and are taxed as they are sold.`;
+  const keptTxt=(pl,after)=>pl.ranOutYear ? `runs out in year ${pl.ranOutYear}` : `leaves ${c.compact(pl.finalIfSold)}${after?' after tax':''}`;
+  drawCap+=` To see the tax alone, give the fund the FD's ${s.fdRate}% too: the SWP ${keptTxt(R.swSame,true)}, the FD ${keptTxt(fd,false)}.`;
+  const keptCell=pl=>pl.ranOutYear ? `<span style="color:#9C4A2C">Runs out, yr ${pl.ranOutYear}</span>` : c.compact(pl.finalIfSold);
+  const sellNote=R.sell>0 ? `<div class="gr-note">Both lines start at ${c.compact(s.corpus-R.sell)}: the pot less the ${money(R.sell)} of tax that selling the fund today would cost. The FD route pays it up front; the SWP route puts it off, and its line is net of whatever tax would be owed on a sale that year. If the money is already cash, set your own money to 100%.</div>` : '';
+  const drawCard=`<div class="card">
+      <h4>An SWP or FD interest: what you keep after tax</h4>
+      <div class="cap">${drawCap}</div>
+      <div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">Tax in year 1, SWP</div><div class="stat-value">${money(sw.firstTax)}</div><div class="stat-sub">only the gain part of what is sold</div></div>
+        <div class="stat"><div class="stat-label">Tax in year 1, FD</div><div class="stat-value">${money(fd.firstTax)}</div><div class="stat-sub">all the interest, at ${R.slabPct}%</div></div>
+        <div class="stat"><div class="stat-label">SWP after ${s.years} years, if sold${infoIcon('What would be left after tax if the whole fund pot were sold in the last year. An SWP leaves its gains untaxed until they are sold, so the pot itself reads higher than what you could spend.')}</div><div class="stat-value">${keptCell(sw)}</div>${sw.ranOutYear?'':`<div class="stat-sub">pot ${c.compact(sw.finalBalance)}, less ${c.compact(sw.finalExitTax)} tax on its gains</div>`}</div>
+        <div class="stat"><div class="stat-label">FD after ${s.years} years</div><div class="stat-value">${keptCell(fd)}</div>${fd.ranOutYear?'':`<div class="stat-sub">interest already taxed each year</div>`}</div>
+      </div>
+      ${incomeLinesChart('inc-draw',
+        {name:'SWP', values:[Math.max(0,s.corpus-R.sell)].concat(sw.rows.map(r=>r.ifSold)), ranOut:sw.ranOutYear, color:'#2557C7', text:CHART_TEXT.blue},
+        {name:'FD', values:[Math.max(0,s.corpus-R.sell)].concat(fd.rows.map(r=>r.ifSold)), ranOut:fd.ranOutYear, color:'#B8740F', dash:[8,4], text:CHART_TEXT.ink}, null)}
+      ${sellNote}
+      <div class="gr-note">Both lines are what you would have left after tax if everything were sold that year. An FD's rate is fixed only until it matures; later renewals are at the rates of the day. The fund's ${s.fundRate}% is an assumption, and a fund can have a bad decade (see the crash card below, or run the Monte Carlo). Same ${s.years} years, same ${s.inflation}% rise in spending, same ${R.slabPct}% slab for both. ${TAX_IN.asOf} rules; no surcharge, no TDS timing; every unit sold is assumed held over a year${s.kind==='swpDebt'?', and a debt fund bought on or after 1 April 2023 is taxed at your slab whatever the holding period':''}.</div>
+    </div>`;
+
+  // ---- card 3: a crash through two ways of drawing
+  const b=hit.buckets, m=hit.mix, b0=calm.buckets, m0=calm.mix;
+  const endTxt=pl=>pl.ranOutYear?`runs out in year ${pl.ranOutYear}`:`ends at ${c.compact(pl.finalBalance)}`;
+  const diff=b.finalBalance-m.finalBalance, level=Math.abs(diff)<s.corpus*0.01;
+  let crashCap=ep ? `${ep.label} (${Math.round(ep.rate*100)}% on equity) lands in year ${s.shock.year}; equity earns ${s.equityRate}% in every other year. ` : `No crash: equity earns ${s.equityRate}% every year. `;
+  if(!b.ranOutYear && !m.ranOutYear) crashCap+=`Both plans last all ${s.years} years: the bucket plan ${endTxt(b)}, the single pot ${endTxt(m)}.`;
+  else if(b.ranOutYear && m.ranOutYear) crashCap+=`Both run out: the bucket plan in year ${b.ranOutYear}, the single pot in year ${m.ranOutYear}.`;
+  else crashCap+=b.ranOutYear ? `The bucket plan runs out in year ${b.ranOutYear}; the single pot lasts and ${endTxt(m)}.` : `The single pot runs out in year ${m.ranOutYear}; the bucket plan lasts and ${endTxt(b)}.`;
+  if(!level){
+    // When one plan ran out, "ahead by" would only repeat the other plan's ending balance.
+    const gap=(b.ranOutYear||m.ranOutYear) ? 'ahead' : c.compact(Math.abs(diff))+' ahead';
+    // The same two plans with no crash say whether the crash made the gap or it was there anyway: the buckets drift to a
+    // higher equity share, so they can lead in a calm run for that reason alone, and a mechanism is only claimed when the
+    // crash actually moved the gap in the leader's favour.
+    const fin=pl=>pl.ranOutYear?0:pl.finalBalance, calmDiff=fin(b0)-fin(m0), shift=diff-calmDiff, thr=s.corpus*0.01;
+    const calmTxt=pl=>pl.ranOutYear?`runs out in year ${pl.ranOutYear}`:c.compact(pl.finalBalance);
+    const bucketsLead=diff>0;
+    crashCap+=` The ${bucketsLead?'bucket plan':'single pot'} comes out ${gap}.`;
+    if(ep){
+      const crashMadeIt=bucketsLead ? shift>thr : shift<-thr;
+      const sameSide=Math.sign(calmDiff)===Math.sign(diff) && Math.abs(calmDiff)>=thr;
+      if(crashMadeIt){
+        crashCap+= (Math.abs(calmDiff)>=thr && !sameSide)
+          ? ` The crash reversed the order: with no crash the ${calmDiff>0?'bucket plan':'single pot'} ends ahead (buckets ${calmTxt(b0)}, one pot ${calmTxt(m0)}).`
+          : ` The crash widened its lead.`;
+        crashCap+= bucketsLead
+          ? ` The early years were paid from the liquid and debt buckets, and equity was left to recover.`
+          : ` After the fall the bucket plan's equity gains go first to rebuilding the debt bucket, so equity compounds less, while the single pot is rebalanced back into equity. Both pay the same spending; the buckets avoid selling equity at the bottom while the near buckets last, but that does not by itself leave more at the end.`;
+      } else if(sameSide) crashCap+=` It was ahead with no crash too (buckets ${calmTxt(b0)}, one pot ${calmTxt(m0)}), so the crash did not build that lead; it cost the buckets ${c.compact(fin(b0)-fin(b))} and the one pot ${c.compact(fin(m0)-fin(m))}.`;
+    }
+  }
+  // Buckets drift: as the near buckets are spent and refilled, the equity share moves. Quoting its average over a calm run
+  // is what stops the comparison above reading as "same money, same risk".
+  const calmEq=b0.rows.filter(r=>r.close>0).map(r=>r.equity/r.close);
+  if(!b0.ranOutYear && calmEq.length){
+    const avgEq=calmEq.reduce((x,y)=>x+y,0)/calmEq.length;
+    if(Math.abs(avgEq-m.weights.equity)>0.03) crashCap+=` The two do not carry the same risk: across a calm run the bucket plan holds about ${incPct(avgEq)} in equity, the single pot ${incPct(m.weights.equity)}.`;
+  }
+  const crashCard=`<div class="card">
+      <h4>A crash early in retirement: buckets or one pot</h4>
+      <div class="cap">${crashCap}</div>
+      <div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">Bucket plan after ${s.years} years</div><div class="stat-value">${endCell(b)}</div>${ep?`<div class="stat-sub">without the crash: ${b0.ranOutYear?'runs out, yr '+b0.ranOutYear:c.compact(b0.finalBalance)}</div>`:''}</div>
+        <div class="stat"><div class="stat-label">Single pot after ${s.years} years${infoIcon('The same money, split the same way on day one, but rebalanced back to that split every year and spent from pro rata. Same returns, same spending: only how the money is drawn differs.')}</div><div class="stat-value">${endCell(m)}</div>${ep?`<div class="stat-sub">without the crash: ${m0.ranOutYear?'runs out, yr '+m0.ranOutYear:c.compact(m0.finalBalance)}</div>`:''}</div>
+      </div>
+      ${incomeLinesChart('inc-crash',
+        {name:'Buckets', values:[s.corpus].concat(b.rows.map(r=>r.close)), ranOut:b.ranOutYear, color:'#2557C7', text:CHART_TEXT.blue},
+        {name:'One pot', values:[s.corpus].concat(m.rows.map(r=>r.close)), ranOut:m.ranOutYear, color:'#B8740F', dash:[8,4], text:CHART_TEXT.ink},
+        ep?{markYear:s.shock.year, markText:ep.label+', yr '+s.shock.year}:null)}
+      <div class="gr-note">Before tax, to show the order of returns on its own. Liquid earns ${(c.d.fdRate*100).toFixed(1).replace(/\.0$/,'')}% and debt ${(c.d.debt*100).toFixed(1).replace(/\.0$/,'')}% a year, the Lab's own category assumptions. One crash at one date is a single story, not a probability: the Monte Carlo tab runs thousands.</div>
+    </div>`;
+
+  // ---- card 4: NPS
+  const covered=s.spend>0?nps.monthlyAfter/s.spend:0, rest=Math.max(0,s.spend-nps.monthlyAfter);
+  const real=nps.monthlyAfter/Math.pow(1+R.infl, s.years);
+  let npsCap;
+  if(s.npsPot<=0) npsCap='Add your NPS pot above to see the pension it would buy.';
+  else npsCap=`${incPct(nps.share)} of ${c.compact(s.npsPot)} buys a pension of ${money(nps.monthlyAfter)} a month after tax, which is ${incPct(Math.min(1,covered))} of the ${c.fmt(s.spend)} you want to spend. ${rest>0?`The other ${money(rest)} a month has to come from the pot above. The pension stays flat while spending rises, so that pot has to cover a growing share of it: taking the pension off today's spending would understate what it needs.`:'On the day you retire that covers all of it.'} A standard annuity pays the same rupees every year: after ${s.years} years at ${s.inflation}% inflation, ${money(nps.monthlyAfter)} buys what ${money(real)} does on the day you retire.`;
+  const npsCard=`<div class="card">
+      <h4>NPS: the part that has to become a pension</h4>
+      <div class="cap">${npsCap}</div>
+      <div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">Pension a month, before tax</div><div class="stat-value">${money(nps.monthlyBefore)}</div></div>
+        <div class="stat"><div class="stat-label">Pension a month, after tax</div><div class="stat-value">${money(nps.monthlyAfter)}</div><div class="stat-sub">taxed as income, at ${R.slabPct}%</div></div>
+        <div class="stat"><div class="stat-label">Kept as cash</div><div class="stat-value">${c.compact(nps.lumpKept)}</div><div class="stat-sub">${nps.lumpTax>0?money(nps.lumpTax)+' of tax':'tax-free'}</div></div>
+        <div class="stat"><div class="stat-label">Used to buy the pension</div><div class="stat-value">${c.compact(nps.annuityBuy)}</div></div>
+      </div>
+      <div class="gr-note">For most subscribers at least ${Math.round(RETIRE_ACCOUNTS_IN.nps.minAnnuityShare*100)}% of the pot must buy a pension (government employees still need at least 40%, and small pots have their own rules: check yours), and cash up to ${Math.round(RETIRE_ACCOUNTS_IN.nps.shareAt60*100)}% of it is tax-free (rules as of ${RETIRE_ACCOUNTS_IN.asOf}). Cash above that limit is shown taxed at your slab, the cautious case, because the rules this tool was checked against do not settle it. The annuity rate is your own assumption, not a quote: pension prices vary by insurer, age and payout option, so get quotes before relying on this. Separate from the pot above.</div>
+    </div>`;
+
+  // ---- inputs
+  const slabChips=`<div class="cap" style="margin-top:8px" id="incSlabLbl">Your income-tax slab (new regime):</div><div class="slab-chips" role="group" aria-labelledby="incSlabLbl">${TAX_IN.newRegimeSlabs.map(v=>`<button type="button" class="tglbtn${v===R.slabPct?' active':''}" data-inc="slab" data-val="${v}" aria-pressed="${v===R.slabPct}">${v===0?'0% (income up to ₹12 L)':v+'%'}</button>`).join('')}</div>`;
+  const epChips=`<div class="episode-grid" role="group" aria-label="Historical crash to test">
+      <button type="button" class="epchip${!s.shock?' active':''}" data-inc="shock" data-val="none" aria-pressed="${!s.shock}"><b>No crash</b>steady returns</button>
+      ${c.episodes.map(e=>`<button type="button" class="epchip${s.shock&&s.shock.epId===e.id?' active':''}" data-inc="shock" data-val="${e.id}" aria-pressed="${!!(s.shock&&s.shock.epId===e.id)}"><b>${e.label}</b>${(e.rate*100).toFixed(0)}% on equity</button>`).join('')}
+    </div>`;
+  let retNoteHTML='';
+  const rn=s.retNote;
+  if(rn && rn.corpus===s.corpus && rn.spend===s.spend && rn.years===s.years){
+    const bits=[];
+    if(rn.wantCorpus!==rn.corpus) bits.push(`the pot is ${c.compact(rn.corpus)}, not the ${c.compact(Number(rn.wantCorpus)||0)} your plan needs`);
+    if(rn.wantSpend!==rn.spend) bits.push(`spending is ${c.fmt(rn.spend)} a month, not ${c.fmt(Number(rn.wantSpend)||0)}`);
+    if(rn.wantYears!==rn.years) bits.push(`the draw is ${rn.years} years, not ${Number(rn.wantYears)||0}`);
+    if(bits.length) retNoteHTML=`<div class="gr-note" style="margin:-4px 0 12px">Your Retirement Lab plan is outside these sliders, so it was cut to fit: ${bits.join('; ')}.</div>`;
+  }
+  const drawTip=infoIcon('Your first year of spending as a share of the pot. A lower share lasts longer. There is no single safe number: the crash card below shows what this share survives in one bad sequence, and the Monte Carlo shows how often.', `Right now ${c.fmt(R.annual)} a year on ${c.compact(s.corpus)} is ${incPct(drawRate)}.`);
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
+  <div class="panel">
+    ${panelHead('Retirement income', 'income')}
+    ${advisorChipsHTML('income')}
+    <div class="slab-chips" style="margin:0 0 12px"><button type="button" class="tglbtn" data-inc="fromRet">Use my Retirement Lab numbers</button></div>
+    ${retNoteHTML}
+    <div class="section-label">The pot and what you spend</div>
+    <div class="field"><label>The pot you will draw from${infoIcon('The money on the day you retire, not counting NPS (set below). The Retirement Lab button above copies its target pot and first-year spending.')} <b>${c.compact(s.corpus)}</b></label><input type="range" min="1000000" max="500000000" step="100000" value="${s.corpus}" data-k="corpus" data-tab="income"></div>
+    <div class="field"><label>Spend each month, after tax <b>${c.fmt(s.spend)}</b></label><input type="range" min="5000" max="1000000" step="1000" value="${s.spend}" data-k="spend" data-tab="income"></div>
+    <div class="field"><label>Draw for <b>${s.years}</b> years</label><input type="range" min="5" max="50" value="${s.years}" data-k="years" data-tab="income"></div>
+    <div class="field"><label>Spending rises by <b>${s.inflation}%</b> a year</label><input type="range" min="2" max="12" step="0.1" value="${s.inflation}" data-k="inflation" data-tab="income"></div>
+    ${slabChips}
+    <div class="gr-note" style="margin-top:12px">First-year draw: <b>${incPct(drawRate)}</b> of the pot${drawTip}</div>
+    <hr class="divider">
+    <div class="section-label">Three buckets</div>
+    <div class="field"><label>Liquid bucket holds <b>${s.liquidYears}</b> ${s.liquidYears===1?'year':'years'} of spending</label><input type="range" min="1" max="3" value="${s.liquidYears}" data-k="liquidYears" data-tab="income"></div>
+    <div class="field"><label>Debt bucket holds the next <b>${s.debtYears}</b> years</label><input type="range" min="2" max="6" value="${s.debtYears}" data-k="debtYears" data-tab="income"></div>
+    <hr class="divider">
+    <div class="section-label">An SWP or FD interest</div>
+    <div class="toggle-row" role="group" aria-label="Type of fund the SWP draws from">
+      <button type="button" class="tglbtn${s.kind==='swpEquity'?' active':''}" data-inc="kind" data-val="swpEquity" aria-pressed="${s.kind==='swpEquity'}">SWP from<br>an equity fund</button>
+      <button type="button" class="tglbtn${s.kind==='swpDebt'?' active':''}" data-inc="kind" data-val="swpDebt" aria-pressed="${s.kind==='swpDebt'}">SWP from<br>a debt fund</button>
+    </div>
+    <div class="field"><label>Fund growth <b>${s.fundRate}%</b></label><input type="range" min="3" max="14" step="0.1" value="${s.fundRate}" data-k="fundRate" data-tab="income"></div>
+    <div class="field"><label>FD interest <b>${s.fdRate}%</b></label><input type="range" min="3" max="10" step="0.1" value="${s.fdRate}" data-k="fdRate" data-tab="income"></div>
+    <div class="field"><label>Your own money in the fund pot${infoIcon('Only the gain part of a sale is taxed. If the pot is half your own money and half gains, half of each sale is gain. A pot built from a long SIP is usually mostly gains. If the money is cash, not a fund, set this to 100%.')} <b>${s.ownShare}%</b></label><input type="range" min="0" max="100" step="5" value="${s.ownShare}" data-k="ownShare" data-tab="income"></div>
+    <hr class="divider">
+    <div class="section-label">Crash test</div>
+    ${epChips}
+    ${s.shock?`<div class="field"><label>The crash hits in year <b>${s.shock.year}</b></label><input type="range" min="1" max="${s.years}" value="${s.shock.year}" data-k="incShockYear" data-tab="income"></div>`:''}
+    <div class="field"><label>Equity growth in other years <b>${s.equityRate}%</b></label><input type="range" min="4" max="14" step="0.1" value="${s.equityRate}" data-k="equityRate" data-tab="income"></div>
+    <hr class="divider">
+    <div class="section-label">NPS pension</div>
+    <div class="field"><label>NPS pot at retirement <b>${c.compact(s.npsPot)}</b></label><input type="range" min="0" max="50000000" step="100000" value="${s.npsPot}" data-k="npsPot" data-tab="income"></div>
+    <div class="field"><label>Used to buy a pension <b>${s.annuityShare}%</b></label><input type="range" min="20" max="100" step="5" value="${s.annuityShare}" data-k="annuityShare" data-tab="income"></div>
+    <div class="field"><label>Pension rate${infoIcon('The yearly income per rupee used to buy the pension. This is YOUR assumption, not a quote: insurers price it by age and payout option. Replace it with a real quote.')} <b>${s.annuityRate}%</b></label><input type="range" min="3" max="9" step="0.1" value="${s.annuityRate}" data-k="annuityRate" data-tab="income"></div>
+  </div>
+  <div class="output">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">First-year draw${drawTip}</div><div class="stat-value">${incPct(drawRate)}</div><div class="stat-sub">${c.fmt(R.annual)} a year from ${c.compact(s.corpus)}</div></div>
+      <div class="stat"><div class="stat-label">Kept near, in two buckets</div><div class="stat-value">${c.compact(bk.liquid+bk.debt)}</div><div class="stat-sub">${L1+D1} years of spending</div></div>
+      <div class="stat"><div class="stat-label">Left in equity to grow</div><div class="stat-value">${c.compact(bk.equity)}</div><div class="stat-sub">${incPct(bk.equityShare)} of the pot</div></div>
+    </div>
+    ${bucketsCard}
+    ${drawCard}
+    ${crashCard}
+    ${npsCard}
+    ${nextStepCard([
+      {q:'Run this pot through thousands of random markets, not one crash.', tab:'mc'},
+      {q:'See the savings side of this plan in the Retirement Lab.', tab:'retirement'},
+    ])}
+  </div>
+  </div>`;
+}
+
+// What the advisor can quote for this tab: the same numbers the cards show.
+function incomeAdvisorResults(){
+  const R=computeIncome(), c=R.c, s=R.s, bk=R.bk, sw=R.sw, fd=R.fd, hit=R.hit, nps=R.nps;
+  const end=pl=>pl.ranOutYear?'runs out in year '+pl.ranOutYear:'ends at '+c.compact(pl.finalBalance);
+  return { ok:true, tool:'Retirement Income', charts:[
+    { kind:'buckets', title:'Three buckets', xAxis:'years of spending (liquid, then debt, then equity)', yAxis:'rupees', note:'sized on the monthly spend, without counting what each bucket earns; the pot is '+(bk.covered?'enough':'NOT enough')+' for '+(bk.liquidYears+bk.debtYears)+' years of spending',
+      points:[{ label:'liquid', value:c.compact(bk.liquid)+' (years 1-'+bk.liquidYears+')' }, { label:'debt', value:c.compact(bk.debt) }, { label:'equity', value:c.compact(bk.equity)+' ('+incPct(bk.equityShare)+' of the pot)' }, { label:'first-year draw', value:incPct(R.annual/s.corpus) }] },
+    { kind:'comparison', title:'SWP or FD interest, after tax', xAxis:'years (0 to '+s.years+')', yAxis:'balance', note:'both spend '+c.fmt(s.spend)+'/month after tax at the '+R.slabPct+'% slab; both balances are what would be left after tax if everything were sold that year, starting from the pot less the tax to sell the fund today; the FD rate is fixed only until each deposit matures, the fund growth is an assumption',
+      points:[{ label:(s.kind==='swpDebt'?'debt fund':'equity fund')+' SWP, year-1 tax', value:c.fmt(Math.round(sw.firstTax)) }, { label:'FD, year-1 tax', value:c.fmt(Math.round(fd.firstTax)) }, { label:'SWP, kept after tax if sold', value:sw.ranOutYear ? end(sw) : 'ends at '+c.compact(sw.finalIfSold)+' (pot '+c.compact(sw.finalBalance)+', less '+c.compact(sw.finalExitTax)+' tax on its gains)' }, { label:'FD', value:end(fd) }, { label:'tax to sell the fund first', value:c.fmt(Math.round(R.sell)) }] },
+    { kind:'comparison', title:'A crash through buckets and one pot', xAxis:'years (0 to '+s.years+')', yAxis:'balance', note:(R.ep?R.ep.label+' in year '+s.shock.year:'no crash')+'; before tax',
+      points:[{ label:'bucket plan', value:end(hit.buckets) }, { label:'single rebalanced pot', value:end(hit.mix) }] },
+    { kind:'pension', title:'NPS pension', xAxis:'', yAxis:'', note:'annuity rate is the user\'s assumption, not a quote; the 20% minimum annuity share is for most subscribers, government employees need at least 40%, and small pots have their own rules',
+      points:[{ label:'pension a month after tax', value:c.fmt(Math.round(nps.monthlyAfter)) }, { label:'cash kept', value:c.compact(nps.lumpKept) }] },
+  ] };
 }
 
 /* =====================================================================
@@ -6443,6 +6793,8 @@ const ICON_INSTRUMENTS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColo
 const ICON_HEALTH=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-6 3 12 2-8 1.5 2H21"/></svg>`;
 const ICON_STATEMENTS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M9 12h7"/><path d="M9 16h7"/><path d="M9 8h3"/></svg>`;
 
+const ICON_INCOME=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.6 11a1 1 0 0 1-1 .9H7.6a1 1 0 0 1-1-.9L5 8z"/><path d="M5 8c0-2.2 3.1-4 7-4s7 1.8 7 4"/><path d="M9.5 13h5"/></svg>`;
+
 const TABS=[
   {id:'livefrontier', label:'Test Real Investments', primary:true, icon:ICON_LIVEFRONTIER,
     blurb:'Pick real stocks, ETFs or funds and see how mixing them would actually have performed - real risk, real return, real history.'},
@@ -6456,6 +6808,8 @@ const TABS=[
     blurb:'Model a SIP that grows with your income every year, not a flat amount forever.'},
   {id:'swp', short:'Will a corpus fund a fixed withdrawal long enough?', label:'Sustainable Withdrawal', icon:ICON_SWP,
     blurb:'Check whether a retirement corpus can actually fund a fixed withdrawal for as long as you need it to.'},
+  {id:'income', short:'How to draw the money: buckets, SWP vs FD, the NPS pension.', label:'Retirement Income', icon:ICON_INCOME,
+    blurb:'Once you have the pot: split it into buckets, compare drawing it as an SWP or FD interest after tax, see a crash hit two ways of drawing, and size the NPS pension.'},
   {id:'fx', short:'What currency moves do to India-US returns.', label:'Cross-Border', icon:ICON_FX,
     blurb:'See what currency movement does to real returns when you invest across India and the US.'},
   {id:'joint', short:'Several children’s education from one pool.', label:'Joint Children Corpus', icon:ICON_JOINT,
@@ -6707,6 +7061,7 @@ function render(opts){
   else if(L.tab==='retirement') main.innerHTML=renderRetirement();
   else if(L.tab==='stepup') main.innerHTML=renderStepUp();
   else if(L.tab==='swp') main.innerHTML=renderSWP();
+  else if(L.tab==='income') main.innerHTML=renderIncome();
   else if(L.tab==='fx') main.innerHTML=renderFX();
   else if(L.tab==='joint') main.innerHTML=renderJoint();
   else if(L.tab==='mc') main.innerHTML=renderMC();
@@ -6804,10 +7159,11 @@ function attach(){
   document.querySelectorAll('input[type=range][data-k]').forEach(el=>{
     el.addEventListener('input',()=>{
       const k=el.dataset.k, tab=el.dataset.tab||'ret';
-      const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
+      const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='income'?L.income : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
       let v=parseFloat(el.value);
       if(k==='shockYear'){ L.ret.shock.year=v; }
       else if(k==='swpShockYear'){ L.swp.shock.year=v; }
+      else if(k==='incShockYear'){ if(L.income.shock) L.income.shock.year=v; }
       else target[k]=v;
       if(tab==='mc' && L.mc.fromRet) L.mc.fromRet=null;
       if(tab==='mc'){
@@ -6888,6 +7244,32 @@ function attach(){
       const id=el.dataset.shock;
       if(id==='none'){ L.ret.shock=null; }
       else { L.ret.shock={epId:id, year: L.ret.shock?L.ret.shock.year:5}; }
+      render();
+    });
+  });
+
+  // Retirement Income's pills (slab, fund type, which crash) and the "use my Retirement Lab numbers" button.
+  document.querySelectorAll('[data-inc]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const f=el.dataset.inc, v=el.dataset.val, s=L.income;
+      if(f==='slab') s.slab=+v;
+      else if(f==='kind'){
+        // The fund's growth follows the fund type only while it still holds the old type's default.
+        const oldDef=s.kind==='swpDebt'?7:10;
+        if(v!==s.kind){ if(s.fundRate===oldDef) s.fundRate=v==='swpDebt'?7:10; s.kind=v==='swpDebt'?'swpDebt':'swpEquity'; }
+      }
+      else if(f==='shock') s.shock = v==='none' ? null : { epId:v, year:s.shock?s.shock.year:1 };
+      else if(f==='fromRet'){
+        const r=calcRetLab();
+        s.corpus=Math.round(r.corpus/1e5)*1e5;
+        s.spend=Math.round(r.expAtRet/12/1000)*1000;
+        s.years=r.drawYrs; s.inflation=L.ret.inflation;
+        // A plan outside the sliders' ranges is cut to fit; the person is told which numbers moved, not left to find out.
+        const want={corpus:s.corpus, spend:s.spend, years:s.years};
+        clampIncome(s);
+        s.retNote=(want.corpus!==s.corpus||want.spend!==s.spend||want.years!==s.years)
+          ? {corpus:s.corpus, spend:s.spend, years:s.years, wantCorpus:want.corpus, wantSpend:want.spend, wantYears:want.years} : null;
+      }
       render();
     });
   });
@@ -10525,7 +10907,7 @@ document.body.addEventListener('click', e=>{
    directly — every mutation goes through executeAdvisorTool.
    ===================================================================== */
 const ADVISOR_TABS = ['home'].concat(TABS.map(t => t.id));
-const TAB_FOR = { ret:'retirement', step:'stepup', swp:'swp', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+const TAB_FOR = { ret:'retirement', step:'stepup', swp:'swp', income:'income', fx:'fx', joint:'joint', mc:'mc', health:'health' };
 
 const ADVISOR_FIELDS = {
   country: { path:['country'], type:'string', enum:['IN','US'], desc:'Country/currency: IN for India ₹, US for United States $.' },
@@ -10563,6 +10945,19 @@ const ADVISOR_FIELDS = {
   'mc.volatility': { path:['mc','volatility'], type:'number', min:0, max:30, desc:'Volatility (std dev) %.' },
   'health.capacity': { path:['health','capacity'], type:'integer', min:5000, max:300000, desc:'Monthly savings capacity.' },
   'health.totalSIP': { path:['health','totalSIP'], type:'integer', min:5000, max:300000, desc:'Total monthly SIP needed.' },
+  'income.corpus': { path:['income','corpus'], type:'integer', min:1000000, max:500000000, desc:'Retirement pot to draw from (rupees, not counting NPS).' },
+  'income.spend': { path:['income','spend'], type:'integer', min:5000, max:1000000, desc:'Monthly spending wanted after tax, in rupees.' },
+  'income.years': { path:['income','years'], type:'integer', min:5, max:50, desc:'Years to draw for.' },
+  'income.inflation': { path:['income','inflation'], type:'number', min:2, max:12, desc:'Spending rises by this % a year.' },
+  'income.liquidYears': { path:['income','liquidYears'], type:'integer', min:1, max:3, desc:'Years of spending held in the liquid bucket.' },
+  'income.debtYears': { path:['income','debtYears'], type:'integer', min:2, max:6, desc:'Years of spending held in the debt bucket.' },
+  'income.fundRate': { path:['income','fundRate'], type:'number', min:3, max:14, desc:'Growth % of the fund the SWP draws from.' },
+  'income.fdRate': { path:['income','fdRate'], type:'number', min:3, max:10, desc:'FD interest %.' },
+  'income.ownShare': { path:['income','ownShare'], type:'integer', min:0, max:100, desc:'Percent of the fund pot that is the person\'s own money (the rest is gains).' },
+  'income.equityRate': { path:['income','equityRate'], type:'number', min:4, max:14, desc:'Equity growth % in the crash comparison, outside the crash year.' },
+  'income.npsPot': { path:['income','npsPot'], type:'integer', min:0, max:50000000, desc:'NPS pot at retirement (rupees).' },
+  'income.annuityShare': { path:['income','annuityShare'], type:'integer', min:20, max:100, desc:'Percent of the NPS pot used to buy a pension (at least 20).' },
+  'income.annuityRate': { path:['income','annuityRate'], type:'number', min:3, max:9, desc:'Pension rate % (the person\'s own assumption, not a quote).' },
 };
 
 const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with three levels — they all share the same math, so moving to a deeper level never wastes anything the user already entered. It supports India (₹) and the United States ($).
@@ -10571,7 +10966,7 @@ const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with thr
 - Level 3 — The Lab (this page): full assumption control, Monte Carlo, efficient frontier, and live real-market-data testing.
 The user is currently on Level 3.
 
-This is "Goalden — The Lab" (Level 3): full assumption control and live market-data testing. Ten tools sharing one underlying engine.
+This is "Goalden — The Lab" (Level 3): full assumption control and live market-data testing. Twelve tools sharing one underlying engine.
 
 Tools:
 - Retirement Lab: age, retire age, monthly expenses, lifestyle %, inflation, growth before/after retirement, life expectancy; stress-tests with a real historical market crash, plus a drawdown Monte Carlo to show sequence-of-returns risk.
@@ -10579,6 +10974,7 @@ Tools:
 - Test Real Investments (Live Frontier): picks real stocks/ETFs/funds and shows how mixing them actually performed — real risk, real return, real history.
 - Step-Up SIP: a SIP that grows with income each year.
 - Sustainable Withdrawal (SWP): whether a corpus can fund a fixed inflation-adjusted withdrawal for a set span.
+- Retirement Income (India only): once there is a pot, how to draw it. Splits it into liquid, debt and equity buckets by when each part is needed; compares an SWP from a fund with FD interest after Indian tax (an SWP taxes only the gain part of each sale, FD interest is taxed in full at the slab, and moving a fund pot into an FD costs tax to sell it first; both balances are shown as what would be left after tax if everything were sold that year); runs one historical crash through the bucket plan and through a single rebalanced pot; sizes the NPS pension (for most subscribers at least 20% of the pot must buy an annuity, government employees still at least 40%, small pots have their own rules; cash up to 60% is tax-free; the annuity rate is the user's own assumption, not a quote). It shows both sides of each comparison and never picks one for the user.
 - Cross-Border (FX): effect of currency movement on India-US investing.
 - Joint Children Corpus: overlapping education costs for multiple children from one pool.
 - Monte Carlo: thousands of random market paths to show plan likelihood, not just the average.
@@ -10734,6 +11130,9 @@ function advisorChipsHTML(tab) {
     chips.push("Why is a step-up SIP cheaper to start?");
   } else if (tab === 'swp') {
     chips.push("How much can I safely withdraw?");
+  } else if (tab === 'income') {
+    chips.push("Buckets or one pot: which holds up in a crash?");
+    chips.push("How is an SWP taxed compared with FD interest?");
   } else if (tab === 'fx') {
     chips.push("Is currency helping or hurting me here?");
   } else if (tab === 'joint') {
@@ -10923,7 +11322,7 @@ function advisorTools() {
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view (no pulse). Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
-    { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, fx, joint, mc or health. params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
+    { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, income, fx, joint, mc or health. params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','income','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
     { type:'function', function:{ name:'read_other_page', description:'Read-only snapshot of another page\'s saved data (from that page\'s own localStorage). page: door1 (Quick Calculate) or door2 (The Full Plan). Returns {page, asOf, state} — context to quote from, NEVER to be merged into this page\'s inputs.', parameters:{ type:'object', properties:{ page:{ type:'string', enum:Object.keys(OTHER_PAGE_KEYS) } }, required:['page'] } } },
   ];
 }
@@ -10931,7 +11330,7 @@ function advisorTools() {
 function advisorFieldSelector(spec) {
   const key = spec.path[spec.path.length - 1];
   const tab = spec.path[0];
-  const tabAttr = { ret: '', step: 'step', swp: 'swp', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' }[tab] || '';
+  const tabAttr = { ret: '', step: 'step', swp: 'swp', income: 'income', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' }[tab] || '';
   return tabAttr ? 'input[data-k="' + key + '"][data-tab="' + tabAttr + '"]' : 'input[data-k="' + key + '"]';
 }
 
@@ -11312,6 +11711,10 @@ function advisorReadCurrentChart() {
       { kind:'drawdown', title:'Can the corpus fund the withdrawal?', xAxis:'years (0 → '+s.years+')', yAxis:'balance (starts '+c.compact(s.corpus)+')', note:'built to reach zero at the end; a shock may cut it short', points:[{ label:'sustainable monthly draw', value:c.fmt(Math.round(w/12)) }, { label:'lasts', value:(sim.ranOutYear || s.years)+' years' }] },
     ] };
   }
+  if (tab === 'income') {
+    if (L.country !== 'IN') return { ok:false, error:'Retirement Income uses Indian tax rules; the user needs to switch the country to India.' };
+    return incomeAdvisorResults();
+  }
   if (tab === 'fx') {
     const f = L.fx;
     const homeC = f.direction==='investingAbroad' ? C.IN : C.US;
@@ -11445,6 +11848,18 @@ function advisorGetResults() {
     const sc = calcHealthScore();
     return { ok:true, result:{ tool:'Plan Health', score:sc.total, capacity:L.health.capacity, totalSIP:L.health.totalSIP, breakdown:{ funding:sc.funding, emergency:sc.emergency, stress:sc.stress, discipline:sc.discipline } }, flags:flags };
   }
+  if (tab === 'income') {
+    if (L.country !== 'IN') return { ok:false, error:'Retirement Income uses Indian tax rules; the user needs to switch the country to India.' };
+    const R = computeIncome(), s = R.s, bk = R.bk;
+    const end = pl => pl.ranOutYear ? 'runs out in year ' + pl.ranOutYear : Math.round(pl.finalBalance);
+    return { ok:true, result:{ tool:'Retirement Income', pot:s.corpus, monthlySpendAfterTax:s.spend, years:s.years, inflationPct:s.inflation, slabPct:R.slabPct,
+      firstYearDrawPct:+(R.annual / s.corpus * 100).toFixed(1),
+      buckets:{ liquid:Math.round(bk.liquid), debt:Math.round(bk.debt), equity:Math.round(bk.equity), potCoversNearBuckets:bk.covered },
+      swp:{ from:s.kind === 'swpDebt' ? 'debt fund' : 'equity fund', year1Tax:Math.round(R.sw.firstTax), totalTax:Math.round(R.sw.totalTax), potAtEndBeforeSaleTax:end(R.sw), potAtEndAfterTaxIfSold:R.sw.ranOutYear ? end(R.sw) : Math.round(R.sw.finalIfSold) },
+      fd:{ year1Tax:Math.round(R.fd.firstTax), totalTax:Math.round(R.fd.totalTax), potAtEnd:end(R.fd), startsAfterTaxToSellTheFund:Math.round(R.sell) },
+      crash:{ scenario:R.ep ? R.ep.label + ' in year ' + s.shock.year : 'none', bucketPlanAtEnd:end(R.hit.buckets), singleRebalancedPotAtEnd:end(R.hit.mix) },
+      nps:{ pot:s.npsPot, pensionPerMonthAfterTax:Math.round(R.nps.monthlyAfter), cashKept:Math.round(R.nps.lumpKept) } }, flags:[] };
+  }
   return { ok:true, result:{ tool: tab === 'home' ? 'Home' : tab, note:'Pick a tool to explore.' } };
 }
 
@@ -11458,6 +11873,8 @@ const ADVISOR_HIGHLIGHT_TARGETS = {
   frontier: '#pf-frontier-echart, #live-frontier-echart, #live-multi-frontier-echart',
   fan: '#mc-fan, #ret-ddmc-fan',
   drawdown: '#ret-drawdown, #swp-drawdown',
+  incomedraw: '#inc-draw',
+  incomecrash: '#inc-crash',
   mountain: '#ret-mountain',
   timeline: '#joint-timeline',
   twinfates: '#step-twinfates',
@@ -11748,8 +12165,8 @@ function executeAdvisorTool(name, args) {
     const start = performance.now();
     const tab = args && args.tab;
     const params = (args && args.params) || {};
-    const PREFIX = { retirement:'ret', stepup:'step', swp:'swp', fx:'fx', joint:'joint', mc:'mc', health:'health' };
-    if (!PREFIX[tab]) return JSON.stringify({ ok:false, error:'Invalid tab. Valid: retirement, stepup, swp, fx, joint, mc, health. (portfolio/livefrontier use set_weights/add_instrument.)' });
+    const PREFIX = { retirement:'ret', stepup:'step', swp:'swp', income:'income', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+    if (!PREFIX[tab]) return JSON.stringify({ ok:false, error:'Invalid tab. Valid: retirement, stepup, swp, income, fx, joint, mc, health. (portfolio/livefrontier use set_weights/add_instrument.)' });
     if (typeof params !== 'object' || Array.isArray(params)) return JSON.stringify({ ok:false, error:'params must be an object.' });
     const prefix = PREFIX[tab];
     L.tab = tab;
@@ -11869,6 +12286,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
       'mc': ['What does the spread mean?', 'What is the chance of running out of money?', 'What if volatility is higher?'],
       'stepup': ['What does stepping up cost me in total?', 'What if my income grows slower?', 'How much of the gain is real vs inflation?'],
       'swp': ['What happens if markets crash early?', 'How much could I withdraw for 30 years?', 'Why does inflation matter here?'],
+      'income': ['How is an SWP taxed compared with FD interest?', 'Which of the two holds up better in this crash, and why?', 'What does the NPS pension cover?'],
       'joint': ['Why are separate pots cheaper here?', 'What if the second child starts later?', 'Where is the tightest year?'],
       'statements': ['What does this chart show about the company?', 'Is profit turning into cash?', 'What changed versus five years ago?'],
     };
