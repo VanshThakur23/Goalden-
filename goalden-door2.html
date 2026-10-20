@@ -316,12 +316,28 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .gr-chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media(max-width:520px){.gr-chart-row{grid-template-columns:1fr}}
 .alloc-card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.1);border-radius:13px;padding:16px 16px 14px;margin-bottom:16px}
-.alloc-flex{display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin:12px 0 14px}
-.alloc-legend{flex:1;min-width:140px}
-.alloc-row{display:flex;align-items:center;gap:8px;padding:5px 0}
-.alloc-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.alloc-name{flex:1;font-size:13px;color:rgba(20,40,63,.8)}
-.alloc-pct{font-family:'Spline Sans Mono',monospace;font-size:13px;color:var(--paper);font-weight:600}
+/* allocation strip (replaces the donut and its legend); capped like the other charts so it does not stretch across a wide monitor */
+.alloc-strip-wrap{max-width:760px;margin:0 auto}
+.alloc-strip{position:relative;height:28px;margin:4px 0 8px}
+.alloc-seg{position:absolute;top:0;bottom:0}
+.alloc-seg:first-child{border-radius:4px 0 0 4px}
+.alloc-seg:last-child{border-radius:0 4px 4px 0}
+.alloc-seg:only-child{border-radius:4px}
+.alloc-eq{background:#2557C7}
+.alloc-de{background:repeating-linear-gradient(45deg,rgba(255,255,255,.38) 0 2px,transparent 2px 7px),#B8740F}
+.alloc-hy{background:repeating-linear-gradient(135deg,rgba(255,255,255,.38) 0 2px,transparent 2px 7px),#1F8A70}
+.alloc-lbls{position:relative;height:42px;margin-bottom:12px}
+.alloc-lbls.has-amt{height:60px}
+.alloc-lbl{position:absolute;top:0;padding-left:7px;border-left:1px solid rgba(20,40,63,.18);font-size:12.5px;line-height:1.35;color:rgba(20,40,63,.8);white-space:nowrap;font-variant-numeric:tabular-nums}
+.alloc-lbl b{display:block;font-family:'Newsreader',serif;font-size:17px;font-weight:600;line-height:1.2;color:var(--paper)}
+.alloc-amt{display:block;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim)}
+.alloc-key{display:none;width:10px;height:10px;border-radius:2px;margin-right:6px;flex:none}
+.alloc-lbls.as-list{height:auto;display:grid;gap:5px}
+.alloc-lbls.as-list .alloc-lbl{position:static;width:auto!important;border-left:0;padding-left:0;display:flex;align-items:baseline;gap:4px}
+.alloc-lbls.as-list .alloc-lbl b{display:inline;margin-right:3px}
+.alloc-lbls.as-list .alloc-key{display:inline-block}
+.alloc-lbls.as-list .alloc-amt{display:inline;margin-left:6px}
+@media print{.alloc-seg,.alloc-key{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 .alloc-return-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding-top:12px;border-top:1px solid rgba(20,40,63,.1)}
 .alloc-return-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.04em;margin-bottom:3px}
 .alloc-return-value{font-family:'Newsreader',serif;font-size:19px;font-weight:600;color:var(--paper)}
@@ -1260,26 +1276,76 @@ function buildPlan(){
 /* =====================================================================
    CHART
    ===================================================================== */
-function allocationDonut(eq, de, hy, uid){
-  const chartId = 'chart-donut'+(uid!==undefined?'-'+uid:'');
-  deferChartInit(()=>renderAllocationDonutOption(chartId, eq, de, hy));
-  return `<div id="${chartId}" class="echart" style="height:132px;max-width:132px;flex-shrink:0"></div>`;
+// Part-to-whole as one labelled strip. Replaces the donut + legend, which the
+// chart rules ban. Lengths along one line compare more easily than angles, each
+// part is labelled where it stands, and the hatching keeps the parts apart in
+// greyscale and print. Plain HTML, so there is no chart instance to manage.
+// The strip itself is decorative (aria-hidden): the labels carry the numbers.
+const ALLOC_PARTS = [
+  { key:'eq', label:'Equity' },
+  { key:'de', label:'Debt' },
+  { key:'hy', label:'Hybrid' },
+];
+let allocStripSeq = 0;
+// Splits a whole-number monthly amount across the parts so the shown amounts
+// add up to it exactly (largest remainder), instead of each being rounded alone.
+function allocAmounts(ws, sip) {
+  const total = Math.round(sip), raw = ws.map(w => total * w), out = raw.map(Math.floor);
+  let rest = total - out.reduce((a, b) => a + b, 0);
+  raw.map((v, i) => [v - out[i], i]).sort((a, b) => b[0] - a[0]).forEach(p => { if (rest > 0) { out[p[1]]++; rest--; } });
+  return out;
 }
-function renderAllocationDonutOption(chartId, eq, de, hy){
-  const segs = [
-    { value: Math.round(eq*100), name: 'Equity', itemStyle:{color:'#2557C7'} },
-    { value: Math.round(de*100), name: 'Debt', itemStyle:{color:'#2D6E6E'} },
-    { value: Math.round(hy*100), name: 'Hybrid', itemStyle:{color:'#8FC79E'} },
-  ].filter(s => s.value > 0);
-  initChart(chartId, {
-    tooltip:{trigger:'item', formatter:p=>`${p.name}: ${p.value}%`},
-    series:[{ type:'pie', radius:['58%','86%'], center:['50%','50%'], data:segs, avoidLabelOverlap:false,
-      label:{show:false}, labelLine:{show:false}, itemStyle:{borderColor:'#14283F', borderWidth:2} }],
+function allocationStrip(eq, de, hy, idPrefix, sip, c) {
+  const id = (idPrefix || 'alloc-strip') + '-' + (++allocStripSeq);
+  const shown = [eq, de, hy].map((w, i) => ({ p: ALLOC_PARTS[i], w: w })).filter(s => s.w > 0.001);
+  const sum = shown.reduce((a, s) => a + s.w, 0);
+  shown.forEach(s => { s.w = s.w / sum; });
+  const amts = sip > 0 && c ? allocAmounts(shown.map(s => s.w), sip) : null;
+  let x = 0;
+  const segs = [], lbls = [];
+  shown.forEach((s, k) => {
+    const last = k === shown.length - 1;
+    const pct = Math.round(s.w * 100);
+    // 2px of card shows through between parts (the "surface gap").
+    const width = last ? (s.w * 100) + '%' : 'calc(' + (s.w * 100) + '% - 2px)';
+    segs.push('<span class="alloc-seg alloc-' + s.p.key + '" style="left:' + (x * 100) + '%;width:' + width + '"></span>');
+    lbls.push('<div class="alloc-lbl" style="left:' + (x * 100) + '%;width:' + (s.w * 100) + '%">' +
+      '<span class="alloc-key alloc-' + s.p.key + '"></span><b>' + pct + '%</b>' + s.p.label +
+      (amts ? '<span class="alloc-amt">' + c.fmt(amts[k]) + '/mo</span>' : '') + '</div>');
+    x += s.w;
   });
+  deferChartInit(() => {
+    fitAllocLabels(id);
+    // Web fonts arriving late change the label widths.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitAllocLabels(id));
+  });
+  return '<div class="alloc-strip-wrap" id="' + id + '">' +
+    '<div class="alloc-strip" aria-hidden="true">' + segs.join('') + '</div>' +
+    '<div class="alloc-lbls' + (amts ? ' has-amt' : '') + '">' + lbls.join('') + '</div></div>';
 }
-function allocationLegend(eq, de, hy){
-  const rows=[{pct:eq,color:'#2557C7',label:'Equity'},{pct:de,color:'#2D6E6E',label:'Debt'},{pct:hy,color:'#8FC79E',label:'Hybrid'}].filter(s=>s.pct>0.001);
-  return rows.map(s=>`<div class="alloc-row"><span class="alloc-dot" style="background:${s.color}"></span><span class="alloc-name">${s.label}</span><span class="alloc-pct">${Math.round(s.pct*100)}%</span></div>`).join('');
+// Labels sit under their own part. If any label's text is wider than its part
+// at the current width (Hybrid at 10-15% almost always, and every part on a
+// narrow phone), stack the labels as a list instead of letting them overlap or
+// clip. Measured, not guessed: scrollWidth > clientWidth is exactly "the text
+// does not fit its box".
+function fitAllocLabels(id) {
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  const box = wrap.querySelector('.alloc-lbls');
+  box.classList.remove('as-list');
+  if ([...box.children].some(l => l.scrollWidth > l.clientWidth + 1)) box.classList.add('as-list');
+}
+window.addEventListener('resize', () => document.querySelectorAll('.alloc-strip-wrap').forEach(el => fitAllocLabels(el.id)));
+// One sentence from the real split, for the card caption (chart rule). With a
+// monthly amount it says where that amount goes; without one, "every rupee".
+function allocCaption(eq, de, hy, sip, c) {
+  const words = { 25: 'A quarter', 50: 'Half', 75: 'Three quarters' };
+  const parts = [['equity', eq], ['debt', de], ['hybrid funds', hy]].filter(p => p[1] > 0.001).sort((a, b) => b[1] - a[1]);
+  const top = Math.round(parts[0][1] * 100);
+  const unit = c && c.sym === '$' ? 'dollar' : 'rupee';
+  const lead = (words[top] || top + '%') + ' of ' + (sip > 0 && c ? 'the ' + c.fmt(Math.round(sip)) + ' a month' : 'every ' + unit) + ' goes to ' + parts[0][0];
+  const rest = parts.slice(1).map(p => Math.round(p[1] * 100) + '% to ' + p[0]);
+  return lead + (rest.length ? ', ' + rest.join(' and ') : '') + '.';
 }
 // On-chart value tag (same convention as the Lab): numbers printed on the
 // chart itself, not only in hover tooltips that phones and printouts never
@@ -1830,10 +1896,11 @@ function renderPlan(){
   const baseReal=realRate(baseRate, cfg().d.inflation);
   const allocCard=`<div class="alloc-card">
     <div class="section-head" style="margin-top:0">Your ${b.name} profile, as an allocation</div>
-    <div class="alloc-flex">${allocationDonut(baseAlloc.eq, baseAlloc.de, baseAlloc.hy)}<div class="alloc-legend">${allocationLegend(baseAlloc.eq, baseAlloc.de, baseAlloc.hy)}</div></div>
+    <div class="gr-note" style="margin:6px 0 4px">${allocCaption(baseAlloc.eq, baseAlloc.de, baseAlloc.hy, 0, cfg())}</div>
+    ${allocationStrip(baseAlloc.eq, baseAlloc.de, baseAlloc.hy, 'alloc-strip-plan')}
     <div class="alloc-return-row">
       <div><div class="alloc-return-label">Expected return</div><div class="alloc-return-value">${(baseRate*100).toFixed(1)}%</div></div>
-      <div><div class="alloc-return-label">After ${(cfg().d.inflation*100).toFixed(0)}% inflation</div><div class="alloc-return-value" style="color:${baseReal>0?'#256F55':'#9C4A2C'}">${(baseReal*100).toFixed(1)}%</div></div>
+      <div><div class="alloc-return-label">After ${(cfg().d.inflation*100).toFixed(0)}% inflation</div><div class="alloc-return-value">${(baseReal*100).toFixed(1)}%</div></div>
     </div>
     <div class="gr-note" style="margin-top:10px">This is your full profile's own mix. Goals with a shorter horizon than your profile can safely support are scaled down individually above, not by changing this baseline.</div>
   </div>`;
@@ -2096,13 +2163,21 @@ function comparePortfolio(){
     riskFreePct: +(rf*100).toFixed(1),
     minVariance: { weights: wMin.map(function(w){ return +w.toFixed(3); }), returnPct: +(mv.ret*100).toFixed(2), volPct: +(mv.vol*100).toFixed(2), sharpe: +mv.sharpe.toFixed(3) },
     tangency: { weights: wTan.map(function(w){ return +w.toFixed(3); }), returnPct: +(tan.ret*100).toFixed(2), volPct: +(tan.vol*100).toFixed(2), sharpe: +tan.sharpe.toFixed(3) },
-    chartTypes: n===2 ? ['frontier','bar','radar'] : ['bar','radar'],
+    chartTypes: n===2 ? ['frontier','bar','profile'] : ['bar','profile'],
   };
   if(n === 2) result.correlation = correlations[0].correlation;
   lastComparisonResult = result;
   return result;
 }
-const FRONTIER_CHART_TITLES = { frontier: 'Efficient frontier', bar: 'Return vs. risk', radar: 'Risk/return profile' };
+const FRONTIER_CHART_TITLES = { frontier: 'Efficient frontier', bar: 'Return vs. risk', profile: 'Return, risk and Sharpe, side by side' };
+// The caption that goes under the profile dot plots (built from the same rows
+// as the chart). Empty when the comparison data is missing, so a stale or
+// half-built briefing prints no caption instead of throwing.
+function profileCaptionHtml(d) {
+  if (!d || !d.assetPoints || !d.minVariance || !d.tangency) return '';
+  return profileComparisonCaption(d.assetPoints, d.minVariance, d.tangency, d.riskFree)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 // Lets the user pull the floating chart panel off whatever it's covering
 // (e.g. the Continue button) instead of only being able to close it. Bound
 // once, when the panel is first created — not re-bound on every re-render.
@@ -2146,7 +2221,8 @@ function makeDraggable(panel, handle){
 function renderFrontierChart(chartType){
   if(!lastFrontierData || lastFrontierData.assetCount !== G.instruments.length){ const r = comparePortfolio(); if(!r.ok) return r; }
   const d = lastFrontierData;
-  let type = ['frontier','bar','radar'].includes(chartType) ? chartType : 'frontier';
+  let type = chartType === 'radar' ? 'profile' : chartType;   // the old name still works
+  type = ['frontier','bar','profile'].includes(type) ? type : 'frontier';
   let note;
   if(type === 'frontier' && d.assetCount !== 2){ type = 'bar'; note = 'Efficient-frontier chart only applies to 2-instrument comparisons — showing the return-vs-risk bar chart instead.'; }
   let panel = document.getElementById('advisor-frontier-panel');
@@ -2172,9 +2248,10 @@ function renderFrontierChart(chartType){
     makeDraggable(panel, head);
     document.body.appendChild(panel);
   }
-  document.getElementById('advisor-frontier-title').innerHTML = '<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:16px;color:#14283F">' + FRONTIER_CHART_TITLES[type] + '</div><div style="font-family:\'Spline Sans Mono\',monospace;font-size:10px;color:rgba(20,40,63,.74)">' + d.assetPoints.map(function(ap){ return ap.label; }).join(' vs ') + '</div>';
+  document.getElementById('advisor-frontier-title').innerHTML = '<div style="font-family:\'Newsreader\',serif;font-weight:700;font-size:16px;color:#14283F">' + FRONTIER_CHART_TITLES[type] + '</div><div style="font-family:\'Spline Sans Mono\',monospace;font-size:10px;color:rgba(20,40,63,.74)">' + d.assetPoints.map(function(ap){ return ap.label; }).join(' vs ') + '</div>' +
+    (type === 'profile' ? '<div style="font-size:11px;line-height:1.45;color:rgba(20,40,63,.74);margin-top:5px;padding-right:18px">' + profileCaptionHtml(d) + '</div>' : '');
   const opt = type === 'bar' ? barComparisonChartOption(d.assetPoints)
-    : type === 'radar' ? radarComparisonChartOption(d.assetPoints, d.minVariance, d.tangency, d.riskFree)
+    : type === 'profile' ? profileComparisonChartOption(d.assetPoints, d.minVariance, d.tangency, d.riskFree)
     : liveFrontierChartOption(d.frontier, d.assetPoints, d.currentPoint, d.cal, d.tangencyPoint, d.currentMixLabel, d.minVarPoint);
   initChart('advisor-frontier-chart', opt);
   const out = { ok:true, rendered:true, chartType:type };
@@ -2632,7 +2709,7 @@ function advisorTools() {
     { type:'function', function:{ name:'remove_instrument', description:'Remove an instrument from the comparison.', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'get_financial_statements', description:'Fetch a real Indian company\'s Profit & Loss, Balance Sheet and Cash Flow statements (scraped from screener.in, not an official filing). Pass the bare NSE/BSE trading code, e.g. "TCS", not "TCS.NS".', parameters:{ type:'object', properties:{ symbol:{ type:'string' } }, required:['symbol'] } } },
     { type:'function', function:{ name:'compare_portfolio', description:'Compare 2 to 4 added instruments: pairwise correlations, the risk-minimizing split, and the best-Sharpe (tangency) split, each with return/vol/Sharpe. At exactly 2 instruments the weights are exact (closed-form); at 3-4 they are approximate, from a sampled frontier (method:"sampled-frontier" in the result) — say "approximately" when quoting those weights. Requires 2-4 instruments via add_instrument.', parameters:{ type:'object', properties:{} } } },
-    { type:'function', function:{ name:'render_frontier_chart', description:'Render a chart for the last compare_portfolio into a floating chart panel. Pass chartType to pick which visual best explains what you\'re about to say: "frontier" shows the full risk/return curve and where the two blends sit on it — best when explaining the tradeoff itself, but only works for exactly 2 instruments (at 3-4 it silently falls back to "bar", with a note in the result explaining why); "bar" (default at 3-4 instruments) is a plain side-by-side of each instrument\'s return and risk — best for a quick, simple comparison; "radar" profiles return/risk/Sharpe for all instruments plus the two blends on one shape — best when summarizing several dimensions at once.', parameters:{ type:'object', properties:{ chartType:{ type:'string', enum:['frontier','bar','radar'] } } } } },
+    { type:'function', function:{ name:'render_frontier_chart', description:'Render a chart for the last compare_portfolio into a floating chart panel. Pass chartType to pick which visual best explains what you\'re about to say: "frontier" shows the full risk/return curve and where the two blends sit on it — best when explaining the tradeoff itself, but only works for exactly 2 instruments (at 3-4 it silently falls back to "bar", with a note in the result explaining why); "bar" (default at 3-4 instruments) is a plain side-by-side of each instrument\'s return and risk — best for a quick, simple comparison; "profile" shows return, risk and Sharpe as three side-by-side dot plots for every instrument plus the two blends — best when summarizing several dimensions at once.', parameters:{ type:'object', properties:{ chartType:{ type:'string', enum:['frontier','bar','profile'] } } } } },
   ];
 }
 
@@ -2879,9 +2956,10 @@ function resultCanvasAlloc() {
   const baseRate = bucketRate(G.bucket);
   const baseReal = realRate(baseRate, c.d.inflation);
   return '<div class="alloc-card"><div class="section-head">Your '+b.name+' profile, as an allocation</div>' +
-    '<div class="alloc-flex">'+allocationDonut(b.eq, b.de, b.hy, 'cv-alloc')+'<div class="alloc-legend">'+allocationLegend(b.eq, b.de, b.hy)+'</div></div>' +
+    '<div class="gr-note" style="margin:6px 0 4px">'+allocCaption(b.eq, b.de, b.hy, 0, c)+'</div>' +
+    allocationStrip(b.eq, b.de, b.hy, 'cv-alloc-strip') +
     '<div class="alloc-return-row"><div><div class="alloc-return-label">Expected return</div><div class="alloc-return-value">'+(baseRate*100).toFixed(1)+'%</div></div>' +
-    '<div><div class="alloc-return-label">After '+(c.d.inflation*100).toFixed(0)+'% inflation</div><div class="alloc-return-value" style="color:'+(baseReal>0?'#256F55':'#9C4A2C')+'">'+(baseReal*100).toFixed(1)+'%</div></div></div></div>';
+    '<div><div class="alloc-return-label">After '+(c.d.inflation*100).toFixed(0)+'% inflation</div><div class="alloc-return-value">'+(baseReal*100).toFixed(1)+'%</div></div></div></div>';
 }
 function resultCanvasProfile() {
   if (!G.bucket) return '<div class="gr-note">Complete the risk questionnaire to see your profile.</div>';
@@ -2924,7 +3002,8 @@ const BRIEFING_SECTIONS = {
     const b = BUCKETS[G.bucket];
     const baseRate = bucketRate(G.bucket);
     return { ok:true, html: '<div class="alloc-card"><div class="section-head">Your '+b.name+' profile</div>' +
-      '<div class="alloc-flex">'+allocationDonut(b.eq, b.de, b.hy, 'bf-alloc')+'<div class="alloc-legend">'+allocationLegend(b.eq, b.de, b.hy)+'</div></div>' +
+      '<div class="gr-note" style="margin:6px 0 4px">'+allocCaption(b.eq, b.de, b.hy, 0, c)+'</div>' +
+      allocationStrip(b.eq, b.de, b.hy, 'bf-alloc-strip') +
       '<div class="alloc-return-row"><div><div class="alloc-return-label">Expected return</div><div class="alloc-return-value">'+(baseRate*100).toFixed(1)+'%</div></div></div></div>' };
   } },
   assumptions: { title: 'Assumptions used', build: function () {
@@ -2955,7 +3034,8 @@ const BRIEFING_SECTIONS = {
     const sampledNote = r.method === 'sampled-frontier' ? '<div class="gr-note" style="margin-top:6px">Weights are approximate — estimated from a sampled set of portfolios rather than solved exactly (exact solving only works for 2 instruments).</div>' : '';
     const chart1Title = r.n === 2 ? 'Efficient frontier' : 'Return vs. risk';
     const charts = '<div class="section-head" style="margin-top:14px">'+chart1Title+'</div><div id="briefing-cmp-chart1" style="height:280px;width:100%"></div>'+
-      '<div class="section-head" style="margin-top:14px">Risk/return profile</div><div id="briefing-cmp-chart2" style="height:280px;width:100%"></div>';
+      '<div class="section-head" style="margin-top:14px">Return, risk and Sharpe, side by side</div><div id="briefing-cmp-chart2" style="height:' + (60 + 38 * (r.instruments.length + 2)) + 'px;width:100%"></div>' +
+      (profileCaptionHtml(lastFrontierData && lastFrontierData.assetCount === r.n ? lastFrontierData : null) ? '<div class="gr-note" style="margin-top:6px">' + profileCaptionHtml(lastFrontierData) + '</div>' : '');
     return { ok:true, html: '<div class="alloc-card"><div class="section-head">Comparing '+r.instruments.map(function (it) { return it.label; }).join(' vs ')+'</div>'+rows+
       '<div class="gr-note" style="margin-top:10px">Correlation — '+corrLine+' · Risk-free rate: '+r.riskFreePct+'%</div>'+compoundNote+
       mixRow('Minimum-variance mix', r.minVariance) + mixRow('Tangency (max Sharpe) mix', r.tangency) + sampledNote + charts + '</div>' };
@@ -2965,7 +3045,7 @@ const BRIEFING_SECTIONS = {
     deferChartInit(function () {
       if (r.n === 2 && d.frontier) initChart('briefing-cmp-chart1', liveFrontierChartOption(d.frontier, d.assetPoints, d.currentPoint, d.cal, d.tangencyPoint, d.currentMixLabel, d.minVarPoint));
       else initChart('briefing-cmp-chart1', barComparisonChartOption(d.assetPoints));
-      initChart('briefing-cmp-chart2', radarComparisonChartOption(d.assetPoints, d.minVariance, d.tangency, d.riskFree));
+      initChart('briefing-cmp-chart2', profileComparisonChartOption(d.assetPoints, d.minVariance, d.tangency, d.riskFree));
     });
   } },
 };

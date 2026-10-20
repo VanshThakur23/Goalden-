@@ -884,8 +884,8 @@ function multiAssetFrontier(statsList, rf, opts){
   for(let i=1;i<frontier.length;i++) if(frontier[i].vol<mv.vol) mv=frontier[i];
   // bestSharpePoint attaches .sharpe to tangency automatically; the
   // min-variance point found above does not get one for free, and
-  // radarComparisonChartOption reads minVariance.sharpe directly -- leave
-  // this off and the radar chart silently plots undefined on that axis.
+  // profileComparisonChartOption reads minVariance.sharpe directly -- leave
+  // this off and the Sharpe column silently drops the Safest mix row.
   const mvSharpe = mv.vol>0 ? (mv.ret-rf)/mv.vol : 0;
   let tan = bestSharpePoint(frontier, rf);
   if(!tan) tan = Object.assign({}, mv, {sharpe:mvSharpe});
@@ -980,7 +980,7 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
    Phase 12 — alternate chart-option builders for the same compare_portfolio
    result. Gives the advisor a choice of visual encoding instead of always
    rendering the same efficient-frontier scatter: a grouped bar for a quick
-   side-by-side, a radar for a multi-dimensional profile. Every number here
+   side-by-side, three dot plots for a multi-dimensional profile. Every number here
    comes from the caller's already-computed data (compare_portfolio) — these
    functions only pick how to draw it, never compute new figures.
    --------------------------------------------------------------------- */
@@ -1002,47 +1002,91 @@ function barComparisonChartOption(assetPoints){
     ],
   };
 }
-// Radar where OUTWARD IS ALWAYS BETTER on every axis. The old version put
-// raw "Risk" on an axis beside Return and Sharpe, so a riskier asset
-// bulged outward exactly like a better one and the shapes read backwards
-// (Visual review's veto). Risk is shown as "Steadiness" (1 - vol/maxVol);
-// the tooltip still gives the real risk figure. Sharpe below zero sits at
-// the centre (a radar can't draw negative values). Asset 1 and "Safest
-// mix" no longer share a colour.
-function radarComparisonChartOption(assetPoints, minVariance, tangency, riskFreeRate){
+// Three small dot plots side by side (Return, Risk, Sharpe): one row per
+// instrument plus the two blends. Replaces the radar, which the chart rules
+// ban. Every column is a plain number line, so "better" never depends on
+// reading a shape; the column titles carry an arrow and the caption says what
+// it means. Dots are labelled with their value (centred above the dot, so a
+// label can never run into the next column), the best value in each column is
+// bold, and blends are ink diamonds so shape, not only colour, tells them
+// from the instruments. No legend: the row names are the key.
+function profileRows(assetPoints, minVariance, tangency, riskFreeRate){
   const rf = riskFreeRate || 0;
-  const sharpeOf = function(ret, vol){ return vol > 0 ? (ret - rf) / vol : 0; };
-  const assetSharpes = assetPoints.map(function(a){ return sharpeOf(a.ret, a.vol); });
-  const rets = assetPoints.map(function(a){ return a.ret; }).concat([minVariance.ret, tangency.ret]);
-  const vols = assetPoints.map(function(a){ return a.vol; }).concat([minVariance.vol, tangency.vol]);
-  const sharpes = assetSharpes.concat([minVariance.sharpe, tangency.sharpe]).filter(function(s){ return isFinite(s); });
-  const maxRet = Math.max(Math.max.apply(null, rets) * 1.2, 0.01);
-  const maxVol = Math.max.apply(null, vols) * 1.15 || 0.01;
-  const maxSharpe = Math.max(sharpes.length ? Math.max.apply(null, sharpes) * 1.2 : 1, 0.1);
-  const indicator = [
-    { name:'Return', max:maxRet },
-    { name:'Steadiness\n(lower risk)', max:1 },
-    { name:'Sharpe', max:maxSharpe },
-  ];
-  const point = function(ret, vol, sharpe){ return [Math.max(0, ret), Math.max(0, 1 - vol / maxVol), isFinite(sharpe) ? Math.max(0, sharpe) : 0]; };
-  const colors = ['#5FA875', '#2557C7', '#D97757', '#946514'];
-  const raw = [];
-  const data = assetPoints.map(function(a, i){
-    raw.push([a.ret, a.vol, assetSharpes[i]]);
-    return { name:a.label, value:point(a.ret, a.vol, assetSharpes[i]), itemStyle:{color:colors[i % colors.length]} };
+  const finiteOrNull = function(v){ return v != null && isFinite(v) ? v : null; };
+  const sharpeOf = function(ret, vol){ return vol > 0 ? (ret - rf) / vol : null; };
+  return assetPoints.map(function(a){ return { name:a.label, ret:a.ret, vol:a.vol, sharpe:sharpeOf(a.ret, a.vol), mix:false }; })
+    .concat([
+      { name:'Safest mix',   ret:minVariance.ret, vol:minVariance.vol, sharpe:finiteOrNull(minVariance.sharpe), mix:true },
+      { name:'Best balance', ret:tangency.ret,    vol:tangency.vol,    sharpe:finiteOrNull(tangency.sharpe),    mix:true },
+    ]);
+}
+const PROFILE_METRICS = [
+  { key:'ret',    title:'Return ↑', fmt:function(v){ return (v*100).toFixed(1)+'%'; }, best:'max' },
+  { key:'vol',    title:'Risk ↓', fmt:function(v){ return (v*100).toFixed(1)+'%'; }, best:'min' },
+  { key:'sharpe', title:'Sharpe ↑', fmt:function(v){ return v.toFixed(2); },           best:'max' },
+];
+function profileComparisonChartOption(assetPoints, minVariance, tangency, riskFreeRate){
+  const rows = profileRows(assetPoints, minVariance, tangency, riskFreeRate);
+  const names = rows.map(function(r){ return r.name; });
+  const mono = "'Spline Sans Mono',monospace";
+  const nameW = 29, gridW = 20, gap = 4;                      // % of the chart width
+  const grids = [], xAxes = [], yAxes = [], titles = [], series = [];
+  PROFILE_METRICS.forEach(function(m, i){
+    const vals = rows.map(function(r){ return r[m.key]; }).filter(function(v){ return v != null && isFinite(v); });
+    // A column with no usable value (every Sharpe is n/a) stays an empty,
+    // titled column instead of a NaN axis.
+    const lo = vals.length ? Math.min(0, Math.min.apply(null, vals)) : 0, hi = vals.length ? Math.max.apply(null, vals) : 1;
+    const span = (hi - lo) || Math.abs(hi) || 1;
+    const bestVal = vals.length ? (m.best === 'max' ? Math.max.apply(null, vals) : Math.min.apply(null, vals)) : null;
+    // Bold only when something actually stands out; a column of identical values has no best.
+    const hasBest = vals.length > 1 && Math.max.apply(null, vals) !== Math.min.apply(null, vals);
+    const left = nameW + i * (gridW + gap);
+    grids.push({ left:left+'%', width:gridW+'%', top:34, bottom:14, containLabel:false });
+    titles.push({ text:m.title, left:(left + gridW / 2)+'%', top:4, textAlign:'center', textStyle:{ fontSize:11, fontWeight:600, color:'#14283F', fontFamily:mono } });
+    xAxes.push({ type:'value', gridIndex:i, min:lo - span * 0.2, max:hi + span * 0.2, show:false });
+    yAxes.push({ type:'category', gridIndex:i, data:names, inverse:true, axisTick:{ show:false },
+      axisLine:{ lineStyle:{ color:'rgba(20,40,63,.12)' } },
+      axisLabel:{ show:i === 0, width:Math.round(nameW * 2.9), overflow:'truncate', fontSize:10.5, color:'#14283F', fontFamily:mono },
+      splitLine:{ show:true, lineStyle:{ color:'rgba(20,40,63,.07)' } } });
+    series.push({ name:m.title, type:'scatter', xAxisIndex:i, yAxisIndex:i,
+      // A faint zero line, only where the column crosses zero (a negative return or Sharpe).
+      markLine: lo < 0 ? { silent:true, symbol:'none', label:{ show:false }, lineStyle:{ color:'rgba(20,40,63,.35)', type:'dotted', width:1 }, data:[{ xAxis:0 }] } : undefined,
+      data:rows.map(function(r, k){
+        const v = r[m.key];
+        return v == null || !isFinite(v) ? null : {
+          value:[v, k], symbol:r.mix ? 'diamond' : 'circle', symbolSize:r.mix ? 11 : 9,
+          itemStyle:{ color:r.mix ? '#14283F' : '#2557C7', borderColor:'#FFFFFF', borderWidth:2 },
+          label:{ show:true, position:'top', distance:3, formatter:m.fmt(v), fontFamily:mono, fontSize:10.5,
+            color:'#14283F', fontWeight:hasBest && v === bestVal ? 700 : 400 } };
+      }) });
   });
-  raw.push([minVariance.ret, minVariance.vol, minVariance.sharpe]);
-  data.push({ name:'Safest mix', value:point(minVariance.ret, minVariance.vol, minVariance.sharpe), itemStyle:{color:'#52647F'}, lineStyle:{type:'dashed'} });
-  raw.push([tangency.ret, tangency.vol, tangency.sharpe]);
-  data.push({ name:'Best balance', value:point(tangency.ret, tangency.vol, tangency.sharpe), itemStyle:{color:'#14283F'}, lineStyle:{type:'dashed'} });
   return {
     animationDurationUpdate:450, animationEasingUpdate:'cubicOut',
-    legend:{top:0, textStyle:{fontSize:10.5,color:'#56698A',fontFamily:"'Spline Sans Mono',monospace"}},
-    tooltip:{trigger:'item', confine:true, textStyle:{fontFamily:"'Figtree',sans-serif", fontSize:12},
-      formatter:function(p){ const v=raw[p.dataIndex] || [0,0,0]; return '<b>'+p.name+'</b><br/>Return: '+(v[0]*100).toFixed(2)+'% &nbsp; Risk: '+(v[1]*100).toFixed(2)+'% &nbsp; Sharpe: '+(isFinite(v[2])?v[2].toFixed(2):'n/a')+'<br/><span style="color:#56698A">Further out is better on every axis.</span>'; }},
-    radar:{indicator:indicator, radius:'60%', splitLine:{lineStyle:{color:'rgba(20,40,63,.08)'}}, axisName:{fontSize:10.5,color:'#56698A'}},
-    series:[{ type:'radar', data:data, symbolSize:5, lineStyle:{width:2}, areaStyle:{opacity:.08} }],
+    title:titles, grid:grids, xAxis:xAxes, yAxis:yAxes, series:series,
+    tooltip:{ trigger:'item', confine:true, textStyle:{ fontFamily:"'Figtree',sans-serif", fontSize:12 },
+      formatter:function(p){ const r = rows[p.value[1]];
+        return '<b>' + r.name + '</b><br/>Return ' + (r.ret*100).toFixed(2) + '% · Risk ' + (r.vol*100).toFixed(2) + '% · Sharpe ' + (r.sharpe == null ? 'n/a' : r.sharpe.toFixed(2)); } },
   };
+}
+// The chart's caption, from the same rows (every chart gets one). The Sharpe
+// sentence names whichever row really has the highest Sharpe; it is not
+// assumed to be the "best balance" blend, which on a sampled frontier or a
+// short history can sit below another row. When even the top Sharpe is not
+// positive, nothing earned more than the risk-free rate, so the usual "most
+// return above the risk-free rate" gloss would be false; it says so instead.
+function profileComparisonCaption(assetPoints, minVariance, tangency, riskFreeRate){
+  const rows = profileRows(assetPoints, minVariance, tangency, riskFreeRate);
+  const assets = rows.filter(function(r){ return !r.mix; });
+  const pct = function(v){ return (v*100).toFixed(1) + '%'; };
+  if(!assets.length) return '';
+  const topRet = assets.reduce(function(a, b){ return b.ret > a.ret ? b : a; });
+  const withSharpe = rows.filter(function(r){ return r.sharpe != null; });
+  const topSharpe = withSharpe.length ? withSharpe.reduce(function(a, b){ return b.sharpe > a.sharpe ? b : a; }) : null;
+  return topRet.name + ' alone had the highest return (' + pct(topRet.ret) + ', with ' + pct(topRet.vol) + ' risk). ' +
+    (!topSharpe ? '' : topSharpe.sharpe > 0
+      ? topSharpe.name + ' had the highest Sharpe ratio (' + topSharpe.sharpe.toFixed(2) + '): the most return above the risk-free rate for each unit of risk. '
+      : 'No row beat the ' + pct(riskFreeRate || 0) + ' risk-free rate, so no Sharpe ratio is positive. ' + topSharpe.name + ' came closest (' + topSharpe.sharpe.toFixed(2) + '). ') +
+    '↑ means higher is better, ↓ means lower is better. Diamonds are the two blends.';
 }
 
 /* ---------------------------------------------------------------------
@@ -1141,7 +1185,7 @@ if (typeof module !== 'undefined' && module.exports) {
     populationCovariance, computeCovarianceMatrix, portfolioReturn, portfolioVariance,
     twoAssetFrontier, minVarianceWeightTwoAsset, tangencyWeightTwoAsset,
     capitalAllocationLine, liveFrontierChartOption,
-    barComparisonChartOption, radarComparisonChartOption,
+    barComparisonChartOption, profileComparisonChartOption, profileComparisonCaption,
     mulberry32, randomWeights, generateFrontier, bestSharpePoint, multiAssetFrontier,
     projectToSimplex, efficientFrontierExact,
     bm25Tokenize, bm25Rank, filterToolsByQuery, TOOL_ALWAYS_KEEP,

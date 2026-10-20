@@ -270,7 +270,7 @@ test('filterToolsByQuery: tool family survives whole when one member is triggere
   }
 });
 
-// ---- Phase 12: alternate chart-option builders (bar / radar) ----
+// ---- Phase 12: alternate chart-option builders (bar / profile dot plots) ----
 
 test('barComparisonChartOption: one series per metric, one bar per asset', () => {
   const assetPoints = [{ label: 'RELIANCE.NS', ret: 0.24, vol: 0.27 }, { label: 'TCS.NS', ret: 0.11, vol: 0.24 }];
@@ -281,31 +281,65 @@ test('barComparisonChartOption: one series per metric, one bar per asset', () =>
   assert.deepStrictEqual(opt.series[1].data, [0.27, 0.24]);
 });
 
-test('radarComparisonChartOption: 3 indicators, 4 data points (2 assets + 2 mixes)', () => {
+test('profileComparisonChartOption: 3 metric columns, one row per asset plus 2 blends', () => {
   const assetPoints = [{ label: 'A', ret: 0.20, vol: 0.25 }, { label: 'B', ret: 0.12, vol: 0.18 }];
   const minVariance = { ret: 0.15, vol: 0.16, sharpe: 0.6 };
   const tangency = { ret: 0.19, vol: 0.22, sharpe: 0.65 };
-  const opt = engine.radarComparisonChartOption(assetPoints, minVariance, tangency, 0.065);
-  assert.strictEqual(opt.radar.indicator.length, 3);
-  // "Risk" became "Steadiness (lower risk)" so outward is better on every axis.
-  assert.deepStrictEqual(opt.radar.indicator.map((i) => i.name), ['Return', 'Steadiness\n(lower risk)', 'Sharpe']);
-  // The riskier asset (A, 25% vol) must sit further IN on steadiness than B (18%).
-  assert.ok(opt.series[0].data[0].value[1] < opt.series[0].data[1].value[1], 'riskier asset is less steady');
-  assert.strictEqual(opt.series[0].data.length, 4, 'asset A, asset B, safest mix, best balance');
-  assert.strictEqual(opt.series[0].data[0].name, 'A');
-  assert.strictEqual(opt.series[0].data[2].name, 'Safest mix');
+  const opt = engine.profileComparisonChartOption(assetPoints, minVariance, tangency, 0.065);
+  assert.strictEqual(opt.grid.length, 3);
+  assert.strictEqual(opt.series.length, 3);
+  assert.ok(opt.series.every((s) => s.type === 'scatter'), 'dot plots, never radar');
+  assert.deepStrictEqual(opt.yAxis[0].data, ['A', 'B', 'Safest mix', 'Best balance']);
+  assert.deepStrictEqual(opt.series[1].data.map((d) => d.value[0]), [0.25, 0.18, 0.16, 0.22], 'risk column is raw volatility');
+  assert.deepStrictEqual(opt.title.map((t) => t.text), ['Return ↑', 'Risk ↓', 'Sharpe ↑'], 'short titles that fit a phone; the caption explains the arrows');
+  assert.strictEqual(opt.legend, undefined, 'no legend');
+  assert.ok(opt.series[0].data.every((d) => d.label.position === 'top'), 'labels sit above their dot, so they cannot run into the next column');
+  assert.strictEqual(opt.series[0].data[2].symbol, 'diamond', 'blends differ by shape, not only colour');
+  assert.strictEqual(opt.series[0].data[0].symbol, 'circle');
 });
 
-test('radarComparisonChartOption: every axis max is >= the values it bounds', () => {
+test('profileComparisonChartOption: best value in each column is bold; missing Sharpe is skipped', () => {
   const assetPoints = [{ label: 'A', ret: 0.30, vol: 0.05 }, { label: 'B', ret: 0.05, vol: 0.30 }];
-  const minVariance = { ret: 0.10, vol: 0.10, sharpe: 0.4 };
-  const tangency = { ret: 0.28, vol: 0.20, sharpe: 1.1 };
-  const opt = engine.radarComparisonChartOption(assetPoints, minVariance, tangency, 0.065);
-  const [retInd, riskInd] = opt.radar.indicator;
-  const rets = opt.series[0].data.map((d) => d.value[0]);
-  const vols = opt.series[0].data.map((d) => d.value[1]);
-  assert.ok(retInd.max >= Math.max(...rets), 'return axis bounds every plotted return');
-  assert.ok(riskInd.max >= Math.max(...vols), 'risk axis bounds every plotted vol');
+  const opt = engine.profileComparisonChartOption(assetPoints, { ret: 0.10, vol: 0.10, sharpe: NaN }, { ret: 0.28, vol: 0.20, sharpe: 1.1 }, 0.065);
+  assert.strictEqual(opt.series[0].data[0].label.fontWeight, 700, 'A has the top return');
+  assert.strictEqual(opt.series[1].data[0].label.fontWeight, 700, 'A has the lowest risk');
+  assert.strictEqual(opt.series[2].data[2], null, 'NaN Sharpe is not plotted');
+});
+
+test('profileComparisonChartOption: ties are not bold; an all-n/a Sharpe column stays a finite empty axis', () => {
+  const same = engine.profileComparisonChartOption([{ label: 'A', ret: 0.1, vol: 0 }, { label: 'B', ret: 0.1, vol: 0 }], { ret: 0.1, vol: 0, sharpe: NaN }, { ret: 0.1, vol: 0, sharpe: NaN }, 0.065);
+  assert.ok(same.series[0].data.every((d) => d.label.fontWeight === 400), 'identical values have no best');
+  assert.ok(same.series[2].data.every((d) => d === null), 'zero risk gives no Sharpe for anyone');
+  assert.ok(same.xAxis.every((x) => isFinite(x.min) && isFinite(x.max) && x.max > x.min), 'no NaN axis, even for an empty column');
+});
+
+test('profileComparisonChartOption: a negative return or Sharpe gets a dotted zero line, others do not', () => {
+  const opt = engine.profileComparisonChartOption([{ label: 'A', ret: -0.12, vol: 0.3 }, { label: 'B', ret: 0.05, vol: 0.1 }], { ret: 0.01, vol: 0.09, sharpe: -0.6 }, { ret: 0.03, vol: 0.1, sharpe: -0.35 }, 0.065);
+  assert.ok(opt.series[0].markLine && opt.series[0].markLine.data[0].xAxis === 0, 'return column crosses zero');
+  assert.strictEqual(opt.series[1].markLine, undefined, 'risk never does');
+  assert.ok(opt.xAxis[0].min < -0.12, 'room left of the lowest dot for its label');
+});
+
+test('profileComparisonCaption names the top-return asset and the row that really has the top Sharpe', () => {
+  // Safest mix (0.60) beats Best balance (0.57) on Sharpe here: the caption must not assume the tangency blend wins.
+  const cap = engine.profileComparisonCaption([{ label: 'A', ret: 0.2, vol: 0.25 }, { label: 'B', ret: 0.12, vol: 0.18 }],
+    { ret: 0.15, vol: 0.16, sharpe: 0.6 }, { ret: 0.19, vol: 0.22, sharpe: 0.57 }, 0.065);
+  assert.match(cap, /^A alone had the highest return \(20\.0%, with 25\.0% risk\)/);
+  assert.match(cap, /Safest mix had the highest Sharpe ratio \(0\.60\)/);
+  assert.doesNotMatch(cap, /Best balance had the highest/);
+  assert.match(cap, /↑ means higher is better, ↓ means lower is better/, 'the arrows in the titles are explained');
+  // an asset can have the top Sharpe too
+  const cap2 = engine.profileComparisonCaption([{ label: 'A', ret: 0.3, vol: 0.1 }, { label: 'B', ret: 0.05, vol: 0.3 }],
+    { ret: 0.1, vol: 0.1, sharpe: 0.35 }, { ret: 0.28, vol: 0.2, sharpe: 1.1 }, 0.065);
+  assert.match(cap2, /A alone had the highest return \(30\.0%, with 10\.0% risk\)\. A had the highest Sharpe ratio \(2\.35\)/);
+  // no usable Sharpe anywhere: no Sharpe sentence rather than "NaN"
+  const cap3 = engine.profileComparisonCaption([{ label: 'A', ret: 0.1, vol: 0 }, { label: 'B', ret: 0.1, vol: 0 }], { ret: 0.1, vol: 0, sharpe: NaN }, { ret: 0.1, vol: 0, sharpe: NaN }, 0.065);
+  assert.doesNotMatch(cap3, /Sharpe ratio|NaN/);
+  // every Sharpe at or below zero: nothing beat the risk-free rate, so the "return above the risk-free rate" gloss must not appear
+  const cap4 = engine.profileComparisonCaption([{ label: 'A', ret: -0.12, vol: 0.3 }, { label: 'B', ret: 0.05, vol: 0.1 }],
+    { ret: 0.01, vol: 0.09, sharpe: -0.6 }, { ret: 0.03, vol: 0.1, sharpe: -0.35 }, 0.065);
+  assert.doesNotMatch(cap4, /above the risk-free rate for each unit/);
+  assert.match(cap4, /No row beat the 6\.5% risk-free rate, so no Sharpe ratio is positive\. B came closest \(-0\.15\)\./);
 });
 
 // ---- Phase 13: N-asset sampled frontier (3-4 instrument comparisons) ----
@@ -330,7 +364,7 @@ test('generateFrontier is deterministic under a fixed seed', () => {
   assert.deepStrictEqual(a.frontier, b.frontier, 'same seed produces the same sampled frontier');
 });
 
-test('multiAssetFrontier: minVariance.sharpe is always finite (radar chart reads it directly)', () => {
+test('multiAssetFrontier: minVariance.sharpe is always finite (the profile dot plot reads it directly)', () => {
   const vals = [0.01, -0.02, 0.03, 0.01, -0.01, 0.02, -0.03, 0.015, -0.025, 0.02, -0.01, 0.03];
   const mk = (arr, ret) => ({ returns: arr.map((r, i) => ({ date: 'd' + i, r })), annualReturn: ret, annualVol: 0.2, tradingDaysPerYear: 252 });
   const statsList = [

@@ -3909,7 +3909,62 @@ standing over the founder's shoulder.
 - Tests: 205/205 (8 new/updated for the scorecard, the thirds logic, boundary
   printing, the gate and the chart names). All 13 smokes pass.
 
-### Next: Group 5
-- The banned charts: 01 allocation strip and 02 dot plots, replacing the
-  donut and radar.
+### Group 5: the banned charts (allocation strip, dot plots)
+- Allocation donut and legend are gone from Quick Calculate and the Full Plan.
+  In their place is one hatched strip, labelled where each part stands: a
+  colour swatch, the percentage and the name, and in Quick Calculate the
+  monthly rupee amount under it. The hatching (solid, diagonal, reverse
+  diagonal) keeps the parts apart in greyscale and print. Plain HTML, no chart
+  instance. Every allocation card has a one-sentence caption from the real
+  split ("Half of the Rs 22,906 a month goes to equity, 35% to debt and 15% to
+  hybrid funds"; "every rupee" where there is no monthly figure).
+  - Quick Calculate: result card, the retirement and education results, the
+    generic goal and the canvas view show the amounts. The amounts are split
+    by largest remainder so they add up to the monthly SIP exactly.
+    `canvasGoalSip()` recomputes the figure for the canvas.
+  - Full Plan: plan card, canvas and briefing "allocation" section show the
+    percentages and caption (the plan has no single monthly SIP to split).
+  - Labels that don't fit their part (Hybrid at 5-15%, and every part on a
+    narrow phone) switch the labels to a stacked list. It is measured
+    (`scrollWidth > clientWidth`), not guessed, and re-measured on resize and
+    when web fonts arrive. Aggressive 85/10/5 is a list even at 760px.
+  - The strip is capped at 760px wide so it doesn't stretch across a desktop.
+  - The green/red colouring on "after inflation" is gone from all four
+    allocation sites (red is for a warning that has fired).
+- Radar chart is gone. "Return, risk and Sharpe, side by side" is three dot
+  plots in a row (Return up, Risk down, Sharpe up), one row per instrument plus
+  the two blends (diamonds). Best value in each column is bold (not when they
+  tie), a dotted zero line appears only in a column that crosses zero, and a
+  missing Sharpe (zero risk) is skipped and never drawn as NaN. No legend.
+  - `profileComparisonChartOption` and `profileComparisonCaption` live in
+    goalden-engine.js. The caption names the asset with the highest return and
+    the row that really has the highest Sharpe (it does not assume the best
+    balance blend wins), and explains the arrows and diamonds. When no Sharpe is
+    positive it says nothing beat the risk-free rate instead of calling the
+    least negative one "the most return above the risk-free rate".
+  - Wired into the floating chart panel (with the caption under the title) and
+    the briefing "comparison" section in both pages. The chart type is now
+    `profile`; the old `radar` name still works so an older model reply can't
+    break the panel. The advisor tool description and enum say `profile`.
+  - A bad `lastFrontierData` no longer crashes the briefing (null guard).
+- Checked in a real browser: strip at 1280px and 375px for all five Full Plan
+  profiles and the Quick Calculate profiles, captions, canvas and briefing;
+  dot plots at 375px with four instruments (row names intact, labels not
+  colliding), the panel and the briefing section in both pages, the `radar`
+  alias, no console errors. Headless (SSR) overlap checks at 300-600px found
+  none, including negative returns and an all-n/a Sharpe column.
+- Independent Opus review: one must-fix (the all-negative-Sharpe caption above,
+  fixed with a test) and one test gap (nothing stopped the donut coming back;
+  smoke-12 now fails if either page has a pie chart or loses `allocationStrip`).
+  Not asked for a second pass.
+- Not done, on purpose: `barComparisonChartOption` (the "Return vs. risk"
+  bars) still has a legend and an orange series colour; the plan doesn't list
+  it. It breaks the legend and colour rules and should be done with Group 6/8
+  chart passes.
+- Tests: 208/208 (the two radar tests replaced by five dot-plot tests plus the
+  negative-Sharpe caption case). All 13 smokes pass.
+
+### Next: Group 6
+- 08 keep-place fix, 18 verdicts and consistency, 15 pills and readout, 11
+  nudges.
 
