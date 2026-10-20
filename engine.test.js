@@ -3192,3 +3192,62 @@ test('companyScorecard: red flags say only what is checked, and the quality gate
   const gated = stmt.companyScorecard(tcs, { divergence: { allFlags: [{ ruleId: 'CFO_DIVERGENCE', year: 2025 }], watch: [] } });
   assert.strictEqual(gated.gated, true, 'an open earnings-quality flag is a caveat on the other tiles too');
 });
+
+// ---- Lab "At a glance": rolling returns and bumpiness ------------------------
+function smoothSeries(rate, from, to) {
+  const dates = [], values = [], t0 = Date.UTC(from, 0, 1);
+  for (let d = t0; d <= Date.UTC(to, 0, 1); d += 864e5) {
+    dates.push(new Date(d).toISOString().slice(0, 10));
+    values.push(Math.pow(1 + rate, (d - t0) / (365.25 * 864e5)));
+  }
+  return { dates, values };
+}
+test('rolling returns: a smooth 10% series is 10% in every stretch and beats a 5% one in all of them', () => {
+  const a = smoothSeries(0.10, 2015, 2021), b = smoothSeries(0.05, 2015, 2021);
+  const r = engine.rollingReturns(a.dates, a.values, 3, b.values);
+  assert.ok(Math.abs(r.min.cagr - 0.10) < 1e-3 && Math.abs(r.max.cagr - 0.10) < 1e-3);
+  assert.strictEqual(r.positiveShare, 1);
+  assert.strictEqual(r.beatShare, 1);
+  assert.strictEqual(r.beatShare === null, false);
+});
+test('rolling returns: too little history gives null, not a made-up figure', () => {
+  const a = smoothSeries(0.10, 2015, 2016);
+  assert.strictEqual(engine.rollingReturns(a.dates, a.values, 3), null);
+});
+test('rolling returns: overlapping stretches are not counted as independent ones', () => {
+  // 6 years of daily data hold thousands of overlapping 3-year stretches but only two separate ones.
+  const a = smoothSeries(0.10, 2015, 2021);
+  const r = engine.rollingReturns(a.dates, a.values, 3);
+  assert.ok(r.count > 1000);
+  assert.strictEqual(r.separate, 2);
+  assert.strictEqual(r.beatShare, null, 'no benchmark given, no beat share');
+  // 5 years holds only one separate 3-year period, too few to call a pattern
+  const b = smoothSeries(0.10, 2015, 2020);
+  assert.strictEqual(engine.rollingReturns(b.dates, b.values, 3).separate, 1);
+});
+test('rolling returns: a fall then a recovery finds the losing stretches and the worst one', () => {
+  // four years falling 10% a year, then four years rising 10% a year
+  const fall = smoothSeries(-0.10, 2010, 2014), rise = smoothSeries(0.10, 2014, 2018);
+  const top = fall.values[fall.values.length - 1];
+  const dates = fall.dates.concat(rise.dates.slice(1));
+  const values = fall.values.concat(rise.values.slice(1).map(v => v * top));
+  const r = engine.rollingReturns(dates, values, 3);
+  assert.ok(r.positiveShare > 0 && r.positiveShare < 1);
+  assert.ok(Math.abs(r.min.cagr - (-0.10)) < 2e-3, 'the worst 3-year stretch sits inside the fall');
+  assert.ok(r.max.cagr > 0.09);
+  assert.ok(r.min.start >= '2010-01-01' && r.min.end <= '2014-01-02');
+});
+test('annualised vol: a perfectly smooth series has none, and it matches the stat cards on real-looking moves', () => {
+  const a = smoothSeries(0.10, 2015, 2017);
+  assert.ok(engine.annualisedVol(a.dates, a.values) < 1e-9);
+  // the same series through computeReturnStats gives the same number, so the verdict card and the stat cards never disagree on risk
+  const rng = engine.mulberry32(7), prices = [];
+  let close = 100;
+  for (let d = Date.UTC(2020, 0, 1), k = 0; k < 900; d += 864e5, k++) { close *= 1 + (rng() - 0.5) * 0.03; prices.push({ date: new Date(d).toISOString().slice(0, 10), close }); }
+  const vol = engine.annualisedVol(prices.map(p => p.date), prices.map(p => p.close));
+  assert.ok(Math.abs(vol - engine.computeReturnStats(prices, false).annualVol) < 1e-12);
+});
+test('annualised vol: too few days gives null', () => {
+  const a = smoothSeries(0.10, 2015, 2016);
+  assert.strictEqual(engine.annualisedVol(a.dates.slice(0, 10), a.values.slice(0, 10)), null);
+});

@@ -191,7 +191,7 @@ is the agentic workflow your college wants.
 | 3 | After-tax line on the SIP card (new, uses 06's `TAX_IN`) → Pillar 2 core: 06 → return reality check (new) → step-up row (#8) | done (3a after-tax deployed; 3b reality check and step-up) |
 | 4 | Pillar 3 core: Read the Company scorecard (#9 extended) | done (scorecard + statements chart palette) |
 | 5 | The banned charts: 01 allocation strip, 02 dot plots | done (strip on both doors, radar replaced by dot plots) |
-| 6 | 08 keep-place fix, 18 verdicts and consistency, 15 pills and readout, 11 nudges | |
+| 6 | 08 keep-place fix, 18 verdicts and consistency, 15 pills and readout, 11 nudges | done (Lab "At a glance" card, period pills, overlap nudges; Quick Calculate keeps its place) |
 | 7 | 16 EPF/PPF/NPS, 17 harvesting, 05 stress test | |
 | 8 | 10 keyboard, 03 A theme, 14 live canvas, 20, 21, 07 | |
 | 9 | Beyond: B1 holdings review, B2 cover, B3 regime, B4 retirement income, B5 yearly review, B6 loans | |

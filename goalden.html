@@ -227,6 +227,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .delay-title{font-family:'Newsreader',serif;font-size:15px;color:var(--paper);margin-bottom:12px}
 .delay-row{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid rgba(20,40,63,.1)}
 .delay-row:last-child{border-bottom:none}
+.delay-row[data-retire-preview]:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:4px}
 .delay-label{font-size:13px;color:rgba(20,40,63,.74)}
 .delay-value{font-family:'Newsreader',serif;font-size:15px;color:var(--paper);font-weight:600}
 .delay-extra{font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--red);margin-left:6px}
@@ -243,8 +244,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .edit-chip{font-family:'Spline Sans Mono',monospace;font-size:11px;color:rgba(20,40,63,.74);background:rgba(20,40,63,.06);border:1px solid rgba(20,40,63,.16);border-radius:2px 10px 10px 10px;padding:6px 11px;cursor:pointer;transition:border-color .15s,color .15s}
 .edit-chip:hover{border-color:rgba(37,87,199,.5);color:var(--paper)}
 .edit-chip::before{content:'edit \2192  ';opacity:.5;font-size:9.5px}
-.assump-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
-.assump-panel.open{max-height:500px}
+/* visibility:hidden (after the close animation) keeps a closed panel's rows and
+   buttons out of the tab order: max-height alone left them focusable, so Enter
+   on an invisible what-if row could change the plan. */
+.assump-panel{max-height:0;overflow:hidden;visibility:hidden;transition:max-height .3s ease, visibility 0s .3s}
+.assump-panel.open{max-height:500px;visibility:visible;transition:max-height .3s ease, visibility 0s}
 /* The breakdown toggle holds two charts plus several comparison cards --
    much taller than the single schedule table the default 500px cap was
    sized for -- so it gets its own higher ceiling instead of raising the
@@ -938,10 +942,10 @@ function retireAgeCompareCard(rows, c) {
   const body = rows.map(row => {
     const label = row.isCurrent ? 'Retire at '+row.age+' (this plan)' : 'Retire at '+row.age;
     const value = row.alreadyMet ? 'No SIP needed' : c.fmt(Math.round(row.sip))+'/mo';
-    const attrs = row.isCurrent ? '' : ' data-retire-preview="'+row.age+'" style="cursor:pointer"';
+    const attrs = row.isCurrent ? '' : ' data-retire-preview="'+row.age+'" role="button" tabindex="0" style="cursor:pointer"';
     return '<div class="delay-row"'+attrs+'><span class="delay-label"'+(row.isCurrent?' style="color:var(--gold)"':'')+'>'+label+'</span><span class="delay-value">'+value+'</span></div>';
   }).join('');
-  return '<div class="delay-card"><div class="delay-title">What if you retired at a different age?</div>' + body +
+  return '<div class="delay-card retire-compare-card"><div class="delay-title">What if you retired at a different age?</div>' + body +
     '<div class="hero-sub" style="text-align:left;margin-top:10px;font-size:11.5px">Tap an age to see the full result for that plan.</div></div>';
 }
 
@@ -2143,7 +2147,11 @@ function syncHistory() {
   try { history.pushState({ si: S.si }, '', hash); } catch (e) {}
 }
 
-function render() {
+// opts.quiet: an in-place update (a what-if tap on the results screen), not a
+// move to another screen. It skips the 0.3s slide-in, which on a screen the
+// person is already looking at reads as the page being thrown away and rebuilt.
+function render(opts) {
+  const quiet = !!(opts && opts.quiet === true);
   const f = flow(), screen = f[S.si];
   let html = '';
   if (screen==='country')      html = sCountry();
@@ -2170,8 +2178,8 @@ function render() {
   // fires correctly without depending on a paint callback -- rAF doesn't
   // reliably fire on a backgrounded/non-composited tab, which would leave
   // the screen permanently stuck at opacity:0.
-  void wrap.offsetHeight;
-  wrap.classList.add('active');
+  if (quiet) wrap.classList.add('active');   // already active when inserted: nothing to transition
+  else { void wrap.offsetHeight; wrap.classList.add('active'); }
   backBtn.classList.toggle('show', S.si > 0);
   assumpBtn.classList.toggle('show', screen==='results');
   if (screen==='case') window.scrollTo(0,0);
@@ -2184,6 +2192,37 @@ function render() {
 /* =====================================================================
    EVENT HANDLERS
    ===================================================================== */
+// "What if I retired at a different age?" re-renders the whole results screen
+// (every figure on it depends on the age). Done plainly, that closed the
+// details panel the person was reading, sent the scroll back to the top and
+// slid the screen in again, so the comparison they asked for was lost. This
+// keeps their place: the panel stays open, the tapped row stays where it was on
+// the screen, and focus goes back to the row for the plan they just left (the
+// one they would tap to go back). Only a tap inside the details panel gets
+// this; anywhere else (the chat canvas) is an ordinary re-render. The card's
+// rows are the plan's age -5, 0, +5, so the list shifts with each tap: the row
+// kept in place is the new "this plan" row (the age just tapped), not the row
+// at the same position.
+let resultKeep = null;   // {offset, from}: consumed once by attach('results')
+function retireWhatIf(el) {
+  const card = el.closest('.retire-compare-card'), scroller = document.querySelector('.result-scroll');
+  const keep = !!(el.closest('#bp') && card && scroller);
+  resultKeep = keep ? { offset: el.getBoundingClientRect().top - scroller.getBoundingClientRect().top, from: S.retireAge } : null;
+  S.retireAge = parseInt(el.dataset.retirePreview, 10);
+  render(keep ? { quiet: true } : undefined);
+}
+function restoreResultPlace() {
+  const keep = resultKeep; resultKeep = null;
+  const bt = document.getElementById('bt'), bp = document.getElementById('bp'), scroller = document.querySelector('.result-scroll');
+  if (!bt || !bp || !scroller) return;
+  // Open it with no animation: the scroll position below is measured on the
+  // final layout, not on a panel that is still growing.
+  bp.style.transition = 'none'; bp.classList.add('open'); bt.classList.add('open'); void bp.offsetHeight; bp.style.transition = '';
+  const row = document.querySelector('#bp .retire-compare-card .delay-row:not([data-retire-preview])');
+  if (row) scroller.scrollTop += row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - keep.offset;
+  const back = document.querySelector('#bp .retire-compare-card [data-retire-preview="' + keep.from + '"]');
+  if (back) back.focus({ preventScroll: true });
+}
 function attach(screen) {
   const nb = document.getElementById('nextBtn');
 
@@ -2337,7 +2376,11 @@ function attach(screen) {
 
   if (screen==='results') {
     document.querySelectorAll('[data-jump]').forEach(el => el.addEventListener('click', () => jumpEdit(el.dataset.jump)));
-    document.querySelectorAll('[data-retire-preview]').forEach(el => el.addEventListener('click', () => { S.retireAge = parseInt(el.dataset.retirePreview); render(); }));
+    document.querySelectorAll('[data-retire-preview]').forEach(el => {
+      el.addEventListener('click', () => retireWhatIf(el));
+      // The rows are role="button": Enter and Space press them like a click.
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); retireWhatIf(el); } });
+    });
     const at = document.getElementById('at'), ap = document.getElementById('ap');
     if (at && ap) at.addEventListener('click', () => ap.classList.toggle('open'));
     const st = document.getElementById('st'), sp = document.getElementById('sp');
@@ -2347,6 +2390,7 @@ function attach(screen) {
     const bt = document.getElementById('bt'), bp = document.getElementById('bp');
     if (bt && bp) bt.addEventListener('click', () => { bp.classList.toggle('open'); bt.classList.toggle('open'); });
     wireAdvAlloc('ret'); wireAdvAlloc('edu');
+    if (resultKeep) restoreResultPlace();
     const rb = document.getElementById('rb');
     if (rb) rb.addEventListener('click', () => {
       Object.assign(S, {country:null,goalType:null,age:null,retireAge:null,monthlyExpense:null,annualFee:null,yearsToCollege:null,courseDuration:null,genType:null,genAmount:null,genYears:null,existingSavings:0,risk:null,si:0,quickEdit:false,postRetAlloc:null,eduAlloc:null,persona:null});

@@ -122,7 +122,7 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
   .slim-row{flex-direction:row;align-items:center;flex-wrap:wrap;gap:10px}
   .slim-back{padding:4px 0}
   .slim-current{display:none}
-  .tabbar.is-slim .explain-panel{max-height:none !important;overflow:visible !important}
+  .tabbar.is-slim .explain-panel{max-height:none !important;overflow:visible !important;visibility:visible !important}
   .tabs-slim{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;flex:1;min-width:0}
   .tabs-slim .tab{flex-shrink:0}
   .nav-toggle-btn{display:none} /* narrow screens: no dead gutter to reclaim */
@@ -390,6 +390,23 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 /* --- efficient frontier chart --- */
 .fx-chart-wrap{position:relative}
 .echart{width:100%}
+.range-pills{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.range-pill{font-family:'Spline Sans Mono',monospace;font-size:11.5px;min-height:34px;padding:7px 13px;border:1px solid rgba(20,40,63,.22);border-radius:999px;background:transparent;color:var(--paper);cursor:pointer;transition:background-color .14s,border-color .14s,color .14s}
+.range-pill[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#fff}
+.range-pill:disabled{opacity:.4;cursor:not-allowed}
+.range-pill:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.scrub-readout{display:flex;flex-wrap:wrap;gap:2px 14px;min-height:22px;margin:0 0 6px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+.scrub-readout b{color:var(--paper);font-weight:600}
+/* One line per value on a phone, so the number of lines never changes as the pointer moves (a line wrapping in or out would shift the chart under a finger). */
+@media(max-width:520px){.scrub-readout{flex-direction:column;flex-wrap:nowrap}.scrub-readout span{white-space:nowrap}}
+.echart[tabindex]:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
+.verdicts{margin:12px 0 4px;display:grid;gap:8px}
+.verdict{display:grid;grid-template-columns:minmax(110px,150px) 1fr;gap:4px 14px;padding:10px 0;border-top:1px solid rgba(20,40,63,.1)}
+.verdict dt{font-family:'Spline Sans Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);padding-top:3px}
+.verdict dd{margin:0;font-size:13px;line-height:1.55;color:var(--body,#3C5470)}
+.verdict-word{font-family:'Newsreader',serif;font-weight:700;font-size:17px;color:var(--paper);margin-right:2px}
+.verdict-text{display:block;margin-top:2px}
+@media(max-width:560px){.verdict{grid-template-columns:1fr}}
 .fx-legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:10px;font-size:11px;color:rgba(20,40,63,.74)}
 .fx-legend span{display:flex;align-items:center;gap:6px}
 .fx-legend i{display:inline-block;width:16px;height:3px;flex-shrink:0}
@@ -409,8 +426,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .explain-toggle .explain-chevron:before{content:"+"}
 .explain-toggle.open .explain-chevron:before{content:"\2212"}
 .explain-toggle.open{background:rgba(37,87,199,.18)}
-.explain-panel{max-height:0;overflow:hidden;transition:max-height .3s ease}
-.explain-panel.open{max-height:600px}
+/* visibility:hidden (after the close animation) takes a closed panel's links,
+   buttons and sliders out of the tab order; max-height alone left them
+   focusable, so Enter on an invisible control could change things. */
+.explain-panel{max-height:0;overflow:hidden;visibility:hidden;transition:max-height .3s ease, visibility 0s .3s}
+.explain-panel.open{max-height:600px;visibility:visible;transition:max-height .3s ease, visibility 0s}
 /* Same collapsible mechanism, reused for panels that hold real controls
    or several bundled cards rather than a paragraph of prose (portfolio
    cluster accordions, the "go deeper" bundles below) -- these can run
@@ -574,6 +594,8 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .dbar-val{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--dim);width:34px;text-align:right}
 
 .gr-note{font-size:12.5px;color:rgba(20,40,63,.74);line-height:1.6;padding:12px 14px;background:rgba(20,40,63,.04);border-left:2px solid var(--gold);border-radius:0 8px 8px 0;margin-top:6px}
+.live-nudge{margin-top:8px}
+.live-nudge b{color:var(--paper)}
 
 .fx-flow{display:flex;align-items:center;justify-content:center;gap:14px;margin:6px 0 18px;font-family:'Newsreader',serif;font-size:15px}
 .fx-arrow{color:var(--gold);font-size:20px}
@@ -594,7 +616,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
      collapsed section -- including the "Go deeper" bundles this overhaul
      adds -- would silently drop that content from the printout. Force
      every panel open and hide the now-pointless toggle pill instead. */
-  .explain-panel{max-height:none !important;overflow:visible !important}
+  .explain-panel{max-height:none !important;overflow:visible !important;visibility:visible !important}
   .explain-toggle{display:none !important}
   /* Year-by-year tables scroll inside a 340px box on screen; on paper that
      box cut every table off at about year 10. */
@@ -1337,6 +1359,42 @@ function disposeChart(id){
 // container is guaranteed to exist by the time this callback runs, with
 // no caller-side changes needed at any of this app's many call sites.
 function deferChartInit(fn){ setTimeout(fn, 0); }
+// The headline follows the pointer: a readout above the chart (never under a
+// finger) shows the date and every value at the point being looked at, and on a
+// phone it replaces the floating box. The chart is also a keyboard slider:
+// arrows move one point, Page Up/Down move 5% of the way, Home/End jump to the
+// ends, and a screen reader hears the same words as the slider's value text.
+// describe(i) returns [[label, value], ...] for point i of `count`.
+function wireLabScrub(inst, chartId, count, describe){
+  const dom=document.getElementById(chartId), ro=document.getElementById(chartId+'-ro');
+  if(!inst || !dom || !ro || count<2) return;
+  let idx=count-1;
+  const paint=i=>{
+    idx=i;
+    const parts=describe(i);
+    ro.textContent='';
+    parts.forEach(([k,v])=>{ const s=document.createElement('span'), b=document.createElement('b'); b.textContent=v; s.append(k+' ', b); ro.append(s); });
+    dom.setAttribute('aria-valuenow', i);
+    dom.setAttribute('aria-valuetext', parts.map(([k,v])=>k+' '+v).join(', '));
+  };
+  dom.tabIndex=0;
+  dom.setAttribute('role','slider');
+  dom.setAttribute('aria-valuemin', 0);
+  dom.setAttribute('aria-valuemax', count-1);
+  paint(count-1);
+  inst.on('updateAxisPointer', e=>{ const a=e.axesInfo && e.axesInfo[0]; if(a && typeof a.value==='number' && a.value!==idx) paint(a.value); });
+  inst.getZr().on('globalout', ()=>{ if(document.activeElement!==dom) paint(count-1); });
+  dom.onkeydown=e=>{
+    const big=Math.max(1, Math.round(count/20));
+    const to={ArrowRight:idx+1, ArrowUp:idx+1, ArrowLeft:idx-1, ArrowDown:idx-1, PageUp:idx+big, PageDown:idx-big, Home:0, End:count-1}[e.key];
+    if(to==null) return;
+    e.preventDefault();
+    const i=Math.max(0, Math.min(count-1, to));
+    inst.dispatchAction({type:'showTip', seriesIndex:0, dataIndex:i});
+    paint(i);
+  };
+  dom.onblur=()=>{ inst.dispatchAction({type:'hideTip'}); paint(count-1); };
+}
 // ECharts with renderer:'svg' writes fixed pixel dimensions at mount time
 // and never re-measures on its own. With no resize listener anywhere in
 // this file, every chart stayed frozen at its original width forever --
@@ -2042,6 +2100,7 @@ const L = {
     freeText:'', freeTextError:null, freeTextLoading:false,
     seed:19,
     overrides:{},        // key -> true once someone explicitly says "use it anyway" past an unusable data-quality flag
+    range:'max',         // period pill: '1','3','5','10' (years) or 'max'; cuts the shared window every card reads (liveCommonWindow)
     taxSlab:null,        // income-tax slab %, for the SIP card's after-tax line; null = TAX_IN.defaultSlab
   },
   statements:{
@@ -4893,7 +4952,11 @@ function liveFundLabel(it){ const d=L.live.data[it.key]; return String((d&&d.lab
 // truncating to "Aditya Birla Sun..." and falling back to scheme codes.
 const LIVE_HOUSE_SHORT=[[/^Aditya Birla Sun Life\b/i,'ABSL'],[/^ICICI Prudential\b/i,'ICICI Pru'],[/^Nippon India\b/i,'Nippon'],[/^Kotak Mahindra\b/i,'Kotak'],[/^Mirae Asset\b/i,'Mirae'],[/^Motilal Oswal\b/i,'Motilal'],[/^Franklin India\b/i,'Franklin'],[/^Mahindra Manulife\b/i,'Mahindra'],[/^Canara Robeco\b/i,'Canara'],[/^Baroda BNP Paribas\b/i,'Baroda BNP'],[/^Invesco India\b/i,'Invesco'],[/^Bank of India\b/i,'BOI']];
 function liveFundBase(it){
-  let nm=liveFundLabel(it).split(/\s-|-\s|\(/)[0];
+  const parts=liveFundLabel(it).split(/\s-|-\s|\(/);
+  let nm=parts[0];
+  // "UTI - Nifty Next 50 Index Fund - Direct Plan": the first chunk is only the
+  // fund house, which would name every UTI fund "UTI". Keep the next chunk too.
+  if(!/\s/.test(nm.trim()) && parts[1]) nm=nm.trim()+' '+parts[1].trim();
   LIVE_HOUSE_SHORT.forEach(([re,sh])=>{ nm=nm.replace(re,sh); });
   nm=nm.replace(/\b(Index Fund|Fund of Funds?|FoF|Fund|Plan|Growth|Direct|Regular)\b/gi,'').replace(/\s+/g,' ').replace(/[\s\-–:,]+$/,'').trim();
   return nm.length>18 ? nm.slice(0,17).trim()+'…' : nm;
@@ -4962,16 +5025,96 @@ function liveItemPrices(it, convert){
   LIVE_FX_CACHE.set(key,out);
   return out;
 }
-function liveCommonWindow(items){
+// Period pills: the same shared window, cut to its last N years. Every card
+// (stats, frontier, lump sum, SIP, vs the index) reads liveCommonWindow, so all
+// of them follow the pill. The whole history is already in the browser, so a new
+// period is instant: no fetch, no spinner. `full` ignores the pill: the pills
+// use it to know which periods the data can fill, and the next-step carry uses
+// it so a short, lucky stretch is never handed on as a long-run rate.
+const LIVE_RANGES=[{id:'1',label:'1Y'},{id:'3',label:'3Y'},{id:'5',label:'5Y'},{id:'10',label:'10Y'},{id:'max',label:'Max'}];
+function liveCommonWindow(items, full){
   const conv=liveFxActive(items);
   const ps=items.map(it=>liveItemPrices(it, conv));
   const start=ps.map(p=>p[0].date).sort().pop();
   const end=ps.map(p=>p[p.length-1].date).sort()[0];
-  return {start, end};
+  const yrs=parseInt(L.live.range,10);
+  if(full || !yrs) return {start, end};
+  // The pills' rule (see liveRangePillsHTML): a period within 0.05 years of the
+  // whole history is just "Max", so a pill never reads as pressed on a window
+  // that is really the full history, or the other way round.
+  const have=(Date.parse(end)-Date.parse(start))/(365.25*864e5);
+  if(yrs>=have-0.05) return {start, end};
+  const cut=new Date(Date.parse(end)-yrs*365.25*864e5).toISOString().slice(0,10);
+  return {start:cut, end, cut:yrs};
 }
-function liveWindowStats(items){
+function liveRangePillsHTML(items){
+  const full=liveCommonWindow(items, true);
+  const have=(Date.parse(full.end)-Date.parse(full.start))/(365.25*864e5);
+  const fits=id=>{ const y=parseInt(id,10); return !y || y<have-0.05; };   // a period as long as the data is just "Max"
+  const cur=fits(L.live.range||'max') ? (L.live.range||'max') : 'max';
+  return `<div class="range-pills" role="group" aria-label="Period for every card below">${LIVE_RANGES.map(r=>
+    `<button type="button" class="range-pill" data-live-range="${r.id}" aria-pressed="${cur===r.id}"${fits(r.id)?'':' disabled title="These instruments share less history than that"'}>${r.label}</button>`).join('')}</div>`;
+}
+// Plain-language reads of numbers the Lab already computes: a beginner can't
+// tell whether "correlation 0.93" is good or bad, or that two funds tracking
+// the same index are one holding bought twice. Calm on purpose (the normal
+// gold-rule note, never red) and silent unless something fires.
+const NUDGE_CORR = 0.85, NUDGE_STOCK_MULTI = 0.5, NUDGE_STOCK_TWO = 0.75;
+// 'stock' only for something the built-in lists positively tag as one operating
+// company. Funds, ETFs, REITs and indices return something else, so the "one
+// company" note can't fire on an 80% Nifty 50 fund, which is already
+// diversified. Both countries' lists are searched (SPY in India mode is an ETF),
+// and a ticker from the wider market that neither list knows is 'unknown': its
+// name can't prove it is one company rather than an unfamiliar ETF, so it gets
+// no note.
+function liveKindOf(it){
+  if(it.type==='fund') return 'fund';
+  const known = INSTRUMENT_INDEX_IN.find(x=>x.symbol===it.symbol) || INSTRUMENT_INDEX_US.find(x=>x.symbol===it.symbol);
+  if(known) return known.kind || 'other';
+  return /^\^/.test(it.symbol) ? 'index' : 'unknown';
+}
+// One instrument's deepest peak-to-trough fall over the shared window, read
+// from the same spike-cleaned panel the growth chart uses so one bad print
+// can't invent a crash. null when there are too few shared days to say.
+function liveWorstFall(items, col){
+  const panel = liveCleanPanel(items);
+  if(panel.dates.length < 60) return null;
+  return maxDrawdownFromPrices(panel.px.map(row => ({close: row[col]})));
+}
+// items: the live items; vols: annual vols; corr: the matrix; weights: fractions summing to 1.
+function liveNudgesHTML(items, vols, corr, weights){
+  const notes = [], nm = i => advisorAttr(liveShortName(items[i]));
+  // 1. The most-correlated pair that is actually held (both weights >= 5%).
+  let best = null;
+  for(let i=0;i<items.length;i++) for(let j=i+1;j<items.length;j++){
+    if(weights[i] < 0.05 || weights[j] < 0.05) continue;
+    if(!best || corr[i][j] > best.c) best = {i, j, c:corr[i][j]};
+  }
+  if(best && best.c >= NUDGE_CORR){
+    // Judged on the pair alone, at their own relative weights. Measured on the
+    // whole mix, a third unrelated holding would make the pair look well
+    // diversified and "only N%" would be untrue.
+    const s = weights[best.i] + weights[best.j], pw = [weights[best.i]/s, weights[best.j]/s], pv = [vols[best.i], vols[best.j]];
+    const avgVol = pw[0]*pv[0] + pw[1]*pv[1];
+    const pairVol = Math.sqrt(portfolioVariance(pw, pv, [[1,best.c],[best.c,1]]));
+    const cut = avgVol > 0 ? Math.max(0, 1 - pairVol/avgVol) : 0;
+    const cutTxt = cut < 0.005 ? 'by less than 1%' : 'by only <b>' + Math.round(cut*100) + '%</b>';
+    notes.push('<b>' + nm(best.i) + ' and ' + nm(best.j) + ' move together</b> (correlation ' + best.c.toFixed(2) + '). Holding the two cuts risk ' + cutTxt +
+      ' compared with holding each on its own. Adding something that moves differently, such as gold or a bond fund, usually does more.');
+  }
+  // 2. One single company carrying most of the mix.
+  const cap = items.length === 2 ? NUDGE_STOCK_TWO : NUDGE_STOCK_MULTI;
+  const k = weights.indexOf(Math.max(...weights));
+  if(weights[k] >= cap && liveKindOf(items[k]) === 'stock'){
+    const fall = liveWorstFall(items, k);
+    notes.push('<b>' + Math.round(weights[k]*100) + '% of this mix is one company, ' + nm(k) + '.</b> A single company can fall much further than an index.' +
+      (fall != null ? ' In this window ' + nm(k) + ' dropped <b>' + Math.round(fall*100) + '%</b> from its high at the worst point.' : ''));
+  }
+  return notes.map(n => '<div class="gr-note live-nudge" role="note">' + n + '</div>').join('');
+}
+function liveWindowStats(items, full){
   if(!items.length) return {stats:[], window:null};
-  const win=liveCommonWindow(items);
+  const win=liveCommonWindow(items, full);
   const conv=liveFxActive(items);
   const key=items.map(it=>it.key+':'+L.live.data[it.key].prices.length).join('|')+'|'+win.start+'|'+win.end+'|'+(conv?'fx-'+liveHomeCurrency():'own');
   if(LIVE_WINDOW_CACHE.has(key)) return LIVE_WINDOW_CACHE.get(key);
@@ -4995,6 +5138,16 @@ function liveWindowStats(items){
   LIVE_WINDOW_CACHE.set(key,res);
   return res;
 }
+// The compounded mix return (mu - sigma^2/2, the figure the stat cards call
+// "Compounded equivalent") over the WHOLE shared history, ignoring the period
+// pill. It is what the next-step button carries into the Retirement tab.
+function liveFullWindowMixRet(items, weights){
+  const stats=liveWindowStats(items, true).stats;
+  const {corr}=computeCovarianceMatrix(stats);
+  const r=portfolioReturn(weights, stats.map(s=>s.annualReturn));
+  const v=portfolioVariance(weights, stats.map(s=>s.annualVol), corr);
+  return r-v/2;
+}
 function liveWindowNoteHTML(items){
   const {window:w}=liveWindowStats(items);
   if(!w) return '';
@@ -5009,7 +5162,7 @@ function liveWindowNoteHTML(items){
     : ` <b style="color:#9C4A2C">Mixed currencies (${cur.join(' and ')}):</b> returns are each in their own currency, with no exchange-rate conversion${fx&&fx.status==='error'?' (the USD/INR rate could not be loaded: '+advisorAttr(fx.error)+')':''}, so the mix return and the risk-free comparison are approximate.${weeklyNote}`;
   return w.tooShort
     ? `<div class="gr-note" style="border-left-color:#9C4A2C">These instruments overlap for less than about six months (${fmt(w.start)} to ${fmt(w.end)}), too short to compare fairly, so each is shown over its own history. Treat the frontier as rough.${curNote}</div>`
-    : `<div class="gr-note">Compared over the same dates for every instrument: <b>${fmt(w.start)} to ${fmt(w.end)}</b> (${w.years.toFixed(1)} years), the period they all have data for. The "best" mixes below are the best <i>for this past window</i>; the pick-list is today's index members, so companies that failed and left the index aren't in it. Treat them as a description of the past, not a forecast.${curNote}</div>`;
+    : `<div class="gr-note">Compared over the same dates for every instrument: <b>${fmt(w.start)} to ${fmt(w.end)}</b> (${w.years.toFixed(1)} years), ${w.cut ? 'the last '+w.cut+(w.cut>1?' years':' year')+' of the period they all have data for' : 'the period they all have data for'}. The "best" mixes below are the best <i>for this past window</i>; the pick-list is today's index members, so companies that failed and left the index aren't in it. Treat them as a description of the past, not a forecast.${curNote}</div>`;
 }
 // "What would ₹1 lakh have become, and how bad did it get?" -- the two
 // questions a retail investor actually asks of a backtest, which the
@@ -5077,7 +5230,8 @@ function liveGrowthCardHTML(items, weights){
       <div class="stat"><div class="stat-label">Worst fall${infoIcon('The deepest drop from a previous high point to a later low, for your mix. Everyone who held through this period sat through it.')}</div><div class="stat-value">${(w.dd*100).toFixed(1)}%</div><div class="stat-sub">bottom in ${fmtD(g.dates[w.k])}</div></div>
       <div class="stat"><div class="stat-label">Time to recover</div><div class="stat-value" style="font-size:20px">${g.recK!=null?(m=>m+(m===1?' month':' months'))(monthsBetween(g.dates[w.k], g.dates[g.recK])):'Not yet'}</div><div class="stat-sub">${rec}</div></div>
     </div>
-    <div id="live-growth-echart" class="echart" style="height:380px"></div>
+    <div class="scrub-readout" id="live-growth-echart-ro" aria-hidden="true"></div>
+    <div id="live-growth-echart" class="echart" style="height:380px" aria-label="What the money became, week by week. Arrow keys move a week, Page Up and Page Down move further, Home and End jump to the ends."></div>
     ${benchCap}
     ${liveMixCurrency(items) ? liveForeignMoneyNoteHTML(items) : (L.live.fx && L.live.fx.status==='loading' ? `<div class="cap" style="margin-top:8px">Loading the USD/INR rate to put these in one currency; until then each line grows in its own currency.</div>` : `<div class="cap" style="margin-top:8px">These instruments are in different currencies and aren’t converted here, so each line grows in its own currency: read the amounts as a growth multiple, not money.</div>`)}
     ${liveDroppedNoteHTML(g.panel)}
@@ -5123,7 +5277,7 @@ function renderLiveGrowthChart(chartId, g, items, amt){
     lineStyle:{width:1, color:'#56698A'}, areaStyle:{color:'rgba(20,40,63,.12)'}, itemStyle:{color:'#56698A'},
     markPoint:{symbol:'circle', symbolSize:6, silent:true, itemStyle:{color:CHART_TEXT.ink}, data:[{coord:[wk, +(g.worst.dd*100).toFixed(2)]}],
       label:valueTag('Worst '+(g.worst.dd*100).toFixed(1)+'%', CHART_TEXT.ink, wk>last*0.7?'left':'right')} });
-  initChart(chartId, {
+  const inst=initChart(chartId, {
     // Room on the right for the end labels, sized to the longest name (the
     // labels are 10px mono, ~6.2px a character) so "HDFC Gold ETF" isn't
     // clipped; on a phone the value drops to its own line, so only the name
@@ -5135,8 +5289,16 @@ function renderLiveGrowthChart(chartId, g, items, amt){
     yAxis:[{type:'value', gridIndex:0, scale:true, axisLabel:{formatter:v=>c.compact(v), color:CHART_TEXT.muted}},
            {type:'value', gridIndex:1, max:0, axisLabel:{formatter:v=>v+'%', color:CHART_TEXT.muted}, splitNumber:2}],
     axisPointer:{link:[{xAxisIndex:'all'}]},
-    tooltip:{trigger:'axis', confine:true, formatter:ps=>{ const arr=Array.isArray(ps)?ps:[ps]; return (arr[0]?arr[0].axisValue:'')+'<br/>'+arr.map(p=>p.marker+p.seriesName+': '+(p.seriesName==='Below previous peak'?(+p.value).toFixed(1)+'%':c.compact(p.value))).join('<br/>'); }},
+    // On a phone the readout above the chart replaces the floating box.
+    tooltip:{trigger:'axis', confine:true, showContent:!narrow, formatter:ps=>{ const arr=Array.isArray(ps)?ps:[ps]; return (arr[0]?arr[0].axisValue:'')+'<br/>'+arr.map(p=>p.marker+p.seriesName+': '+(p.seriesName==='Below previous peak'?(+p.value).toFixed(1)+'%':c.compact(p.value))).join('<br/>'); }},
     series,
+  });
+  wireLabScrub(inst, chartId, keep.length, i=>{
+    const k=keep[i];
+    return [['On', new Date(g.dates[k]).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})], ['Your mix', c.compact(amt*g.mix[k])]]
+      .concat(items.map((it,j)=>[liveShortName(it), c.compact(amt*g.idx[j][k])]))
+      .concat(g.bench && !benchInMix ? [[benchSpec.short, c.compact(amt*g.bench[k])]] : [])
+      .concat([['Below its high', (g.dd[k]*100).toFixed(1)+'%']]);
   });
 }
 // "If I'd put Rs 10,000 a month into this, what would I have now?" -- the
@@ -5148,6 +5310,27 @@ const LIVE_SIP_MONTHLY = { IN: 10000, US: 500 };
 // Typical extra yearly cost of a Regular plan over the Direct plan of the same
 // fund (distributor commission). Estimates, stated as such wherever shown.
 const LIVE_REGULAR_EXTRA = { active: 0.01, passive: 0.004 };
+// What a fund's own name says about its plan. Direct is claimed only on a
+// positive match; a name that says neither is "unstated", never assumed.
+function liveFundPlan(it){
+  if(it.type!=='fund') return null;
+  const nm=liveFundLabel(it);
+  return /direct/i.test(nm) ? 'direct' : /regular/i.test(nm) ? 'regular' : 'unstated';
+}
+// The yearly cost of a Regular plan over the Direct one of the same fund, or
+// null when none is claimed. Claimed only when the name says "Regular" (and not
+// "Direct"): older schemes often state neither, and those are left alone. The
+// gap is roughly 1%/yr for an active equity fund and much less for an index fund
+// or ETF, so the estimate uses the smaller figure for those. Debt-type funds are
+// left out: their Direct/Regular gap ranges from ~0.1% (liquid) to ~0.6%+
+// (credit), too wide for one honest figure. One rule for the instrument card
+// and the "At a glance" cost row, so the two can never disagree.
+function liveRegularGap(it){
+  if(liveFundPlan(it)!=='regular') return null;
+  const nm=liveFundLabel(it);
+  if(/liquid|overnight|money market|debt|bond|gilt|duration|credit|arbitrage|floater|floating|treasury|banking (&|and) psu|corporate/i.test(nm)) return null;
+  return /index|nifty|sensex|etf/i.test(nm) ? LIVE_REGULAR_EXTRA.passive : LIVE_REGULAR_EXTRA.active;
+}
 function liveSipBacktest(items, weights){
   const panel=liveCleanPanel(items);
   if(panel.dates.length<250) return {tooShort:true, days:panel.dates.length};
@@ -5252,7 +5435,13 @@ function liveSipCardHTML(items, weights){
   }
   const s=liveSipBacktest(items, weights);
   const c=s.cm||liveMoneyCfg(items);
-  if(s.tooShort) return `<div class="card"><h4>${c.compact(LIVE_SIP_MONTHLY[c.code]||LIVE_SIP_MONTHLY.IN)} every month into this mix</h4><div class="cap">Not shown: these instruments share only ${s.days} trading days, under about a year, which is too few monthly buys to say anything about a SIP.</div></div>`;
+  if(s.tooShort){
+    // When the period pill is what made it short, say so rather than blame the data.
+    const cutYrs=liveCommonWindow(items).cut;
+    return `<div class="card"><h4>${c.compact(LIVE_SIP_MONTHLY[c.code]||LIVE_SIP_MONTHLY.IN)} every month into this mix</h4><div class="cap">Not shown: ${cutYrs
+      ? 'the last '+cutYrs+(cutYrs>1?' years (the period picked above) hold':' year (the period picked above) holds')+' only '+s.days+' trading days, under the year of monthly buys a SIP needs. Pick a longer period.'
+      : 'these instruments share only '+s.days+' trading days, under about a year, which is too few monthly buys to say anything about a SIP.'}</div></div>`;
+  }
   const r=s.r, w=r.worst;
   const fmtD=d=>new Date(d).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
   const first=s.dates[0], last=s.dates[s.dates.length-1];
@@ -5280,7 +5469,8 @@ function liveSipCardHTML(items, weights){
       <div class="stat"><div class="stat-label">Per year (XIRR)${infoIcon('Each monthly buy had a different amount of time to grow: the first one the whole period, the last one a few days. XIRR is the single yearly rate that turns all those buys into the final value. It is the figure mutual fund statements show, and the right one to compare with a plan’s assumed return. The total looks bigger because most of the money went in recently.')}</div><div class="stat-value">${xirrPct==null?'&mdash;':xirrPct.toFixed(1)+'%'}</div><div class="stat-sub">compare this with a plan</div></div>
       <div class="stat"><div class="stat-label">Lowest point</div><div class="stat-value">${w.gap<0?'&minus;'+c.compact(-w.gap):'Never below'}</div><div class="stat-sub">${w.gap<0?'below paid in, '+fmtD(s.dates[w.k]):'what was paid in'}</div></div>
     </div>
-    <div id="live-sip-echart" class="echart" style="height:300px" role="img" aria-label="Money paid in versus what it was worth, month by month. The numbers are in the text below."></div>
+    <div class="scrub-readout" id="live-sip-echart-ro" aria-hidden="true"></div>
+    <div id="live-sip-echart" class="echart" style="height:300px" aria-label="Money paid in versus what it was worth, month by month. Arrow keys move a point, Page Up and Page Down move further, Home and End jump to the ends. The numbers are in the text below."></div>
     <div class="gr-note" style="margin-top:10px">${c.compact(s.monthly)} every month from ${fmtD(first)} to ${fmtD(last)}, ${c.compact(r.paidIn)} in all, would be worth <b>${c.compact(r.final)}</b>. That's ${total} in total, which is <b>${xirrPct==null?'not computable':xirrPct.toFixed(1)+'% a year'}</b> (XIRR) once you allow for each month's money being invested for a different length of time.${worstLine}${benchLine}${vsPlan}</div>
     ${liveSipTaxHTML(items, s)}
     ${liveForeignMoneyNoteHTML(items)}
@@ -5302,12 +5492,12 @@ function renderLiveSipChart(chartId, s){
   if(r.worst.gap<0 && wi>=0) worth.markPoint={ symbol:'circle', symbolSize:7, silent:true, itemStyle:{color:CHART_TEXT.ink},
     data:[{coord:[wi, Math.round(r.value[r.worst.k])]}],
     label:valueTag('Lowest: '+c.compact(-r.worst.gap)+' below paid in', CHART_TEXT.ink, wi>last*0.7?'left':'right') };
-  initChart(chartId, {
+  const inst=initChart(chartId, {
     grid:{left:8, right:narrow?62:120, top:18, bottom:24, containLabel:true},
     xAxis:{type:'category', data:x, boundaryGap:false, axisTick:{show:false},
       axisLabel:{formatter:v=>v.slice(0,4), interval:Math.max(0,Math.floor(x.length/(narrow?3:6))-1), hideOverlap:true, color:CHART_TEXT.muted}},
     yAxis:{type:'value', axisLabel:{formatter:v=>c.compact(v), color:CHART_TEXT.muted}},
-    tooltip:{trigger:'axis', confine:true, formatter:ps=>{
+    tooltip:{trigger:'axis', confine:true, showContent:!narrow, formatter:ps=>{
       const k=keep[(Array.isArray(ps)?ps[0]:ps).dataIndex], paid=r.paid[k], v=r.value[k];
       return new Date(s.dates[k]).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+'<br/>Paid in: '+c.compact(paid)+'<br/>Worth: '+c.compact(v)+' ('+(v>=paid?'+':'')+((v/paid-1)*100).toFixed(1)+'%)'; }},
     series:[
@@ -5319,8 +5509,169 @@ function renderLiveSipChart(chartId, s){
       worth,
     ],
   });
+  wireLabScrub(inst, chartId, keep.length, i=>{
+    const k=keep[i], paid=r.paid[k], v=r.value[k];
+    return [['On', new Date(s.dates[k]).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})], ['Paid in', c.compact(paid)], ['Worth', c.compact(v)], ['Gain', (v>=paid?'+':'')+((v/paid-1)*100).toFixed(1)+'%']];
+  });
 }
 function onLiveFrontierPick(w){ L.live.weight=Math.round(w*100); render(); }
+// "At a glance": plain verdicts about the current mix, each worked out from this
+// page's own prices over the chosen period, each with its rule in an "i". It is
+// the judgement other apps lead with (and mostly keep behind a login), done in
+// the open. The words and arrows carry the meaning; nothing is coloured red or
+// green, and "behind" is information, not a warning that has fired.
+// Index of the last trading day of each ISO week, in date order.
+function liveWeeklyIdx(dates){
+  const last=new Map();
+  dates.forEach((d,k)=>{ const dt=new Date(d+'T00:00:00Z'), day=(dt.getUTCDay()+6)%7; last.set(new Date(dt-day*864e5).toISOString().slice(0,10), k); });
+  return [...last.values()];
+}
+function liveVerdictHTML(items, weights){
+  const g=liveGrowthDrawdown(items, weights);
+  // 0.95, not 1: a "1Y" period holds just under a year of trading days.
+  if(!g || g.years<0.95) return '';
+  const c=liveMoneyCfg(items), amt=c.code==='IN' ? 100000 : 1000;
+  const pct=x=>(x*100).toFixed(1)+'%';
+  // A share of stretches is never rounded up to 100% ("100%" has to mean all of
+  // them) nor down to "0%" when a few did (0% has to mean none).
+  const share=x=>x>=1 ? '100%' : x<=0 ? '0%' : x<0.01 ? 'under 1%' : Math.min(99, Math.floor(x*100))+'%';
+  const fmtD=d=>new Date(d).toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+  const spec=liveBenchSpec(items);
+  liveEnsureBench(spec);
+  const bi=spec ? liveBenchIndex(spec, g.dates) : null;
+  const bench=bi && bi.ok ? bi.idx : null;
+  const rows=[];
+  // 1. Did it beat simply buying the index?
+  if(bench){
+    const mixEnd=amt*g.mix[g.mix.length-1], benchEnd=amt*bench[bench.length-1], diff=mixEnd-benchEnd;
+    const benchCagr=Math.pow(bench[bench.length-1], 1/Math.max(g.years,0.05))-1;
+    const word=Math.abs(diff)<benchEnd*0.02 ? 'Level' : diff>0 ? '▲ Ahead' : '▼ Behind';
+    rows.push({k:'vs the index', word,
+      text:`${c.compact(amt)} here became ${c.compact(mixEnd)}; in ${spec.a} ${spec.label} it became ${c.compact(benchEnd)}, so this mix is ${c.compact(Math.abs(diff))} ${diff>=0?'ahead':'behind'} (${pct(g.cagr)} vs ${pct(benchCagr)} a year).`,
+      tip:`Same dates and the same starting amount, against ${spec.full}. "Level" means the two ended within 2% of each other. Picks chosen today from today’s winners tend to look better than they would have at the start, so "ahead" describes the past, not skill.`});
+  }
+  // 2. How bumpy was the ride?
+  // A mix across two markets (India and US) is lined up by calendar date, but the
+  // two close on different days, which hides how much they move together and
+  // makes the mix look calmer than it was. The covariance maths on this page
+  // handles that pair with weekly moves; the verdict does the same, for the mix
+  // and the index alike. Annualised by the count of moves, so nothing else changes.
+  const twoMarkets=new Set(items.map(it=>L.live.data[it.key].currency||'INR')).size>1;
+  const wk=twoMarkets ? liveWeeklyIdx(g.dates) : null;
+  const volOf=v=>wk ? annualisedVol(wk.map(k=>g.dates[k]), wk.map(k=>v[k])) : annualisedVol(g.dates, v);
+  const vol=volOf(g.mix), bvol=bench ? volOf(bench) : null;
+  if(vol!=null){
+    const ratio=bvol ? vol/bvol : null;
+    const word=ratio!=null ? (ratio<0.85 ? 'Calmer' : ratio<=1.15 ? 'About the same' : 'Bumpier') : (vol<0.10 ? 'Calm' : vol<=0.18 ? 'Typical' : 'Bumpy');
+    rows.push({k:'Ups and downs', word,
+      text:`${twoMarkets?'Week-to-week':'Day-to-day'} swings of ${pct(vol)} a year${ratio!=null?`, ${ratio.toFixed(1)}× the ${spec.label}’s ${pct(bvol)}`:''}. ${g.worst.dd<0 ? `The worst fall from a high was ${pct(-g.worst.dd)}, in ${fmtD(g.dates[g.worst.k])}.` : 'It never fell below an earlier high.'}`,
+      tip:'Swings are the yearly size of the '+(twoMarkets?'weekly':'daily')+' moves, worked out the same way as the risk figures on this page'+(twoMarkets?' (weekly here, because the two markets close on different days)':'')+'. Against the index fund: under 0.85× is calmer, 0.85× to 1.15× about the same, over 1.15× bumpier. With no index fund to compare to: under 10% a year calm, 10% to 18% typical, over 18% bumpy.'});
+  }
+  // 3. Was it steady, or one lucky start date? (every rolling stretch)
+  const Y=g.years>=6 ? 3 : 1;
+  const rr=g.years>=2 ? rollingReturns(g.dates, g.mix, Y, bench||undefined) : null;
+  // The stretches overlap, so "thousands of windows" are really a handful of
+  // separate periods. With fewer than two, there is nothing to call a pattern.
+  const shown=rr && rr.separate>=2 ? rr : null;
+  if(shown){
+    // The word says what was measured (up over each stretch of Y years, not "never
+    // lost money": a buyer at a peak can sit under water inside a stretch that
+    // still ended up) and admits when only two or so separate periods back it.
+    const yy=`${Y} year${Y>1?'s':''}`;
+    const word=shown.separate<3 ? 'Too short to call' : shown.positiveShare>=1 ? `Up in every ${Y}-year stretch` : shown.positiveShare>=0.95 ? `Up in almost every ${Y}-year stretch` : shown.positiveShare>=0.75 ? `Mostly up over ${yy}` : `Often down over ${yy}`;
+    rows.push({k:'Consistency', word,
+      text:`Across every ${Y}-year stretch in this period (${shown.separate} that don’t overlap; the rest share years with them), it made between ${pct(shown.min.cagr)} and ${pct(shown.max.cagr)} a year (${pct(shown.median)} in the middle). It was up in ${share(shown.positiveShare)} of them${shown.beatShare!=null?` and ahead of the ${spec.label} in ${share(shown.beatShare)}`:''}.`,
+      tip:`Every start date, not one lucky one: each stretch runs from one trading day to the same day ${yy} later. "Up in every stretch" means a gain over each of them, "almost every" at least 95%, "Mostly up" 75% to 95%, "Often down" under 75%. It says only whether a stretch ended with a gain, not how much, and not how far it fell on the way (the worst fall is in the row above); the range is in the sentence. The stretches overlap, so the number of separate ones is shown. With fewer than three separate stretches the word is "Too short to call", and with fewer than two the row is left out.`});
+  }
+  // 4. What does it cost to hold? Claimed from the plan name only: a fund whose
+  // name says neither Direct nor Regular is reported as not stated.
+  const funds=items.filter(it=>it.type==='fund'), plans=funds.map(liveFundPlan);
+  const regular=funds.filter((_,i)=>plans[i]==='regular'), unstated=funds.filter((_,i)=>plans[i]==='unstated');
+  // Fund names come from a third-party feed and are written into markup.
+  const names=list=>list.map(it=>advisorAttr(liveShortName(it))).join(', ');
+  const others=items.filter(it=>it.type!=='fund'), kinds=others.map(liveKindOf);
+  const unknownItems=others.filter((_,i)=>kinds[i]==='unknown' || kinds[i]==='other');
+  const indexItems=others.filter((_,i)=>kinds[i]==='index');
+  const hasEtf=kinds.some(k=>k==='etf' || k==='reit' || k==='invit');
+  let cost;
+  if(regular.length){
+    const gaps=regular.map(liveRegularGap).filter(x=>x!=null);
+    const lo=Math.min(...gaps), hi=Math.max(...gaps);
+    cost={word:'Regular plan', text:`${names(regular)} ${regular.length>1?'are Regular plans':'is a Regular plan'}, the version with a distributor’s commission built in.${gaps.length ? ` The Direct plan of the same fund typically costs about ${lo===hi ? pct(lo) : pct(lo)+' to '+pct(hi)} a year less (an estimate).` : ' The Direct version usually costs less; the gap for debt funds varies too much to estimate here.'}`};
+  }else if(unstated.length){
+    cost={word:'Plan type not stated', text:`${names(unstated)} ${unstated.length>1?'don’t':'doesn’t'} say Direct or Regular in the name, so what it costs to hold can’t be read from here. Check the plan before buying.`};
+  }else if(funds.length){
+    cost={word:'Direct plans', text:`Every mutual fund here is named a Direct plan, the cheaper version with no distributor commission.`};
+  }else if(unknownItems.length){
+    // A ticker neither built-in list knows could be a company or an ETF (liveKindOf).
+    cost={word:'Fee not stated', text:`${names(unknownItems)} ${unknownItems.length>1?'aren’t':'isn’t'} in this app’s built-in lists, so whether ${unknownItems.length>1?'they are company shares or funds':'it is a company share or a fund'}, and what ${unknownItems.length>1?'they charge':'it charges'} to hold, can’t be read from here.`};
+  }else if(hasEtf){
+    cost={word:'Yearly fund fee', text:'ETFs, REITs and InvITs pay a small yearly management fee, already inside the price shown here.'};
+  }else if(indexItems.length){
+    cost={word:'Not a holding', text:`${names(indexItems)} ${indexItems.length>1?'are indexes, not things':'is an index, not something'} you can buy directly, so there is no fee to read: ${indexItems.length>1?'they show':'it shows'} how the market moved.`};
+  }else{
+    cost={word:'No fund fee', text:'Shares carry no fund fee.'};
+  }
+  rows.push({k:'Cost', word:cost.word, text:cost.text,
+    tip:'Fund and ETF prices are already after the fund’s own yearly fee, so every return on this page includes it. A Regular plan is the same fund with a distributor’s commission added. Brokerage, taxes and exit loads are not counted.'});
+  L.live._verdict={sig:liveMixSig(items, weights), from:g.dates[0], to:g.dates[g.dates.length-1], rows:rows.map(r=>({k:r.k, word:r.word, text:r.text}))};
+  // The consistency chart: the yearly rate over each stretch, by its end date.
+  const chart = shown ? collapsibleSection('', `See every ${Y}-year stretch`, `
+      <div class="scrub-readout" id="live-rolling-echart-ro" aria-hidden="true"></div>
+      <div id="live-rolling-echart" class="echart" style="height:260px" aria-label="Yearly return over each ${Y}-year stretch, by the date it ended. Arrow keys move a point, Page Up and Page Down move further, Home and End jump to the ends. The numbers are in the sentence below the chart."></div>
+      <div class="cap" style="margin-top:6px">Each point is the yearly rate over the ${Y} year${Y>1?'s':''} ending that day. The lowest was ${pct(shown.min.cagr)} (ending ${fmtD(shown.min.end)}); the highest ${pct(shown.max.cagr)} (ending ${fmtD(shown.max.end)}); half of all stretches made more than ${pct(shown.median)}. The stretches overlap: ${shown.separate} of them don’t.</div>`) : '';
+  if(shown) deferChartInit(()=>renderLiveRollingChart('live-rolling-echart', shown, bench ? spec : null));
+  return `<div class="card verdict-card">
+    <h4>At a glance${infoIcon('Plain judgements, each worked out from the prices on this page over the period shown ('+fmtD(g.dates[0])+' to '+fmtD(g.dates[g.dates.length-1])+'). The rule behind each word is in its own "i". Past prices only: a description, not a forecast.')}</h4>
+    <div class="cap">Your current mix, ${fmtD(g.dates[0])} to ${fmtD(g.dates[g.dates.length-1])} (${g.years.toFixed(1)} years).</div>
+    <dl class="verdicts">${rows.map(r=>`<div class="verdict"><dt>${r.k}</dt><dd><span class="verdict-word">${r.word}</span>${infoIcon(r.tip)}<span class="verdict-text">${r.text}</span></dd></div>`).join('')}</dl>
+    ${chart}
+  </div>`;
+}
+function renderLiveRollingChart(chartId, rr, spec){
+  const dom=document.getElementById(chartId);
+  // The chart sits in a closed section, so its own width is 0 until it opens:
+  // size the layout from the card it lives in.
+  const room=dom ? (dom.clientWidth || (dom.closest('.card') ? dom.closest('.card').clientWidth : window.innerWidth)) : window.innerWidth;
+  const narrow=room<520;
+  const w=rr.windows, step=Math.max(1, Math.floor(w.length/400));
+  // Thinned to ~400 points, but the lowest and highest stretches are always
+  // kept: otherwise the "Lowest/Highest" tags (which quote the true extreme)
+  // would sit off the line, at a height the plotted line never reaches.
+  const lowAt=w.indexOf(rr.min), highAt=w.indexOf(rr.max);
+  const keep=w.map((_,k)=>k).filter(k=>k%step===0 || k===w.length-1 || k===lowAt || k===highAt);
+  const x=keep.map(k=>w[k].end), last=keep.length-1;
+  const labelEvery=Math.max(1, Math.floor(x.length/6));
+  const at=end=>keep.reduce((b,k,i)=>Math.abs(Date.parse(w[k].end)-Date.parse(end))<Math.abs(Date.parse(w[keep[b]].end)-Date.parse(end))?i:b, 0);
+  const lo=at(rr.min.end), hi=at(rr.max.end);
+  const endLabel=(name,color,bold)=>({show:true, formatter:p=>(narrow?'':name+' ')+(+p.value).toFixed(1)+'%', color, fontWeight:bold?700:500, fontSize:bold?11:10, fontFamily:"'Spline Sans Mono',monospace"});
+  const series=[{ name:'Your mix', type:'line', showSymbol:false, z:5, data:keep.map(k=>+(w[k].cagr*100).toFixed(2)),
+    lineStyle:{width:2.4, color:'#2557C7'}, itemStyle:{color:'#2557C7'}, endLabel:endLabel('Your mix', CHART_TEXT.blue, true), labelLayout:{moveOverlap:'shiftY'},
+    markLine:{silent:true, symbol:'none', lineStyle:{color:CHART_TEXT.ink, width:1, type:'solid', opacity:.5}, label:{show:false}, data:[{yAxis:0}]},
+    markPoint:{symbol:'circle', symbolSize:6, silent:true, itemStyle:{color:CHART_TEXT.ink}, data:[
+      {coord:[lo, +(rr.min.cagr*100).toFixed(2)], label:valueTag('Lowest '+(rr.min.cagr*100).toFixed(1)+'%', CHART_TEXT.ink, lo>last*0.7?'left':'right')},
+      {coord:[hi, +(rr.max.cagr*100).toFixed(2)], label:valueTag('Highest '+(rr.max.cagr*100).toFixed(1)+'%', CHART_TEXT.ink, hi>last*0.7?'left':'right')}]} }];
+  // The index fund: ink, long dash and thinner, so it differs from "Your mix"
+  // in colour AND dash (it reads in greyscale), labelled at its end.
+  if(spec) series.push({ name:spec.short, type:'line', showSymbol:false, z:4, data:keep.map(k=>+(w[k].other*100).toFixed(2)),
+    lineStyle:{width:1.5, color:CHART_TEXT.ink, type:[6,4]}, itemStyle:{color:CHART_TEXT.ink}, endLabel:endLabel(spec.short, CHART_TEXT.ink, false), labelLayout:{moveOverlap:'shiftY'} });
+  const inst=initChart(chartId, {
+    grid:{left:8, right:narrow?56:150, top:16, bottom:24, containLabel:true},
+    // Year-only labels every ~1/6 of the way along; a label whose year repeats
+    // the previous shown one is blank, so the axis never reads "2026  2026".
+    xAxis:{type:'category', data:x, boundaryGap:false, axisTick:{show:false}, axisLabel:{interval:labelEvery-1, color:CHART_TEXT.muted,
+      formatter:(v,i)=>(i>=labelEvery && x[i-labelEvery].slice(0,4)===v.slice(0,4)) ? '' : v.slice(0,4)}},
+    yAxis:{type:'value', axisLabel:{formatter:v=>v+'%', color:CHART_TEXT.muted}},
+    tooltip:{trigger:'axis', confine:true, showContent:!narrow, formatter:ps=>{ const arr=Array.isArray(ps)?ps:[ps], k=keep[arr[0].dataIndex];
+      return rr.years+(rr.years>1?' years':' year')+' to '+new Date(w[k].end).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})+'<br/>'+arr.map(p=>p.seriesName+': '+(+p.value).toFixed(1)+'% a year').join('<br/>'); }},
+    series,
+  });
+  wireLabScrub(inst, chartId, keep.length, i=>{
+    const k=keep[i];
+    return [['Ending', new Date(w[k].end).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})], ['Your mix', (w[k].cagr*100).toFixed(1)+'% a year']]
+      .concat(spec ? [[spec.short, (w[k].other*100).toFixed(1)+'% a year']] : []);
+  });
+}
 function liveComputeMulti(){
   const items=liveReadyItems();
   const stats=liveWindowStats(items).stats;
@@ -5819,7 +6170,7 @@ function liveTwoAssetHTML(items, rfPct){
   const compoundedApprox = currentRet - (currentVol*currentVol)/2;
   const minVarRet=portfolioReturn([wMinVar,1-wMinVar],[sa.annualReturn,sb.annualReturn]);
   const minVarVol=Math.sqrt(portfolioVariance([wMinVar,1-wMinVar],[sa.annualVol,sb.annualVol],[[1,c12],[c12,1]]));
-  return `${liveWindowNoteHTML(items)}<div class="stat-row four">
+  return `${liveWindowNoteHTML(items)}${liveNudgesHTML(items, [sa.annualVol, sb.annualVol], [[1,c12],[c12,1]], [w, 1-w])}<div class="stat-row four">
     <div class="stat"><div class="stat-label">Correlation</div><div class="stat-value">${c12.toFixed(2)}</div>${advisorAskLink('What does this correlation mean?')}</div>
     <div class="stat"><div class="stat-label">Your mix return</div><div class="stat-value">${(currentRet*100).toFixed(1)}%</div></div>
     <div class="stat"><div class="stat-label">Your mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
@@ -5867,7 +6218,7 @@ function liveMultiAssetHTML(computed, rfPct){
   const lowPt = frontier[0];
   const hiPt = frontier.reduce((best,p)=> (!best || p.ret>best.ret) ? p : best, null);
   const rangeLine = (lowPt && hiPt && hiPt.vol > lowPt.vol + 0.0005 && hiPt.ret > lowPt.ret + 0.0005) ? `<div class="gr-note" style="margin-top:10px">Moving up the efficient part of this frontier, from the lowest-risk mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(lowPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(lowPt.ret)} for ${pct(lowPt.vol)} risk &ndash; up to the highest-return mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(hiPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(hiPt.ret)} for ${pct(hiPt.vol)} risk &ndash; both return and risk magnify together. Taking more risk on this line always buys more expected return; there's no way to get one without the other.</div>` : '';
-  return `${liveWindowNoteHTML(items)}<div class="stat-row four">
+  return `${liveWindowNoteHTML(items)}${liveNudgesHTML(items, vols, corr, weights)}<div class="stat-row four">
     <div class="stat"><div class="stat-label">Instruments</div><div class="stat-value">${items.length}</div></div>
     <div class="stat"><div class="stat-label">Selected mix return</div><div class="stat-value">${(currentPoint.ret*100).toFixed(1)}%</div></div>
     <div class="stat"><div class="stat-label">Selected mix Sharpe</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
@@ -5901,16 +6252,10 @@ function liveInstrumentStatsCardHTML(items){
     const heldBack = q.level==='unusable' && !L.live.overrides[it.key];
     const cagrDisplay = s.geoAnnual==null ? '&mdash;' : (s.geoAnnual*100).toFixed(1)+'%';
     // A Regular plan pays distributor commission on top of the Direct plan of
-    // the same fund. Claimed only when the name says "Regular" (and not
-    // "Direct"): older schemes often state neither, and those are left alone.
-    // The gap is roughly 1%/yr for an active equity fund and much less for an
-    // index fund or ETF, so the estimate uses the smaller figure for those.
+    // the same fund; liveRegularGap holds the rule (and its limits), shared with
+    // the "At a glance" cost row.
     const nm=String(d.label||'');
-    // Debt-type funds are left out: their Direct/Regular gap ranges from ~0.1%
-    // (liquid) to ~0.6%+ (credit), too wide for one honest figure.
-    const debtLike = /liquid|overnight|money market|debt|bond|gilt|duration|credit|arbitrage|floater|floating|treasury|banking (&|and) psu|corporate/i.test(nm);
-    const isRegular = it.type==='fund' && /regular/i.test(nm) && !/direct/i.test(nm) && !debtLike;
-    const extra = /index|nifty|sensex|etf/i.test(nm) ? LIVE_REGULAR_EXTRA.passive : LIVE_REGULAR_EXTRA.active;
+    const extra = liveRegularGap(it), isRegular = extra!=null;
     const yrs = (new Date(s.endDate)-new Date(s.startDate))/(365.25*864e5);
     const feeAmt = 100000;   // Indian mutual funds only, so always rupees
     const feeLine = isRegular && s.geoAnnual!=null && yrs>=1
@@ -5949,7 +6294,7 @@ function liveInstrumentStatsCardHTML(items){
 function liveOutputHTML(ready, rfPct){
   // Cleared on every render: the cards below set them again only if they
   // draw, so a mix that no longer has two instruments leaves nothing stale.
-  L.live._vsIndex=null; L.live._sip=null;
+  L.live._vsIndex=null; L.live._sip=null; L.live._verdict=null;
   liveEnsureFx(ready); // async: re-renders once the USD/INR series settles
   const items=L.live.items;
   const errored=items.filter(it=>L.live.data[it.key] && L.live.data[it.key].status==='error');
@@ -5976,12 +6321,13 @@ function liveOutputHTML(ready, rfPct){
   // expected return: the Retirement tab compounds whatever it's given
   // year over year, so handing it the arithmetic figure overstated the
   // projected corpus (19.2% vs 17.9% on a typical equity pair).
-  const mixRet = isTwoAsset
-    ? (() => { const [sa,sb]=liveWindowStats(ready).stats; const w=L.live.weight/100; const {corr}=computeCovarianceMatrix([sa,sb]); const r=portfolioReturn([w,1-w],[sa.annualReturn,sb.annualReturn]); const v=portfolioVariance([w,1-w],[sa.annualVol,sb.annualVol],corr); return r-v/2; })()
-    : (() => { let weights=L.live.selectedWeights; if(!weights||weights.length!==multiComputed.items.length) weights=multiComputed.items.map(()=>1/multiComputed.items.length); const r=portfolioReturn(weights, multiComputed.returns); const v=portfolioVariance(weights, multiComputed.vols, multiComputed.corr); return r-v/2; })();
   const growthWeights = isTwoAsset ? [L.live.weight/100, 1-L.live.weight/100]
     : ((L.live.selectedWeights && L.live.selectedWeights.length===multiComputed.items.length) ? L.live.selectedWeights : multiComputed.items.map(()=>1/multiComputed.items.length));
-  return errorBanner + (isTwoAsset ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(multiComputed, rfPct))
+  // The Retirement tab compounds whatever rate it is handed for decades, so the
+  // carried figure is always the whole shared history's, never a 1Y or 3Y pill's:
+  // a short lucky or unlucky stretch would pass as a long-run rate.
+  const mixRet = liveFullWindowMixRet(isTwoAsset ? ready : multiComputed.items, growthWeights);
+  return errorBanner + liveRangePillsHTML(ready) + liveVerdictHTML(isTwoAsset ? ready : multiComputed.items, growthWeights) + (isTwoAsset ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(multiComputed, rfPct))
     + liveGrowthCardHTML(isTwoAsset ? ready : multiComputed.items, growthWeights)
     + liveSipCardHTML(isTwoAsset ? ready : multiComputed.items, growthWeights)
     + instrumentDropdown
@@ -6244,7 +6590,10 @@ let stmtChromeAutoCollapsed=false;
 // #stmtRoot so a check in DevTools or a test can confirm it stays flat
 // across hover/pin/focus interactions, which must only ever patch DOM.
 window.__statementsRenderCount=0;
-function render(){
+// opts.quiet: an in-place update (a period pill), not a move to another view.
+// It skips the fade-in, which on a screen the person is already reading looks
+// like the page being thrown away and rebuilt.
+function render(opts){
   renderTabs();
   const main=document.getElementById('main');
   // "Read the Company" is a dedicated full-width reading surface, not one of
@@ -6287,7 +6636,7 @@ function render(){
     }
     // else: intentionally nothing -- see statementsShellMounted comment above.
   }
-  main.classList.remove('enter'); void main.offsetWidth; main.classList.add('enter');
+  if(!(opts && opts.quiet === true)){ main.classList.remove('enter'); void main.offsetWidth; main.classList.add('enter'); }
   const tabLabel=L.tab==='home' ? 'Home' : (TABS.find(t=>t.id===L.tab)||{}).label||'';
   document.getElementById('printHeader').innerHTML=
     '<div class="pt">Goalden Lab &middot; '+tabLabel+'</div>'+
@@ -6842,6 +7191,14 @@ function attach(){
       L.live.weight=parseInt(el.value);
       if(liveWeightTimer) clearTimeout(liveWeightTimer);
       liveWeightTimer=setTimeout(()=>{ liveWeightTimer=null; render(); }, 90);
+    });
+  });
+  document.querySelectorAll('[data-live-range]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      L.live.range=el.dataset.liveRange;
+      render({quiet:true});
+      // render() rebuilt the buttons: put focus back on the one that was pressed.
+      const b=document.querySelector('[data-live-range="'+L.live.range+'"]'); if(b) b.focus({preventScroll:true});
     });
   });
   document.querySelectorAll('[data-live-weight-pick]').forEach(el=>{
@@ -10153,6 +10510,11 @@ function stateForAdvisor() {
     return liveMixSig(r, w); } catch (e) { return null; } })();
   live.vsIndex = L.live._vsIndex && L.live._vsIndex.sig === nowSig ? L.live._vsIndex : null;
   live.sipBacktest = L.live._sip && L.live._sip.sig === nowSig ? L.live._sip : null;
+  live.verdicts = L.live._verdict && L.live._verdict.sig === nowSig ? L.live._verdict : null;
+  // The period pill and the dates it leaves: the mix figures the advisor quotes
+  // (frontier, correlation, growth, SIP) are for this window, not the whole history.
+  try { const r = liveReadyItems(); if (r.length >= 2) { const w = liveWindowStats(r).window;
+    if (w) live.window = { start: w.start, end: w.end, years: +w.years.toFixed(1), range: w.cut ? w.cut + 'Y' : 'max' }; } } catch (e) {}
   snapshot.live = live;
   // L.statements.data[sym].result carries a full parsed six-section
   // financial statement (~50 rows x ~13 periods) per loaded company --

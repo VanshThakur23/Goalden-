@@ -456,6 +456,53 @@ function bestWindow(series, years){
   const w=rollingWindows(series, years);
   return w.reduce((best,cur)=>cur.cagr>best.cagr?cur:best, w[0]);
 }
+// Every rolling stretch of `years` in a daily series: the yearly rate (CAGR)
+// from each day back to the day `years` earlier. It answers "was that just a
+// lucky start date?". dates are 'YYYY-MM-DD', values are prices or an index.
+// `other` (optional, same dates) is a benchmark: beatShare is the share of
+// stretches where `values` grew faster than `other`. The stretches overlap and
+// share most of their days, so `separate` (how many non-overlapping stretches
+// the history holds) is reported with them: 2,658 daily stretches in 13.8 years
+// are about four separate 3-year periods, not 2,658 independent tests.
+function rollingReturns(dates, values, years, other){
+  const t=dates.map(d=>Date.parse(d)), span=years*365.25*864e5;
+  const out=[];
+  let j=0;
+  for(let k=0;k<dates.length;k++){
+    if(t[k]-t[0]<span) continue;
+    while(t[k]-t[j+1]>=span) j++;
+    const yrs=(t[k]-t[j])/(365.25*864e5);
+    const w={start:dates[j], end:dates[k], cagr:Math.pow(values[k]/values[j], 1/yrs)-1};
+    if(other) w.other=Math.pow(other[k]/other[j], 1/yrs)-1;
+    out.push(w);
+  }
+  if(!out.length) return null;
+  const sorted=out.map(w=>w.cagr).sort((a,b)=>a-b);
+  const pick=q=>sorted[Math.min(sorted.length-1, Math.floor(q*sorted.length))];
+  const minW=out.reduce((a,b)=>b.cagr<a.cagr?b:a), maxW=out.reduce((a,b)=>b.cagr>a.cagr?b:a);
+  const spanYears=(t[t.length-1]-t[0])/(365.25*864e5);
+  return {
+    years, windows:out, count:out.length,
+    separate:Math.floor(spanYears/years+1e-9),
+    min:minW, max:maxW, median:pick(0.5),
+    positiveShare:out.filter(w=>w.cagr>0).length/out.length,
+    beatShare:other ? out.filter(w=>w.cagr>w.other).length/out.length : null,
+  };
+}
+// Day-to-day bumpiness of a series as a yearly figure, annualised exactly the
+// way computeReturnStats does it for every other risk number in the app
+// (population stdev of the daily moves x sqrt(trading days per year, counted
+// from the series itself)), so "the mix swung 11% a year" and a stat card's
+// risk figure are the same kind of number. null when there are too few days.
+function annualisedVol(dates, values){
+  const r=[];
+  for(let k=1;k<values.length;k++) if(values[k-1]>0) r.push(values[k]/values[k-1]-1);
+  if(r.length<20) return null;
+  const mean=r.reduce((s,x)=>s+x,0)/r.length;
+  const variance=r.reduce((s,x)=>s+(x-mean)*(x-mean),0)/r.length;
+  const spanYears=Math.max(0.05, (Date.parse(dates[dates.length-1])-Date.parse(dates[0]))/(365.25*864e5));
+  return Math.sqrt(variance)*Math.sqrt(r.length/spanYears);
+}
 
 /* =====================================================================
    REAL-INSTRUMENT PORTFOLIO MATH — ported verbatim from goalden-lab.html
@@ -1179,7 +1226,7 @@ if (typeof module !== 'undefined' && module.exports) {
     accumulationSchedule, xirr, sipBacktest, findRevertingSpikes,
     TAX_IN, holdsLongTerm, saleTaxIndia, postTaxPlanValue, postTaxFdFinal,
     marketSeries, marketName, compoundPath, marketGrowthPath,
-    rollingWindows, worstWindow, bestWindow, returnReality, stepUpAnnualPlan,
+    rollingWindows, worstWindow, bestWindow, rollingReturns, annualisedVol, returnReality, stepUpAnnualPlan,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,
     computeDailyReturns, auditPriceSeries, computeReturnStats, alignReturns,
     populationCovariance, computeCovarianceMatrix, portfolioReturn, portfolioVariance,

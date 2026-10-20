@@ -3963,8 +3963,103 @@ standing over the founder's shoulder.
   chart passes.
 - Tests: 208/208 (the two radar tests replaced by five dot-plot tests plus the
   negative-Sharpe caption case). All 13 smokes pass.
+- Committed as 6a9bc07, pushed and deployed as Worker version
+  13fb0fbc-ee32-4ada-a001-207cf84488df.
 
-### Next: Group 6
-- 08 keep-place fix, 18 verdicts and consistency, 15 pills and readout, 11
-  nudges.
+### Group 6: keep-place fix, "At a glance" verdicts, period pills, overlap nudges
+- **08, Quick Calculate (goalden.html).** Choosing a retirement what-if row
+  ("Retire at 55") no longer throws the reader back to the top of the result.
+  `render(opts)` takes a quiet flag, `retireWhatIf()` records where the compare
+  card sits (`resultKeep`) and `restoreResultPlace()` puts the page back so the
+  row that undoes the change lands where the pointer already is. The what-if
+  rows are real keyboard targets now (`role="button"`, `tabindex`, Enter and
+  Space, a `:focus-visible` outline).
+- **18, Lab: the "At a glance" card** sits directly under the period pills.
+  Four rows, each a plain word, one sentence from this page's own prices, and
+  the rule behind the word in an "i". No red or green: "behind" is
+  information, not a warning that fired.
+  - *Vs the index*: Ahead / Level (within 2%) / Behind, the money gap on the
+    same starting amount, and both yearly rates. The index is the UTI Nifty 50
+    fund for a rupee mix and SPY for a dollar mix (`LIVE_BENCH`).
+  - *Ups and downs*: the mix's yearly swing against the index fund's (under
+    0.85x calmer, 0.85x to 1.15x about the same, over 1.15x bumpier), then the
+    worst fall from a high and its month. Same annualisation as every other risk
+    figure on the page (`annualisedVol` matches `computeReturnStats` to 1e-12,
+    pinned by a test). A mix across India and US is measured on weekly moves,
+    because the two markets close on different days and the daily figure made it
+    look calmer than it was (the covariance maths already does this for pairs).
+  - *Consistency*: every rolling 3-year stretch (1-year when the window is
+    under six years) with the lowest, highest and middle yearly rate, the share
+    that ended up, and the share ahead of the index. The stretches overlap, so
+    the number of separate ones is stated (`separate`); with fewer than three the
+    word is "Too short to call", with fewer than two the row is left out. The
+    word names its horizon ("Up in every 3-year stretch"), because a stretch can
+    end up after a fall that left a buyer at the peak under water for months.
+  - *Cost*: from the plan name only. Direct / Regular (with an estimated gap,
+    `liveRegularGap`, shared with the instrument stats card) / plan type not
+    stated / ETF-REIT fee already in the price. "No fund fee" appears only when
+    every holding is a share the built-in lists positively tag as one; a ticker
+    neither list knows says the fee can't be read from here, and an index says it
+    can't be bought directly.
+  - "See every N-year stretch": the yearly rate over each stretch by its end
+    date. Mix solid blue, index dashed ink (differs in dash as well as colour),
+    no legend, direct end labels, lowest and highest tagged. The lowest and
+    highest stretches are always among the plotted points: thinning to ~400
+    points used to drop them, so "Highest 61.1%" floated above a line that
+    peaked at 54% (found while testing, fixed). Year labels are blanked when a
+    year repeats.
+  - New engine functions in goalden-engine.js: `rollingReturns(dates, values,
+    years, other)` and `annualisedVol(dates, values)`, both null when there is
+    too little data. `L.live._verdict` is rebuilt every render, and the advisor
+    sees it as `live.verdicts` only when its signature matches the mix on
+    screen.
+- **15, Lab: period pills and a readout.** 1Y / 3Y / 5Y / 10Y / Max. Every card
+  below (stats, correlation, frontier, growth, SIP, verdicts) is computed on
+  the chosen period (`liveCommonWindow`/`liveWindowStats` take the pill; the
+  window cache key includes it). A period the shared history can't fill is
+  disabled; the pills and the window use one rule (a period within 0.05 years of
+  the whole history is "Max"). The "next step" carry into the Retirement tab
+  still uses the whole history (`liveFullWindowMixRet`), so a short lucky stretch
+  is never handed on as a long-run return. The growth, SIP and rolling charts
+  have a hover and keyboard readout (`wireLabScrub`: arrows, Page Up/Down, Home,
+  End; the chart tooltip is off at phone width and the readout is a fixed
+  block, single column under 520px, so it never changes height under a finger).
+  The SIP card names the period pill when a short pill leaves too little
+  history, instead of blaming the data.
+- **11, Lab: overlap nudges** under the two-asset and multi-asset views, calm
+  gold-rule notes, silent unless something fires. (1) The most correlated held
+  pair (both at least 5%) with correlation of 0.85 or more: "move together ...
+  holding the two cuts risk by only N% compared with each on its own", judged
+  on the pair alone at their own relative weights so an unrelated third holding
+  can't make it untrue. (2) One company at 75% or more of a two-instrument mix
+  (50% for three or more) with its worst fall from the spike-cleaned panel. A
+  holding is a "company" only if the built-in lists tag it a stock; funds,
+  ETFs, REITs, indices and unknown tickers never trigger it.
+- **Short-name fix** (`liveFundBase`): "UTI - Nifty Next 50 Index Fund" used to
+  be shortened to "UTI", so two UTI funds looked identical in the new text.
+- **Accessibility:** closed accordion panels (`.explain-panel` in the Lab,
+  `.assump-panel` in Quick Calculate) are `visibility:hidden` after the close
+  animation, so their rows and sliders are no longer in the tab order. The
+  slim tab bar and print keep them visible.
+- Checked in a real browser at 1280x900 and 375px: the card at every pill (Max,
+  10Y, 5Y, 3Y, 1Y), the 3-fund view, a two-market mix (RELIANCE.NS + SPY), an
+  unknown ticker (SETFNIF50.NS), the chart with its tags, readout and axis
+  labels, no console errors.
+- Independent Opus review: no crashes or wrong numbers, three honesty problems,
+  all fixed: "Never lost money" overclaimed (now names the horizon and admits
+  thin history), the cost row said "No fund fee" for tickers it could not
+  identify, and the mix's swing used same-day moves across two markets. Its
+  small items were done too: "0%" no longer shown when a few stretches did
+  qualify ("under 1%"), "1 years" in the tooltip, fund names escaped, the
+  pills/window rule, and the hidden-panel tab order above.
+- Not done: the Quick Calculate "See how we got this number" toggle is a div
+  and can't be opened from the keyboard (Group 8, item 10). The rolling-stretches
+  section closes again when a period pill is clicked (the screen is rebuilt).
+  `barComparisonChartOption` still has a legend and an orange series colour.
+- Tests: 214/214 (6 new for `rollingReturns` and `annualisedVol`). All 13
+  existing smokes pass, plus the new smoke-17 (34 structural checks for the
+  above, including "no pie or radar" and "no legend on the rolling chart").
+
+### Next: Group 7
+- 16 EPF/PPF/NPS, 17 harvesting, 05 stress test.
 
