@@ -4059,7 +4059,84 @@ standing over the founder's shoulder.
 - Tests: 214/214 (6 new for `rollingReturns` and `annualisedVol`). All 13
   existing smokes pass, plus the new smoke-17 (34 structural checks for the
   above, including "no pie or radar" and "no legend on the rolling chart").
+- Committed as 865842d, pushed and deployed as Worker version
+  a80ba163-c927-4d23-9ba3-bc02c6fda2db.
 
-### Next: Group 7
-- 16 EPF/PPF/NPS, 17 harvesting, 05 stress test.
+### Group 7: EPF/PPF/NPS, tax-gain harvesting, stress test in the Lab
+- **16, Quick Calculate (India, retirement only): EPF, PPF and NPS count
+  toward the pot.** A "Count my EPF, PPF and NPS" panel on the result screen
+  (a real form with an Update button, so the plan does not redraw under the
+  typing hand). Six boxes: EPF balance and basic pay (with a PF-wage choice:
+  PF on full basic, or only up to the wage ceiling), PPF balance and yearly
+  deposit, NPS balance and monthly contribution. What the accounts will hold at
+  the retirement date comes off the target pot, so the SIP shrinks; the action
+  card says what it would have been without them. NPS counts only its tax-free
+  share (60% at 60, 20% if you leave before 60). The maths is in
+  goalden-engine.js (`RETIRE_ACCOUNTS_IN`, `epfFutureValue`, `ppfFutureValue`,
+  `npsFutureValue`, `retirementAccountsFV`), tested against by-hand figures
+  (PPF 1.5 lakh a year for 15 years at 7.1% = Rs 40.68 lakh).
+  - If existing savings were entered, the panel warns that any EPF/PPF/NPS in
+    that box would count twice, and India's question 3 now reads "other than
+    EPF, PPF and NPS".
+  - A plan already covered by existing savings plus the accounts says what the
+    growth chart and schedule show ("only your existing savings growing to
+    X; your EPF, PPF and NPS cover the rest") instead of ending short of the pot.
+  - The FD comparison leaves the accounts out of both sides and says so. The
+    Lab hand-off, the advisor (`epfPpfNpsCountedAtRetirement`) and the
+    result's open panels all know about the accounts; Start over, a persona, a
+    country change and a new goal clear them.
+  - **Finding to report (EPF wage ceiling).** The research review called the
+    Rs 25,000 PF wage ceiling "approved, not yet notified". It has since been
+    notified (S.O. 5109(E)) and is in force from 17 September 2026. The EPS
+    wage cap of Rs 15,000 was not changed, so the employer's 8.33% for the
+    pension scheme is still worked out on at most Rs 15,000. Both are in the
+    dated table with these rates: EPF 8.25% (FY 2025-26), PPF 7.1%
+    (Oct-Dec 2026). Re-check them once a year.
+- **17, Quick Calculate (India, retirement): tax-gain harvesting.** A card in
+  the details panel and `harvestPlan` in the engine: each year, sell units
+  holding up to the Rs 1.25 lakh long-term allowance of gain and buy the same
+  fund back, so the next sale starts from a higher cost. Units go out oldest
+  first. The chart has two lines (with and without) that differ by dash and
+  weight as well as colour, no legend, direct end labels.
+  - Deviations from the research example (47.3 / 43.0 / 4.3 lakh), on purpose:
+    "long term" means strictly more than 12 months at the goal date, a unit
+    is only harvested at 12 months or more, each year's harvest date moves a
+    few days later than the last so re-bought units are still over 12 months
+    old, and the last two years are never harvested (re-bought units would
+    not be long term at the sale). The figures are therefore a little lower
+    than the research page's.
+  - A year-end sale only gets the allowance the harvest left over (the
+    allowance is spent once); a test pins this.
+- **05, Quick Calculate to Lab: "Stress-test this plan in the Lab".** India
+  retirement plans that need a SIP get a second call-to-action (it does not
+  pulse; only "The Case" does) that hands the plan's inputs to the Lab's
+  Retirement tab as a one-shot message. The Lab clamps every value to its
+  slider range and snaps it to the slider's own step (the number box shows
+  `slider.value`, so an off-step value like Balanced's 9.95% would show one
+  figure and quietly become another), then says where the plan came from, what
+  moved, and that the monthly figure already counts the EPF/PPF/NPS the Lab
+  does not model. A `?tab=` deep link drops a stale hand-off instead of
+  replaying it later.
+- **Opus review**: four must-fix items, all fixed: (1) the year-end tax figure
+  for a harvested pot reused an allowance the same year had already spent;
+  (2) the harvested year-end figure used the harvest clock instead of the
+  strict clock at the goal date; (3) the existing-savings box invited EPF
+  balances (double count); (4) the covered-plan chart ended at an unexplained
+  height. Also the Lab off-step values above.
+- Checked in a real browser at 1280x900 and 375px: accounts panel (open,
+  update, clear, keyboard), covered plan with existing savings plus EPF,
+  harvest card and chart, Lab hand-off. The Quick Calculate test case (age 30
+  to 60, Rs 50,000 a month, Balanced) still gives a Rs 4.7 Cr pot and Rs 22,906 a month.
+- Not done: the Lab's "started from your Quick Calculate plan" note stays after
+  the user changes values, and a hand-off has no expiry (the same design as the
+  Full Plan's). PPF's 15-year lock-in is only a note, EPF interest above the
+  Rs 2.5 lakh tax threshold and surcharge are not modelled.
+- Tests: 224/224 (10 new: 5 for EPF/PPF/NPS, 5 for harvesting incl. its year-end rule).
+  All 15 smokes pass, plus the new smoke-18 (50 structural checks for 05, 16
+  and 17).
+
+### Next: Group 8
+- 10 keyboard (including the Quick Calculate "See how we got this number"
+  toggles, which are divs and cannot be opened from the keyboard), 03 A theme,
+  14 live canvas, 20, 21, 07, and 08's ghost line / scrub chart.
 

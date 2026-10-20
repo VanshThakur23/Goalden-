@@ -337,6 +337,168 @@ function postTaxFdFinal(sip, years, fdRate, slab) {
   return accumulationSchedule({ sip: sip, rate: effectiveMonthlyRate(net), periods: years * 12, due: true, stepUp: 0 }).finalBalance;
 }
 
+/* ---------------------------------------------------------------------
+   EPF, PPF and NPS: money a salaried Indian is already putting away for
+   retirement. Rates are DATED constants: re-check them once a year.
+     EPF 8.25%: FY 2025-26, recommended by the EPFO's Central Board of
+                Trustees in March 2026 and ratified by the government.
+     PPF 7.1%:  October-December 2026 quarter (unchanged since April 2020).
+     NPS:       market-linked, so there is no declared rate; the plan's own
+                growth rate is used. Only the tax-free part is counted: 60%
+                of the pot at 60 (non-government subscribers can take up to
+                80% as cash since PFRDA's December 2025 amendment, but cash
+                beyond 60% is taxable and at least 20% must buy an annuity),
+                and 20% when exiting before 60.
+   PF wage ceiling: Rs 25,000 since 17 September 2026 (S.O. 5109(E); it was
+   Rs 15,000 from September 2014). The pension scheme's own cap on EPS
+   (paragraph 11(3), Rs 15,000) was not amended by that notification, so the
+   employer's 8.33% for EPS is still worked out on at most Rs 15,000.
+   --------------------------------------------------------------------- */
+const RETIRE_ACCOUNTS_IN = {
+  asOf: 'October 2026',
+  epf: { rate: 0.0825, rateFor: 'FY 2025-26', employee: 0.12, employer: 0.12, epsShare: 0.0833,
+         epsWageCap: 15000, wageCeiling: 25000, ceilingFrom: '17 September 2026' },
+  ppf: { rate: 0.071, rateFor: 'Oct-Dec 2026', yearlyMax: 150000 },
+  nps: { shareAt60: 0.6, shareBefore60: 0.2 },
+};
+// A negative, missing or non-numeric box counts as nothing (values can come
+// back from saved browser state, so they are never trusted as numbers).
+const accNum = v => { v = Number(v); return isFinite(v) && v > 0 ? v : 0; };
+
+// EPF, per month: 12% of the PF wage from the employee, plus the employer's
+// 12% minus the part that goes to the pension scheme (EPS: 8.33% of the wage,
+// on at most Rs 15,000). wageMode 'ceiling' means the employer pays PF only on
+// pay up to the PF wage ceiling; anything else means on the full basic pay.
+function epfMonthlyContribution(basic, wageMode) {
+  const r = RETIRE_ACCOUNTS_IN.epf, b = accNum(basic);
+  const wage = wageMode === 'ceiling' ? Math.min(b, r.wageCeiling) : b;
+  const eps = Math.min(wage, r.epsWageCap) * r.epsShare;
+  return wage * r.employee + Math.max(0, wage * r.employer - eps);
+}
+// Interest is worked out monthly on the running balance and credited once a
+// year, which is how the EPFO does it. Pay rises once a year by payRise.
+function epfFutureValue(o) {
+  const r = RETIRE_ACCOUNTS_IN.epf, rate = o.rate == null ? r.rate : o.rate;
+  let bal = accNum(o.balance), basic = accNum(o.basic);
+  for (let y = 0; y < o.years; y++) {
+    let interest = 0;
+    const monthly = epfMonthlyContribution(basic, o.wageMode);
+    for (let m = 0; m < 12; m++) { bal += monthly; interest += bal * rate / 12; }
+    bal += interest;
+    basic *= 1 + (o.payRise || 0);
+  }
+  return bal;
+}
+
+// PPF: one deposit a year, made before 5 April so it earns the whole year's
+// interest; interest compounds yearly. Deposits are capped at Rs 1.5 lakh.
+function ppfFutureValue(o) {
+  const r = RETIRE_ACCOUNTS_IN.ppf, rate = o.rate == null ? r.rate : o.rate;
+  const yearly = Math.min(accNum(o.yearly), r.yearlyMax);
+  let bal = accNum(o.balance);
+  for (let y = 0; y < o.years; y++) bal = (bal + yearly) * (1 + rate);
+  return bal;
+}
+
+// NPS: monthly contributions at the plan's own rate (start of month).
+function npsFutureValue(o) {
+  const m = Math.pow(1 + o.rate, 1 / 12) - 1;
+  let bal = accNum(o.balance);
+  for (let k = 0; k < o.years * 12; k++) bal = (bal + accNum(o.monthly)) * (1 + m);
+  return bal;
+}
+function npsCountedShare(retireAge) {
+  const r = RETIRE_ACCOUNTS_IN.nps;
+  return retireAge != null && retireAge < 60 ? r.shareBefore60 : r.shareAt60;
+}
+
+// All three at the retirement date, and how much of them the plan can count.
+// acc = { epfBal, epfBasic, epfWage, ppfBal, ppfYearly, npsBal, npsMonthly };
+// opts.retireAge sets how much of NPS can be taken as tax-free cash.
+function retirementAccountsFV(acc, years, planRate, payRise, opts) {
+  const a = acc || {}, o = opts || {};
+  const epf = epfFutureValue({ balance: a.epfBal, basic: a.epfBasic, years, payRise, wageMode: a.epfWage });
+  const ppf = ppfFutureValue({ balance: a.ppfBal, yearly: a.ppfYearly, years });
+  const nps = npsFutureValue({ balance: a.npsBal, monthly: a.npsMonthly, years, rate: planRate });
+  const npsShare = npsCountedShare(o.retireAge);
+  const npsCounted = nps * npsShare;
+  return { epf, ppf, nps, npsShare, npsCounted, counted: epf + ppf + npsCounted };
+}
+
+/* ---------------------------------------------------------------------
+   Tax-GAIN harvesting (not tax-loss harvesting). Each financial year the
+   first Rs 1.25 lakh of long-term equity gains is tax-free. Selling units
+   that hold that much gain and buying them straight back "books" the gain
+   tax-free and raises what those units cost, so less gain is taxed when
+   everything is finally sold. A monthly SIP is modelled lot by lot:
+     - units are sold first-in, first-out (how fund houses count a redemption);
+     - only units more than 12 months old are harvested. The model's clock is
+       whole months, so a harvest "at month 12" stands for a few days after
+       the anniversary, which is what the investor has to do for the units to
+       be over a year old;
+     - re-bought units start a new 12-month clock;
+     - the last two years are not harvested. A re-bought unit must be more
+       than 12 months old on the day of the final sale to be taxed as
+       long-term, and the final sale is on the goal date, not a few days
+       after it, so a harvest in the year before the goal would leave short-
+       term (20%) units behind.
+   The final sale uses the Act's "more than 12 months" strictly: a lot
+   bought exactly 12 months before the goal date is still short term.
+   Surcharge is not modelled (see TAX_IN). Returns the tax if everything is
+   sold at the goal with and without harvesting, and both figures at the end
+   of every year (for a chart).
+   o = { monthly, years, rate (yearly, e.g. 0.12) }.
+   --------------------------------------------------------------------- */
+function harvestPlan(o) {
+  const t = TAX_IN, ltRate = t.equityLtcg * (1 + t.cess), stRate = t.equityStcg * (1 + t.cess);
+  const m = Math.pow(1 + o.rate, 1 / 12) - 1, nav = k => Math.pow(1 + m, k);
+  // exempt: what is left of this year's allowance. A harvest uses part of it, and
+  // a sale in the same financial year only gets the rest, so the year-end figure
+  // for the harvested pot passes exemption - booked (selling everything in the
+  // very year you harvested saves nothing extra: the allowance is spent once).
+  // strict: the final sale on the goal date needs MORE than 12 months. The other
+  // year-end figures (the chart's earlier points) use the harvest's own clock, a
+  // few days after the anniversary, so a lot is long term from month 12; with the
+  // strict clock they would tax a lot the harvest has just treated as long term.
+  const taxIfSold = (lots, T, exempt, strict) => {
+    let lt = 0, st = 0;
+    lots.forEach(l => { const g = l.units * nav(T) - l.cost; if (strict ? T - l.k > 12 : T - l.k >= 12) lt += g; else st += g; });
+    return Math.max(0, lt - exempt) * ltRate + Math.max(0, st) * stRate;
+  };
+  let plain = [], harvested = [];
+  const years = [];
+  let bookedTotal = 0, harvests = 0;
+  for (let y = 1; y <= o.years; y++) {
+    for (let k = (y - 1) * 12; k < y * 12; k++) {   // 12 monthly buys, at the start of each month
+      const lot = { units: o.monthly / nav(k), cost: o.monthly, k };
+      plain.push(lot); harvested.push(Object.assign({}, lot));
+    }
+    const T = y * 12;
+    let booked = 0;
+    if (y <= o.years - 2) {
+      let room = t.equityLtcgExemption;
+      const next = [], rebought = [];
+      for (const l of harvested) {
+        const g = l.units * nav(T) - l.cost;
+        if (room <= 0 || T - l.k < 12 || g <= 0) { next.push(l); continue; }
+        const f = Math.min(1, room / g);
+        room -= f * g; booked += f * g;
+        rebought.push({ units: l.units * f, cost: l.units * f * nav(T), k: T });
+        if (f < 1) next.push({ units: l.units * (1 - f), cost: l.cost * (1 - f), k: l.k });
+      }
+      harvested = next.concat(rebought);   // re-bought units are the newest, so they sell last
+      if (booked > 0) harvests++;
+    }
+    bookedTotal += booked;
+    const last = y === o.years;
+    years.push({ year: y, booked, taxPlain: taxIfSold(plain, T, t.equityLtcgExemption, last), taxHarvested: taxIfSold(harvested, T, t.equityLtcgExemption - booked, last) });
+  }
+  const end = years[years.length - 1];
+  const value = plain.reduce((s, l) => s + l.units * nav(o.years * 12), 0);
+  return { years, value, paidIn: o.monthly * 12 * o.years, booked: bookedTotal, harvests,
+    taxPlain: end.taxPlain, taxHarvested: end.taxHarvested, saved: end.taxPlain - end.taxHarvested };
+}
+
 /* =====================================================================
    REAL HISTORICAL MARKET DATA
    Sensex: fiscal-year (April-to-April) annual returns, FY1979-80 through
@@ -1224,7 +1386,8 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     inflateExpense, realRate, corpusRequired, solveSIP, effectiveMonthlyRate,
     accumulationSchedule, xirr, sipBacktest, findRevertingSpikes,
-    TAX_IN, holdsLongTerm, saleTaxIndia, postTaxPlanValue, postTaxFdFinal,
+    TAX_IN, holdsLongTerm, saleTaxIndia, postTaxPlanValue, postTaxFdFinal, harvestPlan,
+    RETIRE_ACCOUNTS_IN, epfMonthlyContribution, epfFutureValue, ppfFutureValue, npsFutureValue, npsCountedShare, retirementAccountsFV,
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow, rollingReturns, annualisedVol, returnReality, stepUpAnnualPlan,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,

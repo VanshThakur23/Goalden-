@@ -3038,6 +3038,83 @@ test('postTaxPlanValue: under the exemption pays nothing; above it 12.5% + cess,
   // eq gain 5 L -> (5 L - 1.25 L) x 0.125 x 1.04 = 48,750; debt gain 5 L x 0.2 x 1.04 = 1,04,000
   assert.strictEqual(Math.round(r.tax), 152750);
 });
+// ---- Handoff 16: EPF, PPF and NPS ------------------------------------------
+test('PPF: Rs 1.5 lakh a year for 15 years at 7.1% is the widely quoted Rs 40.68 lakh', () => {
+  const v = engine.ppfFutureValue({ balance: 0, yearly: 150000, years: 15 });
+  assert.ok(Math.abs(v - 4068209) < 50, 'got ' + v);
+  // deposits above the yearly cap are not counted
+  approx(engine.ppfFutureValue({ balance: 0, yearly: 500000, years: 1 }), 150000 * 1.071);
+});
+test('EPF: contribution and one year of interest, worked by hand', () => {
+  // basic 50,000: 12% from you (6,000) + employer 12% minus EPS 8.33% of 15,000 (1,249.50) = 10,750.50
+  approx(engine.epfMonthlyContribution(50000), 10750.5);
+  // below the EPS wage cap the employer's EPF share is 12% - 8.33% = 3.67%
+  approx(engine.epfMonthlyContribution(12000), 12000 * (0.24 - 0.0833));
+  // interest on the running balance, 8.25%/12 a month, credited at year end
+  approx(engine.epfFutureValue({ balance: 0, basic: 50000, years: 1 }), 129006 + 10750.5 * 78 * 0.0825 / 12);
+  approx(engine.epfFutureValue({ balance: 100000, basic: 0, years: 2 }), 100000 * 1.0825 * 1.0825);
+});
+test('EPF: PF only up to the Rs 25,000 wage ceiling; the EPS part still stops at Rs 15,000', () => {
+  // full basic 40,000: 4,800 + (4,800 - 1,249.50) = 8,350.50
+  approx(engine.epfMonthlyContribution(40000), 8350.5);
+  // ceiling mode: PF on 25,000 only = 3,000 + (3,000 - 1,249.50) = 4,750.50
+  approx(engine.epfMonthlyContribution(40000, 'ceiling'), 4750.5);
+  // pay under the ceiling: both modes agree
+  approx(engine.epfMonthlyContribution(20000, 'ceiling'), engine.epfMonthlyContribution(20000));
+  assert.ok(engine.epfFutureValue({ balance: 0, basic: 40000, years: 20, wageMode: 'ceiling' }) < engine.epfFutureValue({ balance: 0, basic: 40000, years: 20 }));
+});
+test('NPS: only the tax-free 60% is counted at 60, and 20% when leaving before 60', () => {
+  const r = engine.retirementAccountsFV({ npsBal: 100000 }, 0, 0.10, 0);
+  approx(r.nps, 100000);
+  approx(r.counted, 60000);
+  approx(engine.retirementAccountsFV({ npsBal: 100000 }, 0, 0.10, 0, { retireAge: 55 }).counted, 20000);
+  approx(engine.retirementAccountsFV({ npsBal: 100000 }, 0, 0.10, 0, { retireAge: 60 }).counted, 60000);
+});
+test('retirement accounts: blank, negative or junk boxes count as nothing', () => {
+  assert.strictEqual(engine.retirementAccountsFV(null, 10, 0.1, 0.06).counted, 0);
+  assert.strictEqual(engine.retirementAccountsFV({ epfBal: -5, ppfBal: 'abc', npsBal: NaN }, 10, 0.1, 0.06).counted, 0);
+});
+
+// ---- Handoff 17: tax-gain harvesting ---------------------------------------
+test('harvesting: nothing to harvest in a short SIP, and a one-year SIP is all short term', () => {
+  const h = engine.harvestPlan({ monthly: 10000, years: 1, rate: 0.12 });
+  assert.strictEqual(h.booked, 0);
+  assert.strictEqual(h.saved, 0);
+  // every lot is 12 months old or less on the goal date, so the Act's "more than 12 months" is not met
+  approx(h.taxPlain, (h.value - h.paidIn) * 0.20 * 1.04, 1e-9);
+  assert.strictEqual(engine.harvestPlan({ monthly: 10000, years: 2, rate: 0.12 }).booked, 0, 'the last two years are never harvested');
+});
+test('harvesting: every rupee booked tax-free saves 12.5% + cess at the end', () => {
+  const h = engine.harvestPlan({ monthly: 25000, years: 25, rate: 0.12 });
+  assert.ok(h.booked > 0 && h.harvests > 0);
+  approx(h.saved, h.booked * engine.TAX_IN.equityLtcg * (1 + engine.TAX_IN.cess), 1e-6);
+  assert.ok(h.booked <= engine.TAX_IN.equityLtcgExemption * (25 - 2) + 1, 'at most the allowance a year, and none in the last two years');
+  assert.ok(h.harvests <= 23);
+  assert.ok(h.years.every(y => y.booked <= engine.TAX_IN.equityLtcgExemption + 1e-6), 'never more than one allowance in a year');
+  assert.ok(h.years.every(y => y.taxHarvested <= y.taxPlain + 1e-6), 'never more tax than not harvesting');
+  assert.strictEqual(h.years[23].booked, 0);
+  assert.strictEqual(h.years[24].booked, 0);
+});
+test('harvesting: a year-end sale cannot use an allowance the same year already harvested', () => {
+  const h = engine.harvestPlan({ monthly: 25000, years: 25, rate: 0.12 });
+  const lt = engine.TAX_IN.equityLtcg * (1 + engine.TAX_IN.cess);
+  let before = 0;   // gains booked in EARLIER years
+  h.years.forEach(y => {
+    // selling everything in year y can only be helped by harvests made before year y
+    assert.ok(y.taxPlain - y.taxHarvested <= before * lt + 1e-6, 'year ' + y.year + ': saving ' + (y.taxPlain - y.taxHarvested) + ' exceeds what was booked earlier');
+    before += y.booked;
+  });
+});
+test('harvesting: the SIP itself is unchanged (start-of-month buys)', () => {
+  const h = engine.harvestPlan({ monthly: 25000, years: 25, rate: 0.12 });
+  const m = Math.pow(1.12, 1 / 12) - 1;
+  approx(h.value, 25000 * ((Math.pow(1 + m, 300) - 1) / m) * (1 + m), 1e-9);
+  assert.strictEqual(h.paidIn, 25000 * 300);
+});
+test('harvesting: gains that never pass the allowance owe nothing either way', () => {
+  const h = engine.harvestPlan({ monthly: 1000, years: 5, rate: 0.12 });
+  assert.ok(Math.abs(h.saved) < 1e-9, 'nothing to save when the long-term gains stay under the allowance');
+});
 test('saleTaxIndia: a short-term loss goes to taxed gains before the exempt Rs 1.25 L', () => {
   // ST equity loss 50k, LT equity gain 1 L (all inside the exemption), a debt
   // fund's slab gain 50k at 15%: the loss should wipe the slab gain -> no tax.

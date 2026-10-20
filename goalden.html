@@ -257,6 +257,23 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .assump-panel.detail-panel.open{max-height:8000px}
 .assump-inner{padding:4px 2px 18px;font-size:12.5px;color:rgba(20,40,63,.74);line-height:1.8}
 .assump-inner b{color:var(--paper)}
+/* EPF / PPF / NPS panel under the action card. */
+.acc-toggle.has{color:var(--paper);text-decoration-color:var(--gold)}
+#acct:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.acc-card{padding:6px 0 14px}
+.acc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin-top:10px}
+.acc-field{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--body)}
+.acc-in{display:flex;align-items:baseline;gap:6px;padding:4px 0;border-bottom:1px solid rgba(20,40,63,.22)}
+.acc-in:focus-within{border-bottom-color:var(--gold);box-shadow:0 2px 0 var(--gold)}
+.acc-in input{flex:1;min-width:0;border:0;outline:none;background:transparent;font-family:'Newsreader',serif;font-size:19px;font-weight:600;color:var(--paper);-moz-appearance:textfield}
+.acc-in input::-webkit-outer-spin-button,.acc-in input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.acc-field small{font-size:11px;color:var(--dim);line-height:1.35}
+.acc-wage{border:0;padding:0;margin:14px 0 0}
+.acc-wage legend{font-size:12px;color:var(--body);padding:0;margin-bottom:6px}
+.acc-wage label{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--body);margin-bottom:6px;cursor:pointer}
+.acc-wage input{accent-color:var(--gold);margin-top:3px}
+.acc-status{min-height:1.4em;margin:10px 0 8px;outline:none}
+@media(max-width:420px){.acc-grid{grid-template-columns:1fr}}
 /* Advanced allocation override -- attached inline to a flat post-goal
    rate line, opt-in, collapsed by default unless already customized. */
 .adv-toggle{display:inline-flex;align-items:center;gap:5px;font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--gold);cursor:pointer;margin:2px 0 4px;text-align:left}
@@ -286,6 +303,8 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .case-cta button{background:var(--gold);color:#fff;border:none;font-family:'Figtree',sans-serif;font-weight:700;font-size:15.5px;padding:15px 30px;border-radius:3px 12px 12px 12px;cursor:pointer;box-shadow:0 4px 14px rgba(37,87,199,.3);transition:transform .15s ease}
 .case-cta button:hover{transform:translateY(-1px)}
 .case-cta button:after{content:" →"}
+/* Two pulsing cards at the foot of the result would compete; only the original one pulses. */
+.case-cta.lab-cta{animation:none;margin-top:22px}
 .restart-row{padding:6px 0 28px;text-align:center}
 .restart-row button{background:none;border:1px solid rgba(20,40,63,.2);color:rgba(20,40,63,.74);font-family:'Spline Sans Mono',monospace;font-size:12px;padding:10px 20px;border-radius:3px;cursor:pointer}
 .personas{display:grid;gap:8px;margin-top:14px}
@@ -497,6 +516,11 @@ const S = {
   risk: null, si: 0, quickEdit: false,
   persona: null, // id of the example person a plan was opened from (PERSONAS)
   taxSlab: null,  // income-tax slab %, for the after-tax FD card; null = TAX_IN.defaultSlab (20)
+  // India retirement only: what the person already has in EPF, PPF and NPS, as
+  // {epfBal, epfBasic, epfWage:'full'|'ceiling', ppfBal, ppfYearly, npsBal, npsMonthly};
+  // null = none. What they will hold at retirement comes off the pot the SIP has
+  // to build (calcRetirement). Always read through accClean().
+  acc: null,
   // Advanced, opt-in overrides for the flat post-goal rate (d.postRet /
   // d.debt). null = use the flat default; {eq,de,hy} once the user has
   // picked a custom post-goal mix via the "Advanced" control under the
@@ -551,6 +575,22 @@ function allocFromEquityPct(eqPct, base) {
 /* =====================================================================
    CALCULATION
    ===================================================================== */
+// Saved browser state and the advisor can both hand calcRetirement a half-formed
+// or tampered S.acc, so the boxes are cleaned here rather than trusted: anything
+// that is not a positive number becomes 0, whole rupees only, capped at Rs 100
+// crore (the ceiling existing savings already has), the PPF deposit capped at its
+// yearly limit, and the PF-wage choice is one of two words. Returns null when
+// nothing is left, so "no accounts" has exactly one shape.
+const ACC_KEYS = ['epfBal', 'epfBasic', 'ppfBal', 'ppfYearly', 'npsBal', 'npsMonthly'];
+function accClean(a) {
+  if (!a || typeof a !== 'object') return null;
+  const out = { epfWage: a.epfWage === 'ceiling' ? 'ceiling' : 'full' };
+  let any = false;
+  ACC_KEYS.forEach(k => { const v = Math.floor(Number(a[k])); out[k] = isFinite(v) && v > 0 ? Math.min(v, 1e9) : 0; if (out[k] > 0) any = true; });
+  out.ppfYearly = Math.min(out.ppfYearly, RETIRE_ACCOUNTS_IN.ppf.yearlyMax);
+  return any ? out : null;
+}
+
 function calcRetirement() {
   const d = cfg().d, c = cfg();
   const yrs = S.retireAge - S.age;
@@ -564,18 +604,28 @@ function calcRetirement() {
   const mRate = effectiveMonthlyRate(preRate);
   // Existing savings are assumed to stay invested the same way the new SIP
   // will be, so both compound at the same mRate. That keeps the identity
-  // exact: existingFV + gapCorpus always equals the full target corpus,
-  // which is what the accumulation chart below needs to land on.
+  // exact: existingFV + gapCorpus equals the target corpus less whatever EPF,
+  // PPF and NPS cover (below), which is where the accumulation chart lands.
   const existing = S.existingSavings || 0;
   const existingFV = existing * Math.pow(1 + mRate, yrs * 12);
-  const gapCorpus = Math.max(0, corpus - existingFV);
-  const alreadyMet = existing > 0 && gapCorpus === 0;
+  // EPF, PPF and NPS (India): what they will hold at retirement is counted
+  // against the pot, so the SIP only builds the rest. The accumulation chart
+  // therefore ends at corpus - accCounted, not at the full pot, and says so.
+  // Pay rises with prices (d.inflation); NPS grows at the plan's own rate.
+  const acc = c.code === 'IN' ? accClean(S.acc) : null;
+  const accFV = acc ? retirementAccountsFV(acc, yrs, preRate, d.inflation, { retireAge: S.retireAge }) : null;
+  const accCounted = accFV ? accFV.counted : 0;
+  const gapCorpus = Math.max(0, corpus - existingFV - accCounted);
+  const alreadyMet = (existing > 0 || accCounted > 0) && gapCorpus === 0;
   const sip = alreadyMet ? 0 : solveSIP(mRate, yrs * 12, gapCorpus, true);
+  // The same plan without the accounts, so the card can say what they save.
+  const gapNoAcc = Math.max(0, corpus - existingFV);
+  const sipWithoutAcc = accCounted > 0 ? (gapNoAcc === 0 ? 0 : solveSIP(mRate, yrs * 12, gapNoAcc, true)) : sip;
   const realCorpus = corpus / Math.pow(1 + d.inflation, yrs);
   const accRows = accumulationSchedule({sip, rate: mRate, periods: yrs * 12, due: true, opening: existing, stepUp: 0}).rows;
   const drawRows = drawdownSchedule({openingCorpus: corpus, firstWithdrawal: expAtRet, inflation: d.inflation, nominalRate: postRetRate, years: drawYrs, due: true});
   const delay = alreadyMet ? null : calcDelay(gapCorpus, mRate, yrs);
-  return {corpus, sip, realCorpus, preRate, postRetRate, expAtRet, yrs, drawYrs, accRows, drawRows, delay, d, existing, existingFV, gapCorpus, alreadyMet};
+  return {corpus, sip, realCorpus, preRate, postRetRate, expAtRet, yrs, drawYrs, accRows, drawRows, delay, d, existing, existingFV, gapCorpus, alreadyMet, acc: accFV, accCounted, sipWithoutAcc};
 }
 
 // A one-tap "what if I retired at a different age" comparison. Reuses
@@ -1023,6 +1073,7 @@ function assumpRetirement(r) {
     advAllocControl('ret') +
     '<b>How long the pot lasts:</b> to age '+r.d.lifeExp+'. A planning default, not a prediction about you specifically.<br>' +
     (r.existing>0 ? '<b>Existing savings:</b> '+c.compact(r.existing)+' assumed to stay invested at the same rate as your new SIP, growing to '+c.compact(r.existingFV)+' by age '+S.retireAge+'.<br>' : '') +
+    (r.accCounted>0 ? '<b>EPF, PPF and NPS:</b> expected to hold '+c.compact(r.acc.epf+r.acc.ppf+r.acc.nps)+' by age '+S.retireAge+'. '+c.compact(r.accCounted)+' of it is counted, the part that can be taken out tax-free: EPF and PPF in full, '+Math.round(r.acc.npsShare*100)+'% of NPS. EPF grows at '+(RETIRE_ACCOUNTS_IN.epf.rate*100).toFixed(2)+'%, PPF at '+(RETIRE_ACCOUNTS_IN.ppf.rate*100).toFixed(1)+'%, NPS at your plan\'s '+(r.preRate*100).toFixed(1)+'%.<br>' : '') +
     '<b>None of these are guarantees.</b> They are the same conservative starting numbers a real adviser would use.';
 }
 
@@ -1103,7 +1154,7 @@ function personasHtml() {
 // of them is still what's on screen; after an edit the plan is the user's own.
 function personaNoteHtml() {
   const p = S.persona && PERSONAS.find(x => x.id === S.persona);
-  if (!p || !Object.keys(p.S).every(k => S[k] === p.S[k]) || S.postRetAlloc || S.eduAlloc) return '';
+  if (!p || !Object.keys(p.S).every(k => S[k] === p.S[k]) || S.postRetAlloc || S.eduAlloc || S.acc) return '';
   return '<div class="persona-note">Example plan: <b>' + p.name + '</b>, ' + p.line + '. Change anything; it becomes your own.</div>';
 }
 
@@ -1165,7 +1216,7 @@ function sExpense() {
     (()=>{const b=sliderBounds(c.expChips);return valueSlider('inpSlider', S.monthlyExpense||b.min, b.min, b.max, b.step, c.compact(b.min), c.compact(b.max));})() +
     '<div class="chips-label">Or pick a common amount</div>' +
     '<div class="chips">'+c.expChips.map(a=>'<div class="chip'+(S.monthlyExpense===a?' selected':'')+'" data-exp="'+a+'">'+c.compact(a)+'</div>').join('')+'</div>' +
-    '<div class="optional-field"><div class="optional-label">Already have retirement savings? (optional)</div>' +
+    '<div class="optional-field"><div class="optional-label">'+(c.code==='IN' ? 'Already have retirement savings other than EPF, PPF and NPS? (optional)' : 'Already have retirement savings? (optional)')+'</div>' +
     '<div class="num-wrap-sm"><span class="num-prefix-sm">'+c.sym+'</span><input class="num-input-sm" id="inpSav" type="number" inputmode="numeric" placeholder="0" value="'+(S.existingSavings||'')+'"></div>' +
     (()=>{const b=sliderBounds(c.amtChips,6,0);return valueSlider('inpSavSlider', S.existingSavings||0, 0, b.max, b.step, c.compact(0), c.compact(b.max));})() +
     '</div>' +
@@ -1396,12 +1447,14 @@ function fdSlabPct() { return TAX_IN.newRegimeSlabs.includes(S.taxSlab) ? S.taxS
 // for retirement and education, gap for a purchase goal). Savings the person
 // already has are left out of BOTH sides: before, the plan side got them and
 // the FD side didn't, which flattered the plan.
-function fdComparisonCardHtml(sip, years, planSipValue, d, c) {
+function fdComparisonCardHtml(sip, years, planSipValue, d, c, hasAcc) {
   const mFd = effectiveMonthlyRate(d.fdRate);
   const fdFinal = accumulationSchedule({sip: sip, rate: mFd, periods: years*12, due: true, stepUp: 0}).finalBalance;
   const preGap = planSipValue - fdFinal;
   const title = '<div class="chart-title">The same ' + c.fmt(Math.round(sip)) + '/month, in a Fixed Deposit instead</div>';
-  const savedNote = (S.existingSavings || 0) > 0 ? ' Only the monthly SIP is compared; savings you already have are left out of both sides.' : '';
+  // hasAcc: the retirement plan counted EPF, PPF and NPS, which are left out of both sides too.
+  const leftOut = [(S.existingSavings || 0) > 0 ? 'savings you already have' : '', hasAcc ? 'your EPF, PPF and NPS' : ''].filter(Boolean);
+  const savedNote = leftOut.length ? ' Only the monthly SIP is compared; ' + leftOut.join(' and ') + ' are left out of both sides.' : '';
   if (c.code !== 'IN') {
     return '<div class="chart-card fd-card">' + title +
       '<div class="chart-caption">A typical multi-year bank CD, around ' + (d.fdRate*100).toFixed(1) + '%/yr, before tax (tax is modelled for India only).</div>' +
@@ -1420,7 +1473,7 @@ function fdComparisonCardHtml(sip, years, planSipValue, d, c) {
   // The figures that rebuild this card on a chip tap ride on the card itself,
   // so the tap redraws only the card: a full render() would close the
   // details panel it sits in and jump to the top.
-  return '<div class="chart-card fd-card" data-sip="' + sip + '" data-years="' + years + '" data-plan="' + planSipValue + '">' + title +
+  return '<div class="chart-card fd-card" data-sip="' + sip + '" data-years="' + years + '" data-plan="' + planSipValue + '" data-acc="' + (hasAcc ? 1 : 0) + '">' + title +
     '<div class="chart-caption">A typical multi-year bank FD, around ' + (d.fdRate*100).toFixed(1) + '%/yr. Both sides after tax at your income-tax slab.</div>' +
     '<div class="hero-sub" style="text-align:left;margin-top:8px">Your slab (new regime)' + (S.taxSlab == null ? ', ' + slabPct + '% until you pick one' : '') + ':</div>' +
     '<div class="chips slab-chips" role="group" aria-label="Your income-tax slab">' + chips + '</div>' +
@@ -1635,16 +1688,151 @@ function attachCaseHandlers(){
 }
 
 
+// "Use your Rs 1.25 lakh a year": tax-gain harvesting on the equity part of the
+// SIP, modelled lot by lot in harvestPlan (engine). Shown in the details panel
+// after the FD card. India only; hidden when no SIP is needed, when fewer than
+// two years could be harvested (a goal under 4 years away: the saving is a few
+// thousand rupees and "once" is not a yearly habit), and when the gains never
+// pass the allowance (then there is nothing to say). Every rate in the text is
+// read from TAX_IN, so the card cannot drift from the engine when the rules change.
+function harvestCardHtml(r, c) {
+  if (c.code !== 'IN' || r.alreadyMet || r.yrs < 4) return '';
+  const a = riskAllocation(), share = a.eq + a.hy;   // hybrid taxed like equity, as in the FD card
+  if (share <= 0) return '';
+  const rate = (a.eq * r.d.equity + a.hy * r.d.hybrid) / share, monthly = r.sip * share;
+  const h = harvestPlan({ monthly, years: r.yrs, rate });
+  if (h.saved < 1 || h.harvests < 2) return '';
+  const pct = v => +(v * 100).toFixed(1);
+  const lt = TAX_IN.equityLtcg, cess = TAX_IN.cess;
+  const allowance = '₹' + (TAX_IN.equityLtcgExemption / 1e5) + ' lakh';   // "₹1.25 lakh" (compact() would round it to ₹1.3 L)
+  const perYear = h.booked / h.harvests;
+  const today = h.saved / Math.pow(1 + r.d.inflation, r.yrs);
+  deferChartInit(() => renderHarvestChart('chart-harvest', h, c));
+  return '<div class="chart-card" id="sec-harvest"><div class="chart-title">Use your ' + allowance + ' tax-free allowance every year</div>' +
+    '<div class="chart-caption">Each financial year the first ' + allowance + ' of long-term gains on equity funds is tax-free. Selling units that hold that much gain and buying them straight back books the gain tax-free and raises what those units cost you, so less is taxed when you finally sell.</div>' +
+    '<div class="alloc-return-row">' +
+    '<div><div class="alloc-return-label">Tax if all sold at ' + S.retireAge + '</div><div class="alloc-return-value">' + c.compact(h.taxPlain) + '</div></div>' +
+    '<div><div class="alloc-return-label">Harvesting every year</div><div class="alloc-return-value">' + c.compact(h.taxHarvested) + '</div></div>' +
+    '</div>' +
+    '<div id="chart-harvest" class="echart" style="height:190px" role="img" aria-label="Tax due if everything were sold at the end of each year, without and with yearly harvesting. At year ' + r.yrs + ': ' + c.compact(h.taxPlain) + ' without, ' + c.compact(h.taxHarvested) + ' with. The numbers are in the text below."></div>' +
+    '<div class="gr-note" style="margin-top:10px">The equity part of your SIP, ' + c.fmt(Math.round(monthly)) + ' a month at ' + (rate * 100).toFixed(1) + '%, would build about ' + c.compact(h.value) + '. ' +
+    'Booking gains tax-free in ' + h.harvests + ' of those years, about ' + c.compact(perYear) + ' a year on average (' + c.compact(h.booked) + ' in all), cuts the tax at the end by <b style="color:var(--paper)">' + c.compact(h.saved) + '</b>, about ' + c.compact(today) + ' in today\'s money. ' +
+    'That is ' + pct(lt * (1 + cess)) + '% of every rupee booked (' + pct(lt) + '% tax plus ' + pct(cess) + '% cess), and about ' + (h.saved / h.value * 100).toFixed(1) + '% of what this part of the SIP builds: a modest saving for one redeem-and-rebuy a year.</div>' +
+    '<div class="chart-caption" style="margin-top:8px">How: once a year, a few days after the anniversary of your buys so the units are over 12 months old, redeem units holding up to ' + allowance + ' of gain and buy the same fund back. Units go out oldest first, as fund houses count them, and each year\'s date moves a few days later than the last so the units you re-bought are still over 12 months old. ' +
+    'The last harvest is more than a year before you need the money, so the re-bought units are long-term by then. ' +
+    'Costs not counted: stamp duty (0.005%) on each re-buy, a few days out of the market, and the exit-load clock restarting on the re-bought units. ' +
+    'Surcharge is ignored (up to 15% on long-term gains at very high incomes), which would make the saving a little larger. ' +
+    'Selling everything at once is the worst case; in retirement you would sell bit by bit and use the allowance every year anyway. Assumes the plan\'s steady return and no other equity gains sharing the allowance. Rules as of ' + TAX_IN.asOf + '; check with a tax adviser before acting.</div>' +
+    '</div>';
+}
+function renderHarvestChart(chartId, h, c) {
+  const n = h.years.length, x = h.years.map(y => 'Year ' + y.year);
+  const end = (name, color, bold) => ({ show:true, formatter: p => name + ' ' + c.compact(p.value), color, fontSize: bold ? 11 : 10, fontWeight: bold ? 700 : 500, fontFamily:"'Spline Sans Mono',monospace" });
+  initChart(chartId, {
+    grid:{ left:2, right:128, top:12, bottom:22, containLabel:true },
+    xAxis:{ type:'category', data:x, boundaryGap:false, axisTick:{show:false}, axisLine:{show:false},
+      axisLabel:{ interval: idx => idx === 0 || idx === n - 1, color:CHART_TEXT.muted, fontSize:10, alignMinLabel:'left', alignMaxLabel:'right' } },
+    yAxis:{ type:'value', axisLabel:{ formatter: v => c.compact(v), color:CHART_TEXT.muted, fontSize:10 } },
+    tooltip:{ trigger:'axis', formatter: ps => ps[0].axisValue + ': tax if all sold then<br/>' + ps.map(p => p.seriesName + ': ' + c.compact(p.value)).join('<br/>') },
+    series:[
+      // Two lines, no legend, each labelled at its end. They differ in colour,
+      // dash AND weight, so they still read apart in greyscale.
+      { name:'No harvesting', type:'line', showSymbol:false, data:h.years.map(y => Math.round(y.taxPlain)),
+        lineStyle:{ color:'#56698A', width:1.5, type:[8,4] }, itemStyle:{ color:'#56698A' }, endLabel:end('Without', CHART_TEXT.muted, false), labelLayout:{ moveOverlap:'shiftY' } },
+      { name:'Harvesting each year', type:'line', showSymbol:false, data:h.years.map(y => Math.round(y.taxHarvested)),
+        lineStyle:{ color:'#2557C7', width:2.4 }, itemStyle:{ color:'#2557C7' }, endLabel:end('Harvesting', CHART_TEXT.blue, true), labelLayout:{ moveOverlap:'shiftY' } },
+    ],
+  });
+}
+
+// One step onward from a retirement result: the Lab's Retirement Lab runs the
+// same spending through 1,000 simulated markets and reports how often the pot
+// lasts. India only: the Lab's slider ranges are rupee-sized, so a dollar plan
+// would be clamped to ₹10,000 a month and stop being the plan on screen.
+function labStressCardHtml(r) {
+  if (S.country !== 'IN' || S.goalType !== 'retirement' || r.alreadyMet) return '';
+  return '<div class="case-cta lab-cta"><div class="cta-eyebrow">Will it survive bad markets?</div>' +
+    '<div class="cta-q">This plan assumes steady growth. Real markets are not steady. The Lab runs the same spending through 1,000 simulated markets and shows how often the money lasts to age ' + r.d.lifeExp + '.</div>' +
+    '<button id="labStressBtn">Stress-test it in the Lab</button></div>';
+}
+
+// "Already in EPF, PPF or NPS?": a toggle under the action card opens six
+// optional boxes. What they will hold at retirement comes off the pot the SIP
+// has to build, so the monthly figure above drops. India only: these are Indian
+// schemes, and their rupee rates mean nothing in dollars. It is a form with an
+// explicit "Update my plan" button, not live updates: every figure on the screen
+// depends on these boxes, so redrawing on each keystroke (or on blur, which
+// fights Tab) would pull the field out from under the person typing.
+let accMsg = '';   // one-shot status line for the next render: what the last Update did
+// The growth chart and the year-by-year table run on the SIP and savings only,
+// so when accounts are counted they stop short of the full pot; say so.
+function accBuildNote(r, c) {
+  if (!(r.accCounted > 0)) return '';
+  // Covered already: the chart is the existing savings alone growing, and it ends
+  // wherever that lands, not at corpus - accCounted.
+  if (r.alreadyMet) return r.existing > 0 && r.existingFV < r.corpus ? ' This shows only your existing savings growing to ' + c.compact(r.existingFV) + '. Your EPF, PPF and NPS cover the rest of the ' + c.compact(r.corpus) + ' pot.' : '';
+  return ' This shows only the part your SIP' + (r.existing > 0 ? ' and savings build, ' : ' builds, ') + c.compact(r.corpus - r.accCounted) + ' of the ' + c.compact(r.corpus) + ' pot. Your EPF, PPF and NPS cover the other ' + c.compact(r.accCounted) + '.';
+}
+function retirementAccountsHtml(r, c) {
+  if (c.code !== 'IN') return '';
+  const a = accClean(S.acc) || {}, R = RETIRE_ACCOUNTS_IN, has = r.accCounted > 0;
+  const msg = accMsg; accMsg = '';
+  const field = (k, label, hint) => {
+    const id = 'acc-' + k;
+    return '<div class="acc-field"><label for="' + id + '">' + label + '</label>' +
+      '<span class="acc-in"><span aria-hidden="true">₹</span><input id="' + id + '" name="' + k + '" type="number" inputmode="numeric" min="0" max="1000000000" step="1" placeholder="0" value="' + (a[k] || '') + '"' + (hint ? ' aria-describedby="' + id + '-h"' : '') + '></span>' +
+      (hint ? '<small id="' + id + '-h">' + hint + '</small>' : '') + '</div>';
+  };
+  const wage = a.epfWage || 'full';
+  const wageChoice = '<fieldset class="acc-wage"><legend>Your employer pays PF on</legend>' +
+    '<label><input type="radio" name="epfWage" value="full"' + (wage === 'full' ? ' checked' : '') + '> your full basic pay</label>' +
+    '<label><input type="radio" name="epfWage" value="ceiling"' + (wage === 'ceiling' ? ' checked' : '') + '> only the first ₹' + R.epf.wageCeiling.toLocaleString('en-IN') + ' (the PF wage ceiling since ' + R.epf.ceilingFrom + ')</label></fieldset>';
+  const drop = Math.round(r.sipWithoutAcc - r.sip);
+  const toggle = has ? 'Counting your EPF, PPF and NPS: ' + c.fmt(drop) + '/month less' : 'Already in EPF, PPF or NPS? Count it';
+  let summary = 'Most salaried people already save into EPF every month. Add what you have and the monthly figure above drops by what these accounts will hold when you retire. Leave a box empty if it does not apply.';
+  if (has) {
+    const held = [['EPF', r.acc.epf], ['PPF', r.acc.ppf], ['NPS', r.acc.nps]].filter(p => p[1] > 0);
+    const parts = held.length > 1 ? ' (' + held.map(p => p[0] + ' ' + c.compact(p[1])).join(', ') + ')' : '';
+    const npsNote = r.acc.nps > 0 ? ' (' + Math.round(r.acc.npsShare * 100) + '% of NPS: ' + (S.retireAge < 60 ? 'leaving before 60, only 20% can be taken out as cash' : 'the rest must buy a pension, so it is not counted') + ')' : '';
+    summary = 'By age ' + S.retireAge + ' these are on track to hold about <b>' + c.compact(r.acc.epf + r.acc.ppf + r.acc.nps) + '</b>' + parts + '. The plan counts <b>' + c.compact(r.accCounted) + '</b> of that' + npsNote +
+      ', so you save <b>' + c.fmt(drop) + ' a month less</b>' + (r.alreadyMet ? ' and need no SIP at all.' : '.');
+  }
+  return '<div class="assump-toggle acc-toggle' + (has ? ' has' : '') + '" id="acct" role="button" tabindex="0" aria-expanded="false" aria-controls="accp">' + caretSvg() + toggle + '</div>' +
+    '<div class="assump-panel detail-panel" id="accp"><form class="acc-card" id="accForm" novalidate>' +
+    '<div class="chart-caption">' + summary + '</div>' +
+    // Question 3 asks for savings other than these, but people type their EPF there anyway.
+    ((S.existingSavings || 0) > 0 ? '<div class="chart-caption">You entered ' + c.compact(S.existingSavings) + ' as existing savings. If that includes any EPF, PPF or NPS, leave those balances out below, or they count twice.</div>' : '') +
+    '<div class="acc-grid">' +
+    field('epfBal', 'EPF balance today') + field('epfBasic', 'Basic pay a month', 'EPF takes 12% of this, plus most of your employer\'s 12%') +
+    field('ppfBal', 'PPF balance today') + field('ppfYearly', 'PPF deposit a year', 'Up to ₹1.5 lakh a year counts') +
+    field('npsBal', 'NPS balance today') + field('npsMonthly', 'NPS a month', 'Yours plus any employer share') +
+    '</div>' + wageChoice +
+    '<div class="acc-status gr-note" id="accStatus" tabindex="-1" role="status">' + msg + '</div>' +
+    '<div class="adv-btn-row"><button type="submit" id="accApply">Update my plan</button>' + (S.acc ? '<button type="button" class="adv-btn-ghost" id="accClear">Clear these</button>' : '') + '</div>' +
+    '<div class="gr-note" style="margin-top:12px;font-size:12px">Rates checked ' + R.asOf + ' and held flat: EPF ' + (R.epf.rate * 100).toFixed(2) + '% (' + R.epf.rateFor + '), PPF ' + (R.ppf.rate * 100).toFixed(1) + '% (' + R.ppf.rateFor + '). ' +
+    'NPS has no fixed rate, so it grows at this plan\'s own ' + (r.preRate * 100).toFixed(1) + '%, and its monthly amount stays flat. Basic pay is assumed to rise with prices, ' + (r.d.inflation * 100).toFixed(0) + '% a year. ' +
+    'EPF interest is worked out monthly and credited yearly; your employer\'s pension share (EPS) is not counted. A PPF deposit is made before 5 April each year, so it earns the whole year; PPF is locked in for 15 years from opening, so check yours will have matured by then. ' +
+    'Under today\'s rules EPF and PPF are tax-free when withdrawn at retirement, and so is 60% of NPS (interest on your own EPF contributions above ₹2.5 lakh a year is taxable and not modelled). ' +
+    'The growth chart and the yearly table show only the part your SIP and savings build.</div>' +
+    '</form></div>';
+}
+
 function sResultsRetirement() {
   const c = cfg(), r = calcRetirement();
   const rLabel = RISK.find(x => x.id === S.risk).title.toLowerCase();
-  const existingNote = r.existing>0 ? ' Your existing '+c.compact(r.existing)+', left to grow the same way, covers '+c.compact(r.existingFV)+' of it by then.' : '';
+  // Nothing for the SIP to build (EPF/PPF/NPS alone cover the pot): no growth chart or schedule to show.
+  const noBuild = r.alreadyMet && r.existing === 0;
+  const existingNote = (r.existing>0 ? ' Your existing '+c.compact(r.existing)+', left to grow the same way, covers '+c.compact(r.existingFV)+' of it by then.' : '') +
+    (r.accCounted>0 ? (r.alreadyMet ? ' Your EPF, PPF and NPS are counted too, at about '+c.compact(r.accCounted)+' by then.' : ' Your EPF, PPF and NPS are counted too: they cover about '+c.compact(r.accCounted)+' of it.') : '');
   const actionCard = r.alreadyMet
     ? '<div class="action-card"><div class="al">Good news</div><div class="af">No SIP needed</div>' +
-      '<div class="as">Your existing '+c.compact(r.existing)+', left to grow at "'+rLabel+'", is already projected to more than cover the pot by age '+S.retireAge+'.</div></div>'
+      (r.accCounted>0
+        ? '<div class="as">Your EPF, PPF and NPS'+(r.existing>0 ? ' and your existing '+c.compact(r.existing) : '')+', counted at what can be taken out tax-free, are already projected to more than cover the pot by age '+S.retireAge+'.</div></div>'
+        : '<div class="as">Your existing '+c.compact(r.existing)+', left to grow at "'+rLabel+'", is already projected to more than cover the pot by age '+S.retireAge+'.</div></div>')
     : '<div class="action-card"><div class="al">Put away, starting now</div>' +
       '<div class="af">'+c.fmt(Math.round(r.sip))+' / month</div>' +
       '<div class="as">For '+r.yrs+' years at "'+rLabel+'". Pot ready by age '+S.retireAge+', lasts to '+r.d.lifeExp+', deliberately past average lifespan so you are unlikely to outlive it.</div>' +
+      (r.accCounted>0 ? '<div class="as" style="margin-top:8px">Counts your EPF, PPF and NPS. Without them it would be '+c.fmt(Math.round(r.sipWithoutAcc))+' a month.</div>' : '') +
       (o => o ? '<div class="as" style="margin-top:8px">Or start at <b>' + c.fmt(Math.round(o.start)) + '/month</b> and raise it 10% every year: the same pot, with ' + c.fmt(Math.round(o.last)) + '/month in the last year. ' + stepUpPaidText(o, c) + ' That suits you if your pay rises at least that fast.</div>' : '')(stepUpOffer(r.sip, r.yrs, r.preRate)) + '</div>';
   return '<div class="result-scroll">' + advisorChipsHTML() + personaNoteHtml() +
     '<div class="result-intro">Good news: this is a solvable problem. Here is exactly what it takes.</div>' +
@@ -1659,26 +1847,27 @@ function sResultsRetirement() {
     '<div class="hero-figure">'+c.compact(r.corpus)+'</div>' +
     '<div class="hero-sub">About '+c.compact(r.realCorpus)+' in today\'s money. Prices will be higher by then, but your spending power stays the same.'+existingNote+'</div>' +
     '</div>' +
-    actionCard +
+    actionCard + retirementAccountsHtml(r, c) +
     '<div class="assump-toggle detail-toggle" id="bt">'+caretSvg()+'See how we got this number: charts, allocation, comparisons</div>' +
     '<div class="assump-panel detail-panel" id="bp"><div class="assump-inner">' +
-    '<div class="chart-card"><div class="chart-title">How the pot grows</div>' +
-    '<div class="chart-caption">The blue area is growth your money earned on its own. The pale area underneath is what you actually paid in.</div>' +
-    mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>' +
+    (noBuild ? '' : '<div class="chart-card"><div class="chart-title">How the pot grows</div>' +
+    '<div class="chart-caption">The blue area is growth your money earned on its own. The pale area underneath is what you actually paid in.' + accBuildNote(r, c) + '</div>' +
+    mountainChart(yearlyMountainRows(r.accRows), 'chart-mountain')+'</div>') +
     '<div class="chart-card"><div class="chart-title">How the pot gets spent</div>' +
     '<div class="chart-caption">Built to last until age '+r.d.lifeExp+'</div>' +
     potChart(r.drawRows, c, 'chart-secondary')+'</div>' +
     allocationCardHtml(r.preRate, r.d, rLabel, r.alreadyMet ? 0 : r.sip) +
     realityCardHtml(r.yrs, r.d, r.preRate, c, 'chart-card') +
-    (!r.alreadyMet ? fdComparisonCardHtml(r.sip, r.yrs, r.gapCorpus, r.d, c) : '') +
+    (!r.alreadyMet ? fdComparisonCardHtml(r.sip, r.yrs, r.gapCorpus, r.d, c, r.accCounted > 0) : '') +
+    harvestCardHtml(r, c) +
     retireAgeCompareCard(calcRetireAgeCompare(), c) +
     delayCard(r.delay, r.yrs) +
     '</div></div>' +
-    '<div class="assump-toggle" id="st">'+caretSvg()+'See the full year-by-year schedule</div>' +
-    '<div class="assump-panel" id="sp"><div class="schedule-scroll"><table class="schedule-table">' +
+    (noBuild ? '' : '<div class="assump-toggle" id="st">'+caretSvg()+'See the full year-by-year schedule</div>' +
+    '<div class="assump-panel" id="sp">' + (accBuildNote(r, c) ? '<div class="chart-caption" style="margin-top:8px">' + accBuildNote(r, c).trim() + '</div>' : '') + '<div class="schedule-scroll"><table class="schedule-table">' +
     '<thead><tr><th>Year</th><th>You paid in</th><th>Growth earned</th><th>Balance</th></tr></thead><tbody>' +
     yearlyAmortization(r.accRows).map(row=>'<tr><td>'+row.year+'</td><td>'+c.compact(row.contributed)+'</td><td>'+c.compact(row.growth)+'</td><td>'+c.compact(row.close)+'</td></tr>').join('') +
-    '</tbody></table></div></div>' +
+    '</tbody></table></div></div>') +
     '<div class="assump-toggle" id="dt">'+caretSvg()+'See the spending-down years, one by one</div>' +
     '<div class="assump-panel" id="dp"><div class="schedule-scroll"><table class="schedule-table">' +
     '<thead><tr><th>Year</th><th>Start of year</th><th>You withdraw</th><th>Growth earned</th><th>End of year</th></tr></thead><tbody>' +
@@ -1686,6 +1875,7 @@ function sResultsRetirement() {
     '</tbody></table></div></div>' +
     '<div class="assump-toggle" id="at">What assumptions did we use?</div>' +
     '<div class="assump-panel" id="ap"><div class="assump-inner">'+assumpRetirement(r)+'</div></div>' +
+    labStressCardHtml(r) +
     '<div class="case-cta"><div class="cta-eyebrow">Before you close this tab</div><div class="cta-q">Why should you trust markets with this money at all, instead of a Fixed Deposit?</div><button id="caseBtn">Show me the actual numbers</button></div>' +
     '<div class="restart-row"><button id="rb">Start over</button></div>' +
     '</div>';
@@ -1854,7 +2044,7 @@ function go(delta) {
     S.age = null; S.retireAge = null; S.monthlyExpense = null;
     S.annualFee = null; S.yearsToCollege = null; S.courseDuration = null;
     S.genType = null; S.genAmount = null; S.genYears = null; S.existingSavings = 0;
-    S.risk = null; S.postRetAlloc = null; S.eduAlloc = null; S.persona = null;
+    S.risk = null; S.postRetAlloc = null; S.eduAlloc = null; S.persona = null; S.acc = null;
   }
   S.si = Math.max(0, Math.min(flow().length - 1, S.si + delta));
   render();
@@ -1899,7 +2089,7 @@ document.addEventListener('click', e => {
   S.taxSlab = +b.dataset.fdSlab; persistState();
   document.querySelectorAll('.fd-card[data-plan]').forEach(card => {
     const tmp = document.createElement('div');
-    tmp.innerHTML = fdComparisonCardHtml(+card.dataset.sip, +card.dataset.years, +card.dataset.plan, cfg().d, cfg());
+    tmp.innerHTML = fdComparisonCardHtml(+card.dataset.sip, +card.dataset.years, +card.dataset.plan, cfg().d, cfg(), card.dataset.acc === '1');
     const fresh = tmp.firstElementChild;
     card.replaceWith(fresh);
     if (card === tapped) { const again = fresh.querySelector('[data-fd-slab="' + S.taxSlab + '"]'); if (again) again.focus({ preventScroll: true }); }
@@ -2223,6 +2413,40 @@ function restoreResultPlace() {
   const back = document.querySelector('#bp .retire-compare-card [data-retire-preview="' + keep.from + '"]');
   if (back) back.focus({ preventScroll: true });
 }
+// The EPF/PPF/NPS form changes every figure on the results screen, so it has to
+// re-render the whole screen, which on its own would close the open panels, jump
+// to the top and slide the screen in again. This keeps the person's place: the
+// panels that were open reopen without animating, the form stays where it was
+// on the screen, and focus goes to the status line, which says what happened.
+let resultReopen = null;   // {open:[panel ids], anchor, focus, offset, top}: consumed once by attach('results')
+const RESULT_PANELS = { bp: 'bt', sp: 'st', dp: 'dt', ap: 'at', accp: 'acct' };
+function refreshResultsInPlace(anchorId, focusId) {
+  const scroller = document.querySelector('.result-scroll'), anchor = document.getElementById(anchorId);
+  resultReopen = {
+    open: Object.keys(RESULT_PANELS).filter(id => { const p = document.getElementById(id); return p && p.classList.contains('open'); }),
+    anchor: anchorId, focus: focusId,
+    offset: scroller && anchor ? anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top : 0,
+    top: scroller ? scroller.scrollTop : 0,
+  };
+  render({ quiet: true });
+}
+function reopenResultPanels() {
+  const keep = resultReopen; resultReopen = null;
+  const scroller = document.querySelector('.result-scroll');
+  if (!keep || !scroller) return;
+  keep.open.forEach(id => {
+    const p = document.getElementById(id), t = document.getElementById(RESULT_PANELS[id]);
+    if (!p) return;
+    p.style.transition = 'none'; p.classList.add('open');
+    if (t) { t.classList.add('open'); if (id === 'accp') t.setAttribute('aria-expanded', 'true'); }
+    void p.offsetHeight; p.style.transition = '';
+  });
+  scroller.scrollTop = keep.top;
+  const anchor = document.getElementById(keep.anchor);
+  if (anchor) scroller.scrollTop += anchor.getBoundingClientRect().top - scroller.getBoundingClientRect().top - keep.offset;
+  const f = document.getElementById(keep.focus);
+  if (f) f.focus({ preventScroll: true });
+}
 function attach(screen) {
   const nb = document.getElementById('nextBtn');
 
@@ -2231,7 +2455,7 @@ function attach(screen) {
 
   if (screen==='country') {
     document.querySelectorAll('[data-country]').forEach(el => el.addEventListener('click', () => {
-      S.country = el.dataset.country; S.goalType = null; S.si = 0;
+      S.country = el.dataset.country; S.goalType = null; S.si = 0; S.acc = null;
       render();
     }));
     nb && nb.addEventListener('click', () => go(1));
@@ -2240,7 +2464,7 @@ function attach(screen) {
       if (!p) return;
       // Clear every answer first, so nothing from an earlier plan leaks in.
       Object.assign(S, { age:null, retireAge:null, monthlyExpense:null, annualFee:null, yearsToCollege:null, courseDuration:null,
-        genType:null, genAmount:null, genYears:null, existingSavings:0, risk:null, postRetAlloc:null, eduAlloc:null,
+        genType:null, genAmount:null, genYears:null, existingSavings:0, risk:null, postRetAlloc:null, eduAlloc:null, acc:null,
         quickEdit:false, viewingCase:false }, p.S, { persona: p.id });
       S.si = flow().indexOf('results');
       render();
@@ -2390,14 +2614,61 @@ function attach(screen) {
     const bt = document.getElementById('bt'), bp = document.getElementById('bp');
     if (bt && bp) bt.addEventListener('click', () => { bp.classList.toggle('open'); bt.classList.toggle('open'); });
     wireAdvAlloc('ret'); wireAdvAlloc('edu');
+    // EPF / PPF / NPS panel (see retirementAccountsHtml).
+    const acct = document.getElementById('acct'), accp = document.getElementById('accp'), accForm = document.getElementById('accForm');
+    if (acct && accp) {
+      const flip = () => { const open = accp.classList.toggle('open'); acct.classList.toggle('open', open); acct.setAttribute('aria-expanded', open); };
+      acct.addEventListener('click', flip);
+      acct.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+    }
+    if (accForm) {
+      accForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const f = new FormData(accForm), raw = { epfWage: f.get('epfWage') };
+        ACC_KEYS.forEach(k => { raw[k] = f.get(k); });
+        const cappedPpf = Math.floor(Number(raw.ppfYearly)) > RETIRE_ACCOUNTS_IN.ppf.yearlyMax;
+        S.acc = accClean(raw);
+        accMsg = !S.acc ? 'Nothing entered, so no accounts are counted.'
+          : cappedPpf ? 'Updated. PPF deposits count up to ₹1.5 lakh a year, so that box was reduced to the limit.'
+          : 'Updated. The figures above now count these accounts.';
+        refreshResultsInPlace('accStatus', 'accStatus');
+      });
+      const accClear = document.getElementById('accClear');
+      if (accClear) accClear.addEventListener('click', () => {
+        S.acc = null; accMsg = 'Cleared. The plan no longer counts EPF, PPF or NPS.';
+        refreshResultsInPlace('accStatus', 'accStatus');
+      });
+    }
     if (resultKeep) restoreResultPlace();
+    if (resultReopen) reopenResultPanels();
     const rb = document.getElementById('rb');
     if (rb) rb.addEventListener('click', () => {
-      Object.assign(S, {country:null,goalType:null,age:null,retireAge:null,monthlyExpense:null,annualFee:null,yearsToCollege:null,courseDuration:null,genType:null,genAmount:null,genYears:null,existingSavings:0,risk:null,si:0,quickEdit:false,postRetAlloc:null,eduAlloc:null,persona:null});
+      Object.assign(S, {country:null,goalType:null,age:null,retireAge:null,monthlyExpense:null,annualFee:null,yearsToCollege:null,courseDuration:null,genType:null,genAmount:null,genYears:null,existingSavings:0,risk:null,si:0,quickEdit:false,postRetAlloc:null,eduAlloc:null,persona:null,acc:null});
       render();
     });
     const caseBtn = document.getElementById('caseBtn');
     if (caseBtn) caseBtn.addEventListener('click', () => { S.viewingCase = true; S.si = flow().indexOf('case'); render(); });
+    const lsb = document.getElementById('labStressBtn');
+    if (lsb) lsb.addEventListener('click', () => {
+      // Same one-shot localStorage hand-off the Full Plan uses ("Open this plan in
+      // the Lab"); the Lab reads and clears it on arrival. Rates go over as percent
+      // with two decimals, because that is the form the Lab's own state keeps.
+      const r = calcRetirement(), d = cfg().d;
+      const handoff = {
+        _goalden: 'lab-handoff', _version: 1, from: 'quick', country: S.country,
+        ret: {
+          age: S.age, retireAge: S.retireAge, monthlyExpense: S.monthlyExpense,
+          existingSavings: S.existingSavings || 0,
+          lifestyleFactor: 75, // Quick Calculate always spends 75% of today's expenses in retirement
+          preRate: +(r.preRate * 100).toFixed(2), postRate: +(r.postRetRate * 100).toFixed(2),
+          inflation: +(d.inflation * 100).toFixed(2), lifeExp: d.lifeExp,
+        },
+        corpus: Math.round(r.corpus), sip: Math.round(r.sip), // what this page showed, for the Lab to quote
+        accCounted: Math.round(r.accCounted), // EPF/PPF/NPS the SIP above already counts; the Lab does not model them
+      };
+      try { localStorage.setItem('goaldenLabHandoff', JSON.stringify(handoff)); } catch (e) {}
+      window.location.href = 'goalden-lab.html';
+    });
   }
   if (screen==='case') { attachCaseHandlers(); }
 }
@@ -2478,6 +2749,7 @@ Mapping what people say to this page:
 - education: yearsToCollege = 18 − the child's age for an undergraduate degree (1-22); courseDuration 4 for engineering and most degrees, 5 for medicine. annualFee comes only from the user — never invent a fee. If it's missing, run the other goals and ask for it.
 - generic: house/car/wedding/travel → genType (a holiday or trip is travel); genAmount = the amount they gave; genYears.
 - existingSavings: only money they said is set aside for that goal. General FDs or mutual funds are not counted against a goal unless they say so — tell them, because counting them would lower the SIP.
+- EPF, PPF and NPS (India, retirement only): the results screen has an optional "Already in EPF, PPF or NPS? Count it" panel. What those accounts will hold at retirement comes off the pot the SIP has to build, so the monthly SIP drops. The user types the balances in themselves (you cannot set them), and they are not part of existingSavings. When get_results includes epfPpfNpsCountedAtRetirement, monthlySIP already counts them and monthlySIPWithoutEpfPpfNps is the figure without. Only the tax-free part of NPS counts (60% at 60, 20% before 60); the employer's pension share is ignored.
 - persona: when state.persona is set (priya, arjun or rohan), the inputs belong to an example person picked from the first screen, not to the user. Say so if it matters, and offer to redo the plan with their own numbers.
 - risk: use what they said ("I can't take losses" → cautious, "I'm fine with big swings" → growth); otherwise balanced, and say so.
 What-ifs and changes ("retire at 58 instead", "make the house 60 lakh"): change just that value — set_value on the goal on screen, or build_goal_plan again for another goal — and report the monthly SIP before → after. Quote only SIPs this page calculated; to show what another date or amount would do, run it rather than estimating.
@@ -2593,7 +2865,10 @@ function advisorGetResults() {
   if (S.goalType === 'retirement') {
     if (S.age == null || S.retireAge == null || S.monthlyExpense == null) return { ok:false, error:'Need age, retirement age and monthly expense first.' };
     const r = calcRetirement();
-    return { ok:true, result:{ goalType:'retirement', age:S.age, retireAge:S.retireAge, monthlyExpense:S.monthlyExpense, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), yearsToRetire:r.yrs, expectedReturnPct:(r.preRate*100).toFixed(1), stepUp10StartSIP:(o=>o?Math.round(o.start):null)(stepUpOffer(r.sip, r.yrs, r.preRate)) }, flags:flags };
+    const out = { goalType:'retirement', age:S.age, retireAge:S.retireAge, monthlyExpense:S.monthlyExpense, monthlySIP:Math.round(r.sip), corpus:Math.round(r.corpus), corpusTodayMoney:Math.round(r.realCorpus), yearsToRetire:r.yrs, expectedReturnPct:(r.preRate*100).toFixed(1), stepUp10StartSIP:(o=>o?Math.round(o.start):null)(stepUpOffer(r.sip, r.yrs, r.preRate)) };
+    // Said only when the user entered EPF/PPF/NPS: monthlySIP above already counts them.
+    if (r.accCounted > 0) { out.epfPpfNpsCountedAtRetirement = Math.round(r.accCounted); out.monthlySIPWithoutEpfPpfNps = Math.round(r.sipWithoutAcc); }
+    return { ok:true, result:out, flags:flags };
   }
   if (S.goalType === 'education') {
     if (S.annualFee == null || S.yearsToCollege == null || S.courseDuration == null) return { ok:false, error:'Need annual fee, years until college and course duration first.' };
@@ -2675,7 +2950,7 @@ function resultCanvasFd() {
   if (S.goalType === 'retirement') {
     if (S.age == null || S.retireAge == null || S.monthlyExpense == null) return '<div class="gr-note">Fill in your retirement inputs first.</div>';
     const r = calcRetirement();
-    return r.alreadyMet ? '<div class="gr-note">No SIP needed, so there is nothing to compare against an FD.</div>' : fdComparisonCardHtml(r.sip, r.yrs, r.gapCorpus, r.d, c);
+    return r.alreadyMet ? '<div class="gr-note">No SIP needed, so there is nothing to compare against an FD.</div>' : fdComparisonCardHtml(r.sip, r.yrs, r.gapCorpus, r.d, c, r.accCounted > 0);
   }
   if (S.goalType === 'generic') {
     if (S.genAmount == null || S.genYears == null) return '<div class="gr-note">Fill in your goal amount and years first.</div>';

@@ -192,7 +192,7 @@ is the agentic workflow your college wants.
 | 4 | Pillar 3 core: Read the Company scorecard (#9 extended) | done (scorecard + statements chart palette) |
 | 5 | The banned charts: 01 allocation strip, 02 dot plots | done (strip on both doors, radar replaced by dot plots) |
 | 6 | 08 keep-place fix, 18 verdicts and consistency, 15 pills and readout, 11 nudges | done (Lab "At a glance" card, period pills, overlap nudges; Quick Calculate keeps its place) |
-| 7 | 16 EPF/PPF/NPS, 17 harvesting, 05 stress test | |
+| 7 | 16 EPF/PPF/NPS, 17 harvesting, 05 stress test | done (accounts panel, harvest card, stress-test hand-off to the Lab) |
 | 8 | 10 keyboard, 03 A theme, 14 live canvas, 20, 21, 07 | |
 | 9 | Beyond: B1 holdings review, B2 cover, B3 regime, B4 retirement income, B5 yearly review, B6 loans | |
 

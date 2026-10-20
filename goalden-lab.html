@@ -2567,11 +2567,20 @@ function renderRetirement(){
   const custom = r.corpusMode==='custom';
   const todayDraw = res.expAtRet/12/Math.pow(1+r.inflation/100, res.yrs);
   scheduleDDMCUpdate();
+  // Only present when the Lab was opened from Quick Calculate's stress-test
+  // button; the tab's Reset button restores L.ret from defaults, which have none.
+  const fq=r.fromQuick;
+  const fromQuickNote = fq ? `<div class="gr-note" style="margin-top:0;margin-bottom:14px">
+      <b style="color:var(--gold)">Started from your Quick Calculate plan</b>${fq.corpus?` (pot ${c.compact(fq.corpus)}${fq.sip?`, ${c.fmt(fq.sip)}/month`:''})`:''}. The survival figure below runs that spending through 1,000 simulated markets.
+      ${fq.acc?`<br>That monthly figure already counts ${c.compact(fq.acc)} from EPF, PPF and NPS, which the Lab does not model. The survival figure depends only on the pot and the spending.`:''}
+      ${fq.changed.length?`<br>The Lab’s sliders have limits and steps, so some values were adjusted: ${fq.changed.join('; ')}. Its numbers can differ from Quick Calculate’s.`:''}
+    </div>` : '';
 
   return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
   <div class="panel">
     ${panelHead('Assumptions', 'retirement')}
     ${advisorChipsHTML('retirement')}
+    ${fromQuickNote}
 
     <div class="section-label">You</div>
     <div class="field-row">
@@ -10189,6 +10198,39 @@ function consumeDoor2Handoff(){
   try{ data = JSON.parse(raw); }catch(e){ return false; }
   if(!data || data._goalden!=='lab-handoff') return false;
   if(data.country==='IN' || data.country==='US') L.country = data.country;
+  if(data.from==='quick' && data.ret && typeof data.ret==='object'){
+    // Quick Calculate allows wider inputs than the Lab's sliders (age from 16,
+    // retiring up to 85, spending from 8,000 a month), so each value is clamped
+    // to the slider's range and every change is named on screen rather than
+    // silently showing a different plan. The ranges are repeated here because
+    // ADVISOR_FIELDS is declared further down the file and does not exist yet.
+    const RANGE={ age:[18,65], retireAge:[45,75], monthlyExpense:[10000,500000], existingSavings:[0,20000000],
+                  lifestyleFactor:[40,120], preRate:[4,16], postRate:[3,14], inflation:[2,12], lifeExp:[70,95] };
+    const LABEL={ age:'age', retireAge:'retirement age', monthlyExpense:'monthly spending', existingSavings:'existing savings',
+                  preRate:'growth while saving', postRate:'growth after retiring', inflation:'inflation', lifeExp:'planning age' };
+    // Each slider moves in steps counted from its minimum. The number box beside a
+    // slider is filled from slider.value, which the browser rounds to the nearest
+    // step, so an off-step value (Balanced's 9.95%, spending of 52,000) would show
+    // one figure and quietly become another the first time that box was touched.
+    // Snapping here, and naming it, keeps the screen and the sums the same.
+    const STEP={ monthlyExpense:5000, existingSavings:50000, preRate:0.1, postRate:0.1, inflation:0.1 };
+    const changed=[];
+    Object.keys(RANGE).forEach(k=>{
+      const v=Number(data.ret[k]); if(!isFinite(v)) return;
+      const lo=RANGE[k][0], hi=RANGE[k][1], st=STEP[k]||1;
+      const cl=Math.min(hi, Math.max(lo, +(lo+Math.round((v-lo)/st)*st).toFixed(2)));
+      L.ret[k]=cl;
+      if(cl!==v) changed.push(LABEL[k]+' '+v+' → '+cl);
+    });
+    if(L.ret.retireAge<=L.ret.age){ L.ret.retireAge=Math.min(75, L.ret.age+1); changed.push('retirement age moved to just after your age'); }
+    // Quick Calculate has no tax on withdrawals, no shock and no custom pot.
+    L.ret.corpusMode='expenses'; L.ret.realTerms=false; L.ret.shock=null; L.ret.withdrawTax=0;
+    const q=Number(data.corpus), s=Number(data.sip);
+    const a=Number(data.accCounted);   // EPF/PPF/NPS the quoted SIP already counts
+    L.ret.fromQuick={ corpus:isFinite(q)&&q>0?q:null, sip:isFinite(s)&&s>0?s:null, acc:isFinite(a)&&a>0?a:null, changed };
+    L.tab='retirement';
+    return true;
+  }
   if(data.totalSIP>0) L.health.totalSIP = Math.min(300000, Math.max(5000, Math.round(data.totalSIP)));
   if(data.capacity>0) L.health.capacity = Math.min(300000, Math.max(5000, Math.round(data.capacity)));
   if(data.emergencyStatus) L.health.emergencyStatus = data.emergencyStatus;
@@ -10215,6 +10257,9 @@ function tabFromQuery(){
 const queryTab = tabFromQuery();
 if(queryTab){
   L.tab = queryTab;
+  // The deep link wins, but a hand-off left in storage would otherwise sit
+  // there and replay on some later, unrelated visit -- drop it unread.
+  try{ localStorage.removeItem('goaldenLabHandoff'); }catch(e){}
 }else if(!consumeDoor2Handoff()){
   try{
     const last = localStorage.getItem('goaldenLabLastTab');
