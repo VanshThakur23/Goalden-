@@ -3586,3 +3586,259 @@ test('NPS annuity: an empty or garbled pot gives zeros, not NaN', () => {
   Object.values(r).forEach(v => assert.ok(Number.isFinite(v)));
   assert.strictEqual(r.monthlyAfter, 0);
 });
+
+// ---- Group 9b: tax regimes, loans, cover ----------------------------------------------------
+test('regime tax: the new regime is nil to Rs 12 lakh and has marginal relief just above it', () => {
+  assert.strictEqual(engine.regimeTax(1200000, 'new'), 0);
+  // Rs 12.25 lakh: slab tax 63,750 would exceed the 25,000 above the limit, so only 25,000 is paid (+4% cess)
+  approx(engine.regimeTax(1225000, 'new'), 25000 * 1.04);
+  // never more than the slab tax, and a rupee more of income never costs more than a rupee more of tax
+  for (let x = 1200000; x < 1400000; x += 7919) {
+    assert.ok(engine.regimeTax(x + 1, 'new') - engine.regimeTax(x, 'new') <= 1.04 + 1e-9, 'marginal relief at ' + x);
+  }
+});
+test('regime tax: slab figures worked by hand', () => {
+  // new: 4L x5% + 4L x10% + 4L x15% + 4L x20% + 4L x25% = 3,00,000 at Rs 24 lakh; + 30% above
+  approx(engine.regimeTax(2400000, 'new'), 300000 * 1.04);
+  approx(engine.regimeTax(3000000, 'new'), 480000 * 1.04);
+  // old, under 60: 12,500 at Rs 5 lakh (rebated to nil), then 20% to Rs 10 lakh and 30% above
+  assert.strictEqual(engine.regimeTax(500000, 'old'), 0);
+  approx(engine.regimeTax(550000, 'old'), 22500 * 1.04);
+  approx(engine.regimeTax(1000000, 'old'), 112500 * 1.04);
+  approx(engine.regimeTax(1500000, 'old'), 262500 * 1.04);
+  // age bands change the nil band: 3 lakh from 60, 5 lakh from 80
+  approx(engine.regimeTax(600000, 'old', 'senior'), (10000 + 100000 * 0.2) * 1.04);
+  approx(engine.regimeTax(600000, 'old', 'superSenior'), 100000 * 0.2 * 1.04);
+  assert.strictEqual(engine.regimeTax(-5, 'old'), 0);
+  assert.strictEqual(engine.regimeTax('x', 'new'), 0);
+});
+test('HRA: the least of three, a bigger share in the eight metros, nothing without rent', () => {
+  const o = { basic: 500000, hraReceived: 250000, rent: 360000 };
+  approx(engine.hraExemption(Object.assign({ metro: true }, o)), 250000);                 // 50% of basic is 250,000
+  approx(engine.hraExemption(Object.assign({ metro: false }, o)), 200000);                // 40% of basic is 200,000
+  approx(engine.hraExemption({ basic: 500000, hraReceived: 250000, rent: 240000, metro: true }), 190000);   // rent - 10% of basic
+  assert.strictEqual(engine.hraExemption({ basic: 500000, hraReceived: 250000, rent: 0, metro: true }), 0);
+  assert.strictEqual(engine.hraExemption({ basic: 500000, hraReceived: 0, rent: 300000, metro: true }), 0);
+  assert.strictEqual(engine.hraExemption({ basic: 500000, hraReceived: 250000, rent: 40000 }), 0, 'rent below 10% of basic is no exemption');
+  assert.strictEqual(engine.TAX_REGIME_IN.hra.metros.length, 8);
+});
+test('EPF for 80C is the employee 12% only, on the capped wage when the employer caps it', () => {
+  approx(engine.epfEmployeeYearly(50000, 'full'), 72000);
+  approx(engine.epfEmployeeYearly(50000, 'ceiling'), 36000);
+  assert.strictEqual(engine.epfEmployeeYearly(-1, 'full'), 0);
+});
+test('compareRegimes: no deductions means the new regime wins, and the break-even is worked out', () => {
+  const c = engine.compareRegimes({ gross: 1500000 });
+  approx(c.new.tax, 93750 * 1.04);                    // taxable 14.25 lakh
+  approx(c.old.tax, 247500 * 1.04);                   // taxable 14.5 lakh
+  assert.strictEqual(c.winner, 'new');
+  approx(c.saving, (247500 - 93750) * 1.04);
+  // old regime ties when its taxable income is T with 12,500 + 20% x (T - 5 lakh) = 93,750
+  approx(c.breakEven, 1450000 - 906250, 1e-6);
+  assert.ok(c.headroom < 0);
+  assert.strictEqual(c.old.deductions, 0);
+});
+test('compareRegimes: enough old-regime deductions flips it, and the parts are capped', () => {
+  const c = engine.compareRegimes({ gross: 1500000, basic: 750000, hraReceived: 375000, rent: 420000, metro: true,
+    c80: 400000, nps1b: 90000, health: 25000, healthParents: 60000, parentsSenior: true, homeLoanInterest: 350000 });
+  assert.strictEqual(c.old.parts.c80, 150000, '80C is held to Rs 1.5 lakh');
+  assert.strictEqual(c.old.parts.nps1b, 50000);
+  assert.strictEqual(c.old.parts.health, 25000 + 50000, 'senior parents: Rs 50,000; the Rs 60,000 is held to it');
+  assert.strictEqual(c.old.parts.homeLoan, 200000);
+  approx(c.old.parts.hra, 345000);                    // rent 4.2 lakh - 10% of 7.5 lakh
+  assert.strictEqual(c.winner, 'old');
+  assert.ok(c.headroom > 0 && c.old.deductions > c.breakEven);
+  // at exactly the break-even deductions the two regimes cost the same
+  const tie = engine.regimeTax(Math.max(0, 1500000 - 50000 - c.breakEven), 'old');
+  approx(tie, c.new.tax, 1e-6);
+});
+test('compareRegimes: employer NPS has its own limit under each regime, health limits follow age', () => {
+  const c = engine.compareRegimes({ gross: 1500000, basic: 750000, employerNps: 100000 });
+  assert.strictEqual(c.new.employerNps, 100000, '14% of 7.5 lakh is 1.05 lakh');
+  assert.strictEqual(c.old.employerNps, 75000, '10% of 7.5 lakh');
+  const s = engine.compareRegimes({ gross: 1500000, health: 70000, ageBand: 'senior' });
+  assert.strictEqual(s.old.parts.health, 50000, 'a senior may claim Rs 50,000 for self and family');
+  const y = engine.compareRegimes({ gross: 1500000, health: 70000 });
+  assert.strictEqual(y.old.parts.health, 25000);
+});
+test('compareRegimes: filling the unused 80C and NPS room is priced, and can leave the winner unchanged', () => {
+  const c = engine.compareRegimes({ gross: 1500000 });
+  approx(c.unused.c80, 150000);
+  approx(c.oldIfFilled.c80Saves, 150000 * 0.3 * 1.04);
+  approx(c.oldIfFilled.nps1bSaves, 50000 * 0.3 * 1.04);
+  assert.strictEqual(c.oldIfFilled.winner, 'new', 'it still would not catch the new regime at this pay');
+});
+test('compareRegimes: surcharge is flagged, not modelled; garbage in gives zeros, not NaN', () => {
+  assert.strictEqual(engine.compareRegimes({ gross: 6000000 }).aboveSurcharge, true);
+  assert.strictEqual(engine.compareRegimes({ gross: 1500000 }).aboveSurcharge, false);
+  const bad = engine.compareRegimes({ gross: 'x', basic: -3, c80: NaN, rent: undefined, ageBand: 'nonsense' });
+  [bad.new.tax, bad.old.tax, bad.diff, bad.breakEven, bad.headroom].forEach(v => assert.ok(Number.isFinite(v)));
+  assert.strictEqual(bad.winner, 'tie');
+  // a basic above gross, or an HRA above what is left of gross, is brought back inside it
+  const odd = engine.compareRegimes({ gross: 1000000, basic: 2000000, hraReceived: 5000000, rent: 900000, metro: true });
+  assert.strictEqual(odd.old.parts.hra, 0, 'no HRA is left once basic takes all of gross');
+});
+test('compareRegimes: a salary inside the rebate pays nothing in either regime', () => {
+  const c = engine.compareRegimes({ gross: 1000000 });
+  assert.strictEqual(c.new.tax, 0);
+  assert.ok(c.old.tax > 0);
+  assert.strictEqual(c.winner, 'new');
+});
+
+test('compareRegimes: saveOn10k is a rupee figure that carries cess and the rebate, and is nil when no tax is due', () => {
+  const mid = engine.compareRegimes({ gross: 1500000 });
+  approx(mid.saveOn10k, 10000 * 0.3 * 1.04, 1e-9);
+  // low pay: both regimes owe nothing and a deduction would save nothing, whatever the slab the next rupee sits in
+  [300000, 450000, 550000].forEach(g => {
+    const c = engine.compareRegimes({ gross: g });
+    assert.strictEqual(c.new.tax, 0); assert.strictEqual(c.old.tax, 0);
+    assert.strictEqual(c.winner, 'tie'); assert.strictEqual(c.breakEven, 0);
+    assert.strictEqual(c.saveOn10k, 0, 'gross ' + g);
+  });
+  // just above the old regime's rebate limit a small deduction pulls the tax to nil, so it saves more than 5% of 10,000
+  const edge = engine.compareRegimes({ gross: 800000 });
+  assert.ok(edge.old.tax > 0 && edge.saveOn10k > 0 && edge.saveOn10k <= edge.old.tax);
+  assert.ok(Number.isFinite(engine.compareRegimes({ gross: 'x' }).saveOn10k));
+});
+
+test('loan schedule: the textbook EMI, and the principal paid adds up to the balance', () => {
+  const s = engine.loanSchedule({ balance: 1e6, rate: 0.09, years: 10 });
+  approx(s.emi, 12667.5773750249, 1e-9);
+  approx(s.totalInterest, s.emi * 120 - 1e6, 1e-9);
+  assert.ok(s.firstYearInterest > 87000 && s.firstYearInterest < 90000);
+  approx(s.firstYearInterest + s.firstYearPrincipal, s.emi * 12, 1e-9);
+  const z = engine.loanSchedule({ balance: 1.2e6, rate: 0, years: 10 });
+  approx(z.emi, 10000); assert.strictEqual(z.totalInterest, 0);
+  const bad = engine.loanSchedule({ balance: 'x', rate: -1, years: NaN });
+  Object.values(bad).forEach(v => assert.ok(Number.isFinite(v)));
+});
+test('loan prepayment: a lump sum ends the loan sooner and saves interest; nothing prepaid saves nothing', () => {
+  const none = engine.loanPrepay({ balance: 1e6, rate: 0.09, years: 10, prepay: 0 });
+  assert.strictEqual(none.monthsSaved, 0);
+  assert.ok(Math.abs(none.interestSaved) < 1e-6);
+  const p = engine.loanPrepay({ balance: 1e6, rate: 0.09, years: 10, prepay: 2e5 });
+  assert.ok(p.monthsSaved > 30 && p.monthsSaved < 40);
+  assert.ok(p.interestSaved > 200000);
+  const all = engine.loanPrepay({ balance: 1e6, rate: 0.09, years: 10, prepay: 5e6 });
+  assert.strictEqual(all.months, 0, 'a prepayment above the balance clears it');
+});
+test('home loan compare: relief only inside the Rs 2 lakh limit, and none on the new regime', () => {
+  const small = engine.homeLoanCompare({ balance: 1.5e6, rate: 0.09, years: 20, slab: 0.3, regime: 'old', amount: 5e5, expected: 0.12, kind: 'fd' });
+  assert.strictEqual(small.old.capped, false);
+  approx(small.old.marginal, 0.09 * (1 - 0.3 * 1.04));
+  approx(small.old.avg, small.old.marginal);
+  approx(small.new.marginal, 0.09);
+  // an FD's interest is taxed at the same slab, so it needs the loan's own pre-tax rate to match
+  approx(small.breakEven, 0.09, 1e-6);
+  const big = engine.homeLoanCompare({ balance: 4e6, rate: 0.09, years: 20, slab: 0.3, regime: 'old', amount: 5e5, expected: 0.12, kind: 'fd' });
+  assert.strictEqual(big.old.capped, true);
+  approx(big.old.marginal, 0.09, 1e-12);        // the next rupee prepaid gets no relief
+  assert.ok(big.old.avg < big.old.marginal && big.old.avg > small.old.marginal, 'relief is spread thin over a bigger loan');
+  const nw = engine.homeLoanCompare({ balance: 1.5e6, rate: 0.09, years: 20, slab: 0.3, regime: 'new', amount: 5e5, expected: 0.12, kind: 'fd' });
+  approx(nw.loanRate, 0.09);
+  approx(nw.breakEven, 0.09 / (1 - 0.3 * 1.04), 1e-6);
+});
+test('home loan compare: a lump sum that takes the interest under the Rs 2 lakh limit loses only part of the relief', () => {
+  const o = { balance: 2.5e6, rate: 0.0875, years: 15, slab: 0.2, regime: 'old', expected: 0.12, kind: 'equity' };
+  const lump = engine.homeLoanCompare(Object.assign({ amount: 5e5 }, o));
+  const next = engine.homeLoanCompare(Object.assign({ amount: 0 }, o));
+  const tax = 0.2 * 1.04;
+  assert.strictEqual(lump.old.capped, true, 'the loan starts above the limit');
+  assert.ok(lump.afterPrepay.firstYearInterest < 200000, 'after the lump sum the interest is under the limit');
+  assert.ok(lump.afterPrepay.reliefLost > 0);
+  assert.ok(lump.loanRate > 0.0875 * (1 - tax) && lump.loanRate < 0.0875, 'between the full-relief and no-relief rates');
+  // the rate is the nominal rate less the share of the interest drop that had relief
+  approx(lump.loanRate, 0.0875 * (1 - lump.afterPrepay.reliefLost / lump.afterPrepay.removed), 1e-12);
+  assert.strictEqual(next.loanRate, 0.0875, 'with no amount to weigh it is the next rupee: no relief above the limit');
+  assert.ok(lump.breakEven < next.breakEven, 'a lower loan-side rate needs a lower investment return to match');
+  approx(lump.gapPerYear, 5e5 * (lump.expectedAfterTax - lump.loanRate), 1e-9);
+  // far above the limit, even a big lump sum leaves the interest above it, so nothing is lost
+  const far = engine.homeLoanCompare({ balance: 6e6, rate: 0.0875, years: 15, slab: 0.2, regime: 'old', amount: 5e5, expected: 0.12, kind: 'equity' });
+  assert.strictEqual(far.afterPrepay.reliefLost, 0);
+  approx(far.loanRate, 0.0875, 1e-12);
+  // clearing the whole loan loses the relief on all of the interest that was claimed
+  const clear = engine.homeLoanCompare(Object.assign({ amount: 5e6 }, o));
+  approx(clear.loanRate, clear.old.avg, 1e-9);
+  assert.strictEqual(clear.afterPrepay.firstYearInterest, 0);
+});
+test('home loan compare: equity break-even is above the loan rate (tax on the gain), and the gap has a sign', () => {
+  const o = { balance: 4e6, rate: 0.09, years: 20, slab: 0.3, regime: 'new', amount: 1e6, kind: 'equity' };
+  const lo = engine.homeLoanCompare(Object.assign({ expected: 0.07 }, o));
+  const hi = engine.homeLoanCompare(Object.assign({ expected: 0.14 }, o));
+  assert.ok(lo.breakEven > 0.09 && lo.breakEven < 0.11);
+  assert.ok(lo.gapPerYear < 0 && hi.gapPerYear > 0);
+  assert.ok(hi.expectedAfterTax > lo.expectedAfterTax);
+  // the investment's after-tax return at the break-even equals the loan rate
+  const at = engine.homeLoanCompare(Object.assign({ expected: lo.breakEven }, o));
+  approx(at.expectedAfterTax, 0.09, 1e-6);
+  // a loan at 0% needs nothing; one that nothing can match is reported as null
+  assert.strictEqual(engine.homeLoanCompare(Object.assign({}, o, { rate: 0, expected: 0.1 })).breakEven, 0);
+  assert.strictEqual(engine.homeLoanCompare(Object.assign({}, o, { rate: 2.5, expected: 0.1, years: 20 })).breakEven, null);
+});
+test('home loan compare: garbage in gives numbers, not NaN', () => {
+  const r = engine.homeLoanCompare({ balance: 'x', rate: NaN, years: -3, slab: 'q', regime: 'sideways', amount: -1, expected: 'z', kind: '??' });
+  [r.loanRate, r.expectedAfterTax, r.gapPerYear].forEach(v => assert.ok(Number.isFinite(v)));
+});
+
+test('debt avalanche: highest rate is cleared first, and it costs less interest than each debt alone', () => {
+  const debts = [{ name: 'Card', balance: 100000, rate: 0.36, payment: 5000 }, { name: 'Personal', balance: 200000, rate: 0.14, payment: 8000 }];
+  const r = engine.debtAvalanche({ debts, extra: 5000 });
+  assert.deepStrictEqual(r.order, ['Card', 'Personal']);
+  const card = r.plan.payoffs.find(p => p.name === 'Card'), pl = r.plan.payoffs.find(p => p.name === 'Personal');
+  assert.ok(card.month < pl.month, 'the 36% debt goes first');
+  assert.ok(r.plan.totalInterest < r.baseline.totalInterest);
+  assert.ok(r.monthsSaved > 0 && r.interestSaved > 0);
+  // every rupee paid is principal or interest, in both runs
+  approx(r.plan.totalPaid, 300000 + r.plan.totalInterest, 1e-9);
+  approx(r.baseline.totalPaid, 300000 + r.baseline.totalInterest, 1e-9);
+  approx(r.monthlyOutlay, 18000);
+});
+test('debt avalanche: a payment that does not cover the interest never clears; no debts is nothing', () => {
+  const r = engine.debtAvalanche({ debts: [{ name: 'Card', balance: 100000, rate: 0.24, payment: 100 }], extra: 0 });
+  assert.strictEqual(r.baseline.neverPaysOff, true);
+  assert.strictEqual(r.interestSaved, null);
+  assert.ok(Number.isFinite(r.baseline.totalInterest));
+  const rescued = engine.debtAvalanche({ debts: [{ name: 'Card', balance: 100000, rate: 0.24, payment: 100 }], extra: 6000 });
+  assert.strictEqual(rescued.plan.neverPaysOff, false, 'an extra payment can clear what the minimum could not');
+  const none = engine.debtAvalanche({ debts: [], extra: 100 });
+  assert.strictEqual(none.plan.months, 0); assert.strictEqual(none.total, 0);
+  const junk = engine.debtAvalanche({ debts: [{ name: null, balance: 'x', rate: -1, payment: NaN }], extra: 'y' });
+  assert.strictEqual(junk.plan.months, 0);
+});
+
+test('term cover: at a real return of zero the expense need is years x yearly spend, and the pieces add up', () => {
+  const r = engine.termCoverNeed({ annualExpense: 600000, years: 10, inflation: 0.06, returnRate: 0.06, loans: 2e6,
+    goalPots: [{ label: 'House', corpus: 1e6, years: 0 }], savings: 1e6, existingCover: 5e6 });
+  approx(r.expense, 6e6);
+  approx(r.gross, 9e6);
+  approx(r.gap, 3e6);
+  assert.strictEqual(r.surplus, 0);
+  const over = engine.termCoverNeed({ annualExpense: 600000, years: 10, inflation: 0.06, returnRate: 0.06, loans: 0, savings: 0, existingCover: 2e7 });
+  assert.strictEqual(over.gap, 0);
+  approx(over.surplus, 2e7 - 6e6);
+});
+test('term cover: a goal pot is its target discounted to today; a higher return needs less', () => {
+  const r = engine.termCoverNeed({ annualExpense: 0, years: 0, returnRate: 0.10, goalPots: [{ corpus: 1610510, years: 5 }] });
+  approx(r.goalPV, 1e6, 1e-6);
+  const lowRet = engine.termCoverNeed({ annualExpense: 600000, years: 20, inflation: 0.06, returnRate: 0.06 });
+  const hiRet = engine.termCoverNeed({ annualExpense: 600000, years: 20, inflation: 0.06, returnRate: 0.10 });
+  assert.ok(hiRet.expense < lowRet.expense);
+  // zero years of dependence means no income to replace
+  assert.strictEqual(engine.termCoverNeed({ annualExpense: 600000, years: 0, inflation: 0.06, returnRate: 0.06 }).expense, 0);
+});
+test('term cover: garbled inputs give zeros, not NaN', () => {
+  const r = engine.termCoverNeed({ annualExpense: 'x', years: NaN, inflation: 'q', returnRate: undefined, loans: -5, goalPots: [null, { corpus: 'z', years: -1 }, 'bad'], savings: NaN });
+  [r.expense, r.gross, r.gap, r.goalPV].forEach(v => assert.ok(Number.isFinite(v)));
+  assert.strictEqual(r.gap, 0);
+  assert.ok(Number.isFinite(engine.termCoverNeed({}).gap));
+});
+test('health cover: a floater takes the first part, a super top-up the rest, and cost growth is compounded', () => {
+  const r = engine.healthCoverPlan({ target: 2.5e6, baseCover: 1e6, medInflation: 0.10, years: 10, own: 5e5, employer: 1e6 });
+  assert.strictEqual(r.base, 1e6); assert.strictEqual(r.topUp, 1.5e6); assert.strictEqual(r.deductible, 1e6);
+  approx(r.inflatedTarget, 2.5e6 * Math.pow(1.1, 10));
+  assert.strictEqual(r.gap, 1e6);
+  assert.strictEqual(r.gapOwnOnly, 2e6, 'without the employer policy the gap is bigger');
+  const small = engine.healthCoverPlan({ target: 5e5, baseCover: 1e6, medInflation: 0, years: 0, own: 0, employer: 0 });
+  assert.strictEqual(small.base, 5e5); assert.strictEqual(small.topUp, 0, 'a target below the floater needs no top-up');
+  Object.values(engine.healthCoverPlan({ target: 'x', baseCover: NaN, medInflation: 'y', years: -2 })).forEach(v => assert.ok(Number.isFinite(v)));
+});

@@ -140,8 +140,8 @@ check(/nearBase/.test(ch), '9a a low end point puts its label above the point, c
 
 // ---- advisor ----------------------------------------------------------------------------------
 check((gl.match(/'income\.[a-zA-Z]+': \{ path:\['income'/g) || []).length === 13, '9a the advisor can set the 13 income inputs');
-check(/TAB_FOR = \{[^}]*income:'income'/.test(gl) && /income: 'income', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' \}\[tab\]/.test(gl), '9a TAB_FOR and the touched-selector map know the tab');
-check(/enum:\['retirement','stepup','swp','income','fx','joint','mc','health'\]/.test(gl) && /PREFIX = \{ retirement:'ret', stepup:'step', swp:'swp', income:'income'/.test(gl), '9a run_full_analysis accepts tab "income"');
+check(/TAB_FOR = \{[^}]*income:'income'/.test(gl) && /income: 'income', loans: 'loans', tax: 'tax', cover: 'cover', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' \}\[tab\]/.test(gl), '9a TAB_FOR and the touched-selector map know the tab');
+check(/enum:\['retirement','stepup','swp','income','loans','taxregime','cover','fx','joint','mc','health'\]/.test(gl) && /PREFIX = \{ retirement:'ret', stepup:'step', swp:'swp', income:'income'/.test(gl), '9a run_full_analysis accepts tab "income"');
 check(/tool:'Retirement Income', pot:s\.corpus/.test(gl) && /tool:'Retirement Income', charts:\[/.test(gl), '9a the advisor can read both the numbers and the charts');
 check(/incomedraw: '#inc-draw'/.test(gl) && /incomecrash: '#inc-crash'/.test(gl), '9a the two charts are highlight targets');
 check(/'income': \['How is an SWP taxed compared with FD interest\?'/.test(gl), '9a the tab has its own follow-up chips');

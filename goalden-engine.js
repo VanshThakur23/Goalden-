@@ -662,6 +662,321 @@ function npsAnnuityPlan(o) {
     monthlyBefore: annual / 12, monthlyAfter: (annual - annualTax) / 12 };
 }
 
+/* ---------------------------------------------------------------------
+   Old vs new income-tax regime, FY 2026-27 (1 Apr 2026 to 31 Mar 2027). DATED
+   rules: re-check after every Budget and whenever the Income-tax Rules are
+   amended. Checked in October 2026 against the Income Tax Department's slab
+   page and the Union Budget 2026-27 papers on indiabudget.gov.in, which left
+   the slabs, the Rs 12 lakh rebate and the deduction limits as Budget 2025 set
+   them. HRA is Rule 279 of the Income-tax Rules 2026; that page was down for
+   maintenance when fetched, so the rule was read from the Department's own
+   search excerpt, and later amendments to the Rules were not checked.
+   - New regime (the default; s.202 of the Income-tax Act 2025): nil to Rs 4
+     lakh, then 5/10/15/20/25/30% in Rs 4 lakh steps. s.87A rebate up to Rs
+     60,000 for income up to Rs 12 lakh, with marginal relief just above it.
+     Standard deduction Rs 75,000. Only the employer's NPS gift (80CCD(2), up
+     to 14% of basic) and the standard deduction come off.
+   - Old regime: by age band, nil to Rs 2.5 lakh (3 lakh from 60, 5 lakh from
+     80), 5% to Rs 5 lakh, 20% to Rs 10 lakh, 30% above. s.87A rebate Rs
+     12,500 up to Rs 5 lakh. Standard deduction Rs 50,000. Then 80C (Rs 1.5
+     lakh), 80CCD(1B) (Rs 50,000 more), employer NPS (10% of basic), 80D (Rs
+     25,000 self and family, Rs 50,000 if senior; the same again for parents),
+     home-loan interest on a self-occupied house (Rs 2 lakh), and HRA.
+   - HRA (old regime only): the least of the HRA received, rent paid minus
+     10% of basic, and 50% of basic in Mumbai, Kolkata, Delhi, Chennai,
+     Hyderabad, Pune, Ahmedabad or Bengaluru (40% elsewhere). "Basic" here is
+     basic plus dearness allowance.
+   4% cess on top of the tax. Surcharge starts above Rs 50 lakh of income and
+   is NOT modelled; compareRegimes flags it. Section numbers are the 1961 Act's
+   except where the line above says otherwise.
+   --------------------------------------------------------------------- */
+const TAX_REGIME_IN = {
+  asOf: 'FY 2026-27', cess: 0.04,
+  newSlabs: [[400000, 0], [800000, 0.05], [1200000, 0.10], [1600000, 0.15], [2000000, 0.20], [2400000, 0.25], [Infinity, 0.30]],
+  oldSlabs: {
+    under60:     [[250000, 0], [500000, 0.05], [1000000, 0.20], [Infinity, 0.30]],
+    senior:      [[300000, 0], [500000, 0.05], [1000000, 0.20], [Infinity, 0.30]],   // 60 to 79
+    superSenior: [[500000, 0], [1000000, 0.20], [Infinity, 0.30]],                    // 80 and over
+  },
+  rebate: { new: { limit: 1200000, max: 60000 }, old: { limit: 500000, max: 12500 } },
+  standardDeduction: { new: 75000, old: 50000 },
+  c80: 150000, nps1b: 50000, homeLoanInterest: 200000,
+  employerNps: { new: 0.14, old: 0.10 },
+  d80: { self: 25000, selfSenior: 50000, parents: 25000, parentsSenior: 50000 },
+  hra: { metroShare: 0.5, otherShare: 0.4, rentOver: 0.10,
+         metros: ['Mumbai', 'Kolkata', 'Delhi', 'Chennai', 'Hyderabad', 'Pune', 'Ahmedabad', 'Bengaluru'] },
+  surchargeFrom: 5000000,
+};
+
+// Tax on `income` through a list of [upTo, rate] bands.
+function slabTax(income, slabs) {
+  const inc = accNum(income);
+  let tax = 0, prev = 0;
+  for (const band of slabs) {
+    if (inc > prev) tax += (Math.min(inc, band[0]) - prev) * band[1];
+    if (inc <= band[0]) break;
+    prev = band[0];
+  }
+  return tax;
+}
+// The rate of the band `income` falls in (what one more rupee of income would be taxed at).
+function slabRate(income, slabs) {
+  const inc = accNum(income);
+  for (const band of slabs) if (inc <= band[0]) return band[1];
+  return slabs[slabs.length - 1][1];
+}
+
+// Tax on a total income under one regime: the slabs, the s.87A rebate (with
+// marginal relief just above the new regime's limit, so a rupee more of income
+// never costs more than a rupee more of tax), then cess.
+function regimeTax(income, regime, ageBand) {
+  const R = TAX_REGIME_IN, inc = accNum(income), isNew = regime === 'new';
+  const slabs = isNew ? R.newSlabs : (R.oldSlabs[ageBand] || R.oldSlabs.under60);
+  let tax = slabTax(inc, slabs);
+  const rb = isNew ? R.rebate.new : R.rebate.old;
+  if (inc <= rb.limit) tax = Math.max(0, tax - rb.max);
+  else if (isNew) tax = Math.min(tax, inc - rb.limit);
+  return tax * (1 + R.cess);
+}
+
+// HRA exempt from tax (old regime). o = { basic, hraReceived, rent, metro } with yearly figures.
+function hraExemption(o) {
+  const h = TAX_REGIME_IN.hra, basic = accNum(o.basic), got = accNum(o.hraReceived), rent = accNum(o.rent);
+  if (!(got > 0) || !(rent > 0)) return 0;
+  return Math.max(0, Math.min(got, rent - h.rentOver * basic, (o.metro ? h.metroShare : h.otherShare) * basic));
+}
+
+// The employee's own EPF for a year (12% of the PF wage). It counts under 80C in the old regime.
+// basicMonthly and wageMode are the same as epfMonthlyContribution's.
+function epfEmployeeYearly(basicMonthly, wageMode) {
+  const r = RETIRE_ACCOUNTS_IN.epf, b = accNum(basicMonthly);
+  return 12 * (wageMode === 'ceiling' ? Math.min(b, r.wageCeiling) : b) * r.employee;
+}
+
+/* Both regimes on the same pay. Every figure is yearly.
+   o = { gross (salary before any deduction), basic (basic + DA), hraReceived, rent, metro (bool),
+         ageBand ('under60' | 'senior' | 'superSenior'), c80 (EPF + PPF + ELSS + whatever else the person puts
+         under 80C), nps1b, employerNps, health (self and family premium), healthParents, parentsSenior (bool),
+         homeLoanInterest (self-occupied house) }.
+   Returns what each regime taxes, which is cheaper and by how much, and the break-even: the total of the
+   old-regime deductions (HRA exemption, 80C, 80CCD(1B), 80D, home-loan interest) at which the old regime
+   costs exactly what the new one does. oldIfFilled says what filling the unused 80C and 80CCD(1B) room
+   would do, which is the question a new-regime winner asks next. saveOn10k is what Rs 10,000 more of old-regime
+   deduction would cut the old tax by (a rupee figure, not a slab rate, so the 87A rebate and cess are in it). */
+function compareRegimes(o) {
+  const R = TAX_REGIME_IN, gross = accNum(o.gross), basic = Math.min(accNum(o.basic), gross);
+  const age = R.oldSlabs[o.ageBand] ? o.ageBand : 'under60', senior = age !== 'under60';
+  const hraReceived = Math.min(accNum(o.hraReceived), gross - basic);
+  const empNps = { new: Math.min(accNum(o.employerNps), R.employerNps.new * basic),
+                   old: Math.min(accNum(o.employerNps), R.employerNps.old * basic) };
+
+  const newTaxable = Math.max(0, gross - R.standardDeduction.new - empNps.new);
+  const newTax = regimeTax(newTaxable, 'new');
+
+  const parts = {
+    hra: hraExemption({ basic, hraReceived, rent: o.rent, metro: o.metro }),
+    c80: Math.min(accNum(o.c80), R.c80),
+    nps1b: Math.min(accNum(o.nps1b), R.nps1b),
+    health: Math.min(accNum(o.health), senior ? R.d80.selfSenior : R.d80.self)
+          + Math.min(accNum(o.healthParents), o.parentsSenior ? R.d80.parentsSenior : R.d80.parents),
+    homeLoan: Math.min(accNum(o.homeLoanInterest), R.homeLoanInterest),
+  };
+  const deductions = parts.hra + parts.c80 + parts.nps1b + parts.health + parts.homeLoan;
+  const oldBase = Math.max(0, gross - R.standardDeduction.old - empNps.old);
+  const oldTaxable = Math.max(0, oldBase - deductions);
+  const oldTax = regimeTax(oldTaxable, 'old', age);
+
+  const oldAt = D => regimeTax(Math.max(0, oldBase - D), 'old', age);
+  let breakEven = 0;
+  if (oldAt(0) > newTax + 1e-6) {
+    let lo = 0, hi = oldBase;
+    for (let i = 0; i < 80; i++) { const mid = (lo + hi) / 2; if (oldAt(mid) <= newTax + 1e-6) hi = mid; else lo = mid; }
+    breakEven = hi;
+  }
+
+  const unused = { c80: R.c80 - parts.c80, nps1b: R.nps1b - parts.nps1b };
+  const afterC80 = regimeTax(Math.max(0, oldTaxable - unused.c80), 'old', age);
+  const afterBoth = regimeTax(Math.max(0, oldTaxable - unused.c80 - unused.nps1b), 'old', age);
+  const winnerOf = (a, b) => Math.abs(a - b) < 1 ? 'tie' : (a > b ? 'new' : 'old');   // the dearer one loses
+
+  return {
+    ageBand: age, gross,
+    new: { taxable: newTaxable, tax: newTax, employerNps: empNps.new, standardDeduction: R.standardDeduction.new },
+    old: { taxable: oldTaxable, tax: oldTax, deductions, parts, employerNps: empNps.old, standardDeduction: R.standardDeduction.old },
+    winner: winnerOf(oldTax, newTax), diff: oldTax - newTax, saving: Math.abs(oldTax - newTax),
+    breakEven, headroom: deductions - breakEven, unused,
+    oldIfFilled: { tax: afterBoth, winner: winnerOf(afterBoth, newTax), c80Saves: oldTax - afterC80, nps1bSaves: afterC80 - afterBoth },
+    saveOn10k: oldTax - regimeTax(Math.max(0, oldTaxable - 10000), 'old', age),   // in rupees, cess and rebate included
+    aboveSurcharge: Math.max(newTaxable, oldTaxable) > R.surchargeFrom,
+  };
+}
+
+/* ---------------------------------------------------------------------
+   Loans. Two questions, each answered with both sides and no verdict:
+     homeLoanCompare  what a rupee put into the home loan saves after tax (a
+                      guaranteed number) against what the same rupee is
+                      expected to earn after tax (an expectation), and the
+                      pre-tax return the investment would need to match
+     debtAvalanche    several costly debts paid highest rate first, against
+                      paying each one on its own
+   Interest is monthly at rate/12, the way Indian lenders quote it.
+   --------------------------------------------------------------------- */
+// Equal monthly instalments on what is owed now. o = { balance, rate (yearly), years (left) }.
+function loanSchedule(o) {
+  const P = accNum(o.balance), r = accNum(o.rate) / 12, n = Math.max(1, Math.round(accNum(o.years) * 12));
+  const emi = P === 0 ? 0 : (r === 0 ? P / n : P * r / (1 - Math.pow(1 + r, -n)));
+  let bal = P, firstYearInterest = 0, firstYearPrincipal = 0, totalInterest = 0;
+  for (let m = 1; m <= n && bal > 0.005; m++) {
+    const i = bal * r, p = Math.min(bal, emi - i);
+    bal -= p; totalInterest += i;
+    if (m <= 12) { firstYearInterest += i; firstYearPrincipal += p; }
+  }
+  return { emi, months: n, firstYearInterest, firstYearPrincipal, totalInterest };
+}
+
+// A lump sum paid in now with the instalment left unchanged: the loan ends sooner. o as loanSchedule plus prepay.
+function loanPrepay(o) {
+  const base = loanSchedule(o), r = accNum(o.rate) / 12;
+  let bal = Math.max(0, accNum(o.balance) - Math.min(accNum(o.prepay), accNum(o.balance))), months = 0, interest = 0;
+  while (bal > 0.005 && months < base.months) {
+    const i = bal * r;
+    bal -= Math.min(bal, base.emi - i); interest += i; months++;
+  }
+  return { months, monthsSaved: base.months - months, totalInterest: interest, interestSaved: base.totalInterest - interest };
+}
+
+/* The home loan's after-tax cost against what the same money is expected to earn.
+   Old regime: interest on a self-occupied house is deductible up to Rs 2 lakh a year (s.24(b)), so the loan's
+   cost falls by the slab, but only on the part of the interest inside that limit. If the first year's interest
+   is already above it, the NEXT rupee prepaid removes interest that gets no relief, so it saves the full rate
+   (marginal); avg is the relief spread over the whole loan; lump is the rate for the amount actually being
+   weighed, from its year-1 effect (loanRate is lump). New regime: no relief on a self-occupied house.
+   o = { balance, rate, years, slab (fraction), regime ('old' | 'new'), amount (the lump sum being weighed),
+         expected (pre-tax yearly return), kind ('equity' | 'debt' | 'fd') }.
+   kind 'fd': interest is taxed every year at the slab. 'debt': the gain is taxed at the slab when sold. 'equity':
+   12.5% on the gain above the Rs 1.25 lakh exemption when sold, which the amount is held to for `years`. Returns
+   are annualised so they compare with the loan's yearly rate. breakEven is the pre-tax return that matches the
+   loan (null if it is beyond 100% a year). */
+function homeLoanCompare(o) {
+  const R = TAX_REGIME_IN, cess = 1 + TAX_IN.cess, slab = Number(o.slab) || 0, r = accNum(o.rate), tax = slab * cess;
+  const sched = loanSchedule(o), first = sched.firstYearInterest;
+  const claim = Math.min(first, R.homeLoanInterest), capped = first > R.homeLoanInterest;
+  const amt = accNum(o.amount);
+  // The lump sum is a block, not "the next rupee": paid in with the instalment left alone, it lowers the first
+  // year's interest from `first` to `firstAfter`. Relief is lost only on the part of that drop that was inside
+  // the Rs 2 lakh limit, so a loan just above the limit loses some relief and one far above it loses none.
+  // With no amount to weigh, fall back to the next rupee (marginal).
+  let bal = Math.max(0, accNum(o.balance) - Math.min(amt, accNum(o.balance))), firstAfter = 0;
+  for (let m = 1; m <= 12 && bal > 0.005; m++) { const i = bal * r / 12; firstAfter += i; bal -= Math.min(bal, sched.emi - i); }
+  const removed = first - firstAfter, reliefLost = (claim - Math.min(firstAfter, R.homeLoanInterest)) * tax;
+  const marginal = capped ? r : r * (1 - tax);
+  const oldReg = { avg: r * (1 - (first > 0 ? claim / first : 0) * tax), marginal, taxSaved: claim * tax, claim, capped,
+                   lump: amt > 0 && removed > 1e-9 ? r * (1 - reliefLost / removed) : marginal };
+  const newReg = { avg: r, marginal: r, lump: r, taxSaved: 0, claim: 0, capped: false };
+  const loan = o.regime === 'new' ? newReg : oldReg;
+
+  const n = Math.max(1, Math.round(accNum(o.years)) || 1);
+  const kind = o.kind === 'fd' || o.kind === 'debt' ? o.kind : 'equity';
+  const afterTax = ret => {
+    ret = Math.max(0, Number(ret) || 0);
+    if (kind === 'fd') return ret * (1 - tax);
+    if (kind === 'equity' && !(amt > 0)) return ret;
+    const A = amt > 0 ? amt : 1, fv = A * Math.pow(1 + ret, n), gain = fv - A;
+    const t = kind === 'debt' ? gain * tax : Math.max(0, gain - TAX_IN.equityLtcgExemption) * TAX_IN.equityLtcg * cess;
+    return Math.pow((fv - t) / A, 1 / n) - 1;
+  };
+  const target = loan.lump;
+  let breakEven = 0;
+  if (afterTax(0) < target) {
+    if (afterTax(1) < target) breakEven = null;
+    else { let lo = 0, hi = 1; for (let i = 0; i < 80; i++) { const mid = (lo + hi) / 2; if (afterTax(mid) >= target) hi = mid; else lo = mid; } breakEven = hi; }
+  }
+  const expectedAfterTax = afterTax(o.expected);
+  return { schedule: sched, old: oldReg, new: newReg, loanRate: target, expectedAfterTax, breakEven,
+    afterPrepay: { firstYearInterest: firstAfter, removed, reliefLost },
+    gapPerYear: amt * (expectedAfterTax - target) };
+}
+
+/* Costly debts paid highest interest first. A debt that is paid off hands its whole payment to the next one
+   (the snowball), and `extra` is on top. The baseline is what happens if each debt just keeps its own payment.
+   Fifty years is the cutoff: a payment that does not even cover a month's interest never clears the debt.
+   o = { debts: [{ name, balance, rate (yearly), payment (monthly) }], extra (monthly) }. */
+function debtAvalanche(o) {
+  const debts = (o.debts || []).map(d => ({ name: String(d.name || ''), balance: accNum(d.balance), rate: accNum(d.rate), payment: accNum(d.payment) }))
+    .filter(d => d.balance > 0);
+  const extra = accNum(o.extra), CAP = 600;
+  const run = (avalanche) => {
+    const ds = debts.map(d => ({ name: d.name, rate: d.rate, payment: d.payment, bal: d.balance, month: null }));
+    let month = 0, interest = 0, paid = 0;
+    while (ds.some(d => d.bal > 0.005) && month < CAP) {
+      month++;
+      ds.forEach(d => { if (d.bal > 0.005) { const i = d.bal * d.rate / 12; d.bal += i; interest += i; } });
+      let pool = avalanche ? extra + ds.reduce((s, d) => s + d.payment, 0) : 0;
+      ds.forEach(d => {
+        if (d.bal <= 0.005) return;
+        const p = Math.min(d.bal, d.payment);
+        d.bal -= p; paid += p;
+        if (avalanche) pool -= p;
+      });
+      if (avalanche) {
+        ds.filter(d => d.bal > 0.005).sort((a, b) => b.rate - a.rate).forEach(d => {
+          if (pool <= 0) return;
+          const p = Math.min(d.bal, pool);
+          d.bal -= p; paid += p; pool -= p;
+        });
+      }
+      ds.forEach(d => { if (d.bal <= 0.005 && d.month === null) { d.bal = 0; d.month = month; } });
+    }
+    return { months: month, totalInterest: interest, totalPaid: paid, neverPaysOff: ds.some(d => d.bal > 0.005),
+      payoffs: ds.map(d => ({ name: d.name, rate: d.rate, month: d.month })) };
+  };
+  const plan = run(true), baseline = run(false);
+  return { order: debts.slice().sort((a, b) => b.rate - a.rate).map(d => d.name), plan, baseline,
+    monthlyOutlay: debts.reduce((s, d) => s + d.payment, 0) + extra, total: debts.reduce((s, d) => s + d.balance, 0),
+    interestSaved: plan.neverPaysOff || baseline.neverPaysOff ? null : baseline.totalInterest - plan.totalInterest,
+    monthsSaved: plan.neverPaysOff || baseline.neverPaysOff ? null : baseline.months - plan.months };
+}
+
+/* ---------------------------------------------------------------------
+   Protection check: how much cover, not what it costs (there is no honest
+   premium source, so none is shown).
+   termCoverNeed: the lump sum a family would need if the earner were gone =
+     the household's yearly spending for as long as the dependants rely on the
+     income (today's money, raised by inflation, paid out of a pot that earns
+     `returnRate`), plus loans outstanding, plus the goal pots (each worth its
+     target discounted back to today at returnRate, because the SIP that was to
+     build it stops), minus savings and cover already held.
+   o = { annualExpense, years, inflation, returnRate, loans, goalPots: [{ label, corpus, years }],
+         savings, existingCover }
+   --------------------------------------------------------------------- */
+function termCoverNeed(o) {
+  const years = Math.min(60, Math.max(0, Math.round(Number(o.years) || 0)));
+  const infl = Number(o.inflation) || 0, ret = Number(o.returnRate) || 0;
+  const expense = years > 0 ? accNum(o.annualExpense) * corpusRequired(realRate(ret, infl), years, 1, true) : 0;
+  const goals = (Array.isArray(o.goalPots) ? o.goalPots : []).map(g => {
+    const corpus = accNum(g && g.corpus), gy = Math.max(0, Number(g && g.years) || 0);
+    return { label: String((g && g.label) || ''), corpus, years: gy, today: corpus / Math.pow(1 + ret, gy) };
+  });
+  const goalPV = goals.reduce((s, g) => s + g.today, 0), loans = accNum(o.loans);
+  const gross = expense + loans + goalPV, offsets = accNum(o.savings) + accNum(o.existingCover);
+  return { expense, loans, goalPV, goals, gross, savings: accNum(o.savings), existingCover: accNum(o.existingCover),
+    gap: Math.max(0, gross - offsets), surplus: Math.max(0, offsets - gross) };
+}
+
+/* Health cover, with the idea of a super top-up. `target` is the total the person wants in today's money; a
+   family floater of `baseCover` takes the first part and a super top-up with that same deductible covers the
+   rest. Medical costs rise, so the same total bought `years` from now has to be `medInflation` larger. Cover from
+   an employer ends with the job, so the gap is shown with and without it.
+   o = { target, baseCover, medInflation, years, own, employer } */
+function healthCoverPlan(o) {
+  const target = accNum(o.target), base = Math.min(target, accNum(o.baseCover));
+  const years = Math.min(60, Math.max(0, Math.round(Number(o.years) || 0))), infl = Number(o.medInflation) || 0;
+  const own = accNum(o.own), employer = accNum(o.employer);
+  return { target, base, topUp: target - base, deductible: base, years,
+    inflatedTarget: target * Math.pow(1 + infl, years),
+    gap: Math.max(0, target - own - employer), gapOwnOnly: Math.max(0, target - own), own, employer };
+}
+
 /* =====================================================================
    REAL HISTORICAL MARKET DATA
    Sensex: fiscal-year (April-to-April) annual returns, FY1979-80 through
@@ -1566,6 +1881,8 @@ if (typeof module !== 'undefined' && module.exports) {
     TAX_IN, holdsLongTerm, saleTaxIndia, postTaxPlanValue, postTaxFdFinal, harvestPlan,
     RETIRE_ACCOUNTS_IN, epfMonthlyContribution, epfFutureValue, ppfFutureValue, npsFutureValue, npsCountedShare, retirementAccountsFV,
     incomeBuckets, incomeStrategies, incomeDrawPlan, incomeSwitchTax, npsAnnuityPlan,
+    TAX_REGIME_IN, slabTax, slabRate, regimeTax, hraExemption, epfEmployeeYearly, compareRegimes,
+    loanSchedule, loanPrepay, homeLoanCompare, debtAvalanche, termCoverNeed, healthCoverPlan,
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow, rollingReturns, annualisedVol, returnReality, stepUpAnnualPlan,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,

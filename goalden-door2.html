@@ -235,6 +235,13 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
    ID-scoped override keeps its cap generous without loosening every other
    .inst-panel on the page. */
 #bp.open{max-height:6000px}
+#pcp.open{max-height:2400px}
+/* Protection check: four number boxes in a grid, one label each; the button that hands off to the Lab sits under the result. */
+.pc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.pc-field{display:flex;flex-direction:column;gap:5px;font-size:12px;line-height:1.35;color:rgba(20,40,63,.8)}
+.pc-in{width:100%;background:rgba(20,40,63,.06);border:1px solid rgba(20,40,63,.16);border-radius:4px;padding:9px 11px;color:var(--paper);font-family:'Spline Sans Mono',monospace;font-size:13px}
+.pc-lab{width:100%;margin-top:12px;background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:9px;padding:12px;font-family:'Figtree',sans-serif;font-weight:600;font-size:13.5px;cursor:pointer}
+@media(max-width:480px){.pc-grid{grid-template-columns:1fr}}
 .inst-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 2px 4px}
 .inst-card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.12);border-radius:3px 10px 10px 10px;padding:11px 12px}
 .inst-name{font-family:'Newsreader',serif;font-size:13.5px;color:var(--paper);line-height:1.3;margin-bottom:3px}
@@ -427,7 +434,7 @@ const C = {
       {id:'debtfund',name:'Short-duration debt fund',band:{min:.065,max:.08},why:'Slightly better post-tax outcome than FD for higher tax slabs, some NAV movement'},
       {id:'hybrid',name:'Balanced advantage / hybrid fund',band:{min:.09,max:.11},why:'Medium goals where some equity upside is wanted without full equity swings'},
       {id:'equityindex',name:'Index / flexi-cap equity fund',band:{min:.11,max:.14},why:'Long-horizon core holding: compounding needs time to work'},
-      {id:'elss',name:'ELSS (tax-saving equity fund)',band:{min:.11,max:.13},why:'Old-regime taxpayers wanting equity exposure plus an 80C deduction in one product'},
+      {id:'elss',name:'ELSS (tax-saving equity fund)',band:{min:.11,max:.13},why:'Equity exposure with a 3-year lock-in. Its 80C deduction exists only on the old tax regime; on the new regime it is an ordinary equity fund, so weigh it against an index fund on returns alone'},
       {id:'gold',name:'Gold ETF',band:{min:.08,max:.10},why:'Portfolio diversifier, not a core holding'},
       {id:'ppf',name:'Public Provident Fund (PPF)',band:{min:.071,max:.071},why:'Debt anchor for very long goals, fully tax-free'},
       {id:'nps',name:'National Pension System (NPS)',band:{min:.09,max:.11},why:'Retirement-specific, locked till 60'},
@@ -906,6 +913,7 @@ const G = {
   editingIndex:null,
   draftType:null,
   draftA:null,draftB:null,draftC:null,draftSav:0,
+  cover:null, // Protection check answers {years, loans, savings, existing}; null until the card is used
   si:0,
   // Phase 10 — real portfolio comparison (2-4 instruments).
   instruments:[]
@@ -1756,7 +1764,7 @@ function renderInstrumentPanel(rec, overridden, fullBucketName, effectiveBucketN
         <div class="inst-risk ${rt.cls}">${rt.label}</div>
         <div class="inst-name">${inst.name}</div>
         <div class="inst-rate"><span class="term" data-def="The illustrative long-run return range for this category. The wider the range, the more its actual yearly result can swing above or below the average.">typically ${(inst.band.min*100).toFixed(1)}&ndash;${(inst.band.max*100).toFixed(1)}%/yr</span></div>
-        <div class="inst-why">${inst.why}</div>
+        <div class="inst-why">${inst.why}${inst.id==='elss'?` <a href="goalden-lab.html?tab=taxregime" target="_blank" rel="noopener">Which regime wins for you?</a>`:''}</div>
       </div>`;}).join('')+`</div>`;
   } else {
     html+=`<div class="inst-note">No instrument on this list fits both your profile and this timeframe. Talk to an adviser before this goal gets closer.</div>`;
@@ -1820,6 +1828,67 @@ function eduPhaseToggleBlock(g,i){
   ${advGoalAllocControl(g,i)}
   </div>`;
 }
+/* =====================================================================
+   PROTECTION CHECK (India only): how much term cover this household would need
+   The same sum as the Lab's Cover tab (termCoverNeed in goalden-engine.js). It sizes cover and shows the gap; it never
+   shows what cover costs, because there is no honest premium source. The four answers live in G.cover so they come back
+   on a resume. The result is rewritten in place while typing, so a number box keeps its focus.
+   ===================================================================== */
+const COVER_DEFAULT={ years:15, loans:0, savings:0, existing:0 };
+function coverState(){
+  const s=Object.assign({}, COVER_DEFAULT, G.cover||{});
+  const n=(v,hi)=>{ v=Number(v); return isFinite(v)?Math.min(hi,Math.max(0,v)):0; };
+  return { years:Math.round(n(s.years,40)), loans:n(s.loans,5e8), savings:n(s.savings,5e8), existing:n(s.existing,1e9) };
+}
+// A retirement goal pays for the earner's own retirement, which does not happen if they are not here, so it is left out.
+// What a goal still needs is its target less what is already set aside for it. Retirement and education carry that as
+// gapCorpus (their corpus is the full target); a general goal's corpus is already net of its savings.
+function coverGoalNeed(g){ return g.gapCorpus!==undefined ? g.gapCorpus : g.corpus; }
+function coverGoalPots(plan){
+  return plan.goals.filter(g=>g.type!=='retirement' && coverGoalNeed(g)>0).map(g=>({label:g.label, corpus:coverGoalNeed(g), years:g.years}));
+}
+function coverResultHtml(plan){
+  const c=cfg(), s=coverState(), d=c.d, exp=G.monthlyExpense||0;
+  const t=termCoverNeed({annualExpense:exp*12, years:s.years, inflation:d.inflation, returnRate:d.debt, loans:s.loans, goalPots:coverGoalPots(plan), savings:s.savings, existingCover:s.existing});
+  if(t.gross<=0) return `<div class="gr-note" style="margin-top:0">Add the years your household would rely on your income, or any loans, to see how much cover that is.</div>`;
+  const parts=[];
+  if(t.expense>0) parts.push(`${c.compact(t.expense)} for ${s.years} years of spending (${c.fmt(exp)} a month today, rising ${(d.inflation*100).toFixed(0)}% a year, paid out of a pot earning ${(d.debt*100).toFixed(0)}%)`);
+  if(t.loans>0) parts.push(`${c.compact(t.loans)} to clear loans`);
+  if(t.goalPV>0) parts.push(`${c.compact(t.goalPV)} for the goals above (what each still needs after the money already set aside for it, brought back to today's value)`);
+  const held=t.savings+t.existingCover;
+  return `<div class="gr-note" style="margin-top:0">If you were not there, your household would need about <b style="color:var(--paper)">${c.compact(t.gross)}</b>: ${parts.join(', plus ')}. You hold ${c.compact(held)} between savings and existing term cover, so ${t.gap>0?`the gap is <b style="color:var(--paper)">${c.compact(t.gap)}</b>`:`you are covered, with ${c.compact(t.surplus)} to spare`}.</div>`;
+}
+function coverCardHtml(plan){
+  const c=cfg();
+  if(c.code!=='IN') return '';
+  const s=coverState();
+  const box=(key,label,val,step,tip)=>`<label class="pc-field"><span>${label}${tip?` <span class="term" data-def="${tip}">what is this?</span>`:''}</span><input type="number" class="pc-in" data-pc="${key}" min="0" step="${step}" value="${val}" inputmode="numeric"></label>`;
+  return `<div class="inst-toggle" id="pct">Check your insurance cover</div>
+  <div class="inst-panel" id="pcp"><div class="alloc-card" id="pcCard">
+    <div class="section-head" style="margin-top:0">How much term cover would your family need?</div>
+    <div class="gr-note" style="margin-top:0;margin-bottom:10px">Term life insurance pays your family a lump sum if you are not there. The size to aim for is what they would need to keep living as they do now until they are independent, clear your loans, and still reach the goals above. Your retirement goal is left out, since it pays for your own retirement.</div>
+    <div class="pc-grid">
+      ${box('years','Years they would rely on your income',s.years,1)}
+      ${box('loans','Loans outstanding (₹)',s.loans,50000)}
+      ${box('savings','Savings they could draw on (₹)',s.savings,50000,'Money you hold that your family could use: bank balance, investments you could sell. Leave out money you have already set aside for the goals above, which is taken off those goals, and do not count the emergency fund twice if it is already in this figure.')}
+      ${box('existing','Term cover you already own (₹)',s.existing,500000,'Only term life cover you pay for yourself. Cover through an employer ends with the job, and an endowment or ULIP policy pays little for its cost, so neither is counted here.')}
+    </div>
+    <div id="pcRes">${coverResultHtml(plan)}</div>
+    <div class="gr-note" style="margin-top:8px">This sizes cover only. What it costs depends on your age, health and insurer, and nothing on this page quotes a price. Health cover is sized in the Lab.</div>
+    <button type="button" id="openCoverBtn" class="pc-lab">Size health cover too, in the Lab →</button>
+  </div></div>`;
+}
+// One delegated listener: any number box in the card refreshes the result text only.
+document.addEventListener('input', e=>{
+  const el=e.target.closest && e.target.closest('[data-pc]');
+  if(!el) return;
+  G.cover=Object.assign({}, COVER_DEFAULT, G.cover||{});
+  G.cover[el.dataset.pc]=Number(el.value)||0;
+  persistState();
+  const res=document.getElementById('pcRes');
+  if(res) res.innerHTML=coverResultHtml(buildPlan());
+});
+
 function renderPlan(){
   const c=cfg(),plan=buildPlan();
   const b=BUCKETS[G.bucket]||BUCKETS.moderate;
@@ -1955,6 +2024,8 @@ function renderPlan(){
   ${(chartHtml||fdCardHtml)?`
   <div class="inst-toggle" id="bt">See the growth chart, FD comparison, and allocation</div>
   <div class="inst-panel" id="bp">${chartHtml}${fdCardHtml}${allocCard}${realityHtml}</div>` : allocCard}
+
+  ${coverCardHtml(plan)}
 
   <div class="alloc-card" style="text-align:center">
     <div class="section-head" style="margin-top:0">Want the deeper tools?</div>
@@ -2578,6 +2649,9 @@ function attach(screen){
     document.getElementById('bt')&&document.getElementById('bt').addEventListener('click',()=>{
       document.getElementById('bp').classList.toggle('open');
     });
+    document.getElementById('pct')&&document.getElementById('pct').addEventListener('click',()=>{
+      document.getElementById('pcp').classList.toggle('open');
+    });
     document.querySelectorAll('[id^="it-"]').forEach(el=>{
       el.addEventListener('click',()=>{
         const idx=el.id.split('-')[1];
@@ -2629,7 +2703,7 @@ function attach(screen){
       });
     });
     document.getElementById('rb')&&document.getElementById('rb').addEventListener('click',()=>{
-      Object.assign(G,{country:null,capA:[null,null,null,null],tolA:[null,null,null,null,null],bucket:null,capScore:0,tolScore:0,monthlyExpense:null,emergencyStatus:null,emergencyPrioritize:null,monthlyCapacity:null,goals:[],addingGoal:false,editingIndex:null,draftType:null,draftA:null,draftB:null,draftC:null,draftSav:0,si:0});
+      Object.assign(G,{country:null,capA:[null,null,null,null],tolA:[null,null,null,null,null],bucket:null,capScore:0,tolScore:0,monthlyExpense:null,emergencyStatus:null,emergencyPrioritize:null,monthlyCapacity:null,goals:[],cover:null,addingGoal:false,editingIndex:null,draftType:null,draftA:null,draftB:null,draftC:null,draftSav:0,si:0});
       render();
     });
 
@@ -2638,7 +2712,7 @@ function attach(screen){
         _goalden:'plan-export', _version:1, savedAt:new Date().toISOString(),
         country:G.country, capA:G.capA, tolA:G.tolA,
         monthlyExpense:G.monthlyExpense, emergencyStatus:G.emergencyStatus,
-        monthlyCapacity:G.monthlyCapacity, goals:G.goals,
+        monthlyCapacity:G.monthlyCapacity, goals:G.goals, cover:G.cover,
       };
       const blob=new Blob([JSON.stringify(savedState,null,2)],{type:'application/json'});
       const url=URL.createObjectURL(blob);
@@ -2662,7 +2736,7 @@ function attach(screen){
           Object.assign(G,{
             country:data.country, capA:data.capA, tolA:data.tolA,
             monthlyExpense:data.monthlyExpense, emergencyStatus:data.emergencyStatus,
-            monthlyCapacity:data.monthlyCapacity, goals:data.goals||[],
+            monthlyCapacity:data.monthlyCapacity, goals:data.goals||[], cover:data.cover&&typeof data.cover==='object'?data.cover:null,
             addingGoal:false, editingIndex:null, draftType:null, draftA:null, draftB:null, draftSav:0,
           });
           // renderPlan() reads G.bucket directly rather than recomputing it —
@@ -2684,17 +2758,20 @@ function attach(screen){
       G.viewingCase=true; G.si=flow().indexOf('case'); render();
     });
 
-    document.getElementById('openLabBtn')&&document.getElementById('openLabBtn').addEventListener('click',()=>{
+    const openPlanInLab=(tab)=>{
       const p=buildPlan();
       const handoff={
         _goalden:'lab-handoff', _version:1, savedAt:new Date().toISOString(),
         country:G.country, totalSIP:p.totalSIP, capacity:p.cap,
-        emergencyStatus:G.emergencyStatus, bucket:G.bucket,
-        goals:p.goals.map(g=>({type:g.type,label:g.label,sip:g.sip,corpus:g.corpus,years:g.years})),
+        emergencyStatus:G.emergencyStatus, bucket:G.bucket, monthlyExpense:G.monthlyExpense,
+        goals:p.goals.map(g=>({type:g.type,label:g.label,sip:g.sip,corpus:g.corpus,need:coverGoalNeed(g),years:g.years})),
+        tab:tab, cover:G.country==='IN'?coverState():null,
       };
       try{ localStorage.setItem('goaldenLabHandoff', JSON.stringify(handoff)); }catch(e){}
       window.location.href='goalden-lab.html';
-    });
+    };
+    document.getElementById('openLabBtn')&&document.getElementById('openLabBtn').addEventListener('click',()=>openPlanInLab('health'));
+    document.getElementById('openCoverBtn')&&document.getElementById('openCoverBtn').addEventListener('click',()=>openPlanInLab('cover'));
   }
   if(screen==='case'){ attachCaseHandlers(); }
 }

@@ -4362,9 +4362,118 @@ standing over the founder's shoulder.
   the page's own `clampIncome` is run for real in a vm, the year-1 SWP tax is
   checked against an independent formula, the rest are structural).
 
-### Next: Group 9b
-- B6 loans (prepay vs invest with a break-even; most expensive debt first; the
-  Rs 2 L old-regime home-loan interest deduction), B3 old vs new tax regime (FY
-  2026-27 figures must come from a primary government source and be dated like
-  `TAX_IN`, with a re-check note), B2 cover (term and health gap sized from the goal
-  pots, no premiums).
+### Group 9b: loans, old vs new tax regime, insurance cover (B6, B3, B2)
+- **Group 9a shipped:** commit `f388dff`, Worker `0e43b9ce-f223-4a11-8c2f-bb3cdb553c8c`,
+  live-checked on goalden.vanshsingh23.workers.dev.
+- **Three new Lab tabs, all India only** (another country gets a note and a one-click
+  switch to India, never wrong numbers). Each shows both sides of its question and
+  says no verdict; none shows an insurance premium, because there is no honest
+  premium source.
+  1. *Loans (B6).* Prepay the home loan, or invest the money: the saving from
+     prepaying (a certain number at today's rate, after the tax relief it costs) set
+     against what the same money is expected to earn after tax (an expectation), and
+     the pre-tax return the investment would need to match. Old regime: interest on a
+     self-occupied house is deductible only up to Rs 2 lakh a year (s.24(b)); the new
+     regime gives no relief. Investment kinds: equity fund (12.5% on the gain above
+     Rs 1.25 lakh when sold), debt fund (gain at the slab when sold), FD (interest at
+     the slab each year). Second card: what prepaying does to the loan (months saved,
+     interest saved, instalment unchanged). Third card: credit-card and personal-loan
+     debts cleared highest rate first, against each on its own payment, with the
+     months each is cleared in. Slab pills; a debt that costs more than the
+     investment is expected to earn after tax is said so, with its reason.
+  2. *Tax regime (B3).* Old against new regime on the same pay, FY 2026-27:
+     which costs less and by how much, the deduction total at which the two tie
+     (break-even) against the person's own, how each regime gets to its tax, and what
+     it means for the plan (on the new regime ELSS/PPF/tax-saving FDs are chosen for
+     returns and lock-ins alone; on the old regime a rupee figure for Rs 10,000 more
+     under 80C or 80CCD(1B), and what filling the unused room saves). Fill buttons
+     copy EPF and PPF from Quick Calculate, first-year interest from the Loans tab and
+     the health premium from the Cover tab; each is the person's own click and is
+     named on screen. Surcharge (above Rs 50 lakh) is not modelled and the tab warns
+     when income is above the line (the only red on the three tabs).
+  3. *Cover (B2).* Term cover = the household's spending for the years the family
+     relies on the income (today's money, raised by inflation, paid out of a pot at a
+     chosen return) + loans + goal pots (each target discounted to today) - savings
+     - existing term cover. Health cover = a family floater plus a super top-up with
+     the same deductible, sized to a total target, with the target grown at medical
+     inflation, and the gap shown with and without employer cover (which ends with
+     the job). The three city-size starting sizes are labelled rules of thumb, not
+     quotes. Plan Health also gets a "Protection, beside the score" card; the 0-100
+     score itself is unchanged.
+- **Engine (goalden-engine.js, exported, 273 tests):** `TAX_REGIME_IN`, `slabTax`,
+  `slabRate`, `regimeTax`, `hraExemption`, `epfEmployeeYearly`, `compareRegimes`,
+  `loanSchedule`, `loanPrepay`, `homeLoanCompare`, `debtAvalanche`, `termCoverNeed`,
+  `healthCoverPlan`.
+- **Rules are dated and sourced.** `TAX_REGIME_IN.asOf` is 'FY 2026-27' and its comment
+  says what was checked in October 2026 (the Income Tax Department's slab page and
+  the Union Budget 2026-27 papers: slabs, the Rs 12 lakh rebate and the deduction
+  limits are as Budget 2025 set them). **Known limitation:** HRA is Rule 279 of the
+  Income-tax Rules 2026; that Department page was down for maintenance, so the rule
+  was read from a search excerpt and later amendments were not checked. The tab asks
+  the person to re-check.
+- **Full Plan (goalden-door2.html).** The ELSS card no longer says it is for
+  "old-regime taxpayers" (the app does not know the regime); it says the 80C
+  deduction exists only on the old regime and links to the Lab's Tax regime tab. A
+  new "Check your insurance cover" block (India only) asks four numbers (years the
+  family relies on the income, loans, savings, existing term cover), sizes term cover
+  from the plan's own goals and monthly spend, saves them in `G.cover` (reset,
+  export and import include it) and hands them to the Lab with "Size health cover
+  too, in the Lab".
+- **Advisor.** 15 `loans.*`, 13 `tax.*` and 15 `cover.*` fields it can set;
+  `run_full_analysis` accepts tabs `loans`, `taxregime` (state key `tax`) and `cover`;
+  it reads numbers and charts of all three; "Fifteen tools" in its knowledge text;
+  highlight targets and follow-up chips for each tab. It refuses these tabs outside
+  India with the switch instruction.
+- **Design decisions.** No premium anywhere. The retirement goal is left out of the
+  term-cover pots (it pays for the earner's own retirement, which does not happen if
+  they are gone; the card says to add it under other goals if someone depends on it).
+  ELSS wording is regime-neutral. Break-evens, not verdicts.
+- **Opus review (model opus, read-only), five MUST-FIX items, all fixed:**
+  1. Basic pay above salary, and a floater above the health target, were clamped
+     silently, so the advisor could report a number the tab had lowered. Now the
+     advisor's `set_value` refuses them with a clear error, says `alsoChanged` when
+     lowering salary/target pulled the other field down, and `run_full_analysis` sets
+     salary before basic pay and the target before the floater whatever order it was
+     sent in. `clampCover` holds the floater to the target and its slider's maximum
+     follows the target. The EPF fill note is built from the clamped basic pay.
+  2. At low pay (both regimes nil) the tab said "the old regime is cheaper" and gave
+     a slab percentage that saved nothing. Now: "Neither regime costs you any tax",
+     and the old-regime saving is a rupee figure from a new engine field `saveOn10k`
+     (cess and the s.87A rebate in it), shown only when there is tax to save.
+  3. For a lump sum the loan side used the marginal rate, so a loan just above the
+     Rs 2 lakh limit was shown as saving the full rate although the lump sum takes
+     the interest under the limit. `homeLoanCompare` now works the year-1 effect of the
+     amount: relief is lost only on the part of the interest drop that was inside the
+     limit (`old.lump`, `afterPrepay`). Default case: 7.55% (was 8.75%), break-even
+     8.14% (was 9.42%), first-year difference about Rs 8,800.
+  4. Education goals carry their full target as `corpus` while a general goal's is net
+     of its savings, so the cover sum counted education savings twice. Both pages now
+     use what each goal still needs (`gapCorpus` in the Full Plan, sent as `need` in
+     the hand-off), and the savings box says not to count goal-earmarked money again.
+  5. The Plan Health descriptions (tab blurb, advisor knowledge text) said the score
+     covers protection; it does not. Reworded.
+  I did not run a second reviewer on these fixes; they are covered by new engine tests,
+  smoke-21 checks and the browser checks below.
+- **Not done.** Rent-vs-buy (B7). Surcharge. No BRIEFING_SECTIONS entry for the income
+  or the three new tabs. The loan comparison puts the loan's nominal rate (8.75%)
+  beside annual investment returns; the loan's effective annual rate is about 0.3
+  points higher (monthly compounding), so the saving is slightly understated. When a
+  plan runs out in year 1 the Retirement Income caption shows Rs 0 tax. The engine does
+  not sanitise NaN for inputs the sliders can never produce. The step-up chart's
+  "behind" label can still clip on a very narrow chart.
+- **Checked in a real browser:** the three tabs at 1280px and 375px (one horizontal
+  overflow on Tax regime at 375px found and fixed with `.fill-chips .tglbtn`), the
+  default loan case (7.55%, 8.14%), gross 4,50,000 / 10,00,000 / 18,00,000 on the tax
+  tab, the advisor refusals and `alsoChanged`, a Full Plan with an education goal with
+  savings (the pots use what is still needed), the EPF fill with a basic above salary,
+  no console errors.
+- **Tests:** 273/273 engine tests; smokes 02-21 pass (smoke-14/15/16 need `python3` on
+  PATH; on this machine it is a copy of python.exe in a scratch folder); new smoke-21
+  (81 checks: the three tabs' own clamps are run for real in a vm, every end of every
+  advisor range is checked against them, the rest are structural); smoke-20 had two
+  assertions updated for the new tabs.
+
+### Next: Group 9c
+- B1 holdings review (holdings with amounts: the real mix against the risk profile,
+  duplicate categories, fee drag, tax-aware rebalancing), then 9d B5 yearly plan
+  review by the advisor. B7 rent-vs-buy only if time is left.

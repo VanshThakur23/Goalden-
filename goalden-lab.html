@@ -327,6 +327,15 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .inc-key .inc-when{font-family:'Spline Sans Mono',monospace;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:rgba(20,40,63,.74)}
 .inc-rules{margin:4px 0 0;padding-left:18px;font-size:12.5px;line-height:1.6;color:rgba(20,40,63,.8)}
 .inc-rules li{margin-bottom:4px}
+/* Tax regime: how each regime reaches its tax, one line per step. Label left, rupees right; the small line under a label
+   says what the number is the least of, so a rule is read where it is used. */
+.tx-rows{margin:0 0 14px}
+.tx-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:6px 0;border-bottom:1px dashed rgba(20,40,63,.15);font-size:13px;line-height:1.45;color:rgba(20,40,63,.86)}
+.tx-row b{font-family:'Spline Sans Mono',monospace;font-size:12.5px;font-weight:600;color:var(--paper);white-space:nowrap}
+.tx-row small{display:block;font-size:11.5px;color:rgba(20,40,63,.7)}
+.tx-row.sum{border-bottom:none;border-top:1px solid rgba(20,40,63,.35);font-weight:600}
+/* Buttons that copy a number from another tab have long names; they wrap instead of overflowing the panel. */
+.fill-chips .tglbtn{flex:0 1 auto;max-width:100%;white-space:normal;text-align:left;line-height:1.4}
 @media(max-width:560px){.inc-keys{grid-template-columns:1fr}}
 @media(max-width:560px){.stat-row.four{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* A flat 1px border in one uniform grey read as barely-there -- a
@@ -2112,6 +2121,21 @@ const L = {
            kind:'swpEquity', fundRate:10, fdRate:6.5, ownShare:50,
            equityRate:11, shock:{ epId:'2008', year:1 },
            npsPot:2000000, annuityShare:40, annuityRate:6, retNote:null },
+  // Loans. slab null = TAX_IN.defaultSlab. expected follows the kind of investment (equity 10, debt 7, FD 6.5) until the
+  // person types their own. cardRate 36 is a typical card rate, not a quote. India only, like Retirement Income.
+  loans:{ balance:2500000, rate:8.75, years:15, regime:'old', slab:null,
+          amount:500000, expected:10, kind:'equity',
+          cardBal:150000, cardRate:36, cardPay:6000, plBal:400000, plRate:14, plPay:12000, extra:5000 },
+  // Tax regime. Defaults are a salaried person in a metro on 18 L, which the new regime wins by a little: the tab opens on
+  // a result, not a blank. note is the "filled from" line, shown only while the numbers still match what the button set.
+  tax:{ gross:1800000, basic:720000, hra:288000, rent:360000, metro:true, ageBand:'under60',
+        c80:150000, nps1b:50000, employerNps:0, health:25000, healthParents:0, parentsSenior:false, homeLoan:0, note:null },
+  // Cover. goals arrive from the Full Plan's "Open in the Lab" hand-off ([{label, corpus, years}], cleaned on every
+  // read). tier only sets where the health sliders open; the sizes are rules of thumb, never market figures or quotes.
+  // premium is optional and used only by the Tax regime tab (80D); no premium is estimated anywhere.
+  cover:{ monthly:60000, years:15, inflation:6, returnRate:7, loans:2500000, goalExtra:0, goals:[], savings:500000, existing:5000000,
+          tier:'metro', healthTarget:2500000, baseCover:1000000, medInflation:10, healthYears:10, ownHealth:500000, employerHealth:1000000,
+          premium:0, note:null },
   snapshots:[], // up to 2 saved Retirement Lab states, for side-by-side comparison
   instCategory:'all',
   instSearch:'',
@@ -2216,7 +2240,7 @@ function nextStepCard(items){
 // tab's own state is reset without touching any other tab's inputs or
 // the global country/currency choice.
 const TAB_STATE_KEYS={
-  retirement:['ret'], stepup:['step'], swp:['swp'], income:['income'], fx:['fx'], joint:['joint'],
+  retirement:['ret'], stepup:['step'], swp:['swp'], income:['income'], loans:['loans'], taxregime:['tax'], cover:['cover'], fx:['fx'], joint:['joint'],
   mc:['mc'], portfolio:['portfolio'], livefrontier:['live'],
   instruments:['instCategory','instSearch'], health:['health'],
   statements:['statements'],
@@ -3223,6 +3247,590 @@ function incomeAdvisorResults(){
       points:[{ label:'bucket plan', value:end(hit.buckets) }, { label:'single rebalanced pot', value:end(hit.mix) }] },
     { kind:'pension', title:'NPS pension', xAxis:'', yAxis:'', note:'annuity rate is the user\'s assumption, not a quote; the 20% minimum annuity share is for most subscribers, government employees need at least 40%, and small pots have their own rules',
       points:[{ label:'pension a month after tax', value:c.fmt(Math.round(nps.monthlyAfter)) }, { label:'cash kept', value:c.compact(nps.lumpKept) }] },
+  ] };
+}
+
+/* =====================================================================
+   TABS: LOANS, TAX REGIME, COVER (Group 9b, India only)
+   The sums are goalden-engine.js (homeLoanCompare, loanPrepay, debtAvalanche,
+   compareRegimes, termCoverNeed, healthCoverPlan); this is inputs and cards.
+   Each card shows both sides of a comparison and a break-even, never a verdict
+   on the home loan. No insurance premium appears anywhere: there is no honest
+   source for one, so the Cover tab sizes cover and shows the gap, and the only
+   premium on the page is the one the person types in for the tax tab.
+   ===================================================================== */
+function indiaOnlyTab(title, tabId, why){
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
+  <div class="panel">${panelHead(title, tabId)}</div>
+  <div class="output"><div class="card is-primary"><h4>This tool uses Indian rules</h4>
+    <div class="cap">${why} Switch to India to use it.</div>
+    <div class="slab-chips"><button type="button" class="tglbtn active" data-country="IN">Switch to India</button></div>
+  </div></div></div>`;
+}
+// Whole numbers of months as "3 yr 4 mo".
+function fmtMonths(m){ m=Math.max(0,Math.round(m)); const y=Math.floor(m/12), r=m%12; return (y?y+' yr':'')+(y&&r?' ':'')+((r||!y)?r+' mo':''); }
+// A number brought onto its slider's step, for the buttons that copy a value from another tab: the box beside a slider
+// shows slider.value, which the browser rounds to the step, so an off-step value would show one figure and quietly become another.
+function incSnap(v,step){ return Math.round(v/step)*step; }
+// "Filled from ..." notes live as {text, vals}; they show only while the fields still hold what the button set, so a
+// note never outlives the numbers it explains. A note about a fill that did nothing snapshots every number on the tab
+// instead, so it goes the moment any slider moves.
+function fillNoteHTML(s){
+  const n=s.note;
+  if(!n || !n.vals || !Object.keys(n.vals).every(k=>s[k]===n.vals[k])) return '';
+  return `<div class="gr-note" style="margin:-4px 0 12px">${n.text}</div>`;
+}
+function numSnap(s){ const o={}; Object.keys(s).forEach(k=>{ if(typeof s[k]==='number') o[k]=s[k]; }); return o; }
+
+// Horizontal bars, one per row, each labelled at its own end, no legend. rows: [{name, value, label, color}].
+function barsChart(chartId, rows, h){
+  if(h===undefined) h=28+rows.length*40;
+  deferChartInit(()=>renderBarsOption(chartId, rows));
+  return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
+}
+function renderBarsOption(chartId, rows){
+  initChart(chartId, {
+    grid:{left:6,right:84,top:6,bottom:6,containLabel:true},
+    xAxis:{type:'value', show:false, min:0},
+    yAxis:{type:'category', inverse:true, data:rows.map(r=>r.name), axisTick:{show:false}, axisLine:{show:false},
+      axisLabel:{color:CHART_TEXT.ink, fontSize:11.5, width:124, overflow:'break'}},
+    tooltip:{trigger:'item', confine:true, formatter:p=>`${rows[p.dataIndex].name}: ${rows[p.dataIndex].label}`},
+    series:[{ type:'bar', barMaxWidth:22, data:rows.map(r=>({value:r.value, itemStyle:{color:r.color, borderRadius:[0,3,3,0]}})),
+      label:{show:true, position:'right', distance:6, formatter:p=>rows[p.dataIndex].label, color:CHART_TEXT.ink,
+        fontFamily:"'Spline Sans Mono',monospace", fontSize:11, fontWeight:600} }],
+  });
+}
+
+/* ---------------------------------------------------------------------
+   LOANS: prepay or invest, and costly debt first
+   --------------------------------------------------------------------- */
+const LOAN_SLABS=[0,5,10,15,20,25,30];
+const LOAN_KIND_DEFAULT={equity:10, debt:7, fd:6.5};   // the expected return, until the person types their own
+function clampLoans(s){
+  const D=L_DEFAULTS.loans;
+  s.balance=incClamp(s.balance,100000,50000000,D.balance);
+  s.rate=incClamp(s.rate,6,14,D.rate);
+  s.years=Math.round(incClamp(s.years,1,30,D.years));
+  s.regime=s.regime==='new'?'new':'old';
+  s.amount=incClamp(s.amount,50000,10000000,D.amount);
+  s.expected=incClamp(s.expected,3,18,D.expected);
+  s.kind=s.kind==='debt'||s.kind==='fd'?s.kind:'equity';
+  s.cardBal=incClamp(s.cardBal,0,1000000,D.cardBal);
+  s.cardRate=incClamp(s.cardRate,10,48,D.cardRate);
+  s.cardPay=incClamp(s.cardPay,0,100000,D.cardPay);
+  s.plBal=incClamp(s.plBal,0,2500000,D.plBal);
+  s.plRate=incClamp(s.plRate,8,30,D.plRate);
+  s.plPay=incClamp(s.plPay,0,150000,D.plPay);
+  s.extra=incClamp(s.extra,0,100000,D.extra);
+}
+// Loan rates are quoted to the quarter point (8.75%), so the Loans tab shows two decimals where incPct would round 8.75 to 8.8.
+function loanPct(x){ return (x*100).toFixed(2).replace(/\.?0+$/,'')+'%'; }
+function loanSlabPct(s){ return LOAN_SLABS.includes(s.slab) ? s.slab : TAX_IN.defaultSlab; }
+function computeLoans(){
+  const c=cfg(), s=L.loans; clampLoans(s);
+  const slabPct=loanSlabPct(s), slab=slabPct/100;
+  const cmp=homeLoanCompare({balance:s.balance, rate:s.rate/100, years:s.years, slab, regime:s.regime, amount:s.amount, expected:s.expected/100, kind:s.kind});
+  const pre=loanPrepay({balance:s.balance, rate:s.rate/100, years:s.years, prepay:s.amount});
+  const debts=[{name:'Credit card', balance:s.cardBal, rate:s.cardRate/100, payment:s.cardPay},
+               {name:'Personal loan', balance:s.plBal, rate:s.plRate/100, payment:s.plPay}];
+  const av=debtAvalanche({debts, extra:s.extra});
+  return {c, s, slabPct, slab, cmp, pre, debts, av};
+}
+
+function renderLoans(){
+  if(L.country!=='IN') return indiaOnlyTab('Loans','loans','Loans here are worked out with the Indian home-loan interest deduction and Indian tax slabs, so the numbers would be wrong for another country.');
+  const R=computeLoans(), c=R.c, s=R.s, cmp=R.cmp, pre=R.pre, av=R.av, sched=cmp.schedule;
+  const money=v=>c.fmt(Math.round(v)), pct=loanPct;
+  const kindWord=s.kind==='fd'?'a fixed deposit':s.kind==='debt'?'a debt fund':'an equity fund';
+  const first=sched.firstYearInterest;
+
+  // ---- card 1: guaranteed saving against expected return
+  let loanCap;
+  if(s.regime==='new') loanCap=`On the new regime a self-occupied home loan gets no tax relief, so prepaying saves the full ${s.rate}%.`;
+  else if(cmp.old.capped && cmp.afterPrepay.reliefLost<1) loanCap=`At ${s.rate}% on ${c.compact(s.balance)} your first year's interest is about ${money(first)}. The old regime lets you deduct only ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} a year (s.24(b)), and even after ${money(s.amount)} is paid in the interest is still above that, so the interest you stop paying gets no relief: prepaying saves the full ${s.rate}%.`;
+  else if(cmp.old.capped) loanCap=`At ${s.rate}% on ${c.compact(s.balance)} your first year's interest is about ${money(first)}, above the ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} a year the old regime lets you deduct (s.24(b)). Paying ${money(s.amount)} in takes it to about ${money(cmp.afterPrepay.firstYearInterest)}, which is under the limit, so part of the interest you stop paying would have had relief. Prepaying saves ${s.rate}% less the relief you lose on that part at your ${R.slabPct}% slab and cess: ${pct(cmp.loanRate)}.`;
+  else loanCap=`At ${s.rate}% on ${c.compact(s.balance)} your first year's interest is about ${money(first)}, all inside the ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} a year the old regime lets you deduct (s.24(b)). Prepaying saves ${s.rate}% less the tax relief you would have had at your ${R.slabPct}% slab and cess: ${pct(cmp.loanRate)}.`;
+  const beCap=cmp.breakEven==null?'more than 100% a year':pct(cmp.breakEven)+' a year before tax';
+  const gap=cmp.gapPerYear;
+  const cap1=`${loanCap} The same ${money(s.amount)} in ${kindWord} is expected to earn ${pct(cmp.expectedAfterTax)} a year after tax, if the ${s.expected}% you assumed holds. It would have to earn ${beCap} to match. Prepaying is a saving that is certain at today's rate; the fund's return is an expectation, and a fund can have a bad decade.`;
+  const gapCap=Math.abs(gap)<1 ? `On ${money(s.amount)} the two come out level in the first year.` : `On ${money(s.amount)}, investing would come out about ${money(Math.abs(gap))} a year ${gap>0?'ahead of':'behind'} prepaying in the first year, if the return holds.`;
+  const bars=[{name:'Prepaying saves', value:cmp.loanRate, label:pct(cmp.loanRate), color:'#2557C7'},
+              {name:'Investing earns, after tax', value:cmp.expectedAfterTax, label:pct(cmp.expectedAfterTax), color:'#B8740F'}];
+  if(cmp.breakEven!=null) bars.push({name:'Needs to earn, before tax', value:cmp.breakEven, label:pct(cmp.breakEven), color:'#56698A'});
+  const compareCard=`<div class="card is-primary">
+      <h4>Prepay the home loan, or invest the money</h4>
+      <div class="cap">${cap1}</div>
+      <div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">First-year difference</div><div class="stat-value">${Math.abs(gap)<1?"none":money(Math.abs(gap))}</div><div class="stat-sub">${Math.abs(gap)<1?"level":gap>0?"investing ahead, if the return holds":"investing behind, if the return holds"}</div></div>
+        <div class="stat"><div class="stat-label">Interest in year 1</div><div class="stat-value">${money(first)}</div><div class="stat-sub">on ${c.compact(s.balance)} at ${s.rate}%</div></div>
+      </div>
+      ${barsChart('loan-compare', bars)}
+      <div class="gr-note">${gapCap} Returns are yearly and compared on equal terms: ${s.kind==='fd'?`FD interest is taxed at your ${R.slabPct}% slab every year`:s.kind==='debt'?`a debt fund's gain is taxed at your ${R.slabPct}% slab when you sell`:`an equity fund pays ${+(TAX_IN.equityLtcg*100).toFixed(1)}% on the gain above ${c.fmt(TAX_IN.equityLtcgExemption)} when you sell`}, held for the loan's remaining ${s.years} years. ${TAX_REGIME_IN.asOf} rules, no surcharge. Left out: prepaying cannot be undone and the money is no longer easy to reach; check whether your lender charges a prepayment penalty; and the principal you repay counts under 80C in the old regime, which EPF usually fills already.</div>
+    </div>`;
+
+  // ---- card 2: what prepaying does
+  const prepaidAll=s.amount>=s.balance;
+  const preCap=prepaidAll ? `${money(s.amount)} is more than the ${money(s.balance)} owed, so it clears the loan and saves ${money(pre.interestSaved)} of interest, before tax.`
+    : `Paying ${money(s.amount)} in now and leaving the instalment at ${money(sched.emi)} a month ends the loan ${fmtMonths(pre.monthsSaved)} sooner (${fmtMonths(pre.months)} left instead of ${fmtMonths(sched.months)}) and saves ${money(pre.interestSaved)} of interest, before tax.`;
+  const prepayCard=`<div class="card">
+      <h4>What prepaying does to the loan</h4>
+      <div class="cap">${preCap}</div>
+      <div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">Instalment</div><div class="stat-value">${money(sched.emi)}</div><div class="stat-sub">a month, over ${fmtMonths(sched.months)}</div></div>
+        <div class="stat"><div class="stat-label">Interest still to pay</div><div class="stat-value">${c.compact(sched.totalInterest)}</div><div class="stat-sub">over the whole loan</div></div>
+        <div class="stat"><div class="stat-label">Loan ends sooner by</div><div class="stat-value">${fmtMonths(pre.monthsSaved)}</div></div>
+        <div class="stat"><div class="stat-label">Interest saved</div><div class="stat-value">${c.compact(pre.interestSaved)}</div><div class="stat-sub">before tax</div></div>
+      </div>
+      <div class="gr-note">Before tax. On the old regime part of the interest you stop paying would have been deductible, so the saving after tax is smaller. The rate is assumed to stay at ${s.rate}%; a floating-rate loan changes with the lender's benchmark.</div>
+    </div>`;
+
+  // ---- card 3: costly debt, highest rate first
+  let debtCap, debtChart='';
+  if(av.total<=0) debtCap='Add a credit-card or personal-loan balance on the left to see the order to clear them in.';
+  else {
+    const order=av.order.map(n=>{ const d=R.debts.find(x=>x.name===n); return `${n} (${pct(d.rate)})`; }).join(', then ');
+    const outlay=R.debts.reduce((t,d)=>t+(d.balance>0?d.payment:0),0);
+    if(av.plan.neverPaysOff) debtCap=`Clear them in this order, highest rate first: ${order}. Even with ${money(s.extra)} a month on top, the payments do not clear every debt within 50 years: raise a payment.`;
+    else if(av.baseline.neverPaysOff) debtCap=`Clear them in this order, highest rate first: ${order}. At today's payments a debt is never cleared, because its payment does not cover a month's interest. Paid highest rate first with ${money(s.extra)} a month on top, everything is clear in ${fmtMonths(av.plan.months)} and costs ${money(av.plan.totalInterest)} in interest.`;
+    else debtCap=`Clear them in this order, highest rate first: ${order}. Paid that way, with ${money(s.extra)} a month on top of the ${money(outlay)} you already pay, everything is clear in ${fmtMonths(av.plan.months)} and costs ${money(av.plan.totalInterest)} in interest. Each debt on its own payment takes ${fmtMonths(av.baseline.months)} and costs ${money(av.baseline.totalInterest)}: ${money(av.interestSaved)} more.`;
+    const dear=R.debts.filter(d=>d.balance>0 && d.rate>cmp.expectedAfterTax);
+    if(dear.length) debtCap+=` ${dear.map(d=>d.name).join(' and ')} cost${dear.length===1?'s':''} more than the ${pct(cmp.expectedAfterTax)} a year the investment above is expected to earn after tax, and ${dear.length===1?'it gets':'neither gets'} any tax relief, so a rupee that clears ${dear.length===1?'it':'them'} saves more than that rupee is expected to earn elsewhere.`;
+    const rows=[];
+    av.order.forEach(n=>{
+      const a=av.plan.payoffs.find(p=>p.name===n), b=av.baseline.payoffs.find(p=>p.name===n);
+      if(a && a.month!=null) rows.push({name:n+', highest first', value:a.month, label:fmtMonths(a.month), color:'#2557C7'});
+      if(b && b.month!=null) rows.push({name:n+', own payment', value:b.month, label:fmtMonths(b.month), color:'#56698A'});
+    });
+    if(rows.length) debtChart=barsChart('loan-debts', rows);
+  }
+  const debtCard=`<div class="card">
+      <h4>Costly debt first</h4>
+      <div class="cap">${debtCap}</div>
+      <div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">Owed on these</div><div class="stat-value">${c.compact(av.total)}</div></div>
+        <div class="stat"><div class="stat-label">Clear in</div><div class="stat-value">${av.total<=0?'-':av.plan.neverPaysOff?'never':fmtMonths(av.plan.months)}</div><div class="stat-sub">paying highest rate first</div></div>
+      </div>
+      ${debtChart}
+      <div class="gr-note">When a debt is cleared its whole payment moves to the next one, and the extra each month goes to the highest rate first. Interest is monthly at the yearly rate divided by 12. Card rates are often 36-45% a year; use the rate on your own statement. Fifty years is the cutoff for "never".</div>
+    </div>`;
+
+  // ---- inputs
+  const slabChips=`<div class="cap" style="margin-top:8px" id="lnSlabLbl">Your income-tax slab:</div><div class="slab-chips" role="group" aria-labelledby="lnSlabLbl">${LOAN_SLABS.map(v=>`<button type="button" class="tglbtn${v===R.slabPct?' active':''}" data-ln="slab" data-val="${v}" aria-pressed="${v===R.slabPct}">${v}%</button>`).join('')}</div>`;
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
+  <div class="panel">
+    ${panelHead('Loans', 'loans')}
+    ${advisorChipsHTML('loans')}
+    <div class="section-label">Home loan</div>
+    <div class="field"><label>Owed now <b>${c.compact(s.balance)}</b></label><input type="range" min="100000" max="50000000" step="50000" value="${s.balance}" data-k="balance" data-tab="loans"></div>
+    <div class="field"><label>Interest rate <b>${s.rate}%</b></label><input type="range" min="6" max="14" step="0.05" value="${s.rate}" data-k="rate" data-tab="loans"></div>
+    <div class="field"><label>Years left <b>${s.years}</b></label><input type="range" min="1" max="30" value="${s.years}" data-k="years" data-tab="loans"></div>
+    <div class="cap" id="lnRegLbl">The tax regime you file under:</div>
+    <div class="toggle-row" role="group" aria-labelledby="lnRegLbl">
+      <button type="button" class="tglbtn${s.regime==='old'?' active':''}" data-ln="regime" data-val="old" aria-pressed="${s.regime==='old'}">Old regime<br>(interest relief)</button>
+      <button type="button" class="tglbtn${s.regime==='new'?' active':''}" data-ln="regime" data-val="new" aria-pressed="${s.regime==='new'}">New regime<br>(no relief)</button>
+    </div>
+    ${slabChips}
+    <hr class="divider">
+    <div class="section-label">Prepay or invest</div>
+    <div class="field"><label>A lump sum to weigh <b>${c.compact(s.amount)}</b></label><input type="range" min="50000" max="10000000" step="25000" value="${s.amount}" data-k="amount" data-tab="loans"></div>
+    <div class="cap" id="lnKindLbl">If invested instead, in:</div>
+    <div class="slab-chips" role="group" aria-labelledby="lnKindLbl">${[['equity','Equity fund'],['debt','Debt fund'],['fd','Fixed deposit']].map(([v,t])=>`<button type="button" class="tglbtn${s.kind===v?' active':''}" data-ln="kind" data-val="${v}" aria-pressed="${s.kind===v}">${t}</button>`).join('')}</div>
+    <div class="field" style="margin-top:12px"><label>Return you expect, before tax${infoIcon('Your own assumption, not a forecast. It moves to a typical figure when you change the kind of investment, until you type your own.')} <b>${s.expected}%</b></label><input type="range" min="3" max="18" step="0.1" value="${s.expected}" data-k="expected" data-tab="loans"></div>
+    <hr class="divider">
+    <div class="section-label">Costly debts</div>
+    <div class="field"><label>Credit card owed <b>${c.compact(s.cardBal)}</b></label><input type="range" min="0" max="1000000" step="5000" value="${s.cardBal}" data-k="cardBal" data-tab="loans"></div>
+    <div class="field"><label>Card interest <b>${s.cardRate}%</b></label><input type="range" min="10" max="48" step="0.5" value="${s.cardRate}" data-k="cardRate" data-tab="loans"></div>
+    <div class="field"><label>You pay on it each month <b>${c.fmt(s.cardPay)}</b></label><input type="range" min="0" max="100000" step="500" value="${s.cardPay}" data-k="cardPay" data-tab="loans"></div>
+    <div class="field"><label>Personal loan owed <b>${c.compact(s.plBal)}</b></label><input type="range" min="0" max="2500000" step="10000" value="${s.plBal}" data-k="plBal" data-tab="loans"></div>
+    <div class="field"><label>Loan interest <b>${s.plRate}%</b></label><input type="range" min="8" max="30" step="0.5" value="${s.plRate}" data-k="plRate" data-tab="loans"></div>
+    <div class="field"><label>You pay on it each month <b>${c.fmt(s.plPay)}</b></label><input type="range" min="0" max="150000" step="500" value="${s.plPay}" data-k="plPay" data-tab="loans"></div>
+    <div class="field"><label>Extra you could add each month <b>${c.fmt(s.extra)}</b></label><input type="range" min="0" max="100000" step="500" value="${s.extra}" data-k="extra" data-tab="loans"></div>
+  </div>
+  <div class="output">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Prepaying saves${infoIcon('The yearly rate the money you put into the loan stops costing you, after any tax relief. In the old regime, interest is deductible only up to ₹2 lakh a year, so relief is lost only on the part of the interest that was inside that limit.')}</div><div class="stat-value">${pct(cmp.loanRate)}</div><div class="stat-sub">a year, after tax, certain</div></div>
+      <div class="stat"><div class="stat-label">Investing earns</div><div class="stat-value">${pct(cmp.expectedAfterTax)}</div><div class="stat-sub">a year, after tax, expected</div></div>
+      <div class="stat"><div class="stat-label">Break-even${infoIcon('The return the investment must earn before tax to leave you as well off as prepaying. Above it the investment comes out ahead on paper; below it the loan does. It is a line, not advice: the return is not certain, and prepaying cannot be undone.')}</div><div class="stat-value">${cmp.breakEven==null?'over 100%':pct(cmp.breakEven)}</div><div class="stat-sub">before tax, to match</div></div>
+    </div>
+    ${compareCard}
+    ${prepayCard}
+    ${debtCard}
+    ${nextStepCard([
+      {q:'Which tax regime are you on? The home-loan interest relief exists only in the old one.', tab:'taxregime'},
+      {q:'Are your loans covered if you are not around to pay them?', tab:'cover'},
+    ])}
+  </div>
+  </div>`;
+}
+// What the advisor can quote for this tab: the same numbers the cards show.
+function loansAdvisorResults(){
+  const R=computeLoans(), c=R.c, s=R.s, cmp=R.cmp, pre=R.pre, av=R.av, pct=loanPct;
+  return { ok:true, tool:'Loans', charts:[
+    { kind:'comparison', title:'Prepay the home loan or invest', xAxis:'', yAxis:'yearly rate', note:'prepaying saves a certain rate at today\'s loan rate; the investment return is the user\'s assumption, not a forecast; '+(s.regime==='old'?'old regime: interest relief only up to ₹2 lakh a year':'new regime: no relief on a self-occupied home loan')+'; no verdict, a break-even',
+      points:[{ label:'prepaying saves (after tax)', value:pct(cmp.loanRate)+' a year' }, { label:'investing earns (after tax, expected)', value:pct(cmp.expectedAfterTax)+' a year' }, { label:'investment must earn before tax to match', value:cmp.breakEven==null?'over 100%':pct(cmp.breakEven) }, { label:'first-year interest', value:c.fmt(Math.round(cmp.schedule.firstYearInterest)) }] },
+    { kind:'prepay', title:'What prepaying does', xAxis:'', yAxis:'', note:'before tax, instalment unchanged',
+      points:[{ label:'lump sum', value:c.fmt(Math.round(Math.min(s.amount,s.balance))) }, { label:'loan ends sooner by', value:fmtMonths(pre.monthsSaved) }, { label:'interest saved', value:c.fmt(Math.round(pre.interestSaved)) }, { label:'instalment', value:c.fmt(Math.round(cmp.schedule.emi)) }] },
+    { kind:'debt', title:'Costly debt, highest rate first', xAxis:'', yAxis:'', note:'a payment that does not cover a month\'s interest never clears; extra goes to the highest rate first',
+      points:[{ label:'order', value:av.order.join(', then ')||'none' }, { label:'clear in', value:av.total<=0?'no balance':av.plan.neverPaysOff?'never within 50 years':fmtMonths(av.plan.months) }, { label:'interest saved against each on its own', value:av.interestSaved==null?'not comparable (one never clears)':c.fmt(Math.round(av.interestSaved)) }] },
+  ] };
+}
+
+/* ---------------------------------------------------------------------
+   TAX REGIME: old or new, on the same pay
+   --------------------------------------------------------------------- */
+const TAX_AGE_BANDS=[['under60','Under 60'],['senior','60 to 79'],['superSenior','80 and over']];
+function clampTax(s){
+  const D=L_DEFAULTS.tax;
+  s.gross=incClamp(s.gross,300000,10000000,D.gross);
+  s.basic=Math.min(s.gross, incClamp(s.basic,100000,5000000,D.basic));
+  s.hra=incClamp(s.hra,0,3000000,D.hra);
+  s.rent=incClamp(s.rent,0,3000000,D.rent);
+  s.metro=s.metro!==false;
+  s.ageBand=TAX_AGE_BANDS.some(b=>b[0]===s.ageBand)?s.ageBand:'under60';
+  s.c80=incClamp(s.c80,0,300000,D.c80);
+  s.nps1b=incClamp(s.nps1b,0,100000,D.nps1b);
+  s.employerNps=incClamp(s.employerNps,0,1000000,D.employerNps);
+  s.health=incClamp(s.health,0,100000,D.health);
+  s.healthParents=incClamp(s.healthParents,0,100000,D.healthParents);
+  s.parentsSenior=s.parentsSenior===true;
+  s.homeLoan=incClamp(s.homeLoan,0,500000,D.homeLoan);
+}
+function computeTax(){
+  const c=cfg(), s=L.tax; clampTax(s);
+  const r=compareRegimes({gross:s.gross, basic:s.basic, hraReceived:s.hra, rent:s.rent, metro:s.metro, ageBand:s.ageBand, c80:s.c80, nps1b:s.nps1b,
+    employerNps:s.employerNps, health:s.health, healthParents:s.healthParents, parentsSenior:s.parentsSenior, homeLoanInterest:s.homeLoan});
+  return {c, s, r};
+}
+// Copying a number from another tab or page is always the person's own click and is named on screen.
+function taxFill(f){
+  const s=L.tax;
+  if(f==='epf'){
+    let acc=null;
+    try{ const raw=localStorage.getItem('goaldenD1State'); if(raw){ const st=JSON.parse(raw); acc=st && st.acc; } }catch(e){}
+    if(!acc || typeof acc!=='object'){ s.note={text:'Nothing is saved from Quick Calculate yet. Add your EPF and PPF in its retirement-accounts panel, or type the numbers here.', vals:numSnap(s)}; return; }
+    const basic=Number(acc.epfBasic)||0, ppf=Math.min(Number(acc.ppfYearly)||0, RETIRE_ACCOUNTS_IN.ppf.yearlyMax);
+    const epf=epfEmployeeYearly(basic, acc.epfWage);
+    if(!(epf>0) && !(ppf>0)){ s.note={text:'Quick Calculate has no EPF basic pay or PPF deposit saved, so there was nothing to fill.', vals:numSnap(s)}; return; }
+    if(basic>0) s.basic=incSnap(basic*12,10000);
+    s.c80=incSnap(epf+ppf,5000);
+    clampTax(s);
+    const c=cfg(), held=basic>0 && s.basic<incSnap(basic*12,10000);   // the slider cannot go above the salary
+    s.note={text:`From Quick Calculate: 80C is your own EPF ${c.fmt(Math.round(epf))} plus your PPF deposit ${c.fmt(Math.round(ppf))}${basic>0?(held?`, and basic pay is held at ${c.fmt(s.basic)} a year, the most the sliders allow at this salary (your ${c.fmt(Math.round(basic))} a month is ${c.fmt(Math.round(basic*12))} a year)`:`, and basic pay is ${c.fmt(s.basic)} a year (12 x ${c.fmt(Math.round(basic))})`):''}. Rounded to the sliders' steps. Add ELSS, life insurance or school fees yourself.`, vals:{basic:s.basic, c80:s.c80}};
+  } else if(f==='loan'){
+    const l=L.loans; clampLoans(l);
+    const int=loanSchedule({balance:l.balance, rate:l.rate/100, years:l.years}).firstYearInterest;
+    s.homeLoan=incSnap(Math.min(int,500000),5000); clampTax(s);
+    s.note={text:`From your Loans tab: first-year interest on ${cfg().compact(l.balance)} at ${l.rate}% is about ${cfg().fmt(Math.round(int))}. The old regime counts up to ${cfg().fmt(TAX_REGIME_IN.homeLoanInterest)} of it, and only for a house you live in.`, vals:{homeLoan:s.homeLoan}};
+  } else if(f==='cover'){
+    const v=Number(L.cover.premium)||0;
+    if(!(v>0)){ s.note={text:'Your Cover tab has no health premium typed in. Enter the yearly premium you pay there, or type it here.', vals:numSnap(s)}; return; }
+    s.health=incSnap(Math.min(v,100000),1000); clampTax(s);
+    s.note={text:`From your Cover tab: the yearly health premium you typed in, ${cfg().fmt(Math.round(v))}. 80D counts it up to its limit.`, vals:{health:s.health}};
+  }
+}
+
+function coverFill(f){
+  const s=L.cover, c=cfg();
+  if(f==='loans'){
+    const l=L.loans; clampLoans(l);
+    const total=l.balance+l.cardBal+l.plBal;
+    s.loans=incSnap(total,50000); clampCover(s);
+    s.note={text:`From your Loans tab: home loan ${c.compact(l.balance)}${l.cardBal>0?`, credit card ${c.compact(l.cardBal)}`:''}${l.plBal>0?`, personal loan ${c.compact(l.plBal)}`:''}, rounded to the slider's step.`, vals:{loans:s.loans}};
+  }
+}
+
+function renderTaxRegime(){
+  if(L.country!=='IN') return indiaOnlyTab('Tax regime','taxregime','The old and new income-tax regimes are an Indian choice, so the numbers would be wrong for another country.');
+  const R=computeTax(), c=R.c, s=R.s, r=R.r, T=TAX_REGIME_IN;
+  const money=v=>c.fmt(Math.round(v)), K=Math.round;
+  const o=r.old, p=o.parts;
+
+  // ---- card 1: which is cheaper
+  let head, tone;
+  const nilBoth=r.new.tax<1 && o.tax<1;
+  if(r.winner==='tie'){ head=nilBoth?'Neither regime costs you any tax':'The two regimes cost you the same'; }
+  else head=`The ${r.winner==='new'?'new':'old'} regime costs you ${money(r.saving)} less`;
+  const beTxt=r.breakEven<=0 ? (nilBoth?'Both regimes come to nil tax at this pay, so the choice does not matter.':r.winner==='tie'?'The two come to the same tax even with no deductions at all.':'The old regime is cheaper even with no deductions at all.')
+    : `The old regime ties with the new one when its deductions (HRA exemption, 80C, 80CCD(1B), 80D and home-loan interest) add up to ${money(r.breakEven)}. Yours add up to ${money(o.deductions)}, which is ${money(Math.abs(r.headroom))} ${r.headroom>=0?'above':'below'} that line.`;
+  const cap1=`On ${money(s.gross)} of salary: the new regime comes to ${money(r.new.tax)} of tax and the old regime ${money(o.tax)}, both with 4% cess. ${beTxt}`;
+  const taxBars=[{name:'New regime', value:r.new.tax, label:money(r.new.tax), color:'#2557C7'}, {name:'Old regime', value:o.tax, label:money(o.tax), color:'#B8740F'}];
+  const dedBars=[{name:'Your old-regime deductions', value:o.deductions, label:c.compact(o.deductions), color:'#2557C7'},
+                 {name:'Needed to tie with new', value:r.breakEven, label:c.compact(r.breakEven), color:'#56698A'}];
+  const surNote=r.aboveSurcharge?`<div class="gr-note" style="border-left-color:#9C4A2C;margin-bottom:12px">Your taxable income is above ${c.fmt(T.surchargeFrom)}, where a surcharge starts. It is not modelled here, so both tax figures are too low and the gap between them may be off.</div>`:'';
+  const verdictCard=`<div class="card is-primary">
+      <h4>${head}</h4>
+      <div class="cap">${cap1}</div>
+      ${surNote}
+      <div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">Old regime's break-even${infoIcon('The total of old-regime deductions at which the two regimes cost the same. If yours are above it, the old regime is cheaper; below it, the new one is.')}</div><div class="stat-value">${r.breakEven<=0?'none needed':c.compact(r.breakEven)}</div><div class="stat-sub">in deductions</div></div>
+        <div class="stat"><div class="stat-label">Your old-regime deductions</div><div class="stat-value">${c.compact(o.deductions)}</div><div class="stat-sub">HRA, 80C, NPS, 80D, home loan</div></div>
+      </div>
+      ${barsChart('tax-compare', taxBars)}
+      ${r.breakEven>0?barsChart('tax-breakeven', dedBars):''}
+      <div class="gr-note">${T.asOf} rules. A salaried person can choose again each year. This is a yearly tax calculation on pay alone: no surcharge, no income from other sources, no capital gains.</div>
+    </div>`;
+
+  // ---- card 2: how each regime got there
+  const row=(label,val,sub)=>`<div class="tx-row"><span>${label}${sub?`<small>${sub}</small>`:''}</span><b>${val}</b></div>`;
+  const oldRows=[row('Salary',money(r.gross)), row('Standard deduction','-'+money(o.standardDeduction)),
+    o.employerNps>0?row('Employer NPS (80CCD(2), up to 10% of basic)','-'+money(o.employerNps)):'',
+    p.hra>0?row('HRA exemption','-'+money(p.hra), `the least of HRA received, rent less 10% of basic, and ${s.metro?'50':'40'}% of basic`):'',
+    p.c80>0?row('80C','-'+money(p.c80), `limit ${c.fmt(T.c80)}`):'',
+    p.nps1b>0?row('NPS 80CCD(1B)','-'+money(p.nps1b), `limit ${c.fmt(T.nps1b)}`):'',
+    p.health>0?row('Health insurance (80D)','-'+money(p.health)):'',
+    p.homeLoan>0?row('Home-loan interest (24(b))','-'+money(p.homeLoan), `limit ${c.fmt(T.homeLoanInterest)}, a house you live in`):'',
+    row('Taxable income',money(o.taxable)).replace('class="tx-row"','class="tx-row sum"')].join('');
+  const newRows=[row('Salary',money(r.gross)), row('Standard deduction','-'+money(r.new.standardDeduction)),
+    r.new.employerNps>0?row('Employer NPS (80CCD(2), up to 14% of basic)','-'+money(r.new.employerNps)):'',
+    row('Taxable income',money(r.new.taxable)).replace('class="tx-row"','class="tx-row sum"')].join('');
+  const rowsCard=`<div class="card">
+      <h4>How each regime gets to its tax</h4>
+      <div class="section-label">Old regime</div>
+      <div class="tx-rows">${oldRows}</div>
+      <div class="section-label">New regime</div>
+      <div class="tx-rows">${newRows}</div>
+      <div class="gr-note">The new regime allows only the standard deduction and the employer's NPS. Its slabs run nil to ${c.fmt(400000)}, then 5% to 30% in ${c.fmt(400000)} steps, and tax is nil up to ${c.fmt(T.rebate.new.limit)} of income (s.87A, with marginal relief just above). The old regime's slabs depend on age.</div>
+    </div>`;
+
+  // ---- card 3: what it means for the plan
+  const filled=r.oldIfFilled;
+  let plan=[];
+  if(r.winner==='new' || r.winner==='tie'){
+    plan.push(`On the new regime, 80C, 80CCD(1B), 80D and home-loan interest give no tax benefit. ELSS, PPF and tax-saving FDs are then chosen for their returns and lock-ins alone, not for tax. EPF still builds your retirement pot, and your employer's NPS (80CCD(2)) is still deductible, up to ${Math.round(T.employerNps.new*100)}% of basic.`);
+    if(r.unused.c80+r.unused.nps1b>0 && filled.c80Saves+filled.nps1bSaves>=1) plan.push(`For comparison: filling the ${money(r.unused.c80)} of unused 80C room and the ${money(r.unused.nps1b)} of NPS room would cut your old-regime tax by ${money(filled.c80Saves+filled.nps1bSaves)}, ${filled.winner==='old'?'enough to make the old regime the cheaper one':'which is not enough to catch the new regime'}.`);
+  }
+  if(r.winner==='old' || r.winner==='tie'){
+    if(o.tax<1) plan.push(`With the deductions you entered, the old regime already comes to nil tax, so adding more under 80C, NPS or the like would save nothing. ${r.winner==='tie'?'The new regime is nil too, so it does not matter which one you pick. ':''}Put money into them for their own sake, not for tax.`);
+    else plan.push(`On the old regime, ${c.fmt(10000)} more under 80C or 80CCD(1B) cuts your tax by about ${money(r.saveOn10k)}. EPF, PPF, ELSS and the principal on a home loan all fill the same ${c.fmt(T.c80)}. ${r.unused.c80>0?`You have ${money(r.unused.c80)} of 80C room unused: filling it saves about ${money(filled.c80Saves)}. `:'Your 80C is full. '}${r.unused.nps1b>0?`Up to ${money(r.unused.nps1b)} more in NPS saves about ${money(filled.nps1bSaves)}.`:''}`);
+  }
+  const planCard=`<div class="card">
+      <h4>What this means for your plan</h4>
+      ${plan.map(t=>`<div class="cap" style="margin-bottom:8px">${t}</div>`).join('')}
+      <div class="gr-note">The Full Plan lists ELSS as a way to save tax. It saves tax only on the old regime, so which regime you are on decides whether that idea applies to you.</div>
+    </div>`;
+
+  // ---- inputs
+  const ageChips=`<div class="cap" id="txAgeLbl">Your age:</div><div class="slab-chips" role="group" aria-labelledby="txAgeLbl">${TAX_AGE_BANDS.map(([v,t])=>`<button type="button" class="tglbtn${s.ageBand===v?' active':''}" data-tx="ageBand" data-val="${v}" aria-pressed="${s.ageBand===v}">${t}</button>`).join('')}</div>`;
+  const metroChips=`<div class="cap" id="txMetroLbl" style="margin-top:10px">Where you rent:${infoIcon('HRA exempts up to 50% of basic in Mumbai, Kolkata, Delhi, Chennai, Hyderabad, Pune, Ahmedabad and Bengaluru, and 40% elsewhere.')}</div><div class="slab-chips" role="group" aria-labelledby="txMetroLbl">
+      <button type="button" class="tglbtn${s.metro?' active':''}" data-tx="metro" data-val="true" aria-pressed="${s.metro}">One of the 8 metros</button>
+      <button type="button" class="tglbtn${!s.metro?' active':''}" data-tx="metro" data-val="false" aria-pressed="${!s.metro}">Anywhere else</button></div>`;
+  const parentChips=`<div class="slab-chips" role="group" aria-label="Your parents' age">
+      <button type="button" class="tglbtn${!s.parentsSenior?' active':''}" data-tx="parentsSenior" data-val="false" aria-pressed="${!s.parentsSenior}">Parents under 60</button>
+      <button type="button" class="tglbtn${s.parentsSenior?' active':''}" data-tx="parentsSenior" data-val="true" aria-pressed="${s.parentsSenior}">Parents 60 or over</button></div>`;
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
+  <div class="panel">
+    ${panelHead('Tax regime', 'taxregime')}
+    ${advisorChipsHTML('taxregime')}
+    <div class="slab-chips fill-chips" style="margin:0 0 12px">
+      <button type="button" class="tglbtn" data-tx="fillEpf">Fill basic pay and 80C from my Quick Calculate EPF and PPF</button>
+      <button type="button" class="tglbtn" data-tx="fillLoan">Use the interest from my Loans tab</button>
+      <button type="button" class="tglbtn" data-tx="fillCover">Use the premium from my Cover tab</button>
+    </div>
+    ${fillNoteHTML(s)}
+    <div class="section-label">Pay, for the year</div>
+    <div class="field"><label>Salary before any deduction <b>${c.compact(s.gross)}</b></label><input type="range" min="300000" max="10000000" step="10000" value="${s.gross}" data-k="gross" data-tab="tax"></div>
+    <div class="field"><label>Basic pay (with DA) <b>${c.compact(s.basic)}</b></label><input type="range" min="100000" max="5000000" step="10000" value="${s.basic}" data-k="basic" data-tab="tax"></div>
+    ${ageChips}
+    <hr class="divider">
+    <div class="section-label">Rent</div>
+    <div class="field"><label>HRA your employer pays <b>${c.compact(s.hra)}</b></label><input type="range" min="0" max="3000000" step="5000" value="${s.hra}" data-k="hra" data-tab="tax"></div>
+    <div class="field"><label>Rent you pay <b>${c.compact(s.rent)}</b></label><input type="range" min="0" max="3000000" step="5000" value="${s.rent}" data-k="rent" data-tab="tax"></div>
+    ${metroChips}
+    <hr class="divider">
+    <div class="section-label">Deductions the old regime counts</div>
+    <div class="field"><label>80C: EPF, PPF, ELSS, life insurance <b>${c.compact(s.c80)}</b></label><input type="range" min="0" max="300000" step="5000" value="${s.c80}" data-k="c80" data-tab="tax"></div>
+    <div class="field"><label>Your own NPS, 80CCD(1B) <b>${c.compact(s.nps1b)}</b></label><input type="range" min="0" max="100000" step="5000" value="${s.nps1b}" data-k="nps1b" data-tab="tax"></div>
+    <div class="field"><label>Health premium, you and family <b>${c.compact(s.health)}</b></label><input type="range" min="0" max="100000" step="1000" value="${s.health}" data-k="health" data-tab="tax"></div>
+    <div class="field"><label>Health premium, parents <b>${c.compact(s.healthParents)}</b></label><input type="range" min="0" max="100000" step="1000" value="${s.healthParents}" data-k="healthParents" data-tab="tax"></div>
+    ${parentChips}
+    <div class="field" style="margin-top:12px"><label>Home-loan interest, a house you live in <b>${c.compact(s.homeLoan)}</b></label><input type="range" min="0" max="500000" step="5000" value="${s.homeLoan}" data-k="homeLoan" data-tab="tax"></div>
+    <hr class="divider">
+    <div class="section-label">Employer NPS</div>
+    <div class="field"><label>Your employer pays into your NPS${infoIcon('Counts in both regimes, up to 14% of basic on the new regime and 10% on the old.')} <b>${c.compact(s.employerNps)}</b></label><input type="range" min="0" max="1000000" step="5000" value="${s.employerNps}" data-k="employerNps" data-tab="tax"></div>
+  </div>
+  <div class="output">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">New regime</div><div class="stat-value">${money(r.new.tax)}</div><div class="stat-sub">tax for the year</div></div>
+      <div class="stat"><div class="stat-label">Old regime</div><div class="stat-value">${money(o.tax)}</div><div class="stat-sub">tax for the year</div></div>
+      <div class="stat"><div class="stat-label">${r.winner==='tie'?'Level':r.winner==='new'?'New is cheaper by':'Old is cheaper by'}</div><div class="stat-value">${r.winner==='tie'?'-':money(r.saving)}</div></div>
+    </div>
+    ${verdictCard}
+    ${rowsCard}
+    ${planCard}
+    <div class="card"><h4>Where these rules come from</h4>
+      <div class="cap">${T.asOf}: slabs, the s.87A rebate and the deduction limits are from the Income Tax Department's slab page and the Union Budget 2026-27 papers, which left them as Budget 2025 set them. HRA is Rule 279 of the Income-tax Rules 2026, read from the Department's page through a search excerpt because the page was down for maintenance when checked; later amendments to the Rules were not checked. Re-check after every Budget. Not tax advice: confirm with a chartered accountant before you declare a regime to your employer.</div>
+    </div>
+    ${nextStepCard([
+      {q:'Your home loan decides a lot here: should you prepay it or invest?', tab:'loans'},
+      {q:'See how your pay and savings add up in the Retirement Lab.', tab:'retirement'},
+    ])}
+  </div>
+  </div>`;
+}
+function taxAdvisorResults(){
+  const R=computeTax(), c=R.c, r=R.r, o=r.old, m=v=>c.fmt(Math.round(v));
+  return { ok:true, tool:'Tax regime', charts:[
+    { kind:'comparison', title:'Old or new regime', xAxis:'', yAxis:'rupees of tax', note:TAX_REGIME_IN.asOf+' rules, tax plus 4% cess, no surcharge'+(r.aboveSurcharge?' (income is above the surcharge line, so both figures are too low)':'')+'; a yearly choice for a salaried person',
+      points:[{ label:'new regime tax', value:m(r.new.tax) }, { label:'old regime tax', value:m(o.tax) }, { label:'cheaper', value:r.winner==='tie'?'level':r.winner+' regime by '+m(r.saving) }, { label:'old regime break-even (total deductions)', value:r.breakEven<=0?'none needed':m(r.breakEven) }, { label:'the user\'s old-regime deductions', value:m(o.deductions) }] },
+    { kind:'breakdown', title:'Old-regime deductions counted', xAxis:'', yAxis:'rupees', note:'each held to its limit',
+      points:[{ label:'HRA exemption', value:m(o.parts.hra) }, { label:'80C', value:m(o.parts.c80) }, { label:'NPS 80CCD(1B)', value:m(o.parts.nps1b) }, { label:'80D health', value:m(o.parts.health) }, { label:'home-loan interest', value:m(o.parts.homeLoan) }] },
+    { kind:'plan', title:'What it means for the plan', xAxis:'', yAxis:'', note:'on the new regime 80C, 80CCD(1B), 80D and home-loan interest give no tax benefit, so ELSS and PPF are chosen on returns and lock-in; on the old regime they do',
+      points:[{ label:'unused 80C room', value:m(r.unused.c80) }, { label:'unused 80CCD(1B) room', value:m(r.unused.nps1b) }, { label:'old regime tax if both were filled', value:m(r.oldIfFilled.tax)+' ('+(r.oldIfFilled.winner==='tie'?'level with the new regime':r.oldIfFilled.winner+' regime cheaper')+')' }] },
+  ] };
+}
+
+/* ---------------------------------------------------------------------
+   COVER: how much term and health cover, never what it costs
+   --------------------------------------------------------------------- */
+// Starting points for the health sliders by size of city. They are NOT market figures or quotes (nobody publishes one
+// right size), only a place for the sliders to open that is not zero; the card says so and the person is expected to move them.
+const COVER_TIERS={ metro:{label:'Metro', base:1000000, target:2500000}, city:{label:'Large city', base:750000, target:2000000}, town:{label:'Smaller town', base:500000, target:1500000} };
+function clampCover(s){
+  const D=L_DEFAULTS.cover;
+  s.monthly=incClamp(s.monthly,5000,500000,D.monthly);
+  s.years=Math.round(incClamp(s.years,0,40,D.years));
+  s.inflation=incClamp(s.inflation,2,12,D.inflation);
+  s.returnRate=incClamp(s.returnRate,4,12,D.returnRate);
+  s.loans=incClamp(s.loans,0,50000000,D.loans);
+  s.goalExtra=incClamp(s.goalExtra,0,50000000,D.goalExtra);
+  s.savings=incClamp(s.savings,0,50000000,D.savings);
+  s.existing=incClamp(s.existing,0,100000000,D.existing);
+  s.tier=COVER_TIERS[s.tier]?s.tier:'metro';
+  s.healthTarget=incClamp(s.healthTarget,300000,10000000,D.healthTarget);
+  s.baseCover=Math.min(s.healthTarget, incClamp(s.baseCover,100000,5000000,D.baseCover));   // a floater cannot be bigger than the whole target
+  s.medInflation=incClamp(s.medInflation,4,15,D.medInflation);
+  s.healthYears=Math.round(incClamp(s.healthYears,0,40,D.healthYears));
+  s.ownHealth=incClamp(s.ownHealth,0,10000000,D.ownHealth);
+  s.employerHealth=incClamp(s.employerHealth,0,10000000,D.employerHealth);
+  s.premium=incClamp(s.premium,0,100000,D.premium);
+  // Goal pots arrive from the Full Plan's hand-off; whatever is stored is cleaned the same way it was when it came in.
+  s.goals=cleanCoverGoals(s.goals);
+}
+// `need` is what a goal still has to build after the money already set aside for it (the Full Plan sends it); `corpus` is the older
+// field and stands in when a hand-off has no `need`. Either way the stored pot is called corpus.
+function cleanCoverGoals(list){
+  if(!Array.isArray(list)) return [];
+  return list.slice(0,8).map(g=>({ label:String(g&&g.label||'Goal').slice(0,40), corpus:Math.min(1e9, Math.max(0, Math.round(Number(g&&(g.need!==undefined?g.need:g.corpus))||0))), years:Math.min(60, Math.max(0, Math.round(Number(g&&g.years)||0))) }))
+    .filter(g=>g.corpus>0);
+}
+function computeCover(){
+  const c=cfg(), s=L.cover; clampCover(s);
+  const goalPots=s.goals.concat(s.goalExtra>0?[{label:'Other goals', corpus:s.goalExtra, years:0}]:[]);
+  const term=termCoverNeed({annualExpense:s.monthly*12, years:s.years, inflation:s.inflation/100, returnRate:s.returnRate/100, loans:s.loans, goalPots, savings:s.savings, existingCover:s.existing});
+  const health=healthCoverPlan({target:s.healthTarget, baseCover:s.baseCover, medInflation:s.medInflation/100, years:s.healthYears, own:s.ownHealth, employer:s.employerHealth});
+  return {c, s, term, health, goalPots};
+}
+function renderCover(){
+  if(L.country!=='IN') return indiaOnlyTab('Cover','cover','The cover sizes here use Indian cost assumptions and the Full Plan\'s rupee goals, so they would be wrong for another country.');
+  const R=computeCover(), c=R.c, s=R.s, t=R.term, h=R.health;
+  const money=v=>c.fmt(Math.round(v));
+
+  // ---- card 1: term cover
+  const held=t.savings+t.existingCover;
+  let cap1;
+  if(t.gross<=0) cap1='Enter what your household spends to see how much cover your family would need.';
+  else {
+    const parts=[`${c.compact(t.expense)} for ${s.years} years of the household's spending (${c.fmt(s.monthly)} a month today, rising ${s.inflation}% a year, paid out of a pot that earns ${s.returnRate}%)`];
+    if(t.loans>0) parts.push(`${c.compact(t.loans)} to clear the loans`);
+    if(t.goalPV>0) parts.push(`${c.compact(t.goalPV)} for the goals, each target brought back to today at ${s.returnRate}%, because the SIP that was to build it stops`);
+    cap1=`If you were not there, your family would need about ${c.compact(t.gross)}: ${parts.join(', plus ')}. You hold ${c.compact(held)} in savings and existing life cover, so ${t.gap>0?`the gap is ${c.compact(t.gap)}`:`you are covered, with ${c.compact(t.surplus)} to spare`}.`;
+  }
+  const bars=[];
+  if(t.expense>0) bars.push({name:'Spending for '+s.years+' years', value:t.expense, label:c.compact(t.expense), color:'#2557C7'});
+  if(t.loans>0) bars.push({name:'Loans', value:t.loans, label:c.compact(t.loans), color:'#2557C7'});
+  if(t.goalPV>0) bars.push({name:'Goal pots, today\'s value', value:t.goalPV, label:c.compact(t.goalPV), color:'#2557C7'});
+  if(t.gross>0){
+    bars.push({name:'Total need', value:t.gross, label:c.compact(t.gross), color:'#14283F'});
+    bars.push({name:'Held: savings and cover', value:held, label:c.compact(held), color:'#1F8A70'});
+    bars.push({name:'Gap', value:t.gap, label:c.compact(t.gap), color:'#B8740F'});
+  }
+  const goalNote=s.goals.length
+    ? `Goals counted from your Full Plan, each the part still to be saved for after money already set aside: ${s.goals.map(g=>`${g.label} (${c.compact(g.corpus)} in ${g.years} yr)`).join(', ')}. Your retirement goal is left out, since it pays for your own retirement; if someone depends on it, add it under other goals.`
+    : 'No goals from the Full Plan yet: use its "Open this plan in the Lab" button to bring them here, or type a total for them on the left. A retirement goal is left out either way, since it pays for your own retirement.';
+  const termCard=`<div class="card is-primary">
+      <h4>Term life cover: what your family would need</h4>
+      <div class="cap">${cap1}</div>
+      <div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">Cover your family needs${infoIcon('Spending until dependants are independent, plus loans, plus the goal pots, in today\'s money. Nothing is added for tax or for a rise in the cost of living beyond the inflation you set.')}</div><div class="stat-value">${c.compact(t.gross)}</div><div class="stat-sub">in all</div></div>
+        <div class="stat"><div class="stat-label">Already held</div><div class="stat-value">${c.compact(held)}</div><div class="stat-sub">savings plus existing cover</div></div>
+      </div>
+      ${bars.length?barsChart('cover-term', bars):''}
+      <div class="gr-note">${goalNote} This sizes cover only; what it costs depends on your age, health and insurer, and there is no price anywhere on this page. The part of the need that is a loan shrinks as you repay it, so size it again each year. Group cover from an employer ends with the job, so count only what you own. Existing cover here means term cover, not an endowment or ULIP.</div>
+    </div>`;
+
+  // ---- card 2: health cover
+  const gapNote=h.gap>0 ? `With your employer's ${c.compact(h.employer)} and your own ${c.compact(h.own)}, you are ${c.compact(h.gap)} short of that.` : `Your cover meets it today.`;
+  const ownNote=h.gapOwnOnly>h.gap ? ` Without the employer policy (it ends with the job) you would be ${c.compact(h.gapOwnOnly)} short.` : '';
+  const healthCap=`${c.compact(h.target)} in total, in today's money, is a ${c.compact(h.base)} family floater plus a ${c.compact(h.topUp)} super top-up. A super top-up costs less than a bigger floater because it pays only after the first ${c.compact(h.deductible)} of a claim. ${gapNote}${ownNote} ${h.years>0?` If medical costs rise ${s.medInflation}% a year, the same cover bought ${h.years} years from now would have to be ${c.compact(h.inflatedTarget)}.`:''}`;
+  const healthBars=[{name:'Total you want', value:h.target, label:c.compact(h.target), color:'#14283F'},
+    {name:'Floater', value:h.base, label:c.compact(h.base), color:'#2557C7'},
+    {name:'Super top-up', value:h.topUp, label:c.compact(h.topUp), color:'#2557C7'},
+    {name:'You hold: own policy', value:h.own, label:c.compact(h.own), color:'#1F8A70'},
+    {name:'You hold: employer', value:h.employer, label:c.compact(h.employer), color:'#56698A'}];
+  const healthCard=`<div class="card">
+      <h4>Health cover for the family</h4>
+      <div class="cap">${healthCap}</div>
+      <div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">Floater</div><div class="stat-value">${c.compact(h.base)}</div></div>
+        <div class="stat"><div class="stat-label">Super top-up${infoIcon('A policy that starts paying after a set amount of a claim (its deductible) and covers a large sum above it. Pair it with a floater of the same size as the deductible.')}</div><div class="stat-value">${c.compact(h.topUp)}</div><div class="stat-sub">above the first ${c.compact(h.deductible)}</div></div>
+        <div class="stat"><div class="stat-label">Short by</div><div class="stat-value">${c.compact(h.gap)}</div><div class="stat-sub">counting your employer's cover</div></div>
+        <div class="stat"><div class="stat-label">Short by, without employer</div><div class="stat-value">${c.compact(h.gapOwnOnly)}</div></div>
+      </div>
+      ${barsChart('cover-health', healthBars)}
+      <div class="gr-note">The starting sizes are a rule of thumb for each kind of city, not a market figure or a quote, and nobody publishes one right size: move the sliders to what a hospital stay in your city and your family's history suggest. Medical costs rising ${s.medInflation}% a year is an assumption, not a forecast. No premium is shown: it depends on ages, health and insurer.</div>
+    </div>`;
+
+  // ---- inputs
+  const tierChips=`<div class="cap" id="cvTierLbl">Where you live (sets the starting sizes):</div><div class="slab-chips" role="group" aria-labelledby="cvTierLbl">${Object.keys(COVER_TIERS).map(k=>`<button type="button" class="tglbtn${s.tier===k?' active':''}" data-cv="tier" data-val="${k}" aria-pressed="${s.tier===k}">${COVER_TIERS[k].label}</button>`).join('')}</div>`;
+  const noteHTML=fillNoteHTML(s);
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
+  <div class="panel">
+    ${panelHead('Cover', 'cover')}
+    ${advisorChipsHTML('cover')}
+    <div class="slab-chips fill-chips" style="margin:0 0 12px"><button type="button" class="tglbtn" data-cv="fromLoans">Use the loans from my Loans tab</button></div>
+    ${noteHTML}
+    <div class="section-label">What your family would need</div>
+    <div class="field"><label>Household spending each month <b>${c.fmt(s.monthly)}</b></label><input type="range" min="5000" max="500000" step="1000" value="${s.monthly}" data-k="monthly" data-tab="cover"></div>
+    <div class="field"><label>Years they would rely on your income <b>${s.years}</b></label><input type="range" min="0" max="40" value="${s.years}" data-k="years" data-tab="cover"></div>
+    <div class="field"><label>Spending rises by <b>${s.inflation}%</b> a year</label><input type="range" min="2" max="12" step="0.1" value="${s.inflation}" data-k="inflation" data-tab="cover"></div>
+    <div class="field"><label>The money would earn${infoIcon('What a lump sum left to your family would earn after tax while they spend it. A rate close to inflation means a bigger need, and one well above it means a smaller one. Your own assumption.')} <b>${s.returnRate}%</b></label><input type="range" min="4" max="12" step="0.1" value="${s.returnRate}" data-k="returnRate" data-tab="cover"></div>
+    <div class="field"><label>Loans outstanding <b>${c.compact(s.loans)}</b></label><input type="range" min="0" max="50000000" step="50000" value="${s.loans}" data-k="loans" data-tab="cover"></div>
+    <div class="field"><label>Other goals to fund, a total in today's money${infoIcon('Goals from the Full Plan arrive by themselves through its "Open in the Lab" button. Use this for any others: a lump sum that has to exist for them.')} <b>${c.compact(s.goalExtra)}</b></label><input type="range" min="0" max="50000000" step="50000" value="${s.goalExtra}" data-k="goalExtra" data-tab="cover"></div>
+    <div class="field"><label>Savings your family could draw on${infoIcon('Money you hold that your family could use. Leave out money already set aside for goals brought in from the Full Plan: it is taken off those goals, so counting it here too would count it twice.')} <b>${c.compact(s.savings)}</b></label><input type="range" min="0" max="50000000" step="50000" value="${s.savings}" data-k="savings" data-tab="cover"></div>
+    <div class="field"><label>Term cover you already own <b>${c.compact(s.existing)}</b></label><input type="range" min="0" max="100000000" step="500000" value="${s.existing}" data-k="existing" data-tab="cover"></div>
+    <hr class="divider">
+    <div class="section-label">Health cover</div>
+    ${tierChips}
+    <div class="field" style="margin-top:12px"><label>Total cover you want, today's money <b>${c.compact(s.healthTarget)}</b></label><input type="range" min="300000" max="10000000" step="100000" value="${s.healthTarget}" data-k="healthTarget" data-tab="cover"></div>
+    <div class="field"><label>Family floater <b>${c.compact(s.baseCover)}</b></label><input type="range" min="100000" max="${Math.min(5000000,s.healthTarget)}" step="50000" value="${s.baseCover}" data-k="baseCover" data-tab="cover"></div>
+    <div class="field"><label>Medical costs rise by <b>${s.medInflation}%</b> a year</label><input type="range" min="4" max="15" step="0.5" value="${s.medInflation}" data-k="medInflation" data-tab="cover"></div>
+    <div class="field"><label>Look ahead <b>${s.healthYears}</b> years</label><input type="range" min="0" max="40" value="${s.healthYears}" data-k="healthYears" data-tab="cover"></div>
+    <div class="field"><label>Your own health policy <b>${c.compact(s.ownHealth)}</b></label><input type="range" min="0" max="10000000" step="100000" value="${s.ownHealth}" data-k="ownHealth" data-tab="cover"></div>
+    <div class="field"><label>Cover through your employer <b>${c.compact(s.employerHealth)}</b></label><input type="range" min="0" max="10000000" step="100000" value="${s.employerHealth}" data-k="employerHealth" data-tab="cover"></div>
+    <div class="field"><label>Health premium you pay each year${infoIcon('Optional, and only used by the Tax regime tab for 80D. It plays no part in the cover sizes.')} <b>${c.fmt(s.premium)}</b></label><input type="range" min="0" max="100000" step="1000" value="${s.premium}" data-k="premium" data-tab="cover"></div>
+  </div>
+  <div class="output">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Term cover needed</div><div class="stat-value">${c.compact(t.gross)}</div><div class="stat-sub">in all</div></div>
+      <div class="stat"><div class="stat-label">Term cover gap</div><div class="stat-value">${c.compact(t.gap)}</div><div class="stat-sub">${t.gap>0?'to add':'covered'}</div></div>
+      <div class="stat"><div class="stat-label">Health cover gap</div><div class="stat-value">${c.compact(h.gap)}</div><div class="stat-sub">with employer cover</div></div>
+    </div>
+    ${termCard}
+    ${healthCard}
+    ${nextStepCard([
+      {q:'Your health premium may be deductible: see which tax regime wins for you.', tab:'taxregime'},
+      {q:'Do your loans change what is worth prepaying?', tab:'loans'},
+    ])}
+  </div>
+  </div>`;
+}
+function coverAdvisorResults(){
+  const R=computeCover(), c=R.c, s=R.s, t=R.term, h=R.health, m=v=>c.fmt(Math.round(v));
+  return { ok:true, tool:'Cover', charts:[
+    { kind:'cover', title:'Term cover the family would need', xAxis:'', yAxis:'rupees', note:'spending for the years they rely on the income (inflated, paid from a pot earning the stated return) plus loans plus the goal pots at today\'s value, minus savings and existing term cover; a size, never a premium',
+      points:[{ label:'spending for '+s.years+' years', value:m(t.expense) }, { label:'loans', value:m(t.loans) }, { label:'goal pots (today\'s value)', value:m(t.goalPV) }, { label:'total need', value:m(t.gross) }, { label:'held (savings + existing term cover)', value:m(t.savings+t.existingCover) }, { label:'gap', value:m(t.gap) }] },
+    { kind:'cover', title:'Health cover', xAxis:'', yAxis:'rupees', note:'starting sizes are a rule of thumb, not a market figure or a quote; medical cost growth is an assumption; employer cover ends with the job',
+      points:[{ label:'total wanted (today\'s money)', value:m(h.target) }, { label:'floater', value:m(h.base) }, { label:'super top-up', value:m(h.topUp) }, { label:'short, counting employer cover', value:m(h.gap) }, { label:'short, own policy only', value:m(h.gapOwnOnly) }, { label:'total wanted in '+h.years+' years', value:m(h.inflatedTarget) }] },
   ] };
 }
 
@@ -4551,9 +5159,24 @@ function renderHealth(){
       <b>Headroom (15pts):</b> ${sc.headroom>=0 ? (sc.headroom*100).toFixed(0)+'% of your capacity is spare after the goals' : 'your goals need more than you can save each month'} (15 pts at 10% or more).
       </div>
     </div>
+    ${healthCoverCard()}
     ${nextStepCard([{q:'Start from the Retirement tab to raise the funding score.', tab:'retirement'}])}
   </div>
   </div>`;
+}
+// Protection sits beside the score, not inside it: the score is built only from what this tab measures, and cover
+// needs a dozen more inputs (spending, loans, dependants) that live on the Cover tab. India only, like that tab.
+function healthCoverCard(){
+  if(L.country!=='IN') return '';
+  const R=computeCover(), c=R.c, t=R.term, h=R.health;
+  const tTxt=t.gross<=0 ? 'Add your household spending on the Cover tab to size term cover.' : t.gap>0 ? `Your family would need about ${c.compact(t.gross)} of term cover and you hold ${c.compact(t.savings+t.existingCover)} between savings and existing cover: ${c.compact(t.gap)} short.` : `Your savings and existing cover meet the ${c.compact(t.gross)} your family would need.`;
+  const hTxt=h.gap>0 ? `Health cover is ${c.compact(h.gap)} short of ${c.compact(h.target)}${h.gapOwnOnly>h.gap?` (${c.compact(h.gapOwnOnly)} without your employer's policy)`:''}.` : `Health cover meets ${c.compact(h.target)}.`;
+  return `<div class="card">
+      <h4>Protection, beside the score</h4>
+      <div class="cap">${tTxt} ${hTxt}</div>
+      <div class="gr-note">Not part of the score above. These use whatever is set on the Cover tab, which opens on starting values until you change them, and say nothing about what cover costs.</div>
+      <button class="ns-btn" data-tab-switch="cover" style="margin-top:8px">Check your cover on the Cover tab<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></button>
+    </div>`;
 }
 
 /* =====================================================================
@@ -6794,6 +7417,9 @@ const ICON_HEALTH=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const ICON_STATEMENTS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M9 12h7"/><path d="M9 16h7"/><path d="M9 8h3"/></svg>`;
 
 const ICON_INCOME=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.6 11a1 1 0 0 1-1 .9H7.6a1 1 0 0 1-1-.9L5 8z"/><path d="M5 8c0-2.2 3.1-4 7-4s7 1.8 7 4"/><path d="M9.5 13h5"/></svg>`;
+const ICON_LOANS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 10v9.5h13V10"/><path d="M12 9.5v7"/><path d="M9.8 11.5h3.4a1.4 1.4 0 0 1 0 2.8h-2.4a1.4 1.4 0 0 0 0 2.8h3.4"/></svg>`;
+const ICON_TAXREGIME=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-2.5 6a3 3 0 0 0 5 0L5 7z"/><path d="M19 7l-2.5 6a3 3 0 0 0 5 0L19 7z"/></svg>`;
+const ICON_COVER=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5.5c0 4.3 2.9 7.8 7 9.5 4.1-1.7 7-5.2 7-9.5V6l-7-3z"/><path d="M9.2 12l2 2 3.6-4"/></svg>`;
 
 const TABS=[
   {id:'livefrontier', label:'Test Real Investments', primary:true, icon:ICON_LIVEFRONTIER,
@@ -6810,6 +7436,12 @@ const TABS=[
     blurb:'Check whether a retirement corpus can actually fund a fixed withdrawal for as long as you need it to.'},
   {id:'income', short:'How to draw the money: buckets, SWP vs FD, the NPS pension.', label:'Retirement Income', icon:ICON_INCOME,
     blurb:'Once you have the pot: split it into buckets, compare drawing it as an SWP or FD interest after tax, see a crash hit two ways of drawing, and size the NPS pension.'},
+  {id:'loans', short:'Prepay the home loan or invest, and clear costly debt first (India).', label:'Loans', icon:ICON_LOANS,
+    blurb:'Set the certain saving from prepaying a home loan, after tax, beside what the same money is expected to earn, with the break-even and no verdict. Then see the order to clear credit-card and personal-loan debt.'},
+  {id:'taxregime', short:'Old or new income-tax regime on your pay (India).', label:'Tax regime', icon:ICON_TAXREGIME,
+    blurb:'Enter your pay and deductions and see which regime costs less, by how much, where the break-even sits, and what that means for ELSS, PPF, NPS and the rest of your plan.'},
+  {id:'cover', short:'How much term and health cover you need, and the gap (India).', label:'Cover', icon:ICON_COVER,
+    blurb:'Size term life cover from your household spending, loans and goals, and health cover as a floater plus a super top-up. Cover amounts and the gap only, never a premium.'},
   {id:'fx', short:'What currency moves do to India-US returns.', label:'Cross-Border', icon:ICON_FX,
     blurb:'See what currency movement does to real returns when you invest across India and the US.'},
   {id:'joint', short:'Several children’s education from one pool.', label:'Joint Children Corpus', icon:ICON_JOINT,
@@ -6819,7 +7451,7 @@ const TABS=[
   {id:'instruments', short:'Return and risk assumptions per fund category.', label:'Instrument Explorer', icon:ICON_INSTRUMENTS,
     blurb:"Look up any bundled fund category's return and risk assumptions side by side."},
   {id:'health', short:'Savings, emergency fund and cover, scored.', label:'Plan Health', icon:ICON_HEALTH,
-    blurb:'A quick score on whether your current savings, emergency fund and protection are actually in shape.'},
+    blurb:'A quick score on whether your savings cover your goals, your emergency fund is in place and the plan holds up in a crash. Insurance cover is shown beside it, not in it.'},
 ];
 function renderHome(){
   const primary=TABS.filter(t=>t.primary), secondary=TABS.filter(t=>!t.primary);
@@ -7062,6 +7694,9 @@ function render(opts){
   else if(L.tab==='stepup') main.innerHTML=renderStepUp();
   else if(L.tab==='swp') main.innerHTML=renderSWP();
   else if(L.tab==='income') main.innerHTML=renderIncome();
+  else if(L.tab==='loans') main.innerHTML=renderLoans();
+  else if(L.tab==='taxregime') main.innerHTML=renderTaxRegime();
+  else if(L.tab==='cover') main.innerHTML=renderCover();
   else if(L.tab==='fx') main.innerHTML=renderFX();
   else if(L.tab==='joint') main.innerHTML=renderJoint();
   else if(L.tab==='mc') main.innerHTML=renderMC();
@@ -7159,7 +7794,7 @@ function attach(){
   document.querySelectorAll('input[type=range][data-k]').forEach(el=>{
     el.addEventListener('input',()=>{
       const k=el.dataset.k, tab=el.dataset.tab||'ret';
-      const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='income'?L.income : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
+      const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='income'?L.income : tab==='loans'?L.loans : tab==='tax'?L.tax : tab==='cover'?L.cover : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
       let v=parseFloat(el.value);
       if(k==='shockYear'){ L.ret.shock.year=v; }
       else if(k==='swpShockYear'){ L.swp.shock.year=v; }
@@ -7270,6 +7905,44 @@ function attach(){
         s.retNote=(want.corpus!==s.corpus||want.spend!==s.spend||want.years!==s.years)
           ? {corpus:s.corpus, spend:s.spend, years:s.years, wantCorpus:want.corpus, wantSpend:want.spend, wantYears:want.years} : null;
       }
+      render();
+    });
+  });
+
+  // Loans: tax slab, regime, kind of investment. Changing the kind moves the expected return to that kind's usual figure,
+  // but only while the person has not typed their own.
+  document.querySelectorAll('[data-ln]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const f=el.dataset.ln, v=el.dataset.val, s=L.loans;
+      if(f==='slab') s.slab=+v;
+      else if(f==='regime') s.regime=v==='new'?'new':'old';
+      else if(f==='kind'){
+        const was=s.kind;
+        s.kind=v==='debt'||v==='fd'?v:'equity';
+        if(s.expected===LOAN_KIND_DEFAULT[was]) s.expected=LOAN_KIND_DEFAULT[s.kind];
+      }
+      render();
+    });
+  });
+  // Tax regime: age band, metro or not, parents' age, and the three fill buttons (each copies from another tab).
+  document.querySelectorAll('[data-tx]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const f=el.dataset.tx, v=el.dataset.val, s=L.tax;
+      if(f==='ageBand') s.ageBand=v;
+      else if(f==='metro') s.metro=v==='true';
+      else if(f==='parentsSenior') s.parentsSenior=v==='true';
+      else if(f==='fillEpf') taxFill('epf');
+      else if(f==='fillLoan') taxFill('loan');
+      else if(f==='fillCover') taxFill('cover');
+      render();
+    });
+  });
+  // Cover: the city size, which sets where the health sliders open, and the copy-from-Loans button.
+  document.querySelectorAll('[data-cv]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const f=el.dataset.cv, v=el.dataset.val, s=L.cover;
+      if(f==='tier' && COVER_TIERS[v]){ s.tier=v; s.baseCover=COVER_TIERS[v].base; s.healthTarget=COVER_TIERS[v].target; }
+      else if(f==='fromLoans') coverFill('loans');
       render();
     });
   });
@@ -10701,7 +11374,22 @@ function consumeDoor2Handoff(){
   if(data.capacity>0) L.health.capacity = Math.min(300000, Math.max(5000, Math.round(data.capacity)));
   if(data.emergencyStatus) L.health.emergencyStatus = data.emergencyStatus;
   L.health.fromDoor2Plan = true;
-  L.tab = 'health';
+  // The Full Plan's goal pots and monthly spending also seed the Cover tab (India only: the Full Plan's rupee goals are
+  // what that tab's term-cover sum reads). The goals are cleaned the same way on every read, so a hand-edited hand-off
+  // cannot put anything but numbers and short labels into the page.
+  // A retirement goal pays for the earner's own retirement, which does not happen if they are not there, so it is left out.
+  if(L.country==='IN'){
+    L.cover.goals = cleanCoverGoals(Array.isArray(data.goals) ? data.goals.filter(g=>g && g.type!=='retirement') : []);
+    const me=Number(data.monthlyExpense);
+    if(isFinite(me) && me>0) L.cover.monthly = Math.min(500000, Math.max(5000, Math.round(me/1000)*1000));
+    // The Full Plan's own protection check carries its four answers over, so they are not typed twice.
+    const cv=data.cover;
+    if(cv && typeof cv==='object'){
+      ['years','loans','savings','existing'].forEach(k=>{ const v=Number(cv[k]); if(isFinite(v) && v>=0) L.cover[k]=v; });
+      clampCover(L.cover);
+    }
+  }
+  L.tab = (data.tab==='cover' && L.country==='IN') ? 'cover' : 'health';
   return true;
 }
 
@@ -10907,7 +11595,10 @@ document.body.addEventListener('click', e=>{
    directly — every mutation goes through executeAdvisorTool.
    ===================================================================== */
 const ADVISOR_TABS = ['home'].concat(TABS.map(t => t.id));
-const TAB_FOR = { ret:'retirement', step:'stepup', swp:'swp', income:'income', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+const TAB_FOR = { ret:'retirement', step:'stepup', swp:'swp', income:'income', loans:'loans', tax:'taxregime', cover:'cover', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+// These four tabs are built on Indian rules, so a value for one of them is refused when the Lab is set to the US:
+// otherwise the number would be stored and the person dropped on a screen that only says "switch to India".
+const INDIA_ONLY_STATE = ['income', 'loans', 'tax', 'cover'];
 
 const ADVISOR_FIELDS = {
   country: { path:['country'], type:'string', enum:['IN','US'], desc:'Country/currency: IN for India ₹, US for United States $.' },
@@ -10958,6 +11649,49 @@ const ADVISOR_FIELDS = {
   'income.npsPot': { path:['income','npsPot'], type:'integer', min:0, max:50000000, desc:'NPS pot at retirement (rupees).' },
   'income.annuityShare': { path:['income','annuityShare'], type:'integer', min:20, max:100, desc:'Percent of the NPS pot used to buy a pension (at least 20).' },
   'income.annuityRate': { path:['income','annuityRate'], type:'number', min:3, max:9, desc:'Pension rate % (the person\'s own assumption, not a quote).' },
+  'loans.balance': { path:['loans','balance'], type:'integer', min:100000, max:50000000, desc:'Home loan still owed (rupees).' },
+  'loans.rate': { path:['loans','rate'], type:'number', min:6, max:14, desc:'Home loan interest rate % a year.' },
+  'loans.years': { path:['loans','years'], type:'integer', min:1, max:30, desc:'Years left on the home loan.' },
+  'loans.regime': { path:['loans','regime'], type:'string', enum:['old','new'], desc:'Income-tax regime the person files under: old (home-loan interest relief up to ₹2 lakh) or new (none).' },
+  'loans.slab': { path:['loans','slab'], type:'integer', enum:[0,5,10,15,20,25,30], desc:'The person\'s income-tax slab, in percent.' },
+  'loans.amount': { path:['loans','amount'], type:'integer', min:50000, max:10000000, desc:'The lump sum being weighed: prepay the loan with it, or invest it (rupees).' },
+  'loans.expected': { path:['loans','expected'], type:'number', min:3, max:18, desc:'Return % a year the person expects if the lump sum is invested instead (their assumption, before tax).' },
+  'loans.kind': { path:['loans','kind'], type:'string', enum:['equity','debt','fd'], desc:'What the lump sum would be invested in: equity fund, debt fund or fixed deposit (decides how the gain is taxed).' },
+  'loans.cardBal': { path:['loans','cardBal'], type:'integer', min:0, max:1000000, desc:'Credit card balance owed (rupees).' },
+  'loans.cardRate': { path:['loans','cardRate'], type:'number', min:10, max:48, desc:'Credit card interest % a year.' },
+  'loans.cardPay': { path:['loans','cardPay'], type:'integer', min:0, max:100000, desc:'What is paid on the card each month (rupees).' },
+  'loans.plBal': { path:['loans','plBal'], type:'integer', min:0, max:2500000, desc:'Personal loan balance owed (rupees).' },
+  'loans.plRate': { path:['loans','plRate'], type:'number', min:8, max:30, desc:'Personal loan interest % a year.' },
+  'loans.plPay': { path:['loans','plPay'], type:'integer', min:0, max:150000, desc:'The personal loan instalment each month (rupees).' },
+  'loans.extra': { path:['loans','extra'], type:'integer', min:0, max:100000, desc:'Extra a month that can go to the costly debts, on top of what is paid now (rupees).' },
+  'tax.gross': { path:['tax','gross'], type:'integer', min:300000, max:10000000, desc:'Gross salary a year (rupees).' },
+  'tax.basic': { path:['tax','basic'], type:'integer', min:100000, max:5000000, desc:'Basic salary a year (rupees); the HRA and employer-NPS rules are worked on it.' },
+  'tax.hra': { path:['tax','hra'], type:'integer', min:0, max:3000000, desc:'HRA received a year (rupees).' },
+  'tax.rent': { path:['tax','rent'], type:'integer', min:0, max:3000000, desc:'Rent actually paid a year (rupees).' },
+  'tax.metro': { path:['tax','metro'], type:'boolean', desc:'true if the person rents in Mumbai, Kolkata, Delhi, Chennai, Hyderabad, Pune, Ahmedabad or Bengaluru (50% of basic for HRA), false elsewhere (40%).' },
+  'tax.ageBand': { path:['tax','ageBand'], type:'string', enum:['under60','senior','superSenior'], desc:'Age band for the old-regime slabs: under60, senior (60 to 79), superSenior (80 and over).' },
+  'tax.c80': { path:['tax','c80'], type:'integer', min:0, max:300000, desc:'Invested under section 80C in the year (EPF, PPF, ELSS, life premium...); only ₹1.5 lakh counts.' },
+  'tax.nps1b': { path:['tax','nps1b'], type:'integer', min:0, max:100000, desc:'The person\'s own NPS contribution under 80CCD(1B); only ₹50,000 counts.' },
+  'tax.employerNps': { path:['tax','employerNps'], type:'integer', min:0, max:1000000, desc:'Employer\'s NPS contribution a year (rupees).' },
+  'tax.health': { path:['tax','health'], type:'integer', min:0, max:100000, desc:'Health insurance premium paid for self and family a year, under 80D (rupees).' },
+  'tax.healthParents': { path:['tax','healthParents'], type:'integer', min:0, max:100000, desc:'Health insurance premium paid for parents a year, under 80D (rupees).' },
+  'tax.parentsSenior': { path:['tax','parentsSenior'], type:'boolean', desc:'true if the parents are 60 or over.' },
+  'tax.homeLoan': { path:['tax','homeLoan'], type:'integer', min:0, max:500000, desc:'Home-loan interest paid in the year on a self-occupied house (rupees); only ₹2 lakh counts, and only on the old regime.' },
+  'cover.monthly': { path:['cover','monthly'], type:'integer', min:5000, max:500000, desc:'What the household spends each month today (rupees).' },
+  'cover.years': { path:['cover','years'], type:'integer', min:0, max:40, desc:'Years the family would rely on the person\'s income.' },
+  'cover.inflation': { path:['cover','inflation'], type:'number', min:2, max:12, desc:'Spending rises by this % a year.' },
+  'cover.returnRate': { path:['cover','returnRate'], type:'number', min:4, max:12, desc:'What the pay-out would earn while the family draws on it, % a year.' },
+  'cover.loans': { path:['cover','loans'], type:'integer', min:0, max:50000000, desc:'Loans that would need clearing (rupees).' },
+  'cover.goalExtra': { path:['cover','goalExtra'], type:'integer', min:0, max:50000000, desc:'Other goal money (children\'s education, a home) the family would still need, in today\'s rupees.' },
+  'cover.savings': { path:['cover','savings'], type:'integer', min:0, max:50000000, desc:'Savings the family could draw on (rupees).' },
+  'cover.existing': { path:['cover','existing'], type:'integer', min:0, max:100000000, desc:'Term life cover the person already pays for (rupees; not employer cover).' },
+  'cover.healthTarget': { path:['cover','healthTarget'], type:'integer', min:300000, max:10000000, desc:'Total health cover wanted, in today\'s rupees.' },
+  'cover.baseCover': { path:['cover','baseCover'], type:'integer', min:100000, max:5000000, desc:'Size of the family floater policy; the super top-up covers the rest of the target (rupees).' },
+  'cover.medInflation': { path:['cover','medInflation'], type:'number', min:4, max:15, desc:'Medical cost rises by this % a year.' },
+  'cover.healthYears': { path:['cover','healthYears'], type:'integer', min:0, max:40, desc:'Years from now the cover would be bought, for the grown target.' },
+  'cover.ownHealth': { path:['cover','ownHealth'], type:'integer', min:0, max:10000000, desc:'Health cover the person already pays for (rupees).' },
+  'cover.employerHealth': { path:['cover','employerHealth'], type:'integer', min:0, max:10000000, desc:'Health cover through the employer (rupees); it ends with the job.' },
+  'cover.premium': { path:['cover','premium'], type:'integer', min:0, max:100000, desc:'Health premium the person says they pay each year (rupees); used only by the Tax regime tab for 80D, never in the cover sizes.' },
 };
 
 const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with three levels — they all share the same math, so moving to a deeper level never wastes anything the user already entered. It supports India (₹) and the United States ($).
@@ -10966,7 +11700,7 @@ const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with thr
 - Level 3 — The Lab (this page): full assumption control, Monte Carlo, efficient frontier, and live real-market-data testing.
 The user is currently on Level 3.
 
-This is "Goalden — The Lab" (Level 3): full assumption control and live market-data testing. Twelve tools sharing one underlying engine.
+This is "Goalden — The Lab" (Level 3): full assumption control and live market-data testing. Fifteen tools sharing one underlying engine.
 
 Tools:
 - Retirement Lab: age, retire age, monthly expenses, lifestyle %, inflation, growth before/after retirement, life expectancy; stress-tests with a real historical market crash, plus a drawdown Monte Carlo to show sequence-of-returns risk.
@@ -10975,11 +11709,14 @@ Tools:
 - Step-Up SIP: a SIP that grows with income each year.
 - Sustainable Withdrawal (SWP): whether a corpus can fund a fixed inflation-adjusted withdrawal for a set span.
 - Retirement Income (India only): once there is a pot, how to draw it. Splits it into liquid, debt and equity buckets by when each part is needed; compares an SWP from a fund with FD interest after Indian tax (an SWP taxes only the gain part of each sale, FD interest is taxed in full at the slab, and moving a fund pot into an FD costs tax to sell it first; both balances are shown as what would be left after tax if everything were sold that year); runs one historical crash through the bucket plan and through a single rebalanced pot; sizes the NPS pension (for most subscribers at least 20% of the pot must buy an annuity, government employees still at least 40%, small pots have their own rules; cash up to 60% is tax-free; the annuity rate is the user's own assumption, not a quote). It shows both sides of each comparison and never picks one for the user.
+- Loans (India only): weighs prepaying the home loan against investing the same lump sum. Prepaying saves a certain rate; under the old tax regime the interest relief (up to ₹2 lakh a year, s.24(b)) lowers that rate by the user's slab, under the new regime there is no relief on a self-occupied home. The investment side is the user's own expected return, taxed as the kind of investment it is (equity fund, debt fund or FD). It shows a break-even (the return the investment must earn before tax to match) and never a verdict. It also takes credit-card and personal-loan balances and shows the order to clear them, highest rate first, and the interest that saves.
+- Tax regime (India only): old or new regime on the same pay, worked from salary, HRA, 80C, NPS, health premium and home-loan interest, with the tax under each, the difference, and the deductions the old regime needs to win. It also says what that means for the plan: on the new regime 80C, 80CCD(1B), 80D and home-loan interest give no tax benefit, so ELSS and PPF are chosen on returns and lock-in, not for tax. The rule year is shown on screen and is a figure to re-check against the Income Tax Department. Surcharge above ₹50 lakh is not modelled, and the HRA rule was read from a search excerpt, not the full page.
+- Cover (India only): how much insurance, never what it costs. Term cover for the family = their spending for the years they would rely on the income (grown by inflation, paid out of a pot earning a stated return) + loans + goal pots at today's value − savings − term cover already held; a retirement goal is left out. Health cover = a family floater plus a super top-up for the rest of a total target, grown at medical inflation, shown short with and without employer cover (which ends with the job). There are no premium figures anywhere; the health starting sizes by city are rules of thumb, not market figures or quotes.
 - Cross-Border (FX): effect of currency movement on India-US investing.
 - Joint Children Corpus: overlapping education costs for multiple children from one pool.
 - Monte Carlo: thousands of random market paths to show plan likelihood, not just the average.
 - Instrument Explorer: return/risk assumptions for all fund categories.
-- Plan Health: a quick 0-100 score on savings, emergency fund and protection.
+- Plan Health: a quick 0-100 score on funding, emergency fund, crash survival and headroom. Insurance cover is shown beside the score, not inside it.
 - Read the Company: reads one real Indian company's Profit & Loss, Balance Sheet and Cash Flow (scraped from screener.in), lets a second company be pinned alongside for comparison, and surfaces five specific divergence checks (e.g. a dividend larger than operating cash flow, profit growth that never became cash, debtor days stretching out) with a check-summary line showing how many checks ran and how many found nothing, not just the ones that fired. A lender (bank/NBFC) gets a different row set than a manufacturer, and the two are never silently compared.
 
 Data sources:
@@ -11133,6 +11870,15 @@ function advisorChipsHTML(tab) {
   } else if (tab === 'income') {
     chips.push("Buckets or one pot: which holds up in a crash?");
     chips.push("How is an SWP taxed compared with FD interest?");
+  } else if (tab === 'loans') {
+    chips.push("Prepay the home loan or invest: where is the break-even?");
+    chips.push("Which of my debts should I clear first?");
+  } else if (tab === 'taxregime') {
+    chips.push("Which regime is cheaper for me, and by how much?");
+    chips.push("What does the new regime change for ELSS and PPF?");
+  } else if (tab === 'cover') {
+    chips.push("How is the term cover figure worked out?");
+    chips.push("Why a super top-up on top of a floater?");
   } else if (tab === 'fx') {
     chips.push("Is currency helping or hurting me here?");
   } else if (tab === 'joint') {
@@ -11322,7 +12068,7 @@ function advisorTools() {
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view (no pulse). Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
-    { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, income, fx, joint, mc or health. params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','income','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
+    { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, income, loans, taxregime, cover, fx, joint, mc or health (income, loans, taxregime and cover are India only). params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP; loans: balance, rate, years, regime, slab, amount, expected, kind; taxregime: gross, basic, hra, rent, metro, c80, nps1b, health, homeLoan; cover: monthly, years, loans, savings, existing, healthTarget, ownHealth, employerHealth).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','income','loans','taxregime','cover','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
     { type:'function', function:{ name:'read_other_page', description:'Read-only snapshot of another page\'s saved data (from that page\'s own localStorage). page: door1 (Quick Calculate) or door2 (The Full Plan). Returns {page, asOf, state} — context to quote from, NEVER to be merged into this page\'s inputs.', parameters:{ type:'object', properties:{ page:{ type:'string', enum:Object.keys(OTHER_PAGE_KEYS) } }, required:['page'] } } },
   ];
 }
@@ -11330,17 +12076,25 @@ function advisorTools() {
 function advisorFieldSelector(spec) {
   const key = spec.path[spec.path.length - 1];
   const tab = spec.path[0];
-  const tabAttr = { ret: '', step: 'step', swp: 'swp', income: 'income', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' }[tab] || '';
+  const tabAttr = { ret: '', step: 'step', swp: 'swp', income: 'income', loans: 'loans', tax: 'tax', cover: 'cover', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' }[tab] || '';
   return tabAttr ? 'input[data-k="' + key + '"][data-tab="' + tabAttr + '"]' : 'input[data-k="' + key + '"]';
 }
 
+// field -> the field whose value is its upper limit
+const ADVISOR_CAPPED_BY = { 'tax.basic':'tax.gross', 'cover.baseCover':'cover.healthTarget' };
 function advisorSetValue(field, value) {
   const spec = ADVISOR_FIELDS[field];
   if (!spec) return { ok:false, error:'Unknown field "'+field+'". Valid: '+Object.keys(ADVISOR_FIELDS).join(', ') };
   if (value === undefined || value === null || value === '') return { ok:false, error:'Missing value for '+field };
+  if (INDIA_ONLY_STATE.includes(spec.path[0]) && L.country !== 'IN') return { ok:false, error:'That tool uses Indian tax rules and the Lab is set to the United States. Ask the user whether to switch the country to India first (set_value country IN).' };
   // Only numeric specs are coerced — country is type 'string' with an enum,
   // and parseFloat('IN') is NaN, so the advisor could never switch the Lab's
   // country until this guard existed.
+  if (spec.type === 'boolean') {
+    if (value === 'true') value = true;
+    else if (value === 'false') value = false;
+    if (typeof value !== 'boolean') return { ok:false, error:'Value for '+field+' must be true or false.' };
+  }
   if (spec.type === 'integer' || spec.type === 'number') {
     value = spec.type === 'integer' ? parseInt(value, 10) : parseFloat(value);
     if (!isFinite(value)) return { ok:false, error:'Value for '+field+' must be a number.' };
@@ -11348,12 +12102,24 @@ function advisorSetValue(field, value) {
   if (spec.enum && !spec.enum.includes(value)) return { ok:false, error:'Invalid value for '+field+'. Allowed: '+spec.enum.join(', ') };
   if (spec.min !== undefined && value < spec.min) return { ok:false, error:'Value for '+field+' is too low — it must be at least '+spec.min+'.' };
   if (spec.max !== undefined && value > spec.max) return { ok:false, error:'Value for '+field+' is too high — it must be at most '+spec.max+'.' };
+  // Basic pay cannot exceed salary and the floater cannot exceed the health target. The sliders hold them inside
+  // that limit; here the model is told instead, so it does not report a number the tab quietly lowered.
+  const capField = ADVISOR_CAPPED_BY[field];
+  if (capField) {
+    const cs = ADVISOR_FIELDS[capField], lim = L[cs.path[0]] && L[cs.path[0]][cs.path[1]];
+    if (lim !== undefined && value > lim) return { ok:false, error:'Value for '+field+' cannot be more than '+capField+' ('+lim+'). Set '+capField+' first.' };
+  }
+  const depField = Object.keys(ADVISOR_CAPPED_BY).find(k => ADVISOR_CAPPED_BY[k] === field);
+  const depSpec = depField && ADVISOR_FIELDS[depField], depBefore = depSpec && L[depSpec.path[0]][depSpec.path[1]];
   let obj = L;
   for (let i = 0; i < spec.path.length - 1; i++) obj = obj[spec.path[i]];
   obj[spec.path[spec.path.length - 1]] = value;
   if (TAB_FOR[spec.path[0]]) L.tab = TAB_FOR[spec.path[0]];
   render();
-  return { ok:true, field, value, tab:L.tab, touched: advisorFieldSelector(spec) };
+  const out = { ok:true, field, value, tab:L.tab, touched: advisorFieldSelector(spec) };
+  const depAfter = depSpec && L[depSpec.path[0]][depSpec.path[1]];
+  if (depSpec && depAfter !== depBefore) out.alsoChanged = { [depField]: depAfter };   // lowering the limit pulled the other field down
+  return out;
 }
 
 // Country-scoped asset list + correlation matrix, one choke point reused by
@@ -11715,6 +12481,10 @@ function advisorReadCurrentChart() {
     if (L.country !== 'IN') return { ok:false, error:'Retirement Income uses Indian tax rules; the user needs to switch the country to India.' };
     return incomeAdvisorResults();
   }
+  if (tab === 'loans' || tab === 'taxregime' || tab === 'cover') {
+    if (L.country !== 'IN') return { ok:false, error:'This tool uses Indian tax rules; the user needs to switch the country to India.' };
+    return tab === 'loans' ? loansAdvisorResults() : tab === 'taxregime' ? taxAdvisorResults() : coverAdvisorResults();
+  }
   if (tab === 'fx') {
     const f = L.fx;
     const homeC = f.direction==='investingAbroad' ? C.IN : C.US;
@@ -11860,6 +12630,35 @@ function advisorGetResults() {
       crash:{ scenario:R.ep ? R.ep.label + ' in year ' + s.shock.year : 'none', bucketPlanAtEnd:end(R.hit.buckets), singleRebalancedPotAtEnd:end(R.hit.mix) },
       nps:{ pot:s.npsPot, pensionPerMonthAfterTax:Math.round(R.nps.monthlyAfter), cashKept:Math.round(R.nps.lumpKept) } }, flags:[] };
   }
+  if (tab === 'loans' || tab === 'taxregime' || tab === 'cover') {
+    if (L.country !== 'IN') return { ok:false, error:'This tool uses Indian tax rules; the user needs to switch the country to India.' };
+  }
+  if (tab === 'loans') {
+    const R = computeLoans(), s = R.s, cmp = R.cmp, pre = R.pre, av = R.av, sc = cmp.schedule;
+    return { ok:true, result:{ tool:'Loans', note:'break-even, not a verdict: the investment return is the user\'s assumption',
+      homeLoan:{ balance:s.balance, ratePct:s.rate, yearsLeft:s.years, regime:s.regime, slabPct:R.slabPct, instalment:Math.round(sc.emi), firstYearInterest:Math.round(sc.firstYearInterest), interestRelieved:s.regime === 'old' ? Math.round(cmp.old.claim) : 0, reliefCappedAt2Lakh:s.regime === 'old' && cmp.old.capped },
+      prepayingSavesPctAfterTax:+(cmp.loanRate * 100).toFixed(2),
+      investingEarnsPctAfterTax:+(cmp.expectedAfterTax * 100).toFixed(2),
+      investmentMustEarnBeforeTaxPct:cmp.breakEven == null ? null : +(cmp.breakEven * 100).toFixed(2),
+      lumpSum:{ amount:s.amount, kind:s.kind, expectedBeforeTaxPct:s.expected, loanEndsSoonerByMonths:pre.monthsSaved, interestSavedBeforeTax:Math.round(pre.interestSaved) },
+      costlyDebts:{ clearOrder:av.order, total:Math.round(av.total), monthsToClear:av.total <= 0 ? 0 : av.plan.neverPaysOff ? null : av.plan.months, neverClears:av.plan.neverPaysOff, interestSavedVersusEachOnItsOwn:av.interestSaved == null ? null : Math.round(av.interestSaved) } }, flags:[] };
+  }
+  if (tab === 'taxregime') {
+    const R = computeTax(), r = R.r, o = r.old, s = R.s;
+    return { ok:true, result:{ tool:'Tax regime', rulesAsOf:TAX_REGIME_IN.asOf, note:'tax plus 4% cess; surcharge not modelled; re-check the figures against the Income Tax Department',
+      grossSalary:s.gross, newRegimeTax:Math.round(r.new.tax), oldRegimeTax:Math.round(o.tax), cheaper:r.winner, saving:Math.round(r.saving),
+      oldRegimeDeductions:Math.round(o.deductions), deductionsOldNeedsToWin:r.breakEven <= 0 ? 0 : Math.round(r.breakEven),
+      counted:{ hra:Math.round(o.parts.hra), c80:Math.round(o.parts.c80), nps1b:Math.round(o.parts.nps1b), health80D:Math.round(o.parts.health), homeLoanInterest:Math.round(o.parts.homeLoan) },
+      unusedRoom:{ c80:Math.round(r.unused.c80), nps1b:Math.round(r.unused.nps1b) },
+      oldRegimeIfBothFilled:{ tax:Math.round(r.oldIfFilled.tax), cheaper:r.oldIfFilled.winner },
+      aboveSurchargeLine:r.aboveSurcharge }, flags:[] };
+  }
+  if (tab === 'cover') {
+    const R = computeCover(), s = R.s, t = R.term, h = R.health;
+    return { ok:true, result:{ tool:'Cover', note:'sizes only; no premiums are shown or known',
+      term:{ spendingForYears:Math.round(t.expense), years:s.years, loans:Math.round(t.loans), goalPotsTodaysValue:Math.round(t.goalPV), totalNeed:Math.round(t.gross), savings:Math.round(t.savings), existingTermCover:Math.round(t.existingCover), gap:Math.round(t.gap), surplus:Math.round(t.surplus) },
+      health:{ target:Math.round(h.target), floater:Math.round(h.base), superTopUp:Math.round(h.topUp), shortCountingEmployerCover:Math.round(h.gap), shortOwnPolicyOnly:Math.round(h.gapOwnOnly), targetInYearsGrown:Math.round(h.inflatedTarget), years:h.years } }, flags:[] };
+  }
   return { ok:true, result:{ tool: tab === 'home' ? 'Home' : tab, note:'Pick a tool to explore.' } };
 }
 
@@ -11875,6 +12674,12 @@ const ADVISOR_HIGHLIGHT_TARGETS = {
   drawdown: '#ret-drawdown, #swp-drawdown',
   incomedraw: '#inc-draw',
   incomecrash: '#inc-crash',
+  loancompare: '#loan-compare',
+  loandebts: '#loan-debts',
+  taxcompare: '#tax-compare',
+  taxbreakeven: '#tax-breakeven',
+  termcover: '#cover-term',
+  healthcover: '#cover-health',
   mountain: '#ret-mountain',
   timeline: '#joint-timeline',
   twinfates: '#step-twinfates',
@@ -12165,16 +12970,21 @@ function executeAdvisorTool(name, args) {
     const start = performance.now();
     const tab = args && args.tab;
     const params = (args && args.params) || {};
-    const PREFIX = { retirement:'ret', stepup:'step', swp:'swp', income:'income', fx:'fx', joint:'joint', mc:'mc', health:'health' };
-    if (!PREFIX[tab]) return JSON.stringify({ ok:false, error:'Invalid tab. Valid: retirement, stepup, swp, income, fx, joint, mc, health. (portfolio/livefrontier use set_weights/add_instrument.)' });
+    const PREFIX = { retirement:'ret', stepup:'step', swp:'swp', income:'income', loans:'loans', taxregime:'tax', cover:'cover', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+    if (!PREFIX[tab]) return JSON.stringify({ ok:false, error:'Invalid tab. Valid: retirement, stepup, swp, income, loans, taxregime, cover, fx, joint, mc, health. (portfolio/livefrontier use set_weights/add_instrument.)' });
     if (typeof params !== 'object' || Array.isArray(params)) return JSON.stringify({ ok:false, error:'params must be an object.' });
     const prefix = PREFIX[tab];
+    if (INDIA_ONLY_STATE.includes(prefix) && L.country !== 'IN') return JSON.stringify({ ok:false, error:'That tool uses Indian tax rules and the Lab is set to the United States. Ask the user whether to switch the country to India first (set_value country IN).' });
     L.tab = tab;
     const setFields = [];
     const skipped = [];
-    for (const k in params) {
+    // A limit is set before the field it limits (salary before basic pay, target before floater), whatever order the model sent them in.
+    const limits = Object.keys(ADVISOR_CAPPED_BY).map(k => ADVISOR_CAPPED_BY[k]);
+    const fieldOf = k => (k.indexOf('.') !== -1) ? k : (prefix + '.' + k);
+    const keys = Object.keys(params).sort((a, b) => (limits.includes(fieldOf(a)) ? 0 : 1) - (limits.includes(fieldOf(b)) ? 0 : 1));
+    for (const k of keys) {
       // Accept bare names (preRate) or full dotted paths (ret.preRate).
-      const field = (k.indexOf('.') !== -1) ? k : (prefix + '.' + k);
+      const field = fieldOf(k);
       if (!ADVISOR_FIELDS[field]) { skipped.push(k); continue; }
       const r = advisorSetValue(field, params[k]);
       if (!r.ok) return JSON.stringify({ ok:false, error:r.error, failedField:field });
@@ -12287,6 +13097,9 @@ window.GOALDEN_ADVISOR_CONFIG = {
       'stepup': ['What does stepping up cost me in total?', 'What if my income grows slower?', 'How much of the gain is real vs inflation?'],
       'swp': ['What happens if markets crash early?', 'How much could I withdraw for 30 years?', 'Why does inflation matter here?'],
       'income': ['How is an SWP taxed compared with FD interest?', 'Which of the two holds up better in this crash, and why?', 'What does the NPS pension cover?'],
+      'loans': ['Why is the break-even higher on the new regime?', 'What if the investment earns less than I assumed?', 'Why clear the card before the home loan?'],
+      'taxregime': ['What would I need to deduct for the old regime to win?', 'Does this change what I put in ELSS or PPF?', 'What is not counted here?'],
+      'cover': ['What does the cover figure leave out?', 'Why show the gap without employer cover?', 'What if my spending changes?'],
       'joint': ['Why are separate pots cheaper here?', 'What if the second child starts later?', 'Where is the tightest year?'],
       'statements': ['What does this chart show about the company?', 'Is profit turning into cash?', 'What changed versus five years ago?'],
     };
