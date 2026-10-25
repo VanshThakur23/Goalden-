@@ -45,10 +45,10 @@ check(/function tabFromQuery/.test(gl) && /TABS\.some\(x=>x\.id===t\)/.test(gl),
 // ---- India only: another country gets a note, never wrong numbers ----------------------------------
 check(/if\(L\.country!=='IN'\) return indiaOnlyTab\('Loans'/.test(rl) && /if\(L\.country!=='IN'\) return indiaOnlyTab\('Tax regime'/.test(rt) && /if\(L\.country!=='IN'\) return indiaOnlyTab\('Cover'/.test(rc), '9b all three refuse a non-India country before computing anything');
 check(/data-country="IN">Switch to India/.test(fnBody(gl, 'indiaOnlyTab')), '9b the note has a one-click switch to India');
-check(/const INDIA_ONLY_STATE = \['income', 'loans', 'tax', 'cover'\];/.test(gl), '9b the advisor knows which state keys are India-only');
+check(/const INDIA_ONLY_STATE = \['income', 'loans', 'tax', 'cover', 'holdings'\];/.test(gl), '9b the advisor knows which state keys are India-only');
 check((gl.match(/INDIA_ONLY_STATE\.includes\(/g) || []).length === 2, '9b set_value and run_full_analysis both refuse an India-only value outside India');
-check(/if \(tab === 'loans' \|\| tab === 'taxregime' \|\| tab === 'cover'\) \{\n    if \(L\.country !== 'IN'\) return \{ ok:false/.test(gl), '9b the chart and numbers readers say so outside India');
-check((gl.match(/if \(tab === 'loans' \|\| tab === 'taxregime' \|\| tab === 'cover'\) \{/g) || []).length === 2, '9b both readers (chart and numbers) handle the three tabs');
+check(/if \(tab === 'loans' \|\| tab === 'taxregime' \|\| tab === 'cover' \|\| tab === 'holdings'\) \{\n    if \(L\.country !== 'IN'\) return \{ ok:false/.test(gl), '9b the chart and numbers readers say so outside India');
+check((gl.match(/if \(tab === 'loans' \|\| tab === 'taxregime' \|\| tab === 'cover' \|\| tab === 'holdings'\) \{/g) || []).length === 2, '9b both readers (chart and numbers) handle the three tabs, and the holdings tab of 9c');
 
 // ---- clamps: the page's own, against the engine's and the advisor's ranges ---------------------------
 const grab = (re, what) => { const m = gl.match(re); if (!m) throw new Error('cannot find ' + what); return m[0]; };
@@ -169,7 +169,7 @@ check(/tab:tab, cover:G\.country==='IN'\?coverState\(\):null/.test(g2) && /openP
 
 // ---- advisor --------------------------------------------------------------------------------------------------------
 check(/TAB_FOR = \{[^}]*loans:'loans', tax:'taxregime', cover:'cover'/.test(gl) && /loans: 'loans', tax: 'tax', cover: 'cover'/.test(gl), '9b TAB_FOR and the touched-selector map know the three tabs');
-check(/enum:\['retirement','stepup','swp','income','loans','taxregime','cover','fx','joint','mc','health'\]/.test(gl) && /loans:'loans', taxregime:'tax', cover:'cover'/.test(gl), '9b run_full_analysis accepts loans, taxregime and cover (the tax tab\'s state key is "tax")');
+check(/enum:\['retirement','stepup','swp','income','loans','taxregime','cover','holdings','fx','joint','mc','health'\]/.test(gl) && /loans:'loans', taxregime:'tax', cover:'cover'/.test(gl), '9b run_full_analysis accepts loans, taxregime and cover (the tax tab\'s state key is "tax")');
 check(/type === 'boolean'/.test(fnBody(gl, 'advisorSetValue')) && /must be true or false/.test(fnBody(gl, 'advisorSetValue')), '9b set_value takes true/false for the two yes-or-no inputs');
 check(/tool:'Loans', charts:\[/.test(gl) && /tool:'Tax regime', charts:\[/.test(gl) && /tool:'Cover', charts:\[/.test(gl), '9b the advisor can read the charts of all three');
 check(/tool:'Loans', note:/.test(gl) && /tool:'Tax regime', rulesAsOf:TAX_REGIME_IN\.asOf/.test(gl) && /tool:'Cover', note:'sizes only; no premiums are shown or known'/.test(gl), '9b the advisor can read the numbers of all three, with the rule year and the no-premium note');
@@ -177,7 +177,7 @@ check(/interestRelieved:s\.regime === 'old'/.test(gl), '9b the advisor is not to
 check(/loancompare: '#loan-compare'/.test(gl) && /taxcompare: '#tax-compare'/.test(gl) && /termcover: '#cover-term'/.test(gl) && /healthcover: '#cover-health'/.test(gl), '9b the charts are highlight targets');
 check(/'loans': \['Why is the break-even higher on the new regime\?'/.test(gl) && /'taxregime': \[/.test(gl) && /'cover': \[/.test(gl), '9b each tab has its own follow-up chips');
 check(/else if \(tab === 'loans'\)/.test(gl) && /else if \(tab === 'taxregime'\)/.test(gl) && /else if \(tab === 'cover'\)/.test(gl), '9b each tab has its own suggestion chips');
-check(/Fifteen tools sharing one underlying engine/.test(gl) && /- Loans \(India only\)/.test(gl) && /- Tax regime \(India only\)/.test(gl) && /- Cover \(India only\)/.test(gl), '9b the advisor\'s knowledge text describes the three tools and their limits');
+check(/Sixteen tools sharing one underlying engine/.test(gl) && /- Loans \(India only\)/.test(gl) && /- Tax regime \(India only\)/.test(gl) && /- Cover \(India only\)/.test(gl), '9b the advisor\'s knowledge text describes the three tools and their limits');
 check(!/sk-[A-Za-z0-9]{20,}|DEEPSEEK_API_KEY\s*=\s*['"][^'"]+['"]/.test(gl + g2), '9b no API key in the pages');
 
 // ---- review fixes: limits the advisor must not silently clamp, plain-pay tax text, lump-sum loan rate ------

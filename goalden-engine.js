@@ -977,6 +977,205 @@ function healthCoverPlan(o) {
     gap: Math.max(0, target - own - employer), gapOwnOnly: Math.max(0, target - own), own, employer };
 }
 
+/* ---------------------------------------------------------------------
+   Holdings review (India): what a person already owns, against the mix their
+   risk profile asks for. Category level only, which is all a typed list can
+   support: whether two funds hold the same companies needs each fund's own
+   portfolio file (AMFI publishes them), which nothing here reads.
+
+   Nothing is guessed. A holding is put in a category only when its name says
+   which (holdingCategoryFromName returns null otherwise) or the person picks
+   one; a holding with no category is left out of the mix and reported as such.
+   A plan is called Direct or Regular only when the name says so.
+   --------------------------------------------------------------------- */
+
+// The Full Plan's five risk profiles as equity / debt / hybrid shares. goalden-door2.html's BUCKETS says the same;
+// smoke-22 compares the two, so they cannot drift apart.
+const RISK_PROFILES_IN = {
+  conservative:     { name: 'Conservative',            eq: 0.20, de: 0.60, hy: 0.20 },
+  mod_conservative: { name: 'Moderately Conservative', eq: 0.35, de: 0.50, hy: 0.15 },
+  moderate:         { name: 'Moderate',                eq: 0.50, de: 0.35, hy: 0.15 },
+  mod_aggressive:   { name: 'Growth-Oriented',         eq: 0.70, de: 0.20, hy: 0.10 },
+  aggressive:       { name: 'Aggressive',              eq: 0.85, de: 0.10, hy: 0.05 },
+};
+
+// cls: equity / debt / hybrid are the three parts of a risk profile; gold and other sit outside it.
+// job: categories with the same job are the ones the duplicate note groups (a Nifty 50 index fund and a large-cap fund
+// hold largely the same companies); null means no claim is made about overlap.
+const HOLDING_CATS_IN = [
+  { id: 'largecap',   label: 'Large-cap fund',                                 cls: 'equity', job: 'large',      jobLabel: 'large-cap shares' },
+  { id: 'index',      label: 'Index fund or ETF on the Nifty 50 or Sensex',    cls: 'equity', job: 'large',      jobLabel: 'large-cap shares' },
+  { id: 'largemid',   label: 'Large and mid-cap fund',                         cls: 'equity', job: 'largemid',   jobLabel: 'large and mid-cap shares' },
+  { id: 'midcap',     label: 'Mid-cap fund',                                   cls: 'equity', job: 'mid',        jobLabel: 'mid-cap shares' },
+  { id: 'smallcap',   label: 'Small-cap fund',                                 cls: 'equity', job: 'small',      jobLabel: 'small-cap shares' },
+  { id: 'flexi',      label: 'Flexi-cap or multi-cap fund',                    cls: 'equity', job: 'allcap',     jobLabel: 'shares of companies of every size' },
+  { id: 'elss',       label: 'ELSS (tax-saving) fund',                         cls: 'equity', job: 'allcap',     jobLabel: 'shares of companies of every size' },
+  { id: 'sectoral',   label: 'Sector or theme fund',                           cls: 'equity', job: null },
+  { id: 'intl',       label: 'International fund or ETF',                      cls: 'equity', job: null },
+  { id: 'otherequity', label: 'Other equity fund',                             cls: 'equity', job: null },
+  { id: 'shares',     label: 'Shares of single companies',                     cls: 'equity', job: null },
+  { id: 'liquid',     label: 'Liquid, overnight or money-market fund',         cls: 'debt',   job: 'liquid',     jobLabel: 'short-term parking' },
+  { id: 'shortdebt',  label: 'Ultra-short or short-duration debt fund',        cls: 'debt',   job: 'shortdebt',  jobLabel: 'short-duration debt' },
+  { id: 'bonddebt',   label: 'Corporate bond, banking and PSU or credit fund', cls: 'debt',   job: 'bonddebt',   jobLabel: 'corporate and PSU bonds' },
+  { id: 'gilt',       label: 'Gilt or long-duration fund',                     cls: 'debt',   job: 'gilt',       jobLabel: 'government bonds' },
+  { id: 'fd',         label: 'Fixed deposit or savings account',               cls: 'debt',   job: null },
+  { id: 'baf',        label: 'Balanced advantage fund',                        cls: 'hybrid', job: 'baf',        jobLabel: 'balanced advantage' },
+  { id: 'aggrhybrid', label: 'Aggressive hybrid fund',                         cls: 'hybrid', job: 'aggrhybrid', jobLabel: 'aggressive hybrid' },
+  { id: 'multiasset', label: 'Multi-asset fund',                               cls: 'hybrid', job: 'multiasset', jobLabel: 'multi-asset' },
+  { id: 'arbitrage',  label: 'Arbitrage fund',                                 cls: 'hybrid', job: 'arbitrage',  jobLabel: 'arbitrage' },
+  { id: 'otherhybrid', label: 'Other hybrid fund',                             cls: 'hybrid', job: null },
+  { id: 'gold',       label: 'Gold or silver fund, ETF or bond',               cls: 'gold',   job: 'gold',       jobLabel: 'gold' },
+  { id: 'other',      label: 'Something else (property, crypto, ...)',         cls: 'other',  job: null },
+];
+
+// The category a fund's own name settles, or null. Order matters: the more specific words come first ("dynamic asset
+// allocation" before "dynamic bond", "Equity & Debt" before "debt", "Banking & PSU" before "banking").
+function holdingCategoryFromName(name) {
+  // Hyphens and slashes read as spaces: "Large-cap", "Flexi-cap", "Short-duration" and "Large/Mid" are written both ways.
+  const n = String(name || '').toLowerCase().replace(/income distribution cum capital withdrawal|\bidcw\b/g, ' ').replace(/[-_/]+/g, ' ');
+  if (!n.trim()) return null;
+  if (/nasdaq|fang|nyse|\b(us|u\.s\.|international|global|overseas|world|emerging markets?|feeder|china|japan|hang seng|taiwan|europe|asia)\b|s&p ?500/.test(n)) return 'intl';
+  if (/\bgold\b|\bsilver\b/.test(n)) return 'gold';
+  if (/arbitrage/.test(n)) return 'arbitrage';
+  if (/balanced advantage|dynamic asset|asset allocat/.test(n)) return 'baf';
+  if (/aggressive hybrid|equity\s*(&|and)\s*debt/.test(n)) return 'aggrhybrid';
+  if (/multi.?asset/.test(n)) return 'multiasset';
+  if (/equity savings|conservative hybrid|balanced|hybrid/.test(n)) return 'otherhybrid';
+  if (/liquid|overnight|money market/.test(n)) return 'liquid';
+  if (/gilt|g ?sec|constant maturity|long duration|dynamic bond/.test(n)) return 'gilt';
+  if (/ultra short|short (term|duration)|low duration|floater|floating/.test(n)) return 'shortdebt';
+  if (/corporate bond|banking\s*(&|and)\s*psu|credit risk|\bbond\b|\bdebt\b|income fund|medium duration|medium to long|target maturity|\bsdl\b/.test(n)) return 'bonddebt';
+  if (/elss|tax saver|tax saving|tax ?shield/.test(n)) return 'elss';
+  if (/small ?cap/.test(n)) return 'smallcap';
+  if (/large\s*(&|and)?\s*mid/.test(n)) return 'largemid';
+  if (/mid ?cap/.test(n)) return 'midcap';
+  if (/nifty ?50\b|nifty ?bees|sensex|nifty ?100\b/.test(n)) return 'index';
+  if (/\bindex\b|\betf\b|nifty/.test(n)) return null;   // an index of what? the name does not say here
+  if (/large ?cap|blue ?chip|top 100|frontline/.test(n)) return 'largecap';
+  if (/flexi ?cap|multi ?cap/.test(n)) return 'flexi';
+  if (/pharma|healthcare|banking|financial services|technology|\bit\b|infrastructure|consumption|\bpsu\b|energy|manufacturing|thematic|sector|\bauto\b|fmcg|digital|innovation/.test(n)) return 'sectoral';
+  return null;
+}
+
+// What a fund's own name says about its plan. Direct is claimed only on a positive match; a name that says neither is
+// "unstated", never assumed.
+function fundPlanFromName(name) {
+  const n = String(name || '');
+  return /direct/i.test(n) ? 'direct' : /regular/i.test(n) ? 'regular' : 'unstated';
+}
+// Typical extra yearly cost of a Regular plan over the Direct plan of the same fund (distributor commission): estimates,
+// to be said to be estimates wherever shown. Roughly 1% for an actively managed equity fund, much less for an index fund.
+const REGULAR_EXTRA = { active: 0.01, passive: 0.004 };
+// The yearly extra cost of a Regular plan, or null when none is claimed (not named Regular) or when the figure is too
+// wide to put one number on (debt funds range from about 0.1% for liquid funds to 0.6% or more for credit funds) or
+// when the category is not one this estimate was made for (gold).
+function regularExtra(name, plan, catId) {
+  if ((plan || fundPlanFromName(name)) !== 'regular') return null;
+  const cat = HOLDING_CATS_IN.find(c => c.id === catId);
+  // With a category the category decides (so "Equity & Debt" in a hybrid fund's name does not switch the estimate off);
+  // with none, as for a fund found by name in Test Real Investments, the words in the name have to.
+  if (cat ? (cat.cls === 'debt' || cat.cls === 'gold' || cat.id === 'arbitrage')
+          : /liquid|overnight|money market|debt|bond|gilt|duration|credit|arbitrage|floater|floating|treasury|banking\s*(&|and)\s*psu|corporate/i.test(String(name || ''))) return null;
+  return catId === 'index' || /index|nifty|sensex|etf/i.test(String(name || '')) ? REGULAR_EXTRA.passive : REGULAR_EXTRA.active;
+}
+
+/* The review itself.
+   o = { holdings: [{ name, cat (a HOLDING_CATS_IN id or ''), value (what it is worth now), cost (what was put in, or
+         null/'' when not known), plan ('direct' | 'regular' | 'unstated'; read from the name when absent),
+         longTerm (false when held under a year; equity only) }],
+         target { eq, de, hy } (a RISK_PROFILES_IN entry),
+         sip (monthly new money), sipMonths (how many months of it to count; default 12),
+         years (horizon for the Regular-plan cost, default 10), expected (yearly return, fraction, default 0.12),
+         exemptUsed (equity gains already booked this year against the Rs 1.25 lakh) }.
+   mix: the three parts of the profile, as shares of what is in the profile (gold, other and uncategorised holdings are
+   reported beside it, not in it). rebalance: new money goes to the parts under their share first; what is still over
+   after that is what would have to be sold, and for equity the tax on selling it is worked out from the cost the person
+   gave (long-term units only: the Rs 1.25 lakh a year is free of tax, the rest at 12.5% on the gain). Debt and hybrid
+   funds are taxed by when they were bought and what they hold, so for those the amount is shown and the tax is not. */
+function reviewHoldings(o) {
+  const CLS = ['equity', 'debt', 'hybrid'], T = TAX_IN, cess = 1 + T.cess;
+  const catOf = {}; HOLDING_CATS_IN.forEach(c => { catOf[c.id] = c; });
+  const clampN = (v, lo, hi, d) => { v = Number(v); return isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
+  const rows = (Array.isArray(o && o.holdings) ? o.holdings : []).slice(0, 60).map(h => {
+    const name = String((h && h.name) || '').slice(0, 80), cat = h && Object.prototype.hasOwnProperty.call(catOf, h.cat) ? h.cat : '';
+    const isFund = !!cat && !['shares', 'fd', 'other'].includes(cat);
+    return { name, cat, cls: cat ? catOf[cat].cls : null, job: cat ? catOf[cat].job : null, value: accNum(h && h.value),
+      cost: h && accNum(h.cost) > 0 ? accNum(h.cost) : null,   // a cost of 0, blank or garbled means "not known", not "a free gift"
+      plan: isFund || !cat ? (['direct', 'regular', 'unstated'].includes(h && h.plan) ? h.plan : fundPlanFromName(name)) : null,
+      longTerm: !(h && h.longTerm === false), isFund };
+  }).filter(r => r.value > 0);
+
+  const total = rows.reduce((s, r) => s + r.value, 0);
+  const by = { equity: 0, debt: 0, hybrid: 0 };
+  let gold = 0, other = 0, unset = 0;
+  rows.forEach(r => { if (!r.cat) unset += r.value; else if (by[r.cls] !== undefined) by[r.cls] += r.value; else if (r.cls === 'gold') gold += r.value; else other += r.value; });
+  const mixTotal = by.equity + by.debt + by.hybrid;
+  const tg = o && o.target ? { equity: accNum(o.target.eq), debt: accNum(o.target.de), hybrid: accNum(o.target.hy) } : null;
+  const tgSum = tg ? tg.equity + tg.debt + tg.hybrid : 0;
+  const tgt = tgSum > 0 ? { equity: tg.equity / tgSum, debt: tg.debt / tgSum, hybrid: tg.hybrid / tgSum }
+                        : { equity: RISK_PROFILES_IN.moderate.eq, debt: RISK_PROFILES_IN.moderate.de, hybrid: RISK_PROFILES_IN.moderate.hy };
+  const mix = CLS.map(c => { const share = mixTotal > 0 ? by[c] / mixTotal : 0; return { cls: c, value: by[c], share, target: tgt[c], drift: share - tgt[c] }; });
+
+  // funds doing the same job, by category only
+  const jobs = {};
+  rows.forEach(r => { if (r.job) (jobs[r.job] = jobs[r.job] || []).push(r); });
+  const overlap = Object.keys(jobs).filter(j => jobs[j].length >= 2).map(j => {
+    const g = jobs[j], v = g.reduce((s, r) => s + r.value, 0);
+    return { job: j, label: catOf[g[0].cat].jobLabel, count: g.length, value: v, share: total > 0 ? v / total : 0,
+      names: g.map(r => r.name || catOf[r.cat].label), cats: Array.from(new Set(g.map(r => r.cat))) };
+  }).sort((a, b) => b.value - a.value);
+
+  // what Regular plans cost, an estimate
+  const years = Math.round(clampN(o && o.years, 1, 40, 10)), er = clampN(o && o.expected, 0, 0.3, 0.12);
+  // Direct and Regular exist only for mutual funds, so a name that says one is a fund even when no category was set for it.
+  const planned = rows.filter(r => r.isFund || (!r.cat && r.plan !== 'unstated'));
+  const regular = planned.filter(r => r.plan === 'regular').map(r => {
+    const x = regularExtra(r.name, r.plan, r.cat);
+    return { name: r.name, value: r.value, extra: x, perYear: x === null ? null : r.value * x,
+      drag: x === null ? null : r.value * (Math.pow(1 + er, years) - Math.pow(Math.max(0, 1 + er - x), years)) };
+  });
+  const priced = regular.filter(r => r.extra !== null);
+  const cost = { regular, unpriced: regular.length - priced.length, perYear: priced.reduce((s, r) => s + r.perYear, 0),
+    drag: priced.reduce((s, r) => s + r.drag, 0), years, expected: er, unstated: rows.filter(r => r.isFund && r.plan === 'unstated' && !/\betf\b|\bbees\b|exchange traded/i.test(r.name)).length,   // an ETF has one plan, so naming none is not a gap
+    direct: planned.filter(r => r.plan === 'direct').length };
+
+  // getting back to the profile: new money first, then sales
+  const sip = accNum(o && o.sip), months = Math.round(clampN(o && o.sipMonths, 0, 60, 12)), N = sip * months, W = mixTotal + N;
+  const overNow = CLS.reduce((s, c) => s + Math.max(0, by[c] - tgt[c] * mixTotal), 0);
+  const excess = {}, shortBy = {}; let over = 0, short = 0;
+  CLS.forEach(c => { const d = by[c] - tgt[c] * W; if (d > 0) { excess[c] = d; over += d; } else { shortBy[c] = -d; short += -d; } });
+  const split = CLS.filter(c => shortBy[c] > 0).map(c => ({ cls: c, amount: short > 0 ? N * shortBy[c] / short : 0 }));
+  let monthsToFix = null;
+  if (overNow <= 1) monthsToFix = 0;
+  else if (sip > 0) {
+    let need = 0, never = false;
+    CLS.forEach(c => { if (by[c] > tgt[c] * mixTotal) { if (tgt[c] > 0) need = Math.max(need, by[c] / tgt[c] - mixTotal); else never = true; } });
+    const m = never ? null : Math.ceil(need / sip);
+    monthsToFix = m !== null && m <= 600 ? m : null;
+  }
+  const eqRows = rows.filter(r => r.cls === 'equity');
+  const ltKnown = eqRows.filter(r => r.longTerm && r.cost !== null);
+  const ltValue = ltKnown.reduce((s, r) => s + r.value, 0);
+  const gainRatio = ltValue > 0 ? ltKnown.reduce((s, r) => s + (r.value - r.cost), 0) / ltValue : null;
+  const room = Math.max(0, T.equityLtcgExemption - accNum(o && o.exemptUsed));
+  const sells = Object.keys(excess).filter(c => excess[c] > 1).map(c => {
+    const amount = excess[c];
+    if (c !== 'equity') return { cls: c, amount, worked: false };
+    const fromLt = Math.min(amount, ltValue), rest = amount - fromLt;
+    const g = gainRatio === null ? 0 : gainRatio;
+    const taxFree = g > 0 ? Math.min(fromLt, room / g) : fromLt;
+    const taxable = fromLt - taxFree;
+    return { cls: c, amount, worked: fromLt > 0, fromLongTerm: fromLt, notWorkedOut: rest, gainRatio: gainRatio, taxFree, taxable,
+      tax: g > 0 ? taxable * g * T.equityLtcg * cess : 0,
+      freeEachYear: g > 0 ? T.equityLtcgExemption / g : null };
+  });
+  const rebalance = { sip, months, newMoney: N, overNow, overAfter: over, monthsToFix, split, sells, exemptRoom: room,
+    unknownCost: eqRows.filter(r => r.longTerm && r.cost === null).reduce((s, r) => s + r.value, 0),
+    shortTerm: eqRows.filter(r => !r.longTerm).reduce((s, r) => s + r.value, 0) };
+
+  return { total, rows, mixTotal, mix, outside: { gold, other }, unset, overlap, cost, rebalance, target: tgt };
+}
+
 /* =====================================================================
    REAL HISTORICAL MARKET DATA
    Sensex: fiscal-year (April-to-April) annual returns, FY1979-80 through
@@ -1883,6 +2082,7 @@ if (typeof module !== 'undefined' && module.exports) {
     incomeBuckets, incomeStrategies, incomeDrawPlan, incomeSwitchTax, npsAnnuityPlan,
     TAX_REGIME_IN, slabTax, slabRate, regimeTax, hraExemption, epfEmployeeYearly, compareRegimes,
     loanSchedule, loanPrepay, homeLoanCompare, debtAvalanche, termCoverNeed, healthCoverPlan,
+    RISK_PROFILES_IN, HOLDING_CATS_IN, holdingCategoryFromName, fundPlanFromName, REGULAR_EXTRA, regularExtra, reviewHoldings,
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow, rollingReturns, annualisedVol, returnReality, stepUpAnnualPlan,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,

@@ -682,6 +682,23 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .live-results .live-result-btn:first-child{border-top-width:1px;border-radius:3px 3px 0 0}
 .live-results .live-result-btn:last-child{border-radius:0 0 3px 3px}
 .live-result-btn:hover{background:rgba(37,87,199,.1);color:var(--paper)}
+/* My holdings: one block per holding, the name on its own line with the remove button and the rest wrapping under it.
+   [hidden] is restated below because .hold-lbl sets display:flex, which would otherwise beat the attribute's own display:none. */
+.hold-row{border:1px solid rgba(20,40,63,.14);border-radius:3px;background:rgba(20,40,63,.03);padding:10px;margin-bottom:8px;display:flex;flex-direction:column;gap:8px}
+.hold-row-top{display:flex;gap:6px;align-items:center}
+.hold-name{flex:1;min-width:0;background:#fff;border:1px solid rgba(20,40,63,.18);border-radius:3px;padding:8px 10px;font-family:'Figtree',sans-serif;font-size:13px;color:var(--paper);outline:none}
+.hold-name:focus,.hold-num:focus,.hold-lbl select:focus{border-color:rgba(37,87,199,.5)}
+.hold-lbl{display:flex;flex-direction:column;gap:3px;font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.03em;color:rgba(20,40,63,.74)}
+.hold-lbl select,.hold-num{background:#fff;border:1px solid rgba(20,40,63,.18);border-radius:3px;padding:7px 8px;font-family:'Figtree',sans-serif;font-size:13px;color:var(--paper);min-width:0;width:100%;outline:none}
+.hold-nums{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hold-hint{text-transform:none;letter-spacing:0;opacity:.8}
+.hold-check{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(20,40,63,.74);cursor:pointer}
+.hold-lbl[hidden],.hold-check[hidden],.hold-hint[hidden]{display:none}
+.hold-dyn{display:flex;flex-direction:column;gap:18px}
+.hold-dup{border-top:1px solid rgba(20,40,63,.1);padding-top:10px;margin-top:10px;font-size:13px}
+.hold-dup-sum{font-family:'Spline Sans Mono',monospace;font-size:11px;color:#56698A}
+.hold-line{font-size:13px;line-height:1.6;color:var(--paper);padding:10px 0;border-top:1px solid rgba(20,40,63,.1)}
+@media(max-width:480px){.hold-nums{grid-template-columns:1fr}}
 .live-result-sym{font-family:'Spline Sans Mono',monospace;font-size:10.5px;color:var(--gold);flex-shrink:0}
 .live-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
 .live-chip{display:flex;align-items:center;gap:8px;background:rgba(37,87,199,.1);border:1px solid rgba(37,87,199,.4);border-radius:3px 12px 12px 12px;padding:7px 8px 7px 12px;font-size:12px;color:var(--paper)}
@@ -2136,6 +2153,9 @@ const L = {
   cover:{ monthly:60000, years:15, inflation:6, returnRate:7, loans:2500000, goalExtra:0, goals:[], savings:500000, existing:5000000,
           tier:'metro', healthTarget:2500000, baseCover:1000000, medInflation:10, healthYears:10, ownHealth:500000, employerHealth:1000000,
           premium:0, note:null },
+  // My holdings (India): rows typed in by the person, never uploaded. pc / pp: they picked the category / plan themselves, so a later
+  // edit of the name does not overwrite it. profile is one of the Full Plan's five risk profiles (its hand-off sets it); sip is new money a month.
+  holdings:{ rows:[], profile:'moderate', sip:20000, sipMonths:12, years:10, expected:12, exemptUsed:0, note:null },
   snapshots:[], // up to 2 saved Retirement Lab states, for side-by-side comparison
   instCategory:'all',
   instSearch:'',
@@ -2240,7 +2260,7 @@ function nextStepCard(items){
 // tab's own state is reset without touching any other tab's inputs or
 // the global country/currency choice.
 const TAB_STATE_KEYS={
-  retirement:['ret'], stepup:['step'], swp:['swp'], income:['income'], loans:['loans'], taxregime:['tax'], cover:['cover'], fx:['fx'], joint:['joint'],
+  retirement:['ret'], stepup:['step'], swp:['swp'], income:['income'], loans:['loans'], taxregime:['tax'], cover:['cover'], holdings:['holdings'], fx:['fx'], joint:['joint'],
   mc:['mc'], portfolio:['portfolio'], livefrontier:['live'],
   instruments:['instCategory','instSearch'], health:['health'],
   statements:['statements'],
@@ -3288,13 +3308,24 @@ function barsChart(chartId, rows, h){
   deferChartInit(()=>renderBarsOption(chartId, rows));
   return `<div id="${chartId}" class="echart" style="height:${h}px"></div>`;
 }
+// containLabel reserved about 70px for names that drew 103px wide once axisLabel.width was set (the left edge of "Equity: profile"
+// ran off the chart), so the left margin is measured from the longest name in the chart's own font instead. Names wider than
+// 124px still wrap, so the margin tops out there.
+function barsLabelWidth(names){
+  const ctx=barsLabelWidth.ctx||(barsLabelWidth.ctx=document.createElement('canvas').getContext('2d'));
+  ctx.font="11.5px 'Spline Sans Mono', monospace";
+  return Math.min(124, Math.ceil(names.reduce((m,n)=>Math.max(m,ctx.measureText(String(n)).width),0)));
+}
 function renderBarsOption(chartId, rows){
+  const names=rows.map(r=>r.name), labelW=barsLabelWidth(names);
   initChart(chartId, {
-    grid:{left:6,right:84,top:6,bottom:6,containLabel:true},
+    grid:{left:labelW+16,right:84,top:6,bottom:6,containLabel:false},
     xAxis:{type:'value', show:false, min:0},
-    yAxis:{type:'category', inverse:true, data:rows.map(r=>r.name), axisTick:{show:false}, axisLine:{show:false},
-      axisLabel:{color:CHART_TEXT.ink, fontSize:11.5, width:124, overflow:'break'}},
-    tooltip:{trigger:'item', confine:true, formatter:p=>`${rows[p.dataIndex].name}: ${rows[p.dataIndex].label}`},
+    yAxis:{type:'category', inverse:true, data:names, axisTick:{show:false}, axisLine:{show:false},
+      axisLabel:{color:CHART_TEXT.ink, fontSize:11.5, width:labelW, overflow:'break'}},
+    // ECharts draws a formatter's string as HTML, and a row name can be typed text (a fund name), so it is escaped here.
+    // r.full is the untruncated name for a row whose axis label had to be cut short.
+    tooltip:{trigger:'item', confine:true, formatter:p=>`${advisorAttr(rows[p.dataIndex].full||rows[p.dataIndex].name)}: ${advisorAttr(rows[p.dataIndex].label)}`},
     series:[{ type:'bar', barMaxWidth:22, data:rows.map(r=>({value:r.value, itemStyle:{color:r.color, borderRadius:[0,3,3,0]}})),
       label:{show:true, position:'right', distance:6, formatter:p=>rows[p.dataIndex].label, color:CHART_TEXT.ink,
         fontFamily:"'Spline Sans Mono',monospace", fontSize:11, fontWeight:600} }],
@@ -3832,6 +3863,365 @@ function coverAdvisorResults(){
     { kind:'cover', title:'Health cover', xAxis:'', yAxis:'rupees', note:'starting sizes are a rule of thumb, not a market figure or a quote; medical cost growth is an assumption; employer cover ends with the job',
       points:[{ label:'total wanted (today\'s money)', value:m(h.target) }, { label:'floater', value:m(h.base) }, { label:'super top-up', value:m(h.topUp) }, { label:'short, counting employer cover', value:m(h.gap) }, { label:'short, own policy only', value:m(h.gapOwnOnly) }, { label:'total wanted in '+h.years+' years', value:m(h.inflatedTarget) }] },
   ] };
+}
+
+/* =====================================================================
+   TAB: MY HOLDINGS (India)
+   What a person already owns, against the mix their risk profile asks for. The sums are goalden-engine.js
+   (reviewHoldings); this is the row editor and the cards. Typed in, never uploaded: no statement, no account link.
+   Category level only. Whether two funds hold the same companies needs each fund's own portfolio, which this
+   page does not read, and the cards say so. A holding gets a category only from its name or from the person;
+   one with none is left out of the mix and listed as such. Nothing here rates or ranks a fund.
+   ===================================================================== */
+const HOLD_MAX=40;
+const HOLD_PROFILES=['conservative','mod_conservative','moderate','mod_aggressive','aggressive'];
+const HOLD_CLS_NAME={equity:'Equity', debt:'Debt', hybrid:'Hybrid'};
+// Fund search results are kept outside L: they are a transient list of up to 25 names, not something to carry in the state.
+let HOLD_SEARCH={ q:'', busy:false, error:null, results:[] };
+function holdNum(v){ v=Number(v); return isFinite(v)&&v>0 ? Math.min(v,1e10) : 0; }
+// An amount typed or sent as text. Commas, spaces and a rupee sign are dropped and a closing k, lakh or crore is read. Any other
+// letter or a minus sign makes it no amount at all: stripping them turned "5L" into ₹5 and -250000 into ₹250,000.
+function holdParseAmount(v){
+  if(typeof v==='number') return holdNum(v);
+  const m=String(v==null?'':v).trim().toLowerCase().replace(/^rs\.?/,'').replace(/[₹,\s]/g,'').match(/^(\d*\.?\d+|\d+\.)(k|l|lac|lakh|lakhs|cr|crore|crores)?$/);
+  if(!m) return 0;
+  const unit={k:1e3, l:1e5, lac:1e5, lakh:1e5, lakhs:1e5, cr:1e7, crore:1e7, crores:1e7}[m[2]]||1;
+  return holdNum(parseFloat(m[1])*unit);
+}
+// pc / pp: the person picked the category / plan themselves, so a later change of the name must not overwrite it.
+function cleanHoldRow(r){
+  r=r&&typeof r==='object'?r:{};
+  const cost=holdNum(r.cost);
+  return { name:String(r.name==null?'':r.name).slice(0,80), cat:HOLDING_CATS_IN.some(c=>c.id===r.cat)?r.cat:'', pc:!!r.pc,
+    value:holdNum(r.value), cost:cost>0?cost:null,
+    plan:['direct','regular','unstated'].includes(r.plan)?r.plan:'unstated', pp:!!r.pp, longTerm:r.longTerm!==false };
+}
+function newHoldRow(name){
+  return cleanHoldRow({ name, cat:holdingCategoryFromName(name)||'', plan:fundPlanFromName(name) });
+}
+function clampHoldings(s){
+  const D=L_DEFAULTS.holdings;
+  s.profile=HOLD_PROFILES.includes(s.profile)?s.profile:D.profile;
+  s.sip=incClamp(s.sip,0,500000,D.sip);
+  s.sipMonths=Math.round(incClamp(s.sipMonths,0,36,D.sipMonths));
+  s.years=Math.round(incClamp(s.years,1,40,D.years));
+  s.expected=incClamp(s.expected,4,18,D.expected);
+  s.exemptUsed=incClamp(s.exemptUsed,0,500000,D.exemptUsed);
+  s.rows=(Array.isArray(s.rows)?s.rows:[]).slice(0,HOLD_MAX).map(cleanHoldRow);
+}
+function computeHoldings(){
+  const s=L.holdings; clampHoldings(s);
+  const p=RISK_PROFILES_IN[s.profile];
+  const rev=reviewHoldings({
+    holdings:s.rows.map(r=>({ name:r.name, cat:r.cat, value:r.value, cost:r.cost, plan:r.plan, longTerm:r.longTerm })),
+    target:{ eq:p.eq, de:p.de, hy:p.hy }, sip:s.sip, sipMonths:s.sipMonths, years:s.years, expected:s.expected/100, exemptUsed:s.exemptUsed });
+  return { s, p, rev, c:cfg() };
+}
+// Made-up amounts under generic names, so nothing here reads as a comment on a real fund.
+function holdExampleRows(){
+  const e=[['Large-cap fund (Regular)',450000,300000],['Nifty 50 index fund (Direct)',300000,220000],['Flexi-cap fund (Direct)',350000,250000],
+    ['Mid-cap fund (Regular)',250000,150000],['Short-duration debt fund',200000,185000],['Gold ETF',100000,70000]];
+  return e.map(x=>{ const r=newHoldRow(x[0]); r.value=x[1]; r.cost=x[2]; return r; });
+}
+
+let holdCatOptionsHTML=null;
+function holdCatOptions(){
+  if(holdCatOptionsHTML) return holdCatOptionsHTML;
+  const grp=(label,cls)=>`<optgroup label="${label}">${HOLDING_CATS_IN.filter(c=>c.cls===cls).map(c=>`<option value="${c.id}">${c.label}</option>`).join('')}</optgroup>`;
+  return holdCatOptionsHTML=`<option value="">Not set: left out of the mix</option>`+grp('Equity','equity')+grp('Debt','debt')+grp('Hybrid','hybrid')
+    +`<optgroup label="Outside the mix">${HOLDING_CATS_IN.filter(c=>c.cls==='gold'||c.cls==='other').map(c=>`<option value="${c.id}">${c.label}</option>`).join('')}</optgroup>`;
+}
+function holdRowHTML(r,i){
+  const n=i+1;
+  return `<div class="hold-row" data-hrow="${i}">
+    <div class="hold-row-top">
+      <input type="text" class="hold-name" data-hr="${i}" data-hf="name" value="${advisorAttr(r.name)}" placeholder="Fund or holding name" aria-label="Name of holding ${n}" maxlength="80" autocomplete="off">
+      <button type="button" class="gp-iconbtn" data-hd="remove" data-i="${i}" aria-label="Remove holding ${n}" title="Remove this holding"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <label class="hold-lbl"><span>What it is <span class="hold-hint hold-hint-cat" hidden>(from the name)</span></span>
+      <select data-hr="${i}" data-hf="cat" aria-label="What holding ${n} is">${holdCatOptions()}</select></label>
+    <div class="hold-nums">
+      <label class="hold-lbl"><span>Worth now (₹)</span><input type="text" inputmode="numeric" class="hold-num" data-hr="${i}" data-hf="value" value="${r.value||''}" placeholder="e.g. 250000 or 2.5L" aria-label="Worth now, holding ${n}, in rupees"></label>
+      <label class="hold-lbl"><span>Paid in, if known (₹)</span><input type="text" inputmode="numeric" class="hold-num" data-hr="${i}" data-hf="cost" value="${r.cost||''}" placeholder="optional" aria-label="Amount paid in, holding ${n}, in rupees, optional"></label>
+    </div>
+    <label class="hold-lbl hold-plan"><span>Plan <span class="hold-hint hold-hint-plan" hidden>(from the name)</span></span>
+      <select data-hr="${i}" data-hf="plan" aria-label="Plan of holding ${n}"><option value="unstated">Not stated</option><option value="direct">Direct</option><option value="regular">Regular</option></select></label>
+    <label class="hold-check hold-lt"><input type="checkbox" data-hr="${i}" data-hf="longTerm"${r.longTerm?' checked':''}> Held for over a year</label>
+  </div>`;
+}
+// Shows what a row's category lets it show: a plan only for funds, "held over a year" only for equity.
+function holdSyncRow(row,r){
+  const cat=HOLDING_CATS_IN.find(x=>x.id===r.cat);
+  const isFund=!!cat && !['shares','fd','other'].includes(cat.id), eq=!!cat && cat.cls==='equity';
+  const q=s=>row.querySelector(s);
+  q('[data-hf="cat"]').value=r.cat; q('[data-hf="plan"]').value=r.plan;
+  q('.hold-plan').hidden=!isFund; q('.hold-lt').hidden=!eq;
+  q('.hold-hint-cat').hidden=!(r.cat && !r.pc); q('.hold-hint-plan').hidden=!(isFund && r.plan!=='unstated' && !r.pp);
+}
+function holdSearchHTML(){
+  const h=HOLD_SEARCH;
+  if(h.busy) return `<div class="cap" style="padding:8px 2px">Searching&hellip;</div>`;
+  if(h.error) return `<div class="live-error-box">${advisorAttr(h.error)}</div>`;
+  if(!h.q) return '';
+  if(!h.results.length) return `<div class="cap" style="padding:8px 2px">No matches for "${advisorAttr(h.q)}".</div>`;
+  return h.results.map(r=>`<button type="button" class="live-result-btn" data-hd="pick" data-name="${advisorAttr(r.schemeName||'')}"><span>${advisorAttr(r.schemeName||'')}</span></button>`).join('');
+}
+let holdSearchTimer=null;
+async function holdRunSearch(){
+  const q=(HOLD_SEARCH.q||'').trim();
+  const paint=()=>{ const el=document.getElementById('holdSearchOut'); if(el) el.innerHTML=holdSearchHTML(); };
+  if(!q){ HOLD_SEARCH.results=[]; HOLD_SEARCH.error=null; HOLD_SEARCH.busy=false; paint(); return; }
+  HOLD_SEARCH.busy=true; HOLD_SEARCH.error=null; paint();
+  try{
+    const res=await liveApiGet(`/api/fundsearch?q=${encodeURIComponent(q)}`);
+    if((HOLD_SEARCH.q||'').trim()!==q) return;   // a newer search is already on its way
+    HOLD_SEARCH.results=Array.isArray(res)?res.slice(0,25):[];
+  }catch(e){
+    if((HOLD_SEARCH.q||'').trim()!==q) return;
+    HOLD_SEARCH.results=[]; HOLD_SEARCH.error=(e&&e.message)||'Fund search failed.';
+  }
+  HOLD_SEARCH.busy=false; paint();
+}
+// A typed edit changes state and repaints only the results, so the box being typed in keeps its focus and cursor.
+function holdRefresh(){
+  const out=document.getElementById('holdOut'); if(!out) return;
+  out.innerHTML=holdingsOutputHTML(computeHoldings());
+  if(window.gtipEnhance) gtipEnhance(out);
+  persistLabState();
+}
+function holdEdit(el){
+  const s=L.holdings, i=+el.dataset.hr, f=el.dataset.hf, r=s.rows[i];
+  if(!r) return;
+  const row=el.closest('.hold-row');
+  if(f==='name'){
+    r.name=el.value.slice(0,80);
+    if(!r.pc) r.cat=holdingCategoryFromName(r.name)||'';
+    if(!r.pp) r.plan=fundPlanFromName(r.name);
+  } else if(f==='value'){ r.value=holdParseAmount(el.value); }
+  else if(f==='cost'){ const v=holdParseAmount(el.value); r.cost=v>0?v:null; }
+  else if(f==='cat'){ r.pc=!!el.value; r.cat=el.value || holdingCategoryFromName(r.name) || ''; }
+  else if(f==='plan'){ r.plan=el.value; r.pp=true; }
+  else if(f==='longTerm'){ r.longTerm=el.checked; }
+  if(row) holdSyncRow(row,r);
+  holdRefresh();
+}
+function holdAddRow(name){
+  const s=L.holdings;
+  if(s.rows.length>=HOLD_MAX) return false;
+  s.rows.push(newHoldRow(name||''));
+  return true;
+}
+
+function holdingsOutputHTML(R){
+  const s=R.s, p=R.p, rev=R.rev, c=R.c, K=v=>c.compact(Math.round(v)), M=v=>c.fmt(Math.round(v));
+  const pct=v=>Math.round(v*100)+'%';
+  const pts=v=>{ const n=Math.round(Math.abs(v)*100); return n+(n===1?' point':' points'); };
+  const T=TAX_IN;
+  if(rev.total<=0) return `<div class="card is-primary">
+      <h4>Add what you already own</h4>
+      <div class="cap">Search for a fund on the left, or add a row and type its name and what it is worth today. You will see your real mix against the ${p.name} profile, the funds that do the same job, what Regular plans cost over ${s.years} years, and how new money and a sale could close the gap. Nothing is uploaded and no account is linked.</div>
+      <div class="slab-chips"><button type="button" class="tglbtn" data-hd="example">Load an example (made-up amounts)</button></div>
+    </div>`;
+
+  // ---- stats
+  const eqm=rev.mix[0], regLine=rev.cost.regular.some(r=>r.extra!==null);
+  const stats=`<div class="stat-row">
+      <div class="stat"><div class="stat-label">In your mix</div><div class="stat-value">${K(rev.mixTotal)}</div><div class="stat-sub">${rev.total>rev.mixTotal+1?`of ${K(rev.total)} listed`:'equity, debt and hybrid'}</div></div>
+      <div class="stat"><div class="stat-label">Equity: yours / profile</div><div class="stat-value">${rev.mixTotal>0?`${pct(eqm.share)} / ${pct(eqm.target)}`:'-'}</div><div class="stat-sub">${rev.mixTotal<=0?'no category set yet':Math.abs(eqm.drift)<0.005?'on the profile':`${pts(eqm.drift)} ${eqm.drift>0?'over':'under'}`}</div></div>
+      <div class="stat"><div class="stat-label">Regular-plan cost</div><div class="stat-value">${regLine?K(rev.cost.drag):'-'}</div><div class="stat-sub">${regLine?`over ${rev.cost.years} years`:'none counted'}</div></div>
+    </div>`;
+
+  // ---- card 1: the mix against the profile
+  let mixCard;
+  if(rev.mixTotal<=0){
+    mixCard=`<div class="card is-primary"><h4>Your mix against ${p.name}</h4>
+      <div class="cap">None of what you listed has a category inside the mix yet. Say what each holding is on the left: equity, debt and hybrid funds count; gold and other things are shown beside the mix.</div></div>`;
+  } else {
+    const [eq,de,hy]=rev.mix, rows=[];
+    rev.mix.forEach(m=>{
+      const n=HOLD_CLS_NAME[m.cls];
+      rows.push({name:n+': yours', value:m.share*100, label:pct(m.share), color:'#2557C7'});
+      rows.push({name:n+': profile', value:m.target*100, label:pct(m.target), color:'#B6C2D6'});
+    });
+    const off=rev.mix.filter(m=>Math.abs(m.drift)>=0.01).map(m=>`${HOLD_CLS_NAME[m.cls].toLowerCase()} is ${pts(m.drift)} ${m.drift>0?'over':'under'}`);
+    const beside=[]; if(rev.outside.gold>0) beside.push(`${K(rev.outside.gold)} in gold`); if(rev.outside.other>0) beside.push(`${K(rev.outside.other)} in other things`); if(rev.unset>0) beside.push(`${K(rev.unset)} with no category yet`);
+    mixCard=`<div class="card is-primary"><h4>Your mix against ${p.name}</h4>
+      <div class="cap">Of ${K(rev.mixTotal)} in equity, debt and hybrid holdings, ${pct(eq.share)} is equity, ${pct(de.share)} debt and ${pct(hy.share)} hybrid. The ${p.name} profile asks for ${pct(eq.target)}, ${pct(de.target)} and ${pct(hy.target)}. ${off.length?`Against it, ${off.join(', ')}.`:'You are within a point of it on all three.'}</div>
+      ${barsChart('hold-mix', rows)}
+      <div class="gr-note">${beside.length?`Left out of these shares: ${beside.join(', ')}. ${rev.outside.gold>0?'Gold is not one of the three parts of a profile, so it is neither counted nor called too much. ':''}`:''}The profile shares are the Full Plan's. A hybrid fund counts as hybrid, as in the Full Plan, not split into equity and debt. A profile is a starting shape, not a rule: change it above if it is not the one you chose.</div></div>`;
+  }
+
+  // ---- card 2: funds doing the same job
+  const dupRows=rev.overlap.map(o=>`<div class="hold-dup"><b>${o.count} holdings in ${o.label}</b> <span class="hold-dup-sum">${K(o.value)}, ${pct(o.share)} of everything listed</span>
+      <div class="cap" style="margin-top:4px">${o.names.map(advisorAttr).join('; ')}</div></div>`).join('');
+  const dupCard=`<div class="card"><h4>Funds doing the same job</h4>
+      <div class="cap">${rev.overlap.length?`${rev.overlap.length===1?'One group of your holdings shares':'Some of your holdings share'} a category, and so a job:`:'No two of your holdings share a category, so none is doing another one\'s job.'}</div>
+      ${dupRows}
+      <div class="gr-note">This is by category, using the category set on the left. Funds in one category are built to do the same job, so several of them add paperwork more than variety unless they differ in style. Whether two funds hold the same companies is a question about each fund's own portfolio, which every fund house publishes each month and this page does not read.</div></div>`;
+
+  // ---- card 3: what Regular plans cost
+  const cs=rev.cost, priced=cs.regular.filter(r=>r.extra!==null), unpriced=cs.regular.length-priced.length;
+  const costBits=[];
+  if(priced.length) costBits.push(`The ${priced.length} Regular ${priced.length===1?'plan':'plans'} you listed cost about ${M(cs.perYear)} a year more than their Direct versions would. After ${cs.years} years at ${s.expected}% growth a year, that is ${K(cs.drag)} less.`);
+  else if(!cs.regular.length) costBits.push('None of the funds you listed is marked Regular, so there is no commission cost to show.');
+  if(unpriced>0) costBits.push(`${unpriced} Regular ${unpriced===1?'fund is':'funds are'} not priced: for debt, gold and arbitrage funds there is no honest single figure for the gap.`);
+  if(cs.unstated>0) costBits.push(`${cs.unstated} ${cs.unstated===1?'fund does':'funds do'} not say Direct or Regular in the name, so ${cs.unstated===1?'it is':'they are'} not counted. Pick the plan for ${cs.unstated===1?'it':'each'} on the left if you know.`);
+  if(cs.direct>0 && priced.length) costBits.push(`${cs.direct} ${cs.direct===1?'is':'are'} already Direct.`);
+  // A scheme name can run past 60 characters and would wrap onto four lines in a 40px row, so the axis shows the start of it
+  // and the tooltip carries the whole name.
+  const costBars=priced.map(r=>{ const full=r.name||'Unnamed fund'; return { name:full.length>30?full.slice(0,29).trimEnd()+'…':full, full, value:r.drag, label:K(r.drag), color:'#B8740F' }; });
+  const costCard=`<div class="card"><h4>What Regular plans cost</h4>
+      <div class="cap">${costBits.join(' ')}</div>
+      ${priced.length?`<div class="stat-row pairs">
+        <div class="stat"><div class="stat-label">Each year, now</div><div class="stat-value">${M(cs.perYear)}</div></div>
+        <div class="stat"><div class="stat-label">Over ${cs.years} years${infoIcon('The gap between your Regular funds growing at '+s.expected+'% a year and growing at '+s.expected+'% minus the extra cost, for '+cs.years+' years, on what they are worth today. It leaves out money you add later.')}</div><div class="stat-value">${K(cs.drag)}</div></div>
+      </div>${barsChart('hold-cost', costBars, 28+costBars.length*52)}`:''}
+      <div class="gr-note">The extra cost is an estimate: about 1% a year for an actively managed fund and about 0.4% for an index fund. The real figure is the gap between the Regular and Direct plans' expense ratios, on each fund's factsheet. Moving from Regular to Direct is a sale and a purchase, so any gain is taxed and an exit load may apply; this page does not work that out.</div></div>`;
+
+  // ---- card 4: getting back to the mix
+  const rb=rev.rebalance;
+  let reCard='';
+  if(rev.mixTotal>0){
+    if(rb.overNow<=1){
+      reCard=`<div class="card"><h4>Getting back to your mix</h4><div class="cap">No part of your mix is over its share of the ${p.name} profile, so nothing needs selling to match it.</div></div>`;
+    } else {
+      const lines=[];
+      if(rb.newMoney>0){
+        const parts=rb.split.filter(x=>x.amount>=1).map(x=>`${K(x.amount)} to ${HOLD_CLS_NAME[x.cls].toLowerCase()}`);
+        const where=parts.length>1 ? parts.slice(0,-1).join(', ')+' and '+parts[parts.length-1] : parts.join('');
+        lines.push(`<b>New money first.</b> Adding ${K(rb.newMoney)} (${M(rb.sip)} a month for ${rb.months} months)${where?`, with ${where} by the end,`:''} ${rb.overAfter>1?`still leaves ${K(rb.overAfter)} over its share.`:'brings the mix to the profile with nothing sold.'}`);
+        if(rb.monthsToFix===null) lines.push('Put only into the parts under their share, new money at this rate would not close the gap within 50 years.');
+        else if(rb.overAfter>1) lines.push(`At ${M(rb.sip)} a month, new money alone would get there in about ${fmtMonths(rb.monthsToFix)}, with no sale, if markets stood still.`);
+      } else lines.push(rb.sip>0
+        ? '<b>New money first.</b> Count at least one month of new money on the left to see how far it goes. Money you add costs no tax.'
+        : '<b>New money first.</b> Enter a monthly amount on the left to see how far new money alone goes. Money you add costs no tax.');
+      if(rb.overAfter>1) rb.sells.forEach(x=>{
+        const n=HOLD_CLS_NAME[x.cls].toLowerCase();
+        if(x.cls!=='equity'){
+          lines.push(`<b>Then selling.</b> ${K(x.amount)} of ${n} is over its share. The tax on selling ${n} funds depends on when they were bought and what the fund holds, so it is not worked out here.`);
+        } else if(!x.worked){
+          lines.push(`<b>Then selling.</b> ${K(x.amount)} of equity is over its share. The tax on selling it is not worked out: it needs what you paid for units held over a year (the "paid in" box) and a tick for each fund held that long.`);
+        } else if(x.gainRatio<=0){
+          lines.push(`<b>Then selling.</b> ${K(x.amount)} of equity is over its share. Your long-held equity is at or below what you paid, so a sale has no gain to tax.`);
+        } else {
+          let t=`<b>Then selling.</b> ${K(x.amount)} of equity is over its share. ${x.taxFree>1?`About ${K(x.taxFree)} of it`:'None of it'} can be sold with no tax this financial year (the ${c.compact(T.equityLtcgExemption)} limit on long-term equity gains, your funds' gain averaging ${pct(x.gainRatio)} of their value).`;
+          if(x.taxable>1) t+=` The other ${K(x.taxable)} would cost about ${M(x.tax)} in tax (${(T.equityLtcg*100).toFixed(1)}% plus ${Math.round(T.cess*100)}% cess on the gain).`;
+          else t+=' Nothing more is due.';
+          // taxFree is this year's room (net of gains already booked); freeEachYear is a whole year's, which a later year gets in full.
+          if(x.taxable>1 && x.freeEachYear) t+=x.taxFree>1
+            ? ` The limit renews each financial year from 1 April, so selling about ${K(x.taxFree)} before 31 March and the rest in later years, up to about ${K(x.freeEachYear)} a year, uses it again.`
+            : ` The gains you have booked already use all of it. It renews on 1 April, from when up to about ${K(x.freeEachYear)} a year can be sold with no tax.`;
+          if(x.notWorkedOut>1) t+=` ${K(x.notWorkedOut)} of the sale would have to come from units under a year old or with no cost entered; the tax on those is not worked out.`;
+          lines.push(t);
+        }
+      });
+      reCard=`<div class="card"><h4>Getting back to your mix</h4>
+        <div class="cap">Closing the gap to the ${p.name} profile, new money first, because adding costs no tax and selling can.</div>
+        <div class="stat-row">
+          <div class="stat"><div class="stat-label">Over the profile now</div><div class="stat-value">${K(rb.overNow)}</div></div>
+          <div class="stat"><div class="stat-label">Still over, after new money</div><div class="stat-value">${K(rb.overAfter)}</div></div>
+          <div class="stat"><div class="stat-label">Months of new money alone</div><div class="stat-value">${rb.monthsToFix===null?'-':fmtMonths(rb.monthsToFix)}</div></div>
+        </div>
+        ${lines.map(l=>`<div class="hold-line">${l}</div>`).join('')}
+        <div class="gr-note">Rates are those of ${T.asOf}; re-check them with the Income Tax Department. The tax is worked from the cost you entered, on units held over a year, assuming the funds sold gained as much as your long-held equity does on average. For units bought before 1 February 2018 the tax cost can be higher than what you paid, so this can overstate the tax. Gains you have already booked this year are taken off the free limit (set above). Exit loads, surcharge (which a total income above ₹50 lakh adds to the tax) and any equity you hold elsewhere are not counted.</div></div>`;
+    }
+  }
+
+  return stats+mixCard+dupCard+costCard+reCard;
+}
+// Outside #holdOut, which a typed edit repaints in place: the buttons here are bound once by attach() and would be dead after a repaint.
+function holdFooterHTML(){
+  return `<div class="gr-note">Categories come from the fund's name or from you; a holding with none is left out of the mix and said so. Plans are read from the name only. No fund is rated or ranked here, and nothing says which fund to buy or sell. Nothing you type is uploaded or kept on a server. The search box sends the words typed in it to a fund-name lookup, and if you use the advisor, your holdings are sent along with your question so it can answer from them.</div>`
+    +nextStepCard([
+      {q:'See how a few real funds would actually have moved together, on real history.', tab:'livefrontier'},
+      {q:'Is your monthly saving enough for your goals? Check Plan Health.', tab:'health'},
+    ]);
+}
+
+function renderHoldings(){
+  if(L.country!=='IN') return indiaOnlyTab('My holdings','holdings','Fund categories, Direct and Regular plans and the equity tax rules here are India\'s.');
+  const R=computeHoldings(), s=R.s, c=R.c;
+  const profChips=`<div class="cap" id="hdProfLbl">Check against this risk profile (equity / debt / hybrid):</div><div class="slab-chips" role="group" aria-labelledby="hdProfLbl">${HOLD_PROFILES.map(k=>{ const q=RISK_PROFILES_IN[k]; return `<button type="button" class="tglbtn${s.profile===k?' active':''}" data-hd="profile" data-val="${k}" aria-pressed="${s.profile===k}">${q.name} ${Math.round(q.eq*100)}/${Math.round(q.de*100)}/${Math.round(q.hy*100)}</button>`; }).join('')}</div>`;
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
+  <div class="panel">
+    ${panelHead('My holdings', 'holdings')}
+    ${advisorChipsHTML('holdings')}
+    ${profChips}
+    ${fillNoteHTML(s)}
+    <div class="section-label" style="margin-top:14px">What you hold</div>
+    <div class="gr-note" style="margin:0 0 10px">Type the name and what it is worth today. Nothing is uploaded and no account is linked.</div>
+    <input type="search" id="holdSearch" class="live-searchbox" data-hs="q" value="${advisorAttr(HOLD_SEARCH.q)}" placeholder="Search a fund by name, e.g. flexi cap or nifty 50" aria-label="Search for a fund by name" autocomplete="off">
+    <div id="holdSearchOut" class="live-results">${holdSearchHTML()}</div>
+    <div style="margin-top:10px">${s.rows.map(holdRowHTML).join('')}</div>
+    <div class="slab-chips fill-chips" style="margin:0 0 12px">
+      <button type="button" class="tglbtn" data-hd="add"${s.rows.length>=HOLD_MAX?' disabled':''}>+ Add a holding</button>
+      ${s.rows.length?'<button type="button" class="tglbtn" data-hd="clear">Clear all</button>':'<button type="button" class="tglbtn" data-hd="example">Load an example</button>'}
+    </div>
+    <hr class="divider">
+    <div class="section-label">New money and assumptions</div>
+    <div class="field"><label>New money each month <b>${c.fmt(s.sip)}</b></label><input type="range" min="0" max="500000" step="1000" value="${s.sip}" data-k="sip" data-tab="holdings"></div>
+    <div class="field"><label>Months of it to count <b>${s.sipMonths}</b></label><input type="range" min="0" max="36" value="${s.sipMonths}" data-k="sipMonths" data-tab="holdings"></div>
+    <div class="field"><label>Look ahead <b>${s.years}</b> years</label><input type="range" min="1" max="40" value="${s.years}" data-k="years" data-tab="holdings"></div>
+    <div class="field"><label>Funds grow by${infoIcon('Used only for the cost of Regular plans: how much smaller they would grow than Direct plans. Your own assumption, not a forecast.')} <b>${s.expected}%</b> a year</label><input type="range" min="4" max="18" step="0.5" value="${s.expected}" data-k="expected" data-tab="holdings"></div>
+    <div class="field"><label>Equity gains already booked this year${infoIcon('Long-term equity gains up to '+c.compact(TAX_IN.equityLtcgExemption)+' a financial year are free of tax. Gains you have already booked this year use part of it. Leave it at zero if you have sold nothing.')} <b>${c.fmt(s.exemptUsed)}</b></label><input type="range" min="0" max="500000" step="5000" value="${s.exemptUsed}" data-k="exemptUsed" data-tab="holdings"></div>
+  </div>
+  <div class="output"><div id="holdOut" class="hold-dyn">${holdingsOutputHTML(R)}</div>${holdFooterHTML()}</div>
+  </div>`;
+}
+function holdingsAdvisorResults(){
+  const R=computeHoldings(), rev=R.rev, c=R.c, p=R.p, m=v=>c.fmt(Math.round(v)), pct=v=>Math.round(v*100)+'%';
+  if(rev.total<=0) return { ok:true, tool:'My holdings', charts:[], note:'No holdings entered yet.' };
+  return { ok:true, tool:'My holdings', charts:[
+    rev.mixTotal>0 ? { kind:'holdings', title:'Your mix against the '+p.name+' profile', xAxis:'', yAxis:'share of equity + debt + hybrid holdings', note:'by category; gold, other things and holdings with no category are left out of the shares',
+      points:rev.mix.map(x=>({ label:HOLD_CLS_NAME[x.cls].toLowerCase(), value:'yours '+pct(x.share)+', profile '+pct(x.target)+', '+(x.drift>=0?'+':'')+Math.round(x.drift*100)+' points' })) } : null,
+    { kind:'holdings', title:'What Regular plans cost', xAxis:'', yAxis:'rupees', note:'an estimate: about 1% a year for an active fund, 0.4% for an index fund; debt, gold and arbitrage funds are not priced',
+      points:[{ label:'each year, now', value:m(rev.cost.perYear) }, { label:'over '+rev.cost.years+' years', value:m(rev.cost.drag) }].concat(rev.cost.regular.filter(r=>r.extra!==null).map(r=>({ label:r.name||'unnamed', value:m(r.drag)+' over '+rev.cost.years+' years' }))) },
+  ].filter(Boolean) };
+}
+// The numbers get_results returns for this tab: everything on screen, none of it a recommendation.
+function holdingsResultForAdvisor(){
+  const R=computeHoldings(), rev=R.rev, p=R.p, rb=rev.rebalance, r0=Math.round;
+  return { tool:'My holdings', note:'by category only; plans come from the names or from the user; the cost of Regular plans is an estimate; no fund is rated and none is recommended',
+    profile:p.name, listedTotal:r0(rev.total), inMix:r0(rev.mixTotal),
+    mix:rev.mixTotal>0 ? rev.mix.map(m=>({ part:m.cls, yourSharePct:+(m.share*100).toFixed(1), profileSharePct:+(m.target*100).toFixed(1), driftPoints:+(m.drift*100).toFixed(1) })) : null, mixNote:rev.mixTotal>0 ? undefined : 'Nothing listed has a category inside the mix (equity, debt or hybrid) yet, so there are no shares to compare.',
+    outsideMix:{ gold:r0(rev.outside.gold), other:r0(rev.outside.other), noCategory:r0(rev.unset) },
+    sameJob:rev.overlap.map(o=>({ job:o.label, holdings:o.count, value:r0(o.value), names:o.names })),
+    regularPlans:{ extraPerYear:r0(rev.cost.perYear), overYears:rev.cost.years, lessAtTheEnd:r0(rev.cost.drag), notPriced:rev.cost.unpriced, planNotStated:rev.cost.unstated, alreadyDirect:rev.cost.direct },
+    gettingBack:{ overItsShareNow:r0(rb.overNow), newMoneyCounted:r0(rb.newMoney), stillOverAfterNewMoney:r0(rb.overAfter), monthsOfNewMoneyAlone:rb.monthsToFix,
+      sells:rb.sells.map(x=>({ part:x.cls, amount:r0(x.amount), taxWorkedOut:!!x.worked, taxFreeThisYear:x.worked&&x.taxFree!==undefined?r0(x.taxFree):null, taxOnTheRest:x.worked&&x.tax!==undefined?r0(x.tax):null })),
+      taxRulesAsOf:TAX_IN.asOf } };
+}
+// The advisor's way to type holdings in: only ones the user has said, with the amounts they gave. A name it cannot place
+// gets no category and is listed back so the model asks, instead of guessing one.
+function advisorSetHoldings(args){
+  if(L.country!=='IN') return { ok:false, error:'My holdings uses Indian fund categories and tax rules and the Lab is set to the United States. Ask the user whether to switch the country to India first (set_value country IN).' };
+  const list=args && Array.isArray(args.holdings) ? args.holdings : null;
+  if(!list || !list.length) return { ok:false, error:'holdings must be a non-empty array of {name, value, ...}. Pass only holdings the user has told you about, with the amounts they gave.' };
+  const replace=args.mode==='replace', s=L.holdings, rows=replace ? [] : s.rows.slice(), skipped=[], kept=[];
+  list.slice(0,HOLD_MAX).forEach(h=>{
+    if(!h || typeof h!=='object'){ skipped.push('an entry that was not an object'); return; }
+    const name=String(h.name==null?'':h.name).trim().slice(0,80), value=holdParseAmount(h.value);
+    if(!name || value<=0){ skipped.push((name||'an unnamed holding')+': needs a name and what it is worth now, as a plain number of rupees'); return; }
+    // The same name and amount already listed is the user's own row (or a retried call), not a second holding.
+    if(rows.some(r=>r.name.toLowerCase()===name.toLowerCase() && r.value===value)){ skipped.push(name+': already listed with that amount'); return; }
+    if(rows.length>=HOLD_MAX){ skipped.push(name+': the list is full ('+HOLD_MAX+' holdings)'); return; }
+    const fromName=holdingCategoryFromName(name)||'';
+    let cat=HOLDING_CATS_IN.some(c=>c.id===h.category) ? h.category : '';
+    // A category the name itself states wins over one the model passes, so a mistaken one cannot pass as the user's choice.
+    if(cat && fromName && cat!==fromName){ kept.push(name+': the name says '+fromName+', not '+cat+'; kept '+fromName); cat=''; }
+    const plan=['direct','regular','unstated'].includes(h.plan) ? h.plan : '', cost=holdParseAmount(h.cost);
+    rows.push(cleanHoldRow({ name, cat:cat||fromName, pc:!!cat, value, cost:cost>0?cost:null,
+      plan:plan||fundPlanFromName(name), pp:!!plan, longTerm:h.heldOverAYear!==false }));
+  });
+  if(rows.length===(replace?0:s.rows.length)) return { ok:false, error:'None of those holdings could be used.', skipped };
+  const before=s.rows.length;
+  s.rows=rows; L.tab='holdings'; render();
+  const unplaced=s.rows.filter(r=>!r.cat).map(r=>r.name);
+  const out={ ok:true, tab:'holdings', count:s.rows.length, skipped };
+  if(replace) out.replacedRows=before;
+  if(kept.length) out.categoryFromName=kept;
+  if(unplaced.length) out.noCategoryYet=unplaced, out.note='These have no category, so they are left out of the mix. Ask the user what each one is (or pass category) rather than guessing.';
+  return out;
 }
 
 /* =====================================================================
@@ -6298,15 +6688,12 @@ function renderLiveGrowthChart(chartId, g, items, amt){
 // lump-sum card. Leads with XIRR, not the total: a total flatters a SIP
 // because most of the money went in recently (+122% here is ~10.9%/yr).
 const LIVE_SIP_MONTHLY = { IN: 10000, US: 500 };
-// Typical extra yearly cost of a Regular plan over the Direct plan of the same
-// fund (distributor commission). Estimates, stated as such wherever shown.
-const LIVE_REGULAR_EXTRA = { active: 0.01, passive: 0.004 };
 // What a fund's own name says about its plan. Direct is claimed only on a
 // positive match; a name that says neither is "unstated", never assumed.
+// The rule lives in goalden-engine.js (fundPlanFromName, regularExtra) because the My holdings tab needs the same one.
 function liveFundPlan(it){
   if(it.type!=='fund') return null;
-  const nm=liveFundLabel(it);
-  return /direct/i.test(nm) ? 'direct' : /regular/i.test(nm) ? 'regular' : 'unstated';
+  return fundPlanFromName(liveFundLabel(it));
 }
 // The yearly cost of a Regular plan over the Direct one of the same fund, or
 // null when none is claimed. Claimed only when the name says "Regular" (and not
@@ -6318,9 +6705,7 @@ function liveFundPlan(it){
 // and the "At a glance" cost row, so the two can never disagree.
 function liveRegularGap(it){
   if(liveFundPlan(it)!=='regular') return null;
-  const nm=liveFundLabel(it);
-  if(/liquid|overnight|money market|debt|bond|gilt|duration|credit|arbitrage|floater|floating|treasury|banking (&|and) psu|corporate/i.test(nm)) return null;
-  return /index|nifty|sensex|etf/i.test(nm) ? LIVE_REGULAR_EXTRA.passive : LIVE_REGULAR_EXTRA.active;
+  return regularExtra(liveFundLabel(it), 'regular', null);
 }
 function liveSipBacktest(items, weights){
   const panel=liveCleanPanel(items);
@@ -7421,6 +7806,8 @@ const ICON_LOANS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const ICON_TAXREGIME=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-2.5 6a3 3 0 0 0 5 0L5 7z"/><path d="M19 7l-2.5 6a3 3 0 0 0 5 0L19 7z"/></svg>`;
 const ICON_COVER=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5.5c0 4.3 2.9 7.8 7 9.5 4.1-1.7 7-5.2 7-9.5V6l-7-3z"/><path d="M9.2 12l2 2 3.6-4"/></svg>`;
 
+const ICON_HOLDINGS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="8" width="17" height="11.5" rx="1.5"/><path d="M9 8V6.2a1.2 1.2 0 0 1 1.2-1.2h3.6A1.2 1.2 0 0 1 15 6.2V8"/><path d="M3.5 13h17"/><path d="M11 13v1.6h2V13"/></svg>`;
+
 const TABS=[
   {id:'livefrontier', label:'Test Real Investments', primary:true, icon:ICON_LIVEFRONTIER,
     blurb:'Pick real stocks, ETFs or funds and see how mixing them would actually have performed - real risk, real return, real history.'},
@@ -7442,6 +7829,8 @@ const TABS=[
     blurb:'Enter your pay and deductions and see which regime costs less, by how much, where the break-even sits, and what that means for ELSS, PPF, NPS and the rest of your plan.'},
   {id:'cover', short:'How much term and health cover you need, and the gap (India).', label:'Cover', icon:ICON_COVER,
     blurb:'Size term life cover from your household spending, loans and goals, and health cover as a floater plus a super top-up. Cover amounts and the gap only, never a premium.'},
+  {id:'holdings', short:'What you already own against your plan: mix, overlap, cost, rebalancing (India).', label:'My holdings', icon:ICON_HOLDINGS,
+    blurb:'Type in the funds you hold and see your real mix against your Full Plan risk profile, which funds do the same job, what Regular plans cost over the years, and how new money and a sale could close the gap. Nothing is uploaded.'},
   {id:'fx', short:'What currency moves do to India-US returns.', label:'Cross-Border', icon:ICON_FX,
     blurb:'See what currency movement does to real returns when you invest across India and the US.'},
   {id:'joint', short:'Several children’s education from one pool.', label:'Joint Children Corpus', icon:ICON_JOINT,
@@ -7697,6 +8086,7 @@ function render(opts){
   else if(L.tab==='loans') main.innerHTML=renderLoans();
   else if(L.tab==='taxregime') main.innerHTML=renderTaxRegime();
   else if(L.tab==='cover') main.innerHTML=renderCover();
+  else if(L.tab==='holdings') main.innerHTML=renderHoldings();
   else if(L.tab==='fx') main.innerHTML=renderFX();
   else if(L.tab==='joint') main.innerHTML=renderJoint();
   else if(L.tab==='mc') main.innerHTML=renderMC();
@@ -7794,7 +8184,7 @@ function attach(){
   document.querySelectorAll('input[type=range][data-k]').forEach(el=>{
     el.addEventListener('input',()=>{
       const k=el.dataset.k, tab=el.dataset.tab||'ret';
-      const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='income'?L.income : tab==='loans'?L.loans : tab==='tax'?L.tax : tab==='cover'?L.cover : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
+      const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='income'?L.income : tab==='loans'?L.loans : tab==='tax'?L.tax : tab==='cover'?L.cover : tab==='holdings'?L.holdings : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
       let v=parseFloat(el.value);
       if(k==='shockYear'){ L.ret.shock.year=v; }
       else if(k==='swpShockYear'){ L.swp.shock.year=v; }
@@ -7946,6 +8336,40 @@ function attach(){
       render();
     });
   });
+  // My holdings. The buttons inside #holdOut and #holdSearchOut are reached by delegation: both are repainted in place while
+  // typing or searching, which would leave a button bound here dead.
+  const holdAct=el=>{
+    const f=el.dataset.hd, s=L.holdings;
+    if(f==='profile' && HOLD_PROFILES.includes(el.dataset.val)) s.profile=el.dataset.val;
+    else if(f==='add'){ if(!holdAddRow('')) return; }
+    else if(f==='remove') s.rows.splice(+el.dataset.i,1);
+    else if(f==='example') s.rows=holdExampleRows();
+    else if(f==='clear') s.rows=[];
+    else if(f==='pick'){ if(!holdAddRow(el.dataset.name||'')) return; HOLD_SEARCH={ q:'', busy:false, error:null, results:[] }; }
+    else return;
+    render();
+  };
+  document.querySelectorAll('[data-hd]').forEach(el=>{ if(!el.closest('#holdOut, #holdSearchOut')) el.addEventListener('click',()=>holdAct(el)); });
+  ['holdOut','holdSearchOut'].forEach(id=>{
+    const box=document.getElementById(id);
+    if(box) box.addEventListener('click',e=>{ const b=e.target.closest('[data-hd]'); if(b && box.contains(b)) holdAct(b); });
+  });
+  document.querySelectorAll('[data-hr]').forEach(el=>el.addEventListener(el.tagName==='SELECT'||el.type==='checkbox'?'change':'input',()=>holdEdit(el)));
+  document.querySelectorAll('.hold-row').forEach(row=>{ const r=L.holdings.rows[+row.dataset.hrow]; if(r) holdSyncRow(row,r); });
+  const holdSearchEl=document.getElementById('holdSearch');
+  if(holdSearchEl){
+    holdSearchEl.addEventListener('input',()=>{
+      HOLD_SEARCH.q=holdSearchEl.value;
+      if(holdSearchTimer) clearTimeout(holdSearchTimer);
+      holdSearchTimer=setTimeout(()=>{ holdSearchTimer=null; holdRunSearch(); }, 350);
+    });
+    holdSearchEl.addEventListener('keydown',e=>{
+      if(e.key!=='Enter') return;
+      e.preventDefault();
+      if(holdSearchTimer){ clearTimeout(holdSearchTimer); holdSearchTimer=null; }
+      holdRunSearch();
+    });
+  }
 
   document.querySelectorAll('[data-swpshock]').forEach(el=>{
     el.addEventListener('click',()=>{
@@ -11388,8 +11812,19 @@ function consumeDoor2Handoff(){
       ['years','loans','savings','existing'].forEach(k=>{ const v=Number(cv[k]); if(isFinite(v) && v>=0) L.cover[k]=v; });
       clampCover(L.cover);
     }
+    // The Full Plan's risk profile is what the holdings review checks the mix against; its monthly saving is the new money
+    // (the smaller of the SIP it asks for and what the person can afford, so the review never counts money that is not there).
+    if(HOLD_PROFILES.includes(data.bucket)){
+      const h=L.holdings, D=L_DEFAULTS.holdings, cap=Number(data.capacity), noRoom=data.capacity!=null && isFinite(cap) && cap<=0;
+      // A capacity of zero or less means there is no money to add, so it counts as 0 rather than falling back to the SIP it would be capping.
+      const ask=noRoom ? [0] : [Number(data.totalSIP), cap].filter(v=>isFinite(v) && v>0);
+      h.profile=data.bucket;
+      if(ask.length) h.sip=incClamp(incSnap(Math.min.apply(null,ask),1000),0,500000,D.sip);
+      clampHoldings(h);
+      h.note={ text:`Opened from your Full Plan: the risk profile is <b>${RISK_PROFILES_IN[h.profile].name}</b>${!ask.length?'':noRoom?', and the plan leaves no room to add money each month, so new money is set to nothing':` and new money is about ${C.IN.fmt(h.sip)} a month, from the monthly saving in the plan`}. Change either below.`, vals:{ profile:h.profile, sip:h.sip } };
+    }
   }
-  L.tab = (data.tab==='cover' && L.country==='IN') ? 'cover' : 'health';
+  L.tab = (data.tab==='holdings' && L.country==='IN') ? 'holdings' : (data.tab==='cover' && L.country==='IN') ? 'cover' : 'health';
   return true;
 }
 
@@ -11595,10 +12030,10 @@ document.body.addEventListener('click', e=>{
    directly — every mutation goes through executeAdvisorTool.
    ===================================================================== */
 const ADVISOR_TABS = ['home'].concat(TABS.map(t => t.id));
-const TAB_FOR = { ret:'retirement', step:'stepup', swp:'swp', income:'income', loans:'loans', tax:'taxregime', cover:'cover', fx:'fx', joint:'joint', mc:'mc', health:'health' };
-// These four tabs are built on Indian rules, so a value for one of them is refused when the Lab is set to the US:
+const TAB_FOR = { ret:'retirement', step:'stepup', swp:'swp', income:'income', loans:'loans', tax:'taxregime', cover:'cover', holdings:'holdings', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+// These five tabs are built on Indian rules, so a value for one of them is refused when the Lab is set to the US:
 // otherwise the number would be stored and the person dropped on a screen that only says "switch to India".
-const INDIA_ONLY_STATE = ['income', 'loans', 'tax', 'cover'];
+const INDIA_ONLY_STATE = ['income', 'loans', 'tax', 'cover', 'holdings'];
 
 const ADVISOR_FIELDS = {
   country: { path:['country'], type:'string', enum:['IN','US'], desc:'Country/currency: IN for India ₹, US for United States $.' },
@@ -11692,6 +12127,12 @@ const ADVISOR_FIELDS = {
   'cover.ownHealth': { path:['cover','ownHealth'], type:'integer', min:0, max:10000000, desc:'Health cover the person already pays for (rupees).' },
   'cover.employerHealth': { path:['cover','employerHealth'], type:'integer', min:0, max:10000000, desc:'Health cover through the employer (rupees); it ends with the job.' },
   'cover.premium': { path:['cover','premium'], type:'integer', min:0, max:100000, desc:'Health premium the person says they pay each year (rupees); used only by the Tax regime tab for 80D, never in the cover sizes.' },
+  'holdings.profile': { path:['holdings','profile'], type:'string', enum:['conservative','mod_conservative','moderate','mod_aggressive','aggressive'], desc:'The Full Plan risk profile the holdings are checked against: conservative 20/60/20, mod_conservative 35/50/15, moderate 50/35/15, mod_aggressive (Growth-Oriented) 70/20/10, aggressive 85/10/5 (equity/debt/hybrid %). Use the one the user got in the Full Plan; never pick one for them.' },
+  'holdings.sip': { path:['holdings','sip'], type:'integer', min:0, max:500000, desc:'New money the person adds each month (rupees); My holdings puts it into the parts under their share before anything is sold.' },
+  'holdings.sipMonths': { path:['holdings','sipMonths'], type:'integer', min:0, max:36, desc:'How many months of that new money to count when closing the gap to the profile.' },
+  'holdings.years': { path:['holdings','years'], type:'integer', min:1, max:40, desc:'Years the cost of Regular plans is worked over.' },
+  'holdings.expected': { path:['holdings','expected'], type:'number', min:4, max:18, desc:'Yearly growth the person assumes for their funds, %, used only for the Regular-plan cost.' },
+  'holdings.exemptUsed': { path:['holdings','exemptUsed'], type:'integer', min:0, max:500000, desc:'Long-term equity gains already booked this financial year (rupees), which use up part of the yearly limit on long-term equity gains that is free of tax.' },
 };
 
 const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with three levels — they all share the same math, so moving to a deeper level never wastes anything the user already entered. It supports India (₹) and the United States ($).
@@ -11700,7 +12141,7 @@ const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with thr
 - Level 3 — The Lab (this page): full assumption control, Monte Carlo, efficient frontier, and live real-market-data testing.
 The user is currently on Level 3.
 
-This is "Goalden — The Lab" (Level 3): full assumption control and live market-data testing. Fifteen tools sharing one underlying engine.
+This is "Goalden — The Lab" (Level 3): full assumption control and live market-data testing. Sixteen tools sharing one underlying engine.
 
 Tools:
 - Retirement Lab: age, retire age, monthly expenses, lifestyle %, inflation, growth before/after retirement, life expectancy; stress-tests with a real historical market crash, plus a drawdown Monte Carlo to show sequence-of-returns risk.
@@ -11712,6 +12153,7 @@ Tools:
 - Loans (India only): weighs prepaying the home loan against investing the same lump sum. Prepaying saves a certain rate; under the old tax regime the interest relief (up to ₹2 lakh a year, s.24(b)) lowers that rate by the user's slab, under the new regime there is no relief on a self-occupied home. The investment side is the user's own expected return, taxed as the kind of investment it is (equity fund, debt fund or FD). It shows a break-even (the return the investment must earn before tax to match) and never a verdict. It also takes credit-card and personal-loan balances and shows the order to clear them, highest rate first, and the interest that saves.
 - Tax regime (India only): old or new regime on the same pay, worked from salary, HRA, 80C, NPS, health premium and home-loan interest, with the tax under each, the difference, and the deductions the old regime needs to win. It also says what that means for the plan: on the new regime 80C, 80CCD(1B), 80D and home-loan interest give no tax benefit, so ELSS and PPF are chosen on returns and lock-in, not for tax. The rule year is shown on screen and is a figure to re-check against the Income Tax Department. Surcharge above ₹50 lakh is not modelled, and the HRA rule was read from a search excerpt, not the full page.
 - Cover (India only): how much insurance, never what it costs. Term cover for the family = their spending for the years they would rely on the income (grown by inflation, paid out of a pot earning a stated return) + loans + goal pots at today's value − savings − term cover already held; a retirement goal is left out. Health cover = a family floater plus a super top-up for the rest of a total target, grown at medical inflation, shown short with and without employer cover (which ends with the job). There are no premium figures anywhere; the health starting sizes by city are rules of thumb, not market figures or quotes.
+- My holdings (India only): what the user already owns, typed in (never uploaded), against the risk profile from the Full Plan. Shows the real mix of equity, debt and hybrid against the profile's shares (gold, other things and holdings with no category sit beside the mix), the funds that share a category and so a job ("four large-cap funds doing one job", by category only: whether two funds hold the same companies needs each fund's own portfolio, which this page does not read), what Regular plans cost over the years against Direct (an estimate, about 1% a year for an active fund and 0.4% for an index fund; debt, gold and arbitrage funds are not priced), and how to close a gap: new money first, then sales, with the equity tax worked from the cost the user gave (₹1.25 lakh a year of long-term gains is free, the rest 12.5% plus cess). It never rates or ranks a fund and never says which fund to buy or sell; moving from Regular to Direct is a sale and is taxed. Use set_holdings to enter what the user tells you, never an invented holding or amount.
 - Cross-Border (FX): effect of currency movement on India-US investing.
 - Joint Children Corpus: overlapping education costs for multiple children from one pool.
 - Monte Carlo: thousands of random market paths to show plan likelihood, not just the average.
@@ -11879,6 +12321,9 @@ function advisorChipsHTML(tab) {
   } else if (tab === 'cover') {
     chips.push("How is the term cover figure worked out?");
     chips.push("Why a super top-up on top of a floater?");
+  } else if (tab === 'holdings') {
+    chips.push("What does my mix look like against my profile?");
+    chips.push("Which of my funds are doing the same job?");
   } else if (tab === 'fx') {
     chips.push("Is currency helping or hurting me here?");
   } else if (tab === 'joint') {
@@ -12068,7 +12513,8 @@ function advisorTools() {
     { type:'function', function:{ name:'highlight', description:'Scroll to an on-screen element and pulse it so the user\'s eye lands on the number being discussed. Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'scroll_to', description:'Scroll the real chart/result into view (no pulse). Valid targets: '+Object.keys(ADVISOR_HIGHLIGHT_TARGETS).join(', ')+'.', parameters:{ type:'object', properties:{ element:{ type:'string', enum:Object.keys(ADVISOR_HIGHLIGHT_TARGETS) } }, required:['element'] } } },
     { type:'function', function:{ name:'compose_briefing', description:'Compose and open a full-page Briefing. Pass a title, an intro paragraph, and an array of section names chosen from: '+Object.keys(BRIEFING_SECTIONS).join(', ')+'.', parameters:{ type:'object', properties:{ title:{ type:'string' }, intro:{ type:'string' }, sections:{ type:'array', items:{ type:'string', enum:Object.keys(BRIEFING_SECTIONS) } } }, required:['sections'] } } },
-    { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, income, loans, taxregime, cover, fx, joint, mc or health (income, loans, taxregime and cover are India only). params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP; loans: balance, rate, years, regime, slab, amount, expected, kind; taxregime: gross, basic, hra, rent, metro, c80, nps1b, health, homeLoan; cover: monthly, years, loans, savings, existing, healthTarget, ownHealth, employerHealth).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','income','loans','taxregime','cover','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
+    { type:'function', function:{ name:'set_holdings', description:'My holdings (India only): type in funds and other holdings the user has TOLD you about, with the amounts they gave (never invent a holding or an amount). mode "add" (default) appends and skips a row whose name and amount are already listed; "replace" removes every row already listed (the reply says how many) and starts again, so use it only when the user asked to start over. Each: name (as the user said it, e.g. "Parag Parikh Flexi Cap Direct Growth"), value (what it is worth now, rupees), optional cost (what they put in, rupees), optional category, optional plan, optional heldOverAYear (false if bought under a year ago; equity only). category is for when the name does not say it: leave it out and the app reads it from the name (a name that states a category keeps it); if the reply lists noCategoryYet, ASK the user what each is. Categories: '+HOLDING_CATS_IN.map(c => c.id + ' (' + c.label + ')').join(', ')+'. Never use this to suggest a fund.', parameters:{ type:'object', properties:{ mode:{ type:'string', enum:['add','replace'] }, holdings:{ type:'array', items:{ type:'object', properties:{ name:{ type:'string' }, value:{ type:'number' }, cost:{ type:'number' }, category:{ type:'string', enum:HOLDING_CATS_IN.map(c => c.id) }, plan:{ type:'string', enum:['direct','regular','unstated'] }, heldOverAYear:{ type:'boolean' } }, required:['name','value'] } } }, required:['holdings'] } } },
+    { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, income, loans, taxregime, cover, holdings, fx, joint, mc or health (income, loans, taxregime, cover and holdings are India only). params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP; loans: balance, rate, years, regime, slab, amount, expected, kind; taxregime: gross, basic, hra, rent, metro, c80, nps1b, health, homeLoan; cover: monthly, years, loans, savings, existing, healthTarget, ownHealth, employerHealth; holdings: profile, sip, sipMonths, years, expected, exemptUsed, with the rows themselves entered by set_holdings).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','income','loans','taxregime','cover','holdings','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
     { type:'function', function:{ name:'read_other_page', description:'Read-only snapshot of another page\'s saved data (from that page\'s own localStorage). page: door1 (Quick Calculate) or door2 (The Full Plan). Returns {page, asOf, state} — context to quote from, NEVER to be merged into this page\'s inputs.', parameters:{ type:'object', properties:{ page:{ type:'string', enum:Object.keys(OTHER_PAGE_KEYS) } }, required:['page'] } } },
   ];
 }
@@ -12076,7 +12522,7 @@ function advisorTools() {
 function advisorFieldSelector(spec) {
   const key = spec.path[spec.path.length - 1];
   const tab = spec.path[0];
-  const tabAttr = { ret: '', step: 'step', swp: 'swp', income: 'income', loans: 'loans', tax: 'tax', cover: 'cover', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' }[tab] || '';
+  const tabAttr = { ret: '', step: 'step', swp: 'swp', income: 'income', loans: 'loans', tax: 'tax', cover: 'cover', holdings: 'holdings', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' }[tab] || '';
   return tabAttr ? 'input[data-k="' + key + '"][data-tab="' + tabAttr + '"]' : 'input[data-k="' + key + '"]';
 }
 
@@ -12481,9 +12927,9 @@ function advisorReadCurrentChart() {
     if (L.country !== 'IN') return { ok:false, error:'Retirement Income uses Indian tax rules; the user needs to switch the country to India.' };
     return incomeAdvisorResults();
   }
-  if (tab === 'loans' || tab === 'taxregime' || tab === 'cover') {
+  if (tab === 'loans' || tab === 'taxregime' || tab === 'cover' || tab === 'holdings') {
     if (L.country !== 'IN') return { ok:false, error:'This tool uses Indian tax rules; the user needs to switch the country to India.' };
-    return tab === 'loans' ? loansAdvisorResults() : tab === 'taxregime' ? taxAdvisorResults() : coverAdvisorResults();
+    return tab === 'loans' ? loansAdvisorResults() : tab === 'taxregime' ? taxAdvisorResults() : tab === 'holdings' ? holdingsAdvisorResults() : coverAdvisorResults();
   }
   if (tab === 'fx') {
     const f = L.fx;
@@ -12630,9 +13076,10 @@ function advisorGetResults() {
       crash:{ scenario:R.ep ? R.ep.label + ' in year ' + s.shock.year : 'none', bucketPlanAtEnd:end(R.hit.buckets), singleRebalancedPotAtEnd:end(R.hit.mix) },
       nps:{ pot:s.npsPot, pensionPerMonthAfterTax:Math.round(R.nps.monthlyAfter), cashKept:Math.round(R.nps.lumpKept) } }, flags:[] };
   }
-  if (tab === 'loans' || tab === 'taxregime' || tab === 'cover') {
+  if (tab === 'loans' || tab === 'taxregime' || tab === 'cover' || tab === 'holdings') {
     if (L.country !== 'IN') return { ok:false, error:'This tool uses Indian tax rules; the user needs to switch the country to India.' };
   }
+  if (tab === 'holdings') return { ok:true, result:holdingsResultForAdvisor(), flags:[] };
   if (tab === 'loans') {
     const R = computeLoans(), s = R.s, cmp = R.cmp, pre = R.pre, av = R.av, sc = cmp.schedule;
     return { ok:true, result:{ tool:'Loans', note:'break-even, not a verdict: the investment return is the user\'s assumption',
@@ -12680,6 +13127,8 @@ const ADVISOR_HIGHLIGHT_TARGETS = {
   taxbreakeven: '#tax-breakeven',
   termcover: '#cover-term',
   healthcover: '#cover-health',
+  holdmix: '#hold-mix',
+  holdcost: '#hold-cost',
   mountain: '#ret-mountain',
   timeline: '#joint-timeline',
   twinfates: '#step-twinfates',
@@ -12966,12 +13415,13 @@ function executeAdvisorTool(name, args) {
     return JSON.stringify({ ok:true, tab });
   }
   if (name === 'set_value') return JSON.stringify(advisorSetValue(args && args.field, args && args.value));
+  if (name === 'set_holdings') return JSON.stringify(advisorSetHoldings(args || {}));
   if (name === 'run_full_analysis') {
     const start = performance.now();
     const tab = args && args.tab;
     const params = (args && args.params) || {};
-    const PREFIX = { retirement:'ret', stepup:'step', swp:'swp', income:'income', loans:'loans', taxregime:'tax', cover:'cover', fx:'fx', joint:'joint', mc:'mc', health:'health' };
-    if (!PREFIX[tab]) return JSON.stringify({ ok:false, error:'Invalid tab. Valid: retirement, stepup, swp, income, loans, taxregime, cover, fx, joint, mc, health. (portfolio/livefrontier use set_weights/add_instrument.)' });
+    const PREFIX = { retirement:'ret', stepup:'step', swp:'swp', income:'income', loans:'loans', taxregime:'tax', cover:'cover', holdings:'holdings', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+    if (!PREFIX[tab]) return JSON.stringify({ ok:false, error:'Invalid tab. Valid: retirement, stepup, swp, income, loans, taxregime, cover, holdings, fx, joint, mc, health. (portfolio/livefrontier use set_weights/add_instrument.)' });
     if (typeof params !== 'object' || Array.isArray(params)) return JSON.stringify({ ok:false, error:'params must be an object.' });
     const prefix = PREFIX[tab];
     if (INDIA_ONLY_STATE.includes(prefix) && L.country !== 'IN') return JSON.stringify({ ok:false, error:'That tool uses Indian tax rules and the Lab is set to the United States. Ask the user whether to switch the country to India first (set_value country IN).' });
@@ -13033,6 +13483,7 @@ function advisorDescribeTool(name, args) {
   switch (name) {
     case 'navigate': return 'Opening ' + tabLabel(args.tab);
     case 'set_value': return 'Setting ' + args.field + ' to ' + args.value;
+    case 'set_holdings': return 'Adding what you hold to My holdings';
     case 'get_results': return 'Calculating the current result';
     case 'get_state': return 'Reading your inputs';
     case 'get_price_history': return 'Looking up price history for ' + args.symbol;
@@ -13100,6 +13551,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
       'loans': ['Why is the break-even higher on the new regime?', 'What if the investment earns less than I assumed?', 'Why clear the card before the home loan?'],
       'taxregime': ['What would I need to deduct for the old regime to win?', 'Does this change what I put in ELSS or PPF?', 'What is not counted here?'],
       'cover': ['What does the cover figure leave out?', 'Why show the gap without employer cover?', 'What if my spending changes?'],
+      'holdings': ['Is my mix too heavy in equity for my profile?', 'Why is this called funds doing the same job?', 'How much of a sale would be tax-free?'],
       'joint': ['Why are separate pots cheaper here?', 'What if the second child starts later?', 'Where is the tightest year?'],
       'statements': ['What does this chart show about the company?', 'Is profit turning into cash?', 'What changed versus five years ago?'],
     };

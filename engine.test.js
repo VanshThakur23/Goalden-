@@ -3842,3 +3842,158 @@ test('health cover: a floater takes the first part, a super top-up the rest, and
   assert.strictEqual(small.base, 5e5); assert.strictEqual(small.topUp, 0, 'a target below the floater needs no top-up');
   Object.values(engine.healthCoverPlan({ target: 'x', baseCover: NaN, medInflation: 'y', years: -2 })).forEach(v => assert.ok(Number.isFinite(v)));
 });
+
+// ---- Holdings review (India): the real mix against the profile, same-job funds, Regular-plan cost, rebalance ----
+test('holdings: the five risk profiles each add up to 100%', () => {
+  Object.values(engine.RISK_PROFILES_IN).forEach(p => approx(p.eq + p.de + p.hy, 1));
+  assert.strictEqual(Object.keys(engine.RISK_PROFILES_IN).length, 5);
+});
+test('holdings: a category comes from the name only when the name settles it', () => {
+  const want = {
+    'Parag Parikh Flexi Cap Fund - Direct Plan - Growth': 'flexi', 'HDFC Index Fund - Nifty 50 Plan - Regular': 'index',
+    'ICICI Prudential Bluechip Fund': 'largecap', 'SBI Small Cap Fund': 'smallcap', 'Kotak Emerging Equity Fund Large & Midcap': 'largemid',
+    'Axis Liquid Fund': 'liquid', 'Nippon India Gold ETF': 'gold', 'Kotak Equity Arbitrage Fund': 'arbitrage',
+    'ICICI Prudential Balanced Advantage Fund': 'baf', 'Mirae Asset ELSS Tax Saver Fund': 'elss', 'Franklin India Taxshield': 'elss',
+    'Motilal Oswal Nasdaq 100 FoF': 'intl', 'HDFC Corporate Bond Fund': 'bonddebt', 'SBI Banking and Financial Services Fund': 'sectoral',
+    'ICICI Prudential Equity & Debt Fund': 'aggrhybrid', 'HDFC Gilt Fund': 'gilt', 'Axis Ultra Short Term Fund': 'shortdebt',
+    'Quant Multi Asset Fund': 'multiasset', 'Nippon India Small Cap Fund': 'smallcap', 'Mirae Asset Midcap Fund': 'midcap',
+    // hyphens and slashes are read as spaces
+    'Large-cap fund (Regular)': 'largecap', 'Flexi-cap fund (Direct)': 'flexi', 'Mid-cap fund (Regular)': 'midcap', 'Short-duration debt fund': 'shortdebt',
+    'Nifty-50 index fund (Direct)': 'index', 'Kotak Large/Mid Cap Fund': 'largemid', 'HDFC Gilt G-Sec Fund': 'gilt',
+    // not settled by the name: the person picks
+    'UTI Nifty Next 50 Index Fund': null, 'HDFC Retirement Savings Fund': null, 'Some Fund of Funds': null, '': null, 'xyz': null,
+  };
+  Object.keys(want).forEach(n => assert.strictEqual(engine.holdingCategoryFromName(n), want[n], n));
+  assert.strictEqual(engine.holdingCategoryFromName(null), null);
+});
+test('holdings: Direct or Regular is read from the name and never assumed', () => {
+  assert.strictEqual(engine.fundPlanFromName('X Fund - Direct Plan - Growth'), 'direct');
+  assert.strictEqual(engine.fundPlanFromName('X Fund - Regular Plan'), 'regular');
+  assert.strictEqual(engine.fundPlanFromName('X Fund - Growth'), 'unstated');
+});
+test('holdings: the Regular-plan extra cost is claimed only where an estimate exists', () => {
+  assert.strictEqual(engine.regularExtra('Axis Bluechip Fund', 'regular', 'largecap'), engine.REGULAR_EXTRA.active);
+  assert.strictEqual(engine.regularExtra('HDFC Nifty 50 Index Fund', 'regular', 'index'), engine.REGULAR_EXTRA.passive);
+  assert.strictEqual(engine.regularExtra('Axis Liquid Fund', 'regular', 'liquid'), null);
+  assert.strictEqual(engine.regularExtra('Corporate Bond Fund', 'regular', 'bonddebt'), null);
+  assert.strictEqual(engine.regularExtra('Gold Fund', 'regular', 'gold'), null);
+  assert.strictEqual(engine.regularExtra('Equity & Debt Fund', 'regular', 'aggrhybrid'), engine.REGULAR_EXTRA.active, 'the word debt in a hybrid fund name does not switch the estimate off');
+  assert.strictEqual(engine.regularExtra('Axis Bluechip Fund', 'direct', 'largecap'), null);
+  assert.strictEqual(engine.regularExtra('Axis Bluechip Fund', 'unstated', 'largecap'), null);
+  // with no category (a fund found by name in Test Real Investments) the words in the name decide
+  assert.strictEqual(engine.regularExtra('HDFC Corporate Bond Fund - Regular', 'regular', null), null);
+  assert.strictEqual(engine.regularExtra('Axis Liquid Fund - Regular', 'regular', null), null);
+  assert.strictEqual(engine.regularExtra('HDFC Nifty 50 Index Fund - Regular', 'regular', null), engine.REGULAR_EXTRA.passive);
+  assert.strictEqual(engine.regularExtra('Axis Bluechip Fund - Regular', 'regular', null), engine.REGULAR_EXTRA.active);
+});
+test('holdings: a cost of zero or garbage means the cost is not known', () => {
+  const r = engine.reviewHoldings({ target: { eq: 0.5, de: 0.5, hy: 0 }, holdings: [
+    { name: 'E', cat: 'largecap', value: 1000000, cost: 0 }, { name: 'D', cat: 'liquid', value: 0 }] });
+  assert.strictEqual(r.rows[0].cost, null);
+  assert.strictEqual(r.rebalance.sells[0].worked, false);
+});
+test('holdings: the mix is shares of equity + debt + hybrid, with gold, other and unplaced money shown beside it', () => {
+  const r = engine.reviewHoldings({ target: { eq: 0.5, de: 0.35, hy: 0.15 }, holdings: [
+    { name: 'A', cat: 'largecap', value: 600000 }, { name: 'B', cat: 'liquid', value: 300000 }, { name: 'C', cat: 'baf', value: 100000 },
+    { name: 'Gold', cat: 'gold', value: 250000 }, { name: 'Flat', cat: 'other', value: 500000 }, { name: 'Unplaced', cat: '', value: 150000 },
+    { name: 'Zero', cat: 'midcap', value: 0 }, { name: 'Bad', cat: 'constructor', value: 50000 } ] });
+  approx(r.mixTotal, 1000000);
+  assert.strictEqual(r.mix.map(m => m.cls).join(), 'equity,debt,hybrid');
+  approx(r.mix[0].share, 0.6); approx(r.mix[0].drift, 0.1); approx(r.mix[1].drift, -0.05); approx(r.mix[2].drift, -0.05);
+  assert.strictEqual(r.outside.gold, 250000); assert.strictEqual(r.outside.other, 500000);
+  assert.strictEqual(r.unset, 200000, 'a category that does not exist counts as not placed, like a blank one');
+  assert.strictEqual(r.total, 1950000, 'rows worth nothing are dropped');
+});
+test('holdings: a target that does not add to 1 is scaled, and a missing one falls back to Moderate', () => {
+  const rows = [{ name: 'A', cat: 'largecap', value: 1e5 }];
+  const a = engine.reviewHoldings({ target: { eq: 50, de: 35, hy: 15 }, holdings: rows });
+  approx(a.target.equity, 0.5); approx(a.target.debt + a.target.hybrid, 0.5);
+  const b = engine.reviewHoldings({ holdings: rows });
+  approx(b.target.equity, engine.RISK_PROFILES_IN.moderate.eq);
+});
+test('holdings: funds with the same job are grouped by category, and a lone fund or a sector fund is not a duplicate', () => {
+  const r = engine.reviewHoldings({ holdings: [
+    { name: 'L1', cat: 'largecap', value: 300000 }, { name: 'Nifty', cat: 'index', value: 200000 }, { name: 'L2', cat: 'largecap', value: 100000 },
+    { name: 'F', cat: 'flexi', value: 100000 }, { name: 'E', cat: 'elss', value: 100000 },
+    { name: 'S1', cat: 'sectoral', value: 50000 }, { name: 'S2', cat: 'sectoral', value: 50000 }, { name: 'M', cat: 'midcap', value: 100000 } ] });
+  assert.strictEqual(r.overlap.length, 2);
+  assert.strictEqual(r.overlap[0].job, 'large'); assert.strictEqual(r.overlap[0].count, 3); assert.strictEqual(r.overlap[0].value, 600000);
+  assert.deepStrictEqual(r.overlap[0].names, ['L1', 'Nifty', 'L2']);
+  assert.strictEqual(r.overlap[1].job, 'allcap'); assert.strictEqual(r.overlap[1].count, 2);
+  approx(r.overlap[0].share, 600000 / 1000000);
+});
+test('holdings: the Regular-plan cost is the gap between growing at r and at r minus the extra, for Regular funds only', () => {
+  const r = engine.reviewHoldings({ years: 10, expected: 0.12, holdings: [
+    { name: 'Active Regular', cat: 'largecap', value: 400000, plan: 'regular' },
+    { name: 'Index Regular', cat: 'index', value: 100000, plan: 'regular' },
+    { name: 'Debt Regular', cat: 'bonddebt', value: 200000, plan: 'regular' },
+    { name: 'Direct one', cat: 'flexi', value: 300000, plan: 'direct' },
+    { name: 'Unnamed plan', cat: 'midcap', value: 100000, plan: 'unstated' },
+    { name: 'FD', cat: 'fd', value: 100000, plan: 'regular' } ] });
+  assert.strictEqual(r.cost.regular.length, 3);
+  assert.strictEqual(r.cost.unpriced, 1, 'the Regular debt fund is named but not priced');
+  approx(r.cost.perYear, 400000 * 0.01 + 100000 * 0.004);
+  const gap = (v, x) => v * (Math.pow(1.12, 10) - Math.pow(1.12 - x, 10));
+  approx(r.cost.drag, gap(400000, 0.01) + gap(100000, 0.004), 1e-9);
+  assert.strictEqual(r.cost.direct, 1); assert.strictEqual(r.cost.unstated, 1, 'only fund rows are counted; a fixed deposit has no plan');
+});
+test('holdings: new money goes to the parts under their share, and the months to fix are worked out from the overweight part', () => {
+  const r = engine.reviewHoldings({ target: { eq: 0.5, de: 0.5, hy: 0 }, sip: 10000, sipMonths: 12, holdings: [
+    { name: 'E', cat: 'largecap', value: 700000, cost: 350000 }, { name: 'D', cat: 'liquid', value: 300000 } ] });
+  const b = r.rebalance;
+  approx(b.newMoney, 120000); approx(b.overNow, 200000);
+  approx(b.overAfter, 140000, 1e-9);
+  assert.strictEqual(b.split.length, 1); assert.strictEqual(b.split[0].cls, 'debt'); approx(b.split[0].amount, 120000);
+  assert.strictEqual(b.monthsToFix, Math.ceil((700000 / 0.5 - 1000000) / 10000));
+  const none = engine.reviewHoldings({ target: { eq: 0.5, de: 0.5, hy: 0 }, sip: 0, holdings: [
+    { name: 'E', cat: 'largecap', value: 700000 }, { name: 'D', cat: 'liquid', value: 300000 } ] });
+  assert.strictEqual(none.rebalance.monthsToFix, null, 'no new money, so no month count');
+  assert.strictEqual(none.rebalance.sells.length, 1);
+  approx(none.rebalance.sells[0].amount, 200000);
+  const even = engine.reviewHoldings({ target: { eq: 0.5, de: 0.5, hy: 0 }, sip: 5000, holdings: [
+    { name: 'E', cat: 'largecap', value: 500000 }, { name: 'D', cat: 'liquid', value: 500000 } ] });
+  assert.strictEqual(even.rebalance.monthsToFix, 0); assert.strictEqual(even.rebalance.sells.length, 0);
+});
+test('holdings: selling equity to rebalance uses the Rs 1.25 lakh free limit, then 12.5% plus cess on the gain', () => {
+  const rows = [{ name: 'E', cat: 'largecap', value: 1000000, cost: 500000 }, { name: 'D', cat: 'liquid', value: 0 }];
+  const base = { target: { eq: 0.5, de: 0.5, hy: 0 }, sip: 0, holdings: rows };
+  const s = engine.reviewHoldings(base).rebalance.sells[0];
+  approx(s.amount, 500000); approx(s.gainRatio, 0.5);
+  approx(s.taxFree, 125000 / 0.5); approx(s.taxable, 500000 - 250000);
+  approx(s.tax, 250000 * 0.5 * 0.125 * 1.04);
+  approx(s.freeEachYear, 250000);
+  const used = engine.reviewHoldings(Object.assign({ exemptUsed: 125000 }, base)).rebalance.sells[0];
+  assert.strictEqual(used.taxFree, 0); approx(used.tax, 500000 * 0.5 * 0.125 * 1.04);
+  const small = engine.reviewHoldings({ target: { eq: 0.9, de: 0.1, hy: 0 }, sip: 0, holdings: [
+    { name: 'E', cat: 'largecap', value: 1000000, cost: 500000 }, { name: 'D', cat: 'liquid', value: 0 }] }).rebalance.sells[0];
+  assert.strictEqual(small.amount, 100000); assert.strictEqual(small.tax, 0, 'a sale whose gain is inside the free limit costs nothing');
+});
+test('holdings: sale tax is not worked out for units under a year, cost unknown, or debt and hybrid funds', () => {
+  const tg = { eq: 0.5, de: 0.5, hy: 0 };
+  const unknown = engine.reviewHoldings({ target: tg, holdings: [{ name: 'E', cat: 'largecap', value: 1000000 }, { name: 'D', cat: 'liquid', value: 0 }] }).rebalance.sells[0];
+  assert.strictEqual(unknown.worked, false); assert.strictEqual(unknown.tax, 0); approx(unknown.notWorkedOut, 500000);
+  const young = engine.reviewHoldings({ target: tg, holdings: [{ name: 'E', cat: 'largecap', value: 1000000, cost: 500000, longTerm: false }, { name: 'D', cat: 'liquid', value: 0 }] });
+  assert.strictEqual(young.rebalance.sells[0].worked, false); approx(young.rebalance.shortTerm, 1000000);
+  const mixed = engine.reviewHoldings({ target: tg, holdings: [{ name: 'E1', cat: 'largecap', value: 400000, cost: 200000 }, { name: 'E2', cat: 'midcap', value: 600000 }, { name: 'D', cat: 'liquid', value: 0 }] });
+  const m = mixed.rebalance.sells[0];
+  approx(m.fromLongTerm, 400000); approx(m.notWorkedOut, 100000); approx(mixed.rebalance.unknownCost, 600000);
+  const debt = engine.reviewHoldings({ target: { eq: 0.9, de: 0.1, hy: 0 }, holdings: [{ name: 'E', cat: 'largecap', value: 200000, cost: 100000 }, { name: 'D', cat: 'liquid', value: 800000 }] }).rebalance.sells[0];
+  assert.strictEqual(debt.cls, 'debt'); assert.strictEqual(debt.worked, false); assert.strictEqual(debt.tax, undefined);
+});
+test('holdings: a name that says Regular or Direct is a fund for the cost even with no category set', () => {
+  const r = engine.reviewHoldings({ years: 10, expected: 0.12, holdings: [
+    { name: 'Some Unknown Fund - Regular Plan', value: 100000 }, { name: 'Another Fund - Direct Plan', value: 50000 }, { name: 'My notes', value: 10000 }, { name: 'Liquid Thing Regular', value: 40000 },
+    { name: 'Nippon India Gold ETF', cat: 'gold', value: 30000 }] });   // an ETF has a single plan: no Direct or Regular to name
+  assert.strictEqual(r.cost.regular.length, 2);
+  approx(r.cost.perYear, 100000 * engine.REGULAR_EXTRA.active);   // the liquid-named one is not priced: no honest single figure
+  assert.strictEqual(r.cost.unpriced, 1); assert.strictEqual(r.cost.direct, 1); assert.strictEqual(r.cost.unstated, 0);
+  assert.strictEqual(r.mixTotal, 0);   // still left out of the mix: the cost needs a plan, the mix needs a category
+});
+test('holdings: empty and garbled input give zeros, not NaN or a throw', () => {
+  const walk = (o) => { if (o && typeof o === 'object') Object.values(o).forEach(walk); else if (typeof o === 'number') assert.ok(Number.isFinite(o), String(o)); };
+  walk(engine.reviewHoldings({}));
+  walk(engine.reviewHoldings({ holdings: 'x', target: 'y', sip: 'z', years: NaN, expected: 'q', exemptUsed: -3 }));
+  walk(engine.reviewHoldings({ holdings: [null, 5, { name: { a: 1 }, cat: 'largecap', value: 'abc', cost: NaN }, { name: 'A', cat: 'largecap', value: 1e5, cost: 'x', plan: 'weird' }], sip: -5, sipMonths: 1e9 }));
+  assert.strictEqual(engine.reviewHoldings({}).total, 0);
+  assert.strictEqual(engine.reviewHoldings({ holdings: Array.from({ length: 200 }, () => ({ name: 'A', cat: 'largecap', value: 1 })) }).rows.length, 60);
+});

@@ -4473,7 +4473,111 @@ standing over the founder's shoulder.
   advisor range is checked against them, the rest are structural); smoke-20 had two
   assertions updated for the new tabs.
 
-### Next: Group 9c
-- B1 holdings review (holdings with amounts: the real mix against the risk profile,
-  duplicate categories, fee drag, tax-aware rebalancing), then 9d B5 yearly plan
-  review by the advisor. B7 rent-vs-buy only if time is left.
+### Group 9c: My holdings in the Lab (B1)
+- **Group 9b shipped:** commit `b13b88d`, Worker `4b18f295-17d7-46e9-872d-7f5e251de4e0`,
+  live-checked on goalden.vanshsingh23.workers.dev.
+- **New Lab tab "My holdings" (India only; another country gets a note and a one-click
+  switch to India).** The person types in what they hold, or searches a fund by name
+  (the existing `/api/fundsearch` MFAPI proxy) and adds the result; each row has a name,
+  what it is worth now, what was paid in (optional), a category, a plan (Direct or
+  Regular) and, for equity, a tick for "held for over a year". No statement upload and
+  no account link. Four cards against a chosen risk profile:
+  1. *Mix against the profile.* Equity / debt / hybrid shares of what is listed, against
+     the Full Plan's profile (same five profiles and shares as Door 2's `BUCKETS`; a
+     smoke check compares the two tables). Gold, "other" and rows with no category are
+     shown beside the mix and left out of the shares. A hybrid fund counts as hybrid, as
+     in the Full Plan, not split into equity and debt.
+  2. *Funds doing the same job.* Category level only: "2 holdings in large-cap shares".
+     It says plainly that whether two funds hold the same companies needs each fund's own
+     monthly portfolio file, which this page does not read.
+  3. *What Regular plans cost.* The extra cost of each Regular plan (about 1% a year for
+     an active fund, about 0.4% for an index fund, labelled an estimate; debt, gold and
+     arbitrage funds are not priced) as a rupee drag over the chosen years:
+     `value*((1+g)^n - (1+g-extra)^n)`. Plans come from the words Direct / Regular in the
+     name, or the person's own pick.
+  4. *Getting back to the mix.* New money first (the monthly amount and the months to
+     count are inputs), split so the total ends nearest the profile with nothing sold;
+     then, for what is still over, equity sells within the free limit on long-term equity
+     gains (net of gains already booked this year, set above) and the tax on the rest at
+     the dated rates. Debt and hybrid sells say the tax is "not worked out" rather than
+     guess, as do units under a year and units with no cost entered.
+- **No invented data.** A holding gets a category only from its name or from the person;
+  one with none is left out of the mix and listed as such. No fund is rated, ranked or
+  recommended. The sale-tax rules are `TAX_IN` (FY 2026-27), shown with "re-check".
+- **Engine (goalden-engine.js, exported, 287 tests, 14 new):** `RISK_PROFILES_IN`,
+  `HOLDING_CATS_IN` (23 categories), `holdingCategoryFromName` (also reads hyphens and
+  slashes: "Large-cap", "Large/Mid"), `fundPlanFromName`, `REGULAR_EXTRA`,
+  `regularExtra`, `reviewHoldings`. `liveFundPlan` / `liveRegularGap` in the Lab now call
+  the engine, so the Test Real Investments tab and this tab read plans the same way.
+- **Full Plan (goalden-door2.html).** India plans get a "Check what you already own
+  against this plan" button; it hands the Lab the risk-profile key and the smaller of the
+  plan's SIP and what the person can afford (a capacity of zero or less sets new money to
+  0). The Lab shows a one-line note of what it took, which goes as soon as either value is
+  changed.
+- **Advisor.** New tool `set_holdings` (add or replace; only holdings the user has told it,
+  with the amounts they gave; it lists back any it could not place instead of guessing);
+  six `holdings.*` fields it can set; `run_full_analysis` and `get_results` read the tab;
+  highlight targets `holdmix` / `holdcost`; follow-up chips. The footer says what leaves the
+  browser: the search words go to the fund-name lookup, and the holdings go to the advisor
+  with a question when it is used.
+- **Opus review (model opus, read-only), two MUST-FIX items and eight smaller ones, all
+  fixed except the last note under "Not done":**
+  1. The bar-chart tooltip drew a fund name as HTML (ECharts renders a formatter string as
+     HTML), so a name like `<img onerror=...>` ran on hover. Now escaped; a long name is cut
+     for the axis label and whole in the tooltip.
+  2. When gains had already been booked this year, the sell line said to sell a full
+     year's free amount before 31 March. It now says this year's room (net of the booked
+     gains) first and the full yearly limit for later years, and says "none" when this
+     year's is used up.
+  3. The advisor was told "equity yours 0%, profile 50%" when nothing in the list had a
+     category; it now gets no shares and the reason.
+  4. `set_holdings` could double a row on a retry (a row with the same name and amount is
+     now skipped and reported), wipe the list on "replace" without saying so (the reply
+     now says how many rows went), let the model's category beat what the name says and
+     look like the user's pick (the name wins and it is reported), and read `-250000` as
+     250000 and `2.5 lakh` as 2.5. Amounts now go through `holdParseAmount`: a number as
+     it is; text only when it is a plain amount with an optional k / lakh / crore; a minus
+     sign or stray letters is no amount. The typed boxes use the same function ("5L" was
+     read as 5).
+  5. Long scheme names ran together in the Regular-plan chart (see 1).
+  6. "Load an example" replaced typed rows without asking; it is now offered only when the
+     list is empty. The footer no longer says "stays in this browser" (the search words do
+     leave it).
+  7. A monthly amount with 0 months to count said "Enter a monthly amount"; it now says to
+     count at least one month.
+  8. The new-money split could put money into a part already over its share when the
+     months counted exceed what closing the gap needs; the sentence now says "by the end"
+     (it is where the total lands, not the order the months arrive in).
+  9. The free-limit figure in the slider help came from a typed number; it now reads
+     `TAX_IN`. The sell note says surcharge is not counted.
+  10. A plan capacity of 0 fell back to the plan's SIP; it now sets new money to 0.
+  A chart label clipping on the mix chart (a short name's left edge ran off the chart
+  because `containLabel` reserved about 70px for labels that drew 103px wide) was found
+  in the browser before the review and fixed in `barsChart` for every tab that uses it: the
+  left margin is now measured from the longest name (Loans, Tax regime, Cover re-checked,
+  none clipped).
+- **Not done.** Rent-vs-buy (B7). Typed rows are not saved: a reload clears them, as it does
+  on every other Lab tab (`persistLabState` writes, nothing reads it back). Holdings are not
+  looked up for their category by scheme code; the category comes from the name or the
+  person. Holding-level overlap (same companies) needs the funds' own portfolio files.
+  No BRIEFING_SECTIONS entry for the income and new tabs. The earlier 9b notes still stand
+  (loan nominal rate against annual returns; year-1 run-out caption shows Rs 0 tax; the
+  engine does not sanitise NaN for inputs the sliders can never produce; the step-up chart's
+  "behind" label can clip on a very narrow chart).
+- **Checked in a real browser:** the tab at 1280px and 375px with the example loaded (no
+  clipped labels, no horizontal overflow), typing in a row keeps focus, add / remove /
+  clear / pick from search (Parag Parikh Flexi Cap read as flexi cap, Regular), the US
+  country note, `?tab=holdings`, the Door 2 hand-off (Growth-Oriented, 45,000 from a
+  45,300 plan), `set_holdings` / `set_value holdings.*` / `run_full_analysis` /
+  `get_results`, a hostile fund name in the tooltip, `5L` typed in the box, the sell line
+  with Rs 1 lakh and Rs 1.25 lakh already booked, no console errors.
+- **Tests:** 287/287 engine tests; smokes 02-22 pass (smoke-14/15/16 need `python3` on PATH);
+  new smoke-22 (81 checks: the tab's own clamp and the advisor's `set_holdings` are run for
+  real in a vm, every end of every advisor range is checked against the clamp, the profile
+  table is compared with Door 2's, the rest are structural); smoke-20 and smoke-21 had
+  assertions updated for the new tab.
+
+### Next: Group 9d
+- B5 yearly plan review by the advisor: a fixed checklist across the tools (Plan Health,
+  cover, tax regime, holdings, retirement income) and a dated action list through the
+  existing plan-and-approve flow. B7 rent-vs-buy only if time is left.
