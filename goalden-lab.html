@@ -424,6 +424,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .range-pill:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .scrub-readout{display:flex;flex-wrap:wrap;gap:2px 14px;min-height:22px;margin:0 0 6px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
 .scrub-readout b{color:var(--paper);font-weight:600}
+.lg-head{margin:4px 0 10px;font-size:16px;line-height:1.5;color:var(--paper)}
+.lg-head b{font-weight:700}
+.lg-head .lg-gap{color:#1E4FBE}
 /* One line per value on a phone, so the number of lines never changes as the pointer moves (a line wrapping in or out would shift the chart under a finger). */
 @media(max-width:520px){.scrub-readout{flex-direction:column;flex-wrap:nowrap}.scrub-readout span{white-space:nowrap}}
 .echart[tabindex]:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
@@ -6811,7 +6814,7 @@ function liveGrowthCardHTML(items, weights){
   const w=g.worst, rec = g.recK!=null ? `back to its old high by ${fmtD(g.dates[g.recK])}` : 'still below its old high at the end of the data';
   const mixEnd=amt*g.mix[g.mix.length-1];
   const bState = spec && L.live.bench ? L.live.bench[spec.symbol] : null;
-  let benchStat='', benchCap='';
+  let benchStat='', benchCap='', benchHead='';
   if(g.bench){
     const benchEnd=amt*g.bench[g.bench.length-1], diff=mixEnd-benchEnd;
     L.live._vsIndex={sig:liveMixSig(items, weights), benchmark:spec.full, from:g.dates[0], to:g.dates[g.dates.length-1], amount:amt, mixEnd:Math.round(mixEnd), benchEnd:Math.round(benchEnd), diff:Math.round(diff)};
@@ -6819,7 +6822,12 @@ function liveGrowthCardHTML(items, weights){
     benchStat=`<div class="stat"><div class="stat-label">vs ${spec.a} ${spec.label}${infoIcon('The same amount, on the same dates, in '+spec.full+': the plainest alternative you could have bought. The gap is your mix’s gain minus the index fund’s gain.')}</div>
       <div class="stat-value" style="font-size:20px">${diff>=0?'▲':'▼'} ${c.compact(Math.abs(diff))}</div>
       <div class="stat-sub">${diff>=0?'ahead of':'behind'} it; the index fund grew to ${c.compact(benchEnd)}</div></div>`;
-    benchCap=`<div class="cap" style="margin-top:8px">Over these ${g.years.toFixed(1)} years, ${c.compact(amt)} in your mix became <b style="color:var(--paper)">${c.compact(mixEnd)}</b>; the same in ${spec.a} ${spec.label} became <b style="color:var(--paper)">${c.compact(benchEnd)}</b>, so the mix ${diff>=0?'beat it by':'missed out on'} ${c.compact(Math.abs(diff))}. Past prices only, not a forecast, and hindsight helps: picks chosen today from today’s winners tend to look better than they would have at the start.</div>`;
+    // The one sentence a retail investor needs, in money and above the chart: what the plain index fund would have
+    // given them instead. Direction is in the words, never in red or green.
+    benchHead=`<p class="lg-head">Over these ${g.years.toFixed(1)} years, ${c.compact(amt)} in your mix became <b>${c.compact(mixEnd)}</b>. The same in ${spec.a} ${spec.label} became <b>${c.compact(benchEnd)}</b>. ${diff>=0
+      ? `Your mix finished <b class="lg-gap">${c.compact(Math.abs(diff))} ahead</b> of the index fund.`
+      : `By not simply holding the index fund, you <b class="lg-gap">missed out on ${c.compact(Math.abs(diff))}</b>.`}</p>`;
+    benchCap=`<div class="cap" style="margin-top:8px">The shaded band is the gap between your mix and the index fund. Past prices only, not a forecast, and hindsight helps: picks chosen today from today’s winners tend to look better than they would have at the start.</div>`;
   }else if(!spec){
     benchStat=`<div class="stat"><div class="stat-label">vs an index fund</div><div class="stat-sub">Not compared: this mix is in more than one currency and the exchange rate isn’t loaded, so there is no like-for-like index.</div></div>`;
   }else if(bi && !bi.ok){
@@ -6838,8 +6846,9 @@ function liveGrowthCardHTML(items, weights){
       <div class="stat"><div class="stat-label">Worst fall${infoIcon('The deepest drop from a previous high point to a later low, for your mix. Everyone who held through this period sat through it.', c.compact(amt*g.mix[w.peakK])+' at the high ('+fmtD(g.dates[w.peakK])+') fell to '+c.compact(amt*g.mix[w.k])+' at the bottom ('+fmtD(g.dates[w.k])+').')}</div><div class="stat-value">${(w.dd*100).toFixed(1)}%</div><div class="stat-sub">bottom in ${fmtD(g.dates[w.k])}</div></div>
       <div class="stat"><div class="stat-label">Time to recover</div><div class="stat-value" style="font-size:20px">${g.recK!=null?(m=>m+(m===1?' month':' months'))(monthsBetween(g.dates[w.k], g.dates[g.recK])):'Not yet'}</div><div class="stat-sub">${rec}</div></div>
     </div>
+    ${benchHead}
     <div class="scrub-readout" id="live-growth-echart-ro" aria-hidden="true"></div>
-    <div id="live-growth-echart" class="echart" style="height:380px" aria-label="What the money became, week by week. Arrow keys move a week, Page Up and Page Down move further, Home and End jump to the ends."></div>
+    <div id="live-growth-echart" class="echart" style="height:500px" aria-label="What the money became, week by week. Arrow keys move a week, Page Up and Page Down move further, Home and End jump to the ends."></div>
     ${benchCap}
     ${liveMixCurrency(items) ? liveForeignMoneyNoteHTML(items) : (L.live.fx && L.live.fx.status==='loading' ? `<div class="cap" style="margin-top:8px">Loading the USD/INR rate to put these in one currency; until then each line grows in its own currency.</div>` : `<div class="cap" style="margin-top:8px">These instruments are in different currencies and aren’t converted here, so each line grows in its own currency: read the amounts as a growth multiple, not money.</div>`)}
     ${liveDroppedNoteHTML(g.panel)}
@@ -6848,10 +6857,15 @@ function liveGrowthCardHTML(items, weights){
 function renderLiveGrowthChart(chartId, g, items, amt){
   const c=liveMoneyCfg(items);
   const dom=document.getElementById(chartId); const narrow=!!dom && dom.clientWidth<520;
+  // On a phone the index line is labelled just "Index" (the sentence above the chart names it), so the plot keeps its width.
+  const tiny=!!dom && dom.clientWidth<360;
   const benchSpec=liveBenchSpec(items);
   const benchInMix = benchSpec && items.some(it=>String(it.symbol)===benchSpec.symbol);
-  const longest=Math.max(8, ...items.map(it=>liveShortName(it).length), g.bench && !benchInMix ? benchSpec.short.length : 0);
-  const labelRoom=Math.round(narrow ? Math.max(70, longest*6.2+12) : Math.max(130, (longest+8)*6.2+12));
+  // Room on the right for the end labels. Faded instrument labels are the name alone (10px, ~6.2px a character); the
+  // mix and the index carry their amount too (bold 12px, ~7.6px), which drops to its own line on a narrow chart.
+  const thin=Math.max(0, ...items.map(it=>liveShortName(it).length));
+  const heavy=Math.max(8, g.bench && !tiny ? (benchInMix ? liveShortName(items.find(it=>String(it.symbol)===benchSpec.symbol)) : benchSpec.short).length : 0);
+  const labelRoom=Math.round(Math.max(thin*6.2, (narrow ? heavy : heavy+9)*7.6)+14);
   // Weekly points keep ten years of daily data light to draw.
   const step=Math.max(1, Math.floor(g.dates.length/520));
   const keep=g.dates.map((_,k)=>k).filter(k=>k%step===0 || k===g.dates.length-1);
@@ -6863,20 +6877,36 @@ function renderLiveGrowthChart(chartId, g, items, amt){
   // dash-dot, and for a 4th instrument a thin solid slate (no 5th hue). The
   // index fund is ink with a long dash, unlike any slot. Labels are ink text:
   // the ochre and green slots are under 4.5:1 for small text.
-  const SLOTS=[{c:'#B8740F',t:[8,4],w:1.4},{c:'#1F8A70',t:[2,3],w:1.6},{c:'#8A4FBF',t:[8,3,2,3],w:1.4},{c:'#56698A',t:'solid',w:1}];
-  const series=items.map((it,i)=>{ const sl=SLOTS[i%SLOTS.length]; return { name:liveShortName(it), type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.idx[i][k]),
-    lineStyle:{width:sl.w, color:sl.c, type:sl.t}, itemStyle:{color:sl.c},
-    // On a phone the name goes on its own line above the value (no legend).
-    endLabel:{show:true, formatter:p=>liveShortName(it)+(narrow?'\n':' ')+c.compact(p.value), color:CHART_TEXT.ink, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} }; });
-  series.push({ name:'Your mix', type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.mix[k]), lineStyle:{width:2.6, color:'#2557C7'}, itemStyle:{color:'#2557C7'}, z:5,
-    endLabel:{show:true, formatter:p=>'Your mix'+(narrow?'\n':' ')+c.compact(p.value), color:CHART_TEXT.blue, fontWeight:700, fontSize:11, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} });
-  if(g.bench && !benchInMix){
-    // A reference line, so ink with a long dash; it doesn't take a series slot.
-    // Skipped when the index fund is itself one of the instruments: its own
-    // line already is the index, and a second copy would sit right on top.
-    series.push({ name:benchSpec.short, type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.bench[k]),
-      lineStyle:{width:1.6, color:CHART_TEXT.ink, type:[16,6]}, itemStyle:{color:CHART_TEXT.ink}, z:4,
-      endLabel:{show:true, formatter:p=>benchSpec.short+(narrow?'\n':' ')+c.compact(p.value), color:CHART_TEXT.ink, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"},
+  // The story is your mix against the plain index fund, so those two lines are drawn heavy and labelled with their
+  // amounts; the instruments inside the mix are context, drawn thin and faded with their name only (the readout above
+  // the chart gives their amounts). When the index fund is itself one of the instruments, that line is drawn as the
+  // index rather than faded.
+  const isBench=it=>!!benchSpec && String(it.symbol)===benchSpec.symbol && !!g.bench;
+  const SLOTS=[{c:'#B8740F',t:[8,4],w:1.3},{c:'#1F8A70',t:[2,3],w:1.5},{c:'#8A4FBF',t:[8,3,2,3],w:1.3},{c:'#56698A',t:'solid',w:1}];
+  const series=[];
+  // The gap between mix and index as a shaded band: an invisible base at the lower of the two, and the difference
+  // stacked on it. Light blue whichever side is ahead; the words above the chart say which.
+  if(g.bench){
+    const lo=keep.map(k=>amt*Math.min(g.mix[k], g.bench[k])), gap=keep.map(k=>amt*Math.abs(g.mix[k]-g.bench[k]));
+    series.push({ name:'__gapBase', type:'line', xAxisIndex:0, yAxisIndex:0, stack:'gap', showSymbol:false, silent:true, data:lo, lineStyle:{opacity:0}, z:1, tooltip:{show:false} },
+      { name:'__gap', type:'line', xAxisIndex:0, yAxisIndex:0, stack:'gap', showSymbol:false, silent:true, data:gap, lineStyle:{opacity:0}, areaStyle:{color:'rgba(37,87,199,.13)'}, z:1, tooltip:{show:false} });
+  }
+  items.forEach((it,i)=>{
+    if(isBench(it)) return;
+    const sl=SLOTS[i%SLOTS.length];
+    series.push({ name:liveShortName(it), type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.idx[i][k]),
+      lineStyle:{width:sl.w, color:sl.c, type:sl.t, opacity:.6}, itemStyle:{color:sl.c}, z:2,
+      endLabel:{show:true, formatter:()=>liveShortName(it), color:CHART_TEXT.muted, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} });
+  });
+  series.push({ name:'Your mix', type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.mix[k]), lineStyle:{width:3.2, color:'#2557C7'}, itemStyle:{color:'#2557C7'}, z:5,
+    // On a narrow chart the name goes on its own line above the value (no legend).
+    endLabel:{show:true, formatter:p=>'Your mix'+(narrow?'\n':' ')+c.compact(p.value), color:CHART_TEXT.blue, fontWeight:700, fontSize:12, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{moveOverlap:'shiftY'} });
+  if(g.bench){
+    // The index fund: ink with a long dash, unlike any instrument slot, so it reads in greyscale too.
+    const bi=items.findIndex(isBench), name=bi>=0 ? liveShortName(items[bi]) : benchSpec.short;
+    series.push({ name, type:'line', xAxisIndex:0, yAxisIndex:0, showSymbol:false, data:keep.map(k=>amt*g.bench[k]),
+      lineStyle:{width:2.4, color:CHART_TEXT.ink, type:[14,5]}, itemStyle:{color:CHART_TEXT.ink}, z:4,
+      endLabel:{show:true, formatter:p=>(tiny?'Index':name)+(narrow?'\n':' ')+c.compact(p.value), color:CHART_TEXT.ink, fontWeight:700, fontSize:12, fontFamily:"'Spline Sans Mono',monospace"},
       labelLayout:{moveOverlap:'shiftY'} });
   }
   const wk=keep.reduce((best,k,i)=>Math.abs(k-g.worst.k)<Math.abs(keep[best]-g.worst.k)?i:best,0);
@@ -6890,15 +6920,17 @@ function renderLiveGrowthChart(chartId, g, items, amt){
     // labels are 10px mono, ~6.2px a character) so "HDFC Gold ETF" isn't
     // clipped; on a phone the value drops to its own line, so only the name
     // has to fit.
-    grid:[{left:8,right:labelRoom,top:12,height:'58%',containLabel:true},{left:8,right:labelRoom,top:'74%',bottom:24,containLabel:true}],
+    grid:[{left:8,right:labelRoom,top:14,height:'66%',containLabel:true},{left:8,right:labelRoom,top:'80%',bottom:24,containLabel:true}],
     legend:{show:false},
     xAxis:[{type:'category', data:x, gridIndex:0, boundaryGap:false, axisLabel:{show:false}, axisTick:{show:false}},
            {type:'category', data:x, gridIndex:1, boundaryGap:false, axisLabel:{formatter:v=>v.slice(0,4), interval:Math.max(0,Math.floor(x.length/(narrow?3:6))-1), hideOverlap:true, color:CHART_TEXT.muted}, axisTick:{show:false}}],
-    yAxis:[{type:'value', gridIndex:0, scale:true, axisLabel:{formatter:v=>c.compact(v), color:CHART_TEXT.muted}},
+    // Lines all start at the same amount, so the axis starts a little below the lowest point rather than at zero.
+    // The floor is not a round number, so its own label is hidden.
+    yAxis:[{type:'value', gridIndex:0, scale:true, min:v=>Math.max(0, v.min*0.9), axisLabel:{formatter:v=>c.compact(v), color:CHART_TEXT.muted, fontSize:11, showMinLabel:false}},
            {type:'value', gridIndex:1, max:0, axisLabel:{formatter:v=>v+'%', color:CHART_TEXT.muted}, splitNumber:2}],
     axisPointer:{link:[{xAxisIndex:'all'}]},
     // On a phone the readout above the chart replaces the floating box.
-    tooltip:{trigger:'axis', confine:true, showContent:!narrow, formatter:ps=>{ const arr=Array.isArray(ps)?ps:[ps]; return (arr[0]?arr[0].axisValue:'')+'<br/>'+arr.map(p=>p.marker+p.seriesName+': '+(p.seriesName==='Below previous peak'?(+p.value).toFixed(1)+'%':c.compact(p.value))).join('<br/>'); }},
+    tooltip:{trigger:'axis', confine:true, showContent:!narrow, formatter:ps=>{ const arr=Array.isArray(ps)?ps:[ps]; return (arr[0]?arr[0].axisValue:'')+'<br/>'+arr.filter(p=>p.seriesName.indexOf('__')!==0).map(p=>p.marker+p.seriesName+': '+(p.seriesName==='Below previous peak'?(+p.value).toFixed(1)+'%':c.compact(p.value))).join('<br/>'); }},
     series,
   });
   wireLabScrub(inst, chartId, keep.length, i=>{
@@ -6906,6 +6938,7 @@ function renderLiveGrowthChart(chartId, g, items, amt){
     return [['On', new Date(g.dates[k]).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})], ['Your mix', c.compact(amt*g.mix[k])]]
       .concat(items.map((it,j)=>[liveShortName(it), c.compact(amt*g.idx[j][k])]))
       .concat(g.bench && !benchInMix ? [[benchSpec.short, c.compact(amt*g.bench[k])]] : [])
+      .concat(g.bench ? [['Mix vs index', c.compact(amt*Math.abs(g.mix[k]-g.bench[k]))+(g.mix[k]>=g.bench[k]?' ahead':' behind')]] : [])
       .concat([['Below its high', (g.dd[k]*100).toFixed(1)+'%']]);
   });
 }

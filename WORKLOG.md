@@ -4617,3 +4617,12 @@ standing over the founder's shoulder.
 - Test Real Investments: make the "What Rs 1 L would have become" chart larger and readable.
 - Group 9e: statement (CAS) import in My holdings, Indian MF and demat first; "You vs the
   index" (XIRR against the same cash flows in an index fund, cost, risk).
+
+## 2026-10-28 - Claude Code - Test Real Investments: growth chart made readable
+- "What Rs 1 L would have become": a sentence above the chart says in money what the plain
+  Nifty 50 index fund gave instead ("finished Rs X ahead" / "missed out on Rs X"). Chart
+  500px tall (was 380); mix and index are the two heavy lines with amounts; instruments are
+  thin, faded, name only; the gap between mix and index is a light-blue band; the readout
+  adds "Mix vs index" at every week; the y-axis starts just below the lowest point; on a
+  phone the index label is "Index". smoke-24 added (13 checks).
+- Checked at 1600px, docked advisor (442px chart) and 375px; no console errors.
