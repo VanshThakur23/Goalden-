@@ -1176,6 +1176,214 @@ function reviewHoldings(o) {
   return { total, rows, mixTotal, mix, outside: { gold, other }, unset, overlap, cost, rebalance, target: tgt };
 }
 
+/* ---------------------------------------------------------------------
+   The yearly plan review (B5): one fixed checklist across the Lab's tools,
+   turned into a dated to-do list. Pure: the page works out each area's
+   numbers with the same functions its tabs draw from and passes them in;
+   this decides what needs doing, by when and in what order. The advisor can
+   start the review and read it back, but it cannot skip a check or add an
+   action of its own.
+   Rules, so a reviewer can check them:
+   - Only numbers the person gave are reviewed. The page decides that field by
+     field and passes { missing: 'what is still needed' } for an area it cannot
+     review, or leaves a part out (and says so) when only that part is missing.
+     Nothing is ever reviewed on the app's starting values, which describe an
+     example person.
+   - When: the emergency fund, costly debt, cover gaps and a monthly shortfall
+     are this month. Anything that spends this financial year's tax room
+     (80C/NPS, the tax-free equity gains, a sale to rebalance, a Regular-to-
+     Direct move) is before 31 March. The regime choice is made in the return,
+     due 31 July for most salaried people. Tidying up waits for the next
+     review, a year on. The list runs in date order.
+   - Within one date, the usual Indian planning order: emergency fund, costly
+     debt, term cover, health cover, then the savings gap and the mix.
+   - A mix within 5 percentage points of the profile on every part is left
+     alone (a common rebalancing band). Regimes under Rs 1,000 apart are a tie.
+   o = { today:'YYYY-MM-DD', country, fmt, areas:{ id: object | null }, skipped:[ids] }
+   --------------------------------------------------------------------- */
+const REVIEW_AREAS = [
+  { id: 'health', label: 'Savings against your goals, and the emergency fund' },
+  { id: 'debt', label: 'Costly debt', india: true },
+  { id: 'cover', label: 'Term and health cover', india: true },
+  { id: 'tax', label: 'Old or new tax regime', india: true },
+  { id: 'holdings', label: 'What you own against your profile', india: true },
+  { id: 'harvest', label: 'Tax-free equity gains this year', india: true },
+  { id: 'retirement', label: 'Retirement through a crash' },
+  { id: 'income', label: 'Drawing a retirement income', india: true },
+];
+const REVIEW_DRIFT_BAND = 0.05, REVIEW_TAX_TIE = 1000;
+const REVIEW_WHEN = ['month', 'fyEnd', 'filing', 'next'];
+
+// today -> the due dates. India's financial year ends 31 March. A return is due 31 July for most salaried people, and
+// the next one due is this year's from April to July (the year just ended), next year's from August on.
+function reviewDates(today) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(today || ''));
+  if (!m) return null;
+  const y = +m[1], mo = +m[2], d = +m[3];
+  const days = (Y, M) => new Date(Date.UTC(Y, M, 0)).getUTCDate();
+  if (mo < 1 || mo > 12 || d < 1 || d > days(y, mo)) return null;
+  const iso = (Y, M, D) => Y + '-' + String(M).padStart(2, '0') + '-' + String(D).padStart(2, '0');
+  const fy = mo >= 4 ? y + 1 : y;   // the year the current financial year ends in
+  return { today: iso(y, mo, d), month: iso(y, mo, days(y, mo)), fyEnd: iso(fy, 3, 31), filing: iso(mo <= 7 ? y : y + 1, 7, 31),
+    next: iso(y + 1, mo, Math.min(d, days(y + 1, mo))) };
+}
+// The four "when"s in the order their dates fall.
+function reviewWhenOrder(dates) { return REVIEW_WHEN.slice().sort((a, b) => (dates[a] < dates[b] ? -1 : dates[a] > dates[b] ? 1 : 0)); }
+
+function yearlyReview(o) {
+  o = o || {};
+  const dates = reviewDates(o.today);
+  if (!dates) return { ok: false, error: 'today must be a real date, YYYY-MM-DD' };
+  const order = reviewWhenOrder(dates);
+  const fmt = typeof o.fmt === 'function' ? o.fmt : (v => String(Math.round(v)));
+  const us = o.country === 'US';
+  const A = o.areas && typeof o.areas === 'object' ? o.areas : {};
+  const skipped = Array.isArray(o.skipped) ? o.skipped : [];
+  const n = v => { v = Number(v); return isFinite(v) ? v : 0; };
+  const pct = v => Math.round(n(v) * 100) + '%';
+  const arr = v => Array.isArray(v) ? v.filter(x => x && typeof x === 'object') : [];
+  const str = v => typeof v === 'string' ? v : '';
+  const checks = [], actions = [];
+  REVIEW_AREAS.forEach((a, ai) => {
+    const row = { area: a.id, label: a.label, status: 'ok', finding: '' };
+    checks.push(row);
+    if (a.india && us) { row.status = 'na'; row.finding = 'Uses Indian rules, so it is not part of a US review.'; return; }
+    if (skipped.indexOf(a.id) !== -1) { row.status = 'skipped'; row.finding = 'Left out of this review.'; return; }
+    const d = A[a.id];
+    if (!d || typeof d !== 'object' || d.missing) { row.status = 'missing'; row.finding = d && typeof d === 'object' ? str(d.missing) : ''; return; }
+    const notes = [], start = actions.length;
+    let partial = false;
+    const act = (when, rank, text, amount) => actions.push({ area: a.id, when, due: dates[when], rank, order: ai,
+      text: text.trim(), amount: amount == null ? null : Math.round(n(amount)) });
+    const gap = text => { partial = true; notes.push(text); };
+    switch (a.id) {
+      case 'health': {
+        // The two parts are separate answers: one given does not make the other the person's own.
+        const cap = n(d.capacity), need = n(d.totalSIP);
+        if (d.emergency === 'no') act('month', 1, 'Build an emergency fund before adding to investments: a few months of spending, somewhere you can reach within a day.');
+        else if (d.emergency === 'partial') act('month', 1, 'Finish the emergency fund before raising investments.');
+        else if (d.emergency === 'full') notes.push('The emergency fund is in place.');
+        else gap(str(d.emergencyNeed) || 'Emergency fund not checked.');
+        if (d.capacity == null || d.totalSIP == null) gap(str(d.savingsNeed) || 'Savings against goals not checked.');
+        else if (need > cap) act('month', 5, 'Your goals need ' + fmt(need) + ' a month and you can save ' + fmt(cap) + ', so ' + fmt(need - cap) + ' is missing each month. Move a goal later, make one smaller or save more; the Full Plan shows which goal makes the gap.', need - cap);
+        else notes.push('You can save ' + fmt(cap) + ' a month and your goals need ' + fmt(need) + (cap > need ? ', leaving ' + fmt(cap - need) + ' spare.' : '.'));
+        break;
+      }
+      case 'debt': {
+        const debts = arr(d.debts).filter(x => n(x.balance) > 0).sort((p, q) => n(q.rate) - n(p.rate));
+        const total = debts.reduce((s, x) => s + n(x.balance), 0);
+        (Array.isArray(d.notEntered) ? d.notEntered : []).forEach(x => gap('No ' + String(x).toLowerCase() + ' balance entered, so it is left out.'));
+        if (total <= 0) { notes.push('No costly debt in what was entered.'); break; }
+        const list = debts.map(x => String(x.name || 'debt').toLowerCase() + ' at ' + Math.round(n(x.rate) * 1000) / 10 + '%' + (x.rateGiven === false ? ' (a typical rate)' : ''));
+        // How long it takes depends on the payments, so it is only said when every payment was given.
+        const when = d.months == null ? (d.neverClears ? 'At the payments entered it never clears, so the payments have to go up.' : 'Enter what you pay each month in Loans to see how long it takes.')
+          : d.neverClears ? 'At the payments entered it never clears, so the payments have to go up.' : 'At the payments entered it is gone in ' + Math.round(n(d.months)) + ' months.';
+        act('month', 2, 'Clear ' + fmt(total) + ' of costly debt before investing more, highest rate first (' + list.join(', then ') + '). ' + when, total);
+        break;
+      }
+      case 'cover': {
+        const t = d.term && typeof d.term === 'object' ? d.term : null, h = d.health && typeof d.health === 'object' ? d.health : null;
+        if (!t) gap(str(d.termNeed) || 'Term cover not checked.');
+        else if (n(t.gap) > 0) act('month', 3, 'Raise term life cover by ' + fmt(n(t.gap)) + ': your family would need ' + fmt(n(t.need)) + ', and savings of ' + fmt(n(t.savings)) + ' plus cover of ' + fmt(n(t.existing)) + ' leave that much uncovered.', n(t.gap));
+        else notes.push('Term cover of ' + fmt(n(t.existing)) + ' plus savings of ' + fmt(n(t.savings)) + ' meets the ' + fmt(n(t.need)) + ' your family would need.');
+        const tgt = (h && h.targetGiven === false) ? ' (the starting target for your city size; set your own in Cover)' : '';
+        if (!h) gap(str(d.healthNeed) || 'Health cover not checked.');
+        else if (n(h.short) > 0) act('month', 4, 'Add ' + fmt(n(h.short)) + ' of health cover to reach ' + fmt(n(h.target)) + tgt + '. The Cover tab splits it into a family floater and a super top-up.', n(h.short));
+        else if (n(h.shortOwn) > 0) notes.push('Health cover reaches ' + fmt(n(h.target)) + tgt + ' only with your employer\'s policy, which ends with the job; on your own policy you would be ' + fmt(n(h.shortOwn)) + ' short.');
+        else notes.push('Health cover reaches ' + fmt(n(h.target)) + tgt + ' on your own policy.');
+        break;
+      }
+      case 'tax': {
+        const nw = n(d.newTax), od = n(d.oldTax), best = Math.min(nw, od), saving = Math.abs(nw - od);
+        const room = n(d.room), filled = n(d.filledTax);
+        // Filling the old regime's room can turn it from the dearer option into the cheaper one. Then the two lines
+        // must agree: the investment comes first, and the filing line says which regime follows from it.
+        const fill = room > 0 && d.filledTax != null && filled < best - REVIEW_TAX_TIE;
+        const keepOld = 'File by the due date to keep it: a late return is taxed under the new regime.';
+        if (fill) act('fyEnd', 2, 'Putting ' + fmt(room) + ' more into 80C and NPS (80CCD(1B)) before 31 March would bring the old-regime tax to ' + fmt(filled) + ', ' + fmt(best - filled) + ' below the cheaper option today. Only worth it with money you would invest anyway.', best - filled);
+        if (fill && nw <= od) act('filing', 1, 'On these numbers the new regime costs ' + fmt(od - nw) + ' less (' + fmt(nw) + ' new, ' + fmt(od) + ' old). If you make the 80C and NPS investments above, the old regime comes out ' + fmt(nw - filled) + ' cheaper instead; choose the one that matches what you did when you file. ' + keepOld);
+        else if (saving < REVIEW_TAX_TIE) notes.push('The two regimes cost about the same on these numbers: ' + fmt(nw) + ' new, ' + fmt(od) + ' old.');
+        else act('filing', 1, 'The ' + (nw < od ? 'new' : 'old') + ' regime costs ' + fmt(saving) + ' less on these numbers (' + fmt(nw) + ' new, ' + fmt(od) + ' old). Choose it when you file your return, and tell your employer at the start of each financial year so the tax held back from your pay matches.' + (nw < od ? '' : ' ' + keepOld), saving);
+        if (d.assumedNone) notes.push('Counted as none: ' + String(d.assumedNone) + '.');
+        if (d.aboveSurcharge) notes.push('Income is above the surcharge line, which is not counted, so both figures are too low.');
+        break;
+      }
+      case 'holdings': {
+        const mix = arr(d.mix);
+        if (d.profileGiven === false || !mix.length) {
+          gap(d.profileGiven === false ? 'Mix not checked: pick your risk profile in My holdings, or open it from your Full Plan.' : 'Mix not checked: nothing listed has a category in the mix (equity, debt or hybrid) yet.');
+        } else {
+          const prof = String(d.profile || 'your'), months = Math.round(n(d.months));
+          const desc = mix.map(m => String(m.cls) + ' ' + pct(m.share) + ' (profile ' + pct(m.target) + ')').join(', ');
+          if (!mix.some(m => Math.abs(n(m.drift)) > REVIEW_DRIFT_BAND + 1e-9)) notes.push('Every part is within 5 points of the ' + prof + ' profile: ' + desc + '. No change.');
+          else if (d.sipGiven === false) act('month', 6, 'Your mix is off the ' + prof + ' profile: ' + desc + '. Enter how much you add each month in My holdings to see how new money closes the gap before selling anything.');
+          else {
+            const toNew = arr(d.split).filter(s => n(s.amount) >= 1), sells = arr(d.sells).filter(s => n(s.amount) >= 1);
+            const sell = n(d.overAfter) >= 1 && sells.length;
+            if (toNew.length) act('month', 6, 'Your mix is off the ' + prof + ' profile: ' + desc + '. Put new money into ' + toNew.map(s => String(s.cls) + ' (' + fmt(n(s.amount)) + ')').join(' and ') + ' over the next ' + months + ' month' + (months === 1 ? '' : 's') + ' before selling anything.', toNew.reduce((s, x) => s + n(x.amount), 0));
+            if (sell) act('fyEnd', 3, (toNew.length ? 'New money alone does not close the gap: ' : 'Your mix is off the ' + prof + ' profile (' + desc + ') and there is no new money to add: ') +
+              'selling ' + sells.map(s => fmt(n(s.amount)) + ' of ' + String(s.cls)).join(' and ') + ' does. Time an equity sale with this year\'s tax-free room.', sells.reduce((s, x) => s + n(x.amount), 0));
+            if (!toNew.length && !sell) notes.push('Your mix is off the ' + prof + ' profile (' + desc + '), but My holdings found nothing to move.');
+          }
+        }
+        arr(d.sameJob).forEach(j => act('next', 1, Math.round(n(j.count)) + ' of your funds do the same job (' + String(j.label || '') + '). Fewer funds would be easier to follow; nothing here says which one to keep.'));
+        if (n(d.regularPerYear) >= 1) act('fyEnd', 4, 'Regular plans cost about ' + fmt(n(d.regularPerYear)) + ' a year more than Direct ones (an estimate). Moving is a sale, so time it with this year\'s tax-free room.', n(d.regularPerYear));
+        break;
+      }
+      case 'harvest': {
+        const room = n(d.room), lt = n(d.ltValue), g = d.gainRatio == null ? null : n(d.gainRatio);
+        if (!(n(d.equity) > 0)) {
+          if (n(d.uncategorised) > 0) { row.status = 'missing'; notes.push('Give your holdings a category in My holdings to see which are equity.'); }
+          else notes.push('No equity listed, so there are no gains to book.');
+          break;
+        }
+        if (room <= 0) { notes.push('This year\'s ' + fmt(TAX_IN.equityLtcgExemption) + ' of tax-free long-term equity gains is already used.'); break; }
+        if (g === null || lt <= 0) {
+          if (n(d.unknownCost) > 0) { row.status = 'missing'; notes.push('Add what you paid for your long-term equity holdings in My holdings to work out how much to book.'); }
+          else notes.push('None of your equity has been held for more than a year yet, so there is nothing to book.');
+          break;
+        }
+        if (g <= 0) { notes.push('Your long-term equity shows no gain to book.'); break; }
+        const sell = Math.min(lt, room / g), gain = sell * g;
+        // Stated, not hidden: the holdings list says "held over a year" unless a row is marked otherwise, and the gain
+        // is the average across those funds.
+        act('fyEnd', 1, 'Before 31 March, book up to ' + fmt(gain) + ' of long-term equity gains tax-free: at the average gain across your funds that is selling and buying back about ' + fmt(sell) +
+          ', but a fund with a bigger gain books more per rupee sold, so add up each fund\'s gain in My holdings. That lowers the tax on a later sale by up to ' + fmt(gain * TAX_IN.equityLtcg * (1 + TAX_IN.cess)) +
+          '; the bought-back units start a new one-year clock. This counts only units held more than a year' + (d.exemptGiven === false ? ', and assumes none of this year\'s ' + fmt(TAX_IN.equityLtcgExemption) + ' is used yet (set it in My holdings).' : '.'), gain);
+        if (n(d.unknownCost) > 0) gap(fmt(n(d.unknownCost)) + ' of long-term equity has no purchase cost entered, so it is left out.');
+        break;
+      }
+      case 'retirement': {
+        const ep = String(d.episode || 'a historical crash');
+        if (d.survives) notes.push('The plan lasts even if ' + ep + ' hits in your first year of retirement (pot ' + Math.round(n(d.equity)) + '% in equities).');
+        else act(n(d.yearsToRetire) <= 5 ? 'month' : 'next', 7, 'If ' + ep + ' hit in your first year of retirement, the pot would run out in year ' + Math.round(n(d.ranOutYear)) + ' of ' + Math.round(n(d.drawYears)) + '. The Retirement Lab shows what a smaller equity share near retirement, or a larger pot, does.');
+        if (d.savingsGiven === false) notes.push('Existing savings were not entered, so they count as none.');
+        break;
+      }
+      case 'income': {
+        const sp = fmt(n(d.spend)), yrs = Math.round(n(d.years)), how = String(d.how || '');
+        if (n(d.ranOutYear) > 0) act('month', 8, 'Drawing ' + sp + ' a month after tax ' + how + ' runs the pot out in year ' + Math.round(n(d.ranOutYear)) + ' of ' + yrs + '. Spend less or plan a larger pot; Retirement Income shows both.');
+        else notes.push('Drawing ' + sp + ' a month after tax ' + how + ' lasts all ' + yrs + ' years.');
+        break;
+      }
+    }
+    row.finding = notes.join(' ');
+    if (row.status !== 'missing') row.status = actions.length > start ? 'act' : partial ? 'partial' : 'ok';
+  });
+  actions.sort((p, q) => order.indexOf(p.when) - order.indexOf(q.when) || p.rank - q.rank || p.order - q.order);
+  // The year's tax-free room is one amount. A sale to rebalance or to move to Direct plans books gains too, so when
+  // either is on the list the harvest says so, rather than three items each spending the same room.
+  const hv = actions.find(x => x.area === 'harvest');
+  if (hv && actions.some(x => x.area === 'holdings' && x.when === 'fyEnd'))
+    hv.text += ' The sales on this list to rebalance or move to Direct plans use this same room, so book the gains through them first.';
+  // Every amount on the list, keyed by area and position, so a report can be re-checked against a fresh run.
+  const figures = {}, per = {};
+  actions.forEach(x => { if (x.amount == null) return; per[x.area] = (per[x.area] || 0) + 1; figures[x.area + per[x.area]] = x.amount; });
+  const counts = { act: 0, ok: 0, partial: 0, missing: 0, skipped: 0, na: 0 };
+  checks.forEach(c => { counts[c.status]++; });
+  return { ok: true, dates, order, checks, actions, counts, figures };
+}
+
 /* =====================================================================
    REAL HISTORICAL MARKET DATA
    Sensex: fiscal-year (April-to-April) annual returns, FY1979-80 through
@@ -2050,6 +2258,7 @@ var TOOL_ALWAYS_KEEP = [
   'navigate', 'set_value', 'get_state', 'get_results', 'build_goal_plan',
   'add_goal', 'update_goal', 'remove_goal', 'run_full_analysis',
   'compose_briefing', 'propose_plan', 'execute_plan', 'open_door',
+  'start_yearly_review', 'review_check',
 ];
 function filterToolsByQuery(tools, query, alreadyCalled, opts){
   const k = (opts && opts.k) || 8;
@@ -2083,6 +2292,7 @@ if (typeof module !== 'undefined' && module.exports) {
     TAX_REGIME_IN, slabTax, slabRate, regimeTax, hraExemption, epfEmployeeYearly, compareRegimes,
     loanSchedule, loanPrepay, homeLoanCompare, debtAvalanche, termCoverNeed, healthCoverPlan,
     RISK_PROFILES_IN, HOLDING_CATS_IN, holdingCategoryFromName, fundPlanFromName, REGULAR_EXTRA, regularExtra, reviewHoldings,
+    REVIEW_AREAS, REVIEW_DRIFT_BAND, REVIEW_TAX_TIE, REVIEW_WHEN, reviewDates, reviewWhenOrder, yearlyReview,
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow, rollingReturns, annualisedVol, returnReality, stepUpAnnualPlan,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,

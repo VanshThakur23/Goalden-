@@ -4581,3 +4581,39 @@ standing over the founder's shoulder.
 - B5 yearly plan review by the advisor: a fixed checklist across the tools (Plan Health,
   cover, tax regime, holdings, retirement income) and a dated action list through the
   existing plan-and-approve flow. B7 rent-vs-buy only if time is left.
+
+## 2026-10-28 - Claude Code - Group 9d: yearly plan review (B5)
+- **Built.** New Lab tab "Yearly review": one pass over Plan Health, Loans, Cover, Tax regime,
+  My holdings (mix and tax-gain harvesting), Retirement Lab and Retirement Income, in a fixed
+  order, ending in a to-do list grouped by date (this month, before 31 March, at ITR filing by
+  31 July, next review). Engine: `yearlyReview`, `reviewDates`, `reviewWhenOrder`,
+  `REVIEW_AREAS` in goalden-engine.js (pure, tested). The advisor gets `start_yearly_review`
+  (proposes the fixed checklist through plan-and-approve; unticked checks show "Skipped") and
+  `review_check`; the last step writes a briefing whose amounts are audited by get_results.
+  Worker and local_server nudge "review my plan" / "annual check-up" to the tool (narrow
+  regex: "annual bonus ... check my tax" does not match). Full Plan has a "Do a yearly review
+  of this plan in the Lab" button.
+- **Only the person's own numbers.** `L.given` records each field the person set (slider,
+  toggle, advisor set_value, typed/picked holdings, Quick/Full Plan hand-offs). An area needs
+  every field it rests on; otherwise it is "Not checked" and names what is still missing.
+  Example values (the 18 L salary, the example credit card, "Load an example" holdings) are
+  never reviewed. This was the Opus reviewer's main NO-GO; also fixed from that review:
+  Run plan could run twice on a double-click (advisor.js guard), a finished run could clear a
+  newer pending plan, the Full Plan sent zero-filled cover when the protection check was
+  empty, skipped checks leaked into later manual views, regime text when old wins after
+  filling 80C/NPS.
+- **Checked in a real browser:** one slider moved leaves the area Not checked with the
+  missing fields named; a Full Plan hand-off reviews savings (Rs 7,000 a month short) and
+  names what Cover still needs; Run plan clicked three times runs each check once; the report
+  shows "Every figure recomputed".
+- **Tests:** 300/300 engine; smokes 02-23 pass (14/15/16 need `python3` on PATH, unchanged).
+  smoke-23 runs the page's own markGiven/reviewAreasData/advisorStartYearlyReview in a vm,
+  including the leak cases. smoke-21/22 updated for the new hand-off and markGiven.
+- **Not done.** Plan Health has a ~36px horizontal overflow in the narrow docked layout
+  (pre-existing). Values entered through buttons that are not wired into markGiven count as
+  given only when they differ from the starting value.
+
+### Next
+- Test Real Investments: make the "What Rs 1 L would have become" chart larger and readable.
+- Group 9e: statement (CAS) import in My holdings, Indian MF and demat first; "You vs the
+  index" (XIRR against the same cash flows in an index fund, cost, risk).

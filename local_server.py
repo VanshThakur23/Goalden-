@@ -1093,6 +1093,7 @@ _TOOL_ALWAYS_KEEP = (
     'navigate', 'set_value', 'get_state', 'get_results', 'build_goal_plan',
     'add_goal', 'update_goal', 'remove_goal', 'run_full_analysis',
     'compose_briefing', 'propose_plan', 'execute_plan', 'open_door',
+    'start_yearly_review', 'review_check',
 )
 
 
@@ -1168,6 +1169,10 @@ _WALK_RE = re.compile(r'walk (?:me )?through|step[- ]by[- ]step|guide me|one (?:
 _REVIEW_RE = re.compile(
     r'show (?:it to )?me (?:it )?first|see (?:it|the plan) first|review (?:it|the plan|first)|'
     r'before (?:you|anything)', re.I)
+# "Review my plan" / "yearly review" means the Lab's fixed checklist. Mirrors YEARLY_RE in src/worker.js.
+_YEARLY_RE = re.compile(
+    r'\b(?:yearly|annual|year[- ]end)\s+(?:(?:plan|financial|money|portfolio)\s+)?(?:review|check[- ]?up)\b|\breview (?:of )?my (?:whole |financial |money )?plan\b'
+    r'|\bplan (?:review|check[- ]?up)\b|\bfinancial check[- ]?up\b', re.I)
 _FIRST_PERSON_RE = re.compile(
     r"\b(?:i|i'm|im|i've|my|me|we|we're|our|us|mera|meri|mere|mujhe|hum|hamara|hamari)\b", re.I)
 
@@ -1192,7 +1197,25 @@ def _situation_nudges(messages, tools=None):
         review = any(_REVIEW_RE.search(str(msgs[i]['content'])) for i in users)
         numbers = len(re.findall(r'\d+(?:[.,]\d+)*', text))
         described = not acted_since and not walk and numbers >= 2 and _FIRST_PERSON_RE.search(text)
-        if described and review:
+        yearly = bool(_YEARLY_RE.search(text))
+        review_called = any(
+            m.get('role') == 'assistant'
+            and any((tc.get('function') or {}).get('name') == 'start_yearly_review' for tc in (m.get('tool_calls') or []))
+            for m in msgs[last + 1:])
+        if yearly and 'start_yearly_review' in page_tools:
+            if not review_called:
+                notes.append('The user asked for the yearly plan review. Call '
+                             'start_yearly_review now: it lays out the fixed '
+                             'checklist for their approval. Do not write the '
+                             'checklist yourself with propose_plan, and do not '
+                             'offer the A/B choice.')
+        elif yearly:
+            notes.append('The yearly plan review runs in the Lab (Level 3), in '
+                         'its Yearly review tab. You cannot run it from this '
+                         'page: tell the user how to get there (the Full Plan '
+                         'has a "Do a yearly review of this plan in the Lab" '
+                         'button) and answer what you can here.')
+        elif described and review:
             notes.append('The user asked to see the plan before anything '
                          'changes. Put every step in propose_plan now, using '
                          'the numbers they gave, and wait for their approval. '

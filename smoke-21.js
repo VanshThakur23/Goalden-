@@ -161,7 +161,7 @@ check(/function coverGoalNeed\(g\)\{ return g\.gapCorpus!==undefined \? g\.gapCo
 check(/Leave out money you have already set aside for the goals above/.test(g2) && /Leave out money already set aside for goals brought in from the Full Plan/.test(gl), '9b both pages tell people not to count goal money again under savings');
 check(/const COVER_DEFAULT=/.test(g2) && /termCoverNeed\(\{annualExpense:exp\*12/.test(g2) && /if\(c\.code!=='IN'\) return '';/.test(fnBody(g2, 'coverCardHtml')), '9b the Protection check uses the shared termCoverNeed and is India only');
 check(/No premium|nothing on this page quotes a price/.test(g2) || /nothing on this page quotes a price/.test(fnBody(g2, 'coverCardHtml')), '9b the Protection check shows no premium');
-check(/tab:tab, cover:G\.country==='IN'\?coverState\(\):null/.test(g2) && /openPlanInLab\('cover'\)/.test(g2), '9b "Size health cover too, in the Lab" hands the four answers and the monthly spend to the Lab');
+check(/tab:tab, cover:G\.country==='IN'&&G\.cover\?coverState\(\):null/.test(g2) && /openPlanInLab\('cover'\)/.test(g2), '9b "Size health cover too, in the Lab" hands the four answers and the monthly spend to the Lab');
 {
   const hand = gl.slice(gl.indexOf('function consumeDoor2Handoff'));
   check(/cleanCoverGoals\(/.test(hand.slice(0, 6000)) && /g\.type!=='retirement'|type!=='retirement'/.test(hand.slice(0, 6000)) && /data\.tab==='cover' && L\.country==='IN'/.test(hand.slice(0, 6000)), '9b the Lab takes the hand-off: goal pots cleaned, retirement left out, the Cover tab opened only for India');

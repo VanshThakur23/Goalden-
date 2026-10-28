@@ -2032,6 +2032,7 @@ function renderPlan(){
     <div class="gr-note" style="margin-top:0;margin-bottom:12px">Opens the Lab with this plan's total SIP, savings capacity, and country already filled in, so the Plan Health tab does not make you retype what you just built here.</div>
     <button id="openLabBtn" style="width:100%;background:rgba(37,87,199,.14);border:1px solid rgba(37,87,199,.5);color:var(--gold);border-radius:9px;padding:13px;font-family:'Figtree',sans-serif;font-weight:600;font-size:14px;cursor:pointer">Open this plan in the Lab →</button>
     ${cfg().code==='IN'?`<button type="button" id="openHoldingsBtn" class="pc-lab" style="margin-top:10px">Check what you already own against this plan →</button>`:''}
+    <button type="button" id="openReviewBtn" class="pc-lab" style="margin-top:10px">Do a yearly review of this plan in the Lab →</button>
   </div>
 
   <div class="assump-toggle" id="at">Assumptions used in this plan</div>
@@ -2766,7 +2767,9 @@ function attach(screen){
         country:G.country, totalSIP:p.totalSIP, capacity:p.cap,
         emergencyStatus:G.emergencyStatus, bucket:G.bucket, monthlyExpense:G.monthlyExpense,
         goals:p.goals.map(g=>({type:g.type,label:g.label,sip:g.sip,corpus:g.corpus,need:coverGoalNeed(g),years:g.years})),
-        tab:tab, cover:G.country==='IN'?coverState():null,
+        // Cover goes only if the person filled the protection check: coverState() pads an empty one with zeros, which the
+        // Lab would otherwise take as their savings and existing cover.
+        tab:tab, cover:G.country==='IN'&&G.cover?coverState():null,
       };
       try{ localStorage.setItem('goaldenLabHandoff', JSON.stringify(handoff)); }catch(e){}
       window.location.href='goalden-lab.html';
@@ -2774,6 +2777,7 @@ function attach(screen){
     document.getElementById('openLabBtn')&&document.getElementById('openLabBtn').addEventListener('click',()=>openPlanInLab('health'));
     document.getElementById('openCoverBtn')&&document.getElementById('openCoverBtn').addEventListener('click',()=>openPlanInLab('cover'));
     document.getElementById('openHoldingsBtn')&&document.getElementById('openHoldingsBtn').addEventListener('click',()=>openPlanInLab('holdings'));
+    document.getElementById('openReviewBtn')&&document.getElementById('openReviewBtn').addEventListener('click',()=>openPlanInLab('review'));
   }
   if(screen==='case'){ attachCaseHandlers(); }
 }

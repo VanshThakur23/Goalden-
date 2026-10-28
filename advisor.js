@@ -840,7 +840,8 @@ function executePlan(planId) {
     return p;
   })();
   return chain.then(function () {
-    advisor.pendingPlan = null;
+    // Only this plan is cleared: a new one proposed while this ran (a message sent mid-run) stays pending.
+    if (advisor.pendingPlan === plan) advisor.pendingPlan = null;
     // ok reflects the steps' own results — a plan whose step failed must
     // not report success to the model.
     return { ok: failedSteps.length === 0, ranSteps: ranSteps, skippedSteps: skippedSteps, failedSteps: failedSteps, results: results };
@@ -883,11 +884,16 @@ function advisorRenderPlan(plan) {
 // "Run plan" click: execute the checked steps, feed the result back into the
 // conversation as a synthetic tool round-trip, then continue the loop so the
 // model can close out (e.g. compose the briefing).
-async function advisorRunPlanClick() {
+async function advisorRunPlanClick(e) {
   const plan = advisor.pendingPlan;
-  if (!plan || advisor.busy) return;
+  // advisor.busy is false while the steps themselves run (some pause between repaints), so a second click needs its own
+  // guard, or the plan runs twice and its tool-call id lands in the history twice.
+  if (!plan || advisor.busy || advisor.planRunning) return;
+  advisor.planRunning = true;
+  if (e && e.currentTarget) e.currentTarget.disabled = true;
   const planId = plan.id;
-  const result = await executePlan(planId);
+  let result;
+  try { result = await executePlan(planId); } finally { advisor.planRunning = false; }
   advisor.messages.push({ role:'assistant', content:null, tool_calls:[{ id:'call_plan_run', type:'function', function:{ name:'execute_plan', arguments: JSON.stringify({ planId: planId }) } }] });
   advisor.messages.push({ role:'tool', tool_call_id:'call_plan_run', name:'execute_plan', content: JSON.stringify(result) });
   advisorEnterDock();

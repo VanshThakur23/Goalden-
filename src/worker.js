@@ -908,6 +908,7 @@ const TOOL_ALWAYS_KEEP = [
   'navigate', 'set_value', 'get_state', 'get_results', 'build_goal_plan',
   'add_goal', 'update_goal', 'remove_goal', 'run_full_analysis',
   'compose_briefing', 'propose_plan', 'execute_plan', 'open_door',
+  'start_yearly_review', 'review_check',
 ];
 // Returns the filtered tool array: every CORE_TOOLS member the page offers,
 // PLUS the top-K of the remaining tools by BM25 relevance to the latest user
@@ -958,6 +959,10 @@ function filterKnowledge(body) {
 const MENU_OFFER_RE = /A\)\W*do it all/i;
 const WALK_RE = /walk (?:me )?through|step[- ]by[- ]step|guide me|one (?:screen|step) at a time/i;
 const REVIEW_RE = /show (?:it to )?me (?:it )?first|see (?:it|the plan) first|review (?:it|the plan|first)|before (?:you|anything)/i;
+// "Review my plan" / "yearly review" / "annual check-up" means the Lab's fixed checklist, not a plan the model
+// (the review or check-up has to be the thing asked for: "annual bonus ... check my tax" is not one),
+// writes itself: without this, REVIEW_RE ("review the plan") plus a few numbers pushed it to a hand-written plan.
+const YEARLY_RE = /\b(?:yearly|annual|year[- ]end)\s+(?:(?:plan|financial|money|portfolio)\s+)?(?:review|check[- ]?up)\b|\breview (?:of )?my (?:whole |financial |money )?plan\b|\bplan (?:review|check[- ]?up)\b|\bfinancial check[- ]?up\b/i;
 const FIRST_PERSON_RE = /\b(?:i|i'm|im|i've|my|me|we|we're|our|us|mera|meri|mere|mujhe|hum|hamara|hamari)\b/i;
 function situationNudges(messages, tools) {
   const msgs = (messages || []).filter((m) => m && typeof m === 'object');
@@ -977,7 +982,13 @@ function situationNudges(messages, tools) {
     const review = users.some((i) => REVIEW_RE.test(String(msgs[i].content)));
     const numbers = (text.match(/\d+(?:[.,]\d+)*/g) || []).length;
     const described = !actedSince && !walk && numbers >= 2 && FIRST_PERSON_RE.test(text);
-    if (described && review) {
+    const yearly = YEARLY_RE.test(text);
+    const reviewCalled = msgs.slice(last + 1).some((m) => m.role === 'assistant' && (m.tool_calls || []).some((tc) => (tc.function || {}).name === 'start_yearly_review'));
+    if (yearly && pageTools.has('start_yearly_review')) {
+      if (!reviewCalled) notes.push('The user asked for the yearly plan review. Call start_yearly_review now: it lays out the fixed checklist for their approval. Do not write the checklist yourself with propose_plan, and do not offer the A/B choice.');
+    } else if (yearly) {
+      notes.push('The yearly plan review runs in the Lab (Level 3), in its Yearly review tab. You cannot run it from this page: tell the user how to get there (the Full Plan has a "Do a yearly review of this plan in the Lab" button) and answer what you can here.');
+    } else if (described && review) {
       notes.push('The user asked to see the plan before anything changes. Put every step in propose_plan now, using the numbers they gave, and wait for their approval. Do not build directly and do not offer the A/B choice.');
     } else if (described) {
       notes.push('The latest user message describes their own situation with real numbers. Act on it now with the tools: map the facts, build what you can, then ask only for numbers that are still missing. Do not reply with the A/B choice or a list of questions.');

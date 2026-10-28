@@ -3997,3 +3997,187 @@ test('holdings: empty and garbled input give zeros, not NaN or a throw', () => {
   assert.strictEqual(engine.reviewHoldings({}).total, 0);
   assert.strictEqual(engine.reviewHoldings({ holdings: Array.from({ length: 200 }, () => ({ name: 'A', cat: 'largecap', value: 1 })) }).rows.length, 60);
 });
+
+// ---- B5 yearly plan review -------------------------------------------------------------------------
+test('review: due dates follow the Indian financial year', () => {
+  const oct = engine.reviewDates('2026-10-28');
+  assert.deepStrictEqual(oct, { today: '2026-10-28', month: '2026-10-31', fyEnd: '2027-03-31', filing: '2027-07-31', next: '2027-10-28' });
+  const feb = engine.reviewDates('2027-02-15');   // before April: this financial year ends next month
+  assert.strictEqual(feb.fyEnd, '2027-03-31'); assert.strictEqual(feb.filing, '2027-07-31'); assert.strictEqual(feb.month, '2027-02-28');
+  const apr = engine.reviewDates('2027-04-01');   // 1 April starts a new year; the return still due is the year just ended
+  assert.strictEqual(apr.fyEnd, '2028-03-31'); assert.strictEqual(apr.filing, '2027-07-31');
+  const may = engine.reviewDates('2027-05-15');
+  assert.strictEqual(may.filing, '2027-07-31'); assert.strictEqual(may.next, '2028-05-15');
+  assert.deepStrictEqual(engine.reviewWhenOrder(may), ['month', 'filing', 'fyEnd', 'next']);   // the list runs in date order
+  assert.strictEqual(engine.reviewDates('2027-08-01').filing, '2028-07-31');
+  assert.strictEqual(engine.reviewDates('2028-02-29').next, '2029-02-28');   // a leap day a year on
+  ['2026-13-01', '2026-02-30', '28-10-2026', '', null, 5].forEach(v => assert.strictEqual(engine.reviewDates(v), null, String(v)));
+  assert.strictEqual(engine.yearlyReview({ today: 'soon' }).ok, false);
+});
+const RV_FMT = v => 'Rs ' + Math.round(v);
+const rvFull = () => ({
+  health: { capacity: 40000, totalSIP: 52000, emergency: 'partial' },
+  debt: { debts: [{ name: 'Personal loan', balance: 400000, rate: 0.14 }, { name: 'Credit card', balance: 150000, rate: 0.36 }], months: 30, neverClears: false },
+  cover: { term: { need: 20000000, savings: 500000, existing: 5000000, gap: 14500000 }, health: { target: 2500000, short: 1000000, shortOwn: 2000000 } },
+  tax: { newTax: 150000, oldTax: 180000, room: 100000, filledTax: 140000, aboveSurcharge: false },
+  holdings: { profile: 'Moderate', months: 12, overAfter: 0,
+    mix: [{ cls: 'equity', share: 0.72, target: 0.6, drift: 0.12 }, { cls: 'debt', share: 0.2, target: 0.3, drift: -0.1 }, { cls: 'hybrid', share: 0.08, target: 0.1, drift: -0.02 }],
+    split: [{ cls: 'debt', amount: 200000 }, { cls: 'hybrid', amount: 40000 }], sells: [], sameJob: [{ label: 'large-cap', count: 3 }], regularPerYear: 7000 },
+  harvest: { equity: 1350000, ltValue: 1000000, gainRatio: 0.25, room: 125000, unknownCost: 0 },
+  retirement: { survives: false, ranOutYear: 18, drawYears: 25, yearsToRetire: 25, episode: 'the 2008 crash', equity: 40 },
+  income: { spend: 80000, years: 25, how: 'as an SWP from an equity fund', ranOutYear: 0 },
+});
+test('review: every area acts on its own numbers, in the fixed order, with dated actions', () => {
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: rvFull() });
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.checks.map(c => c.area), engine.REVIEW_AREAS.map(a => a.id));
+  assert.deepStrictEqual(r.checks.map(c => c.status), ['act', 'act', 'act', 'act', 'act', 'act', 'act', 'ok']);
+  // this month in planning order, then 31 March, then filing, then the next review
+  const order = r.actions.map(x => x.when + ':' + x.area);
+  assert.deepStrictEqual(order, ['month:health', 'month:debt', 'month:cover', 'month:cover', 'month:health', 'month:holdings',
+    'fyEnd:harvest', 'fyEnd:tax', 'fyEnd:holdings', 'filing:tax', 'next:holdings', 'next:retirement']);
+  r.actions.forEach(x => assert.strictEqual(x.due, r.dates[x.when]));
+  assert.match(r.actions[0].text, /emergency fund/);
+  assert.match(r.actions[1].text, /credit card at 36%, then personal loan at 14%/);   // highest rate first
+  assert.strictEqual(r.actions[1].amount, 550000);
+  assert.strictEqual(r.actions[2].amount, 14500000);   // term gap
+  assert.strictEqual(r.actions[3].amount, 1000000);    // health counting the employer's policy
+  assert.strictEqual(r.actions[4].amount, 12000);      // monthly shortfall
+  const harvest = r.actions.find(x => x.area === 'harvest');
+  assert.strictEqual(harvest.amount, 125000);          // 500,000 sold at a 25% gain books the full room
+  assert.match(harvest.text, /book up to Rs 125000/); assert.match(harvest.text, /buying back about Rs 500000/);
+  assert.match(harvest.text, /average gain across your funds/);   // the pooled ratio is said, not hidden
+  assert.match(harvest.text, new RegExp('up to Rs ' + Math.round(125000 * 0.125 * 1.04)));
+  // filling 80C/NPS makes the old regime cheaper, so the filing line follows from it instead of contradicting it
+  const filing = r.actions.find(x => x.when === 'filing');
+  assert.strictEqual(filing.amount, null);
+  assert.match(filing.text, /^On these numbers the new regime costs Rs 30000 less/);
+  assert.match(filing.text, /old regime comes out Rs 10000 cheaper instead/);
+  assert.match(filing.text, /late return is taxed under the new regime/);
+  assert.strictEqual(r.actions.find(x => x.area === 'tax' && x.when === 'fyEnd').amount, 10000);   // filled old regime 140k vs new 150k
+});
+test('review: nothing to do reads as ok, with the reason', () => {
+  const a = rvFull();
+  a.health = { capacity: 60000, totalSIP: 52000, emergency: 'full' };
+  a.debt = { debts: [{ name: 'Credit card', balance: 0, rate: 0.36 }] };
+  a.cover = { term: { need: 2e7, savings: 5e6, existing: 2e7, gap: 0 }, health: { target: 2.5e6, short: 0, shortOwn: 0 } };
+  a.tax = { newTax: 150000, oldTax: 150900, room: 0, filledTax: 150900 };   // Rs 900 apart: a tie
+  a.holdings = Object.assign(a.holdings, { mix: [{ cls: 'equity', share: 0.65, target: 0.6, drift: 0.05 }, { cls: 'debt', share: 0.25, target: 0.3, drift: -0.05 }, { cls: 'hybrid', share: 0.1, target: 0.1, drift: 0 }], sameJob: [], regularPerYear: 0 });
+  a.harvest = Object.assign(a.harvest, { room: 0 });
+  a.retirement = { survives: true, episode: 'the 2008 crash', equity: 40 };
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: a });
+  assert.deepStrictEqual(r.checks.map(c => c.status), ['ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok', 'ok']);
+  assert.strictEqual(r.actions.length, 0);
+  assert.match(r.checks[0].finding, /Rs 8000 spare/);
+  assert.match(r.checks[3].finding, /about the same/);
+  assert.match(r.checks[4].finding, /within 5 points/);   // exactly 5 points is inside the band
+  assert.match(r.checks[5].finding, /already used/);
+});
+test('review: no numbers, a skip and a US review are named, never filled with defaults', () => {
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: { health: { capacity: 1, totalSIP: 1, emergency: 'full' } }, skipped: ['retirement'] });
+  assert.deepStrictEqual(r.checks.map(c => c.status), ['ok', 'missing', 'missing', 'missing', 'missing', 'missing', 'skipped', 'missing']);
+  assert.deepStrictEqual(r.counts, { act: 0, ok: 1, partial: 0, missing: 6, skipped: 1, na: 0 });
+  const us = engine.yearlyReview({ today: '2026-10-28', country: 'US', fmt: RV_FMT, areas: rvFull() });
+  assert.deepStrictEqual(us.checks.map(c => c.status), ['act', 'na', 'na', 'na', 'na', 'na', 'act', 'na']);
+  assert.ok(us.actions.every(x => x.area === 'health' || x.area === 'retirement'));
+});
+test('review: part-checked areas and the cases that need more input', () => {
+  const a = rvFull();
+  a.cover.health = null;                                        // term only
+  a.cover.term.gap = 0;
+  a.harvest = { equity: 900000, ltValue: 0, gainRatio: null, room: 125000, unknownCost: 600000 };
+  a.holdings.mix = [];                                          // nothing with a category yet
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: a });
+  const st = Object.fromEntries(r.checks.map(c => [c.area, c.status]));
+  assert.strictEqual(st.cover, 'partial'); assert.match(r.checks[2].finding, /Health cover not checked/);
+  assert.strictEqual(st.harvest, 'missing'); assert.match(r.checks[5].finding, /what you paid/);
+  assert.strictEqual(st.holdings, 'act'); assert.match(r.checks[4].finding, /Mix not checked/);   // same-job and Regular cost need no category mix
+  a.harvest = { equity: 900000, ltValue: 0, gainRatio: null, room: 125000, unknownCost: 0 };   // all of it under a year old
+  assert.strictEqual(engine.yearlyReview({ today: '2026-10-28', areas: a }).checks[5].status, 'ok');
+});
+test('review: a crash close to retirement is this month; a sale is needed only when new money cannot close the gap', () => {
+  const a = rvFull();
+  a.retirement.yearsToRetire = 4;
+  a.holdings.split = []; a.holdings.overAfter = 180000; a.holdings.sells = [{ cls: 'equity', amount: 180000 }];
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: a });
+  assert.strictEqual(r.actions.find(x => x.area === 'retirement').when, 'month');
+  const hs = r.actions.filter(x => x.area === 'holdings').map(x => x.when);
+  assert.deepStrictEqual(hs, ['fyEnd', 'fyEnd', 'next']);   // the sale, the Regular-plan move, then the tidy-up
+  assert.match(r.actions.find(x => x.area === 'holdings').text, /no new money to add: selling Rs 180000 of equity does/);
+  assert.strictEqual(r.figures.holdings1, 180000);
+});
+test('review: costly debt that never clears, and an income that runs out', () => {
+  const a = rvFull();
+  a.debt.neverClears = true;
+  a.income.ranOutYear = 19;
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: a });
+  assert.match(r.actions.find(x => x.area === 'debt').text, /never clears/);
+  const inc = r.actions.find(x => x.area === 'income');
+  assert.strictEqual(inc.when, 'month'); assert.match(inc.text, /year 19 of 25/);
+});
+test('review: figures key every amount, and garbled input gives no NaN or throw', () => {
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: rvFull() });
+  const amounts = r.actions.filter(x => x.amount != null).map(x => x.amount);
+  assert.deepStrictEqual(Object.values(r.figures), amounts);
+  const walk = (o) => { if (o && typeof o === 'object') Object.values(o).forEach(walk); else if (typeof o === 'number') assert.ok(Number.isFinite(o), String(o)); else if (typeof o === 'string') assert.ok(!/NaN|undefined|Infinity/.test(o), o); };
+  walk(engine.yearlyReview({ today: '2026-10-28' }));
+  walk(engine.yearlyReview({ today: '2026-10-28', areas: { health: { capacity: 'x', totalSIP: NaN }, debt: { debts: 'no' }, cover: { term: 5 }, tax: { newTax: 'a' },
+    holdings: { mix: [null, { cls: 'equity', share: 'q', drift: Infinity }] }, harvest: { equity: 1, gainRatio: 'z', ltValue: 1e5, room: -4 }, retirement: {}, income: { ranOutYear: 'x' } }, skipped: 'all' }));
+});
+test('review: an answer not given is never filled from another (emergency fund, a second debt)', () => {
+  const a = rvFull();
+  a.health = { capacity: 40000, totalSIP: 52000, emergency: null };           // savings given, emergency fund not
+  a.debt = { debts: [{ name: 'Credit card', balance: 120000, rate: 0.36 }], notEntered: ['Personal loan'], months: 8 };
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: a });
+  assert.ok(!r.actions.some(x => /emergency fund/.test(x.text)));
+  assert.match(r.checks[0].finding, /Emergency fund not checked/);
+  assert.strictEqual(r.checks[0].status, 'act');                               // the shortfall is still on the list
+  assert.match(r.checks[1].finding, /No personal loan balance entered/);
+  assert.strictEqual(r.actions.find(x => x.area === 'debt').amount, 120000);
+  const onlyEmer = engine.yearlyReview({ today: '2026-10-28', areas: { health: { capacity: null, totalSIP: null, emergency: 'full' } } });
+  assert.strictEqual(onlyEmer.checks[0].status, 'partial'); assert.match(onlyEmer.checks[0].finding, /Savings against goals not checked/);
+});
+test('review: the tax-free room is one amount; the harvest says when a sale on the list uses it', () => {
+  const a = rvFull();
+  const plain = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: Object.assign(a, { holdings: Object.assign(a.holdings, { regularPerYear: 0, overAfter: 0 }) }) });
+  assert.ok(!/same room/.test(plain.actions.find(x => x.area === 'harvest').text));
+  const b = rvFull();
+  const both = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: b });   // a Regular-plan move is on the list
+  assert.match(both.actions.find(x => x.area === 'harvest').text, /use this same room/);
+});
+test('review: a regime win without the 80C step is a plain choice; the old regime carries its filing deadline', () => {
+  const a = rvFull();
+  a.tax = { newTax: 150000, oldTax: 180000, room: 0, filledTax: 180000 };
+  let f = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: a }).actions.find(x => x.when === 'filing');
+  assert.strictEqual(f.amount, 30000); assert.match(f.text, /^The new regime costs Rs 30000 less/); assert.ok(!/late return/.test(f.text));
+  a.tax = { newTax: 190000, oldTax: 160000, room: 0, filledTax: 160000 };
+  f = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: a }).actions.find(x => x.when === 'filing');
+  assert.match(f.text, /^The old regime costs Rs 30000 less/); assert.match(f.text, /late return is taxed under the new regime/);
+  a.tax = { newTax: 150000, oldTax: 180000, room: 150000, filledTax: 120000, assumedNone: 'home-loan interest' };
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: a });
+  assert.strictEqual(r.actions.filter(x => x.area === 'tax').length, 2);
+  assert.match(r.checks[3].finding, /Counted as none: home-loan interest/);
+});
+test('review: an area the page could not review says what is still needed', () => {
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: { tax: { missing: 'Still needed in Tax regime: basic pay and rent paid.' },
+    cover: { term: null, termNeed: 'Term cover not checked: still needed in Cover: loans outstanding.', health: { target: 2500000, short: 500000, shortOwn: 500000, targetGiven: false } },
+    harvest: { equity: 0, uncategorised: 300000 }, holdings: { profileGiven: false, mix: [{ cls: 'equity', share: 1, target: 0.5, drift: 0.5 }], sameJob: [], regularPerYear: 0 },
+    debt: { debts: [{ name: 'Credit card', balance: 50000, rate: 0.36, rateGiven: false }], months: null, neverClears: false } } });
+  const c = Object.fromEntries(r.checks.map(x => [x.area, x]));
+  assert.strictEqual(c.tax.status, 'missing'); assert.match(c.tax.finding, /basic pay and rent paid/);
+  assert.strictEqual(c.cover.status, 'act'); assert.match(c.cover.finding, /loans outstanding/);
+  assert.match(r.actions.find(x => x.area === 'cover').text, /starting target for your city size/);
+  assert.strictEqual(c.harvest.status, 'missing'); assert.match(c.harvest.finding, /category/);
+  assert.strictEqual(c.holdings.status, 'partial'); assert.match(c.holdings.finding, /pick your risk profile/);
+  const debt = r.actions.find(x => x.area === 'debt').text;
+  assert.match(debt, /36% \(a typical rate\)/); assert.match(debt, /Enter what you pay each month/);
+});
+test('review: no new money given means no invented split; unknown exemption use is said', () => {
+  const a = rvFull();
+  a.holdings.sipGiven = false; a.harvest.exemptGiven = false; a.retirement.savingsGiven = false;
+  const r = engine.yearlyReview({ today: '2026-10-28', fmt: RV_FMT, areas: a });
+  const h = r.actions.find(x => x.area === 'holdings' && x.when === 'month');
+  assert.match(h.text, /Enter how much you add each month/); assert.strictEqual(h.amount, null);
+  assert.match(r.actions.find(x => x.area === 'harvest').text, /assumes none of this year's Rs 125000 is used yet/);
+  assert.match(r.checks[6].finding, /Existing savings were not entered/);
+});

@@ -63,9 +63,9 @@ let sb = null;
 {
   const defaults = grab(gl, /holdings:\{ rows:\[\], profile:'moderate'[^\n]*\},/, 'holdings defaults').replace(/,\s*$/, '');
   const src = [grab(gl, /const HOLD_MAX=\d+;/, 'HOLD_MAX'), grab(gl, /const HOLD_PROFILES=.*;/, 'HOLD_PROFILES'), fnBody(gl, 'incClamp'),
-    fnBody(gl, 'holdNum'), fnBody(gl, 'holdParseAmount'), fnBody(gl, 'cleanHoldRow'), fnBody(gl, 'newHoldRow'), fnBody(gl, 'clampHoldings'), fnBody(gl, 'advisorSetHoldings')].join('\n');
+    fnBody(gl, 'holdNum'), fnBody(gl, 'holdParseAmount'), fnBody(gl, 'cleanHoldRow'), fnBody(gl, 'newHoldRow'), fnBody(gl, 'clampHoldings'), fnBody(gl, 'advisorSetHoldings'), fnBody(gl, 'markGiven')].join('\n');
   const ctx = { console, HOLDING_CATS_IN: eng.HOLDING_CATS_IN, holdingCategoryFromName: eng.holdingCategoryFromName, fundPlanFromName: eng.fundPlanFromName,
-    L: { country: 'IN', tab: 'x', holdings: null }, renders: 0, render() { ctx.renders++; } };
+    L: { country: 'IN', tab: 'x', holdings: null, given: {} }, renders: 0, render() { ctx.renders++; } };
   vm.createContext(ctx);
   let ok = true;
   try {
