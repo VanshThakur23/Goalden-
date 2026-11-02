@@ -325,31 +325,38 @@ async function fundSearch(query) {
  * The MFAPI scheme code (the one /api/history?type=fund takes) for each mutual-fund or ETF ISIN, from AMFI's own
  * daily list of every scheme (NAVAll.txt; MFAPI has no ISIN search). A statement prints ISINs, so this is how its
  * funds are opened on real price history. The list is about 1.5 MB and changes once a day: Cloudflare's cache keeps
- * it for 12 hours, and the parsed map is kept in this isolate. Lines are
+ * it for 12 hours, and the text is kept in this isolate. Lines are
  * "code;ISIN growth/payout;ISIN reinvest;name;[plan;option;]NAV;date" (the plan and option columns were added later).
  */
 const ISIN_LIST_URL = 'https://portal.amfiindia.com/spages/NAVAll.txt';
 const ISIN_TTL_MS = 12 * 60 * 60 * 1000;
-let isinMap = null, isinAt = 0;
-async function isinLookup(codes) {
-  if (!isinMap || Date.now() - isinAt > ISIN_TTL_MS) {
-    const res = await fetch(ISIN_LIST_URL, { cf: { cacheTtl: 43200, cacheEverything: true } });
-    if (!res.ok) throw new UpstreamError(`AMFI scheme list returned ${res.status}`);
-    const map = new Map();
-    for (const line of (await res.text()).split(/\r?\n/)) {
-      const f = line.split(';');
-      if (f.length < 6 || !/^\d+$/.test(f[0].trim())) continue;
+// The list is kept as text and each requested ISIN is found with indexOf, reading only its own line: parsing all
+// ~14,000 lines into a map took 50-75 ms of CPU, over the Workers free plan's 10 ms on every cold isolate.
+let isinText = null, isinAt = 0;
+function isinLine(text, code) {
+  let at = text.indexOf(code);
+  while (at !== -1) {
+    const start = text.lastIndexOf('\n', at) + 1, end = text.indexOf('\n', at);
+    const f = text.slice(start, end === -1 ? undefined : end).replace(/\r$/, '').split(';');
+    // the ISIN must be a whole field (growth/payout or reinvestment), on a line that starts with a scheme code
+    if (f.length >= 6 && /^\d+$/.test(f[0].trim()) && (f[1].trim() === code || f[2].trim() === code)) {
       const name = f.length >= 8 ? [f[3], f[4], f[5]].map((x) => x.trim()).filter(Boolean).join(' - ') : f[3].trim();
-      for (const isin of [f[1], f[2]]) {
-        const k = (isin || '').trim();
-        if (/^IN[A-Z0-9]{10}$/.test(k)) map.set(k, { schemeCode: f[0].trim(), schemeName: name });
-      }
+      return { schemeCode: f[0].trim(), schemeName: name };
     }
-    if (!map.size) throw new UpstreamError('AMFI scheme list was empty');
-    isinMap = map; isinAt = Date.now();
+    at = text.indexOf(code, at + code.length);
+  }
+  return null;
+}
+async function isinLookup(codes) {
+  if (!isinText || Date.now() - isinAt > ISIN_TTL_MS) {
+    const res = await fetch(ISIN_LIST_URL, { cf: { cacheTtl: 43200, cacheEverything: true }, signal: AbortSignal.timeout(25000) });
+    if (!res.ok) throw new UpstreamError(`AMFI scheme list returned ${res.status}`);
+    const text = await res.text();
+    if (text.indexOf(';') === -1) throw new UpstreamError('AMFI scheme list was empty');
+    isinText = text; isinAt = Date.now();
   }
   const out = {};
-  codes.forEach((c) => { const hit = isinMap.get(c); if (hit) out[c] = hit; });
+  codes.forEach((c) => { const hit = isinLine(isinText, c); if (hit) out[c] = hit; });
   return out;
 }
 

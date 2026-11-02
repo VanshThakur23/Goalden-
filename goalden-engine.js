@@ -1515,7 +1515,7 @@ function stmtParseMfDetailed(lines) {
       const adds = Math.abs(bal + units - balance) <= Math.max(0.002, Math.abs(balance) * 1e-5);
       if (!(free || priced) || !adds) cur.bad = cur.bad || { date, desc };
       bal = balance;
-      cur.txns.push({ date, desc, amount, units, nav, balance });
+      cur.txns.push({ date, desc, amount, units, nav, balance, free });
     } else if (STMT_CHARGE.test(desc)) cur.txns.push({ date, desc, amount: Math.abs(nums[nums.length - 1]), charge: true });
     else if (STMT_PAYOUT.test(desc) && !/reinvest/i.test(desc)) cur.txns.push({ date, desc, amount: Math.abs(nums[nums.length - 1]), payout: true });
   }
@@ -1672,10 +1672,14 @@ function parseStatement(lines, o) {
       if (!clean) unread.push(s.name);
       else if (s.open > 0) before.push(s.name);
       const cat = stmtCategory(s.isin, s.name);
-      // The fund's own price on each day it was bought or sold, one per day: what statementRisk measures it on.
+      // The fund's own price on each day it was bought or sold, one per day: what statementRisk measures it on. Not for
+      // a dividend (IDCW) plan, whose price drops at every payout and would read as falls the investor never had, nor
+      // for a fund whose units were split, merged or given as a bonus, whose price jumps for the same reason.
       const navs = [];
-      s.txns.forEach(x => { if (x.nav > 0 && Math.abs(x.units) > 0 && (!navs.length || navs[navs.length - 1].date !== x.date)) navs.push({ date: x.date, nav: x.nav }); });
-      out.push({ name: s.name, isin: s.isin, cat, value: value > 0 ? value : 0, flows: f.flows, complete, navs: clean ? navs : [] });
+      let navsNote = !clean ? 'its transactions could not all be read' : /idcw|dividend/i.test(s.name) || s.txns.some(x => /reinvest|idcw|dividend/i.test(x.desc || '')) ? 'a dividend (IDCW) plan, whose price drops at each payout'
+        : s.txns.some(x => x.free) ? 'its units were split, merged or given as a bonus' : '';
+      if (!navsNote) s.txns.forEach(x => { if (x.nav > 0 && Math.abs(x.units) > 0 && (!navs.length || navs[navs.length - 1].date !== x.date)) navs.push({ date: x.date, nav: x.nav }); });
+      out.push({ name: s.name, isin: s.isin, cat, value: value > 0 ? value : 0, flows: f.flows, complete, navs, navsNote });
       if (clean) f.flows.forEach(x => allFlows.push(x));
       if (!(value > 0)) return;
       const lotCost = f.lots.reduce((a, l) => a + l.cost, 0);

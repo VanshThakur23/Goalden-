@@ -17,6 +17,35 @@ handful of plain `<script>` files. That constraint is deliberate (see
 single file open, which matters as much for a technical interview as it does
 for a user's trust in a finance tool.
 
+## For someone who already invests
+
+The Lab's **My holdings** tab reads an Indian Consolidated Account Statement
+(CAS) PDF, from CAMS or KFintech (mutual funds, every transaction) or NSDL or
+CDSL (shares, ETFs, bonds, gold bonds, funds), in the browser with a vendored
+pdf.js. The file and its password never leave the device, and the parser
+(`parseStatement` in `goalden-engine.js`) keeps no name, PAN, folio or account
+number. From one statement it shows:
+
+- every holding, its value and cost, checked against the statement's own total;
+- **you against the index**: each equity-fund purchase and sale repeated on the
+  same day in a Nifty 50 index fund, as a rupee gap and yearly return, fund by
+  fund (`statementVsIndex`);
+- **risk against the index**: movement and worst fall from the fund's own
+  prices on those days, against the index on the same days (`statementRisk`);
+- **your mix on the efficient frontier**: the largest holdings open in Test
+  Real Investments at the weights held (fund ISINs mapped through AMFI's list,
+  share ISINs through a snapshot of NSE's, `data/nse-isin.json`).
+
+Every transaction is checked (amount against units x price, and the running
+balance); a fund whose lines do not add up is left out of the comparison and
+named rather than used wrong. Made-up test statements are in
+[`test-statements/`](test-statements) and behind the tab's "Try a made-up one".
+
+The **Yearly review** tab has the advisor run a fixed checklist across the
+Lab's tools, through a plan the user approves, and returns a dated to-do list
+(this month, before 31 March, at ITR filing, next year) built only from
+numbers the user gave.
+
 ## Agent architecture
 
 The advisor is a real tool-calling agent, not a wrapper around a chat
@@ -110,8 +139,9 @@ Routes:
 | `GET /api/history?type=equity&symbol=TITAN.NS` | NSE-listed equity/ETF daily bars | Yahoo Finance chart endpoint |
 | `GET /api/history?type=fund&scheme=119551` | Mutual fund NAV history | MFAPI.in |
 | `GET /api/fundsearch?q=gilt` | Fund name / scheme-code search | MFAPI.in |
+| `GET /api/isin?codes=INF194K01W62,INF209K01VA3` | Fund/ETF ISIN to scheme code (up to 40) | AMFI's daily NAVAll.txt |
 
-All three return `{ id, label, currency, prices: [{ date, close }, ...] }`,
+The two `/api/history` routes return `{ id, label, currency, prices: [{ date, close }, ...] }`,
 oldest-first.
 
 **To run and deploy:**

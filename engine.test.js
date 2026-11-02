@@ -4282,6 +4282,14 @@ test('statement: numbers at the end of a description do not shift the columns', 
   assert.strictEqual(r.complete, true, JSON.stringify(r.notes));
   assert.deepStrictEqual(r.schemes[0].flows.map(f => f.amount), [-5000, 500, 105]);
 });
+test('statement: a growth plan gives its prices for risk; a fund with dividends reinvested does not', () => {
+  const t = [['10-Jan-2021', 'Purchase', '5,000.00', '100.000', '50.0000', '100.000'], ['10-Feb-2021', 'Purchase', '5,500.00', '100.000', '55.0000', '200.000']];
+  const g = engine.parseStatement(stOne('0.000', t, '200.000', '10,000.00'), { today: '2026-10-28' }).schemes[0];
+  assert.strictEqual(g.navsNote, ''); assert.deepStrictEqual(g.navs, [{ date: '2021-01-10', nav: 50 }, { date: '2021-02-10', nav: 55 }]);
+  // Its price drops at every payout, so a fall there is not a loss: it is not measured, and the reason says why.
+  const d = engine.parseStatement(stOne('0.000', t.concat([['10-Mar-2021', 'IDCW Reinvest @ Rs.0.25', '250.00', '5.000', '50.0000', '205.000']]), '205.000', '10,250.00'), { today: '2026-10-28' }).schemes[0];
+  assert.deepStrictEqual(d.navs, []); assert.match(d.navsNote, /dividend \(IDCW\) plan/);
+});
 test('statement: a line whose numbers do not add up leaves that fund out, named, rather than used wrong', () => {
   const r = engine.parseStatement(stOne('0.000', [
     ['10-Jan-2021', 'Purchase', '5,000.00', '100.000', '50.0000', '100.000'],

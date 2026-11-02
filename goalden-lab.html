@@ -632,9 +632,11 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .epchip b{display:block;color:var(--paper);font-size:12px}
 
 /* --- health score --- */
-.score-dial{display:flex;align-items:center;gap:22px}
+/* The bars drop under the number when the card is narrow (the docked advisor leaves ~300px): side by side they need
+   ~164px beside it and ran 18px past the card. */
+.score-dial{display:flex;align-items:center;gap:8px 22px;flex-wrap:wrap}
 .dial-num{font-family:'Newsreader',serif;font-size:52px;font-weight:700;color:var(--gold)}
-.dial-bars{flex:1;display:flex;flex-direction:column;gap:8px}
+.dial-bars{flex:1 1 200px;min-width:0;display:flex;flex-direction:column;gap:8px}
 .dbar-row{display:flex;align-items:center;gap:10px;font-size:11.5px}
 .dbar-label{width:110px;font-family:'Spline Sans Mono',monospace;color:rgba(20,40,63,.74);flex-shrink:0}
 .dbar-track{flex:1;height:7px;background:rgba(20,40,63,.1);border-radius:4px;overflow:hidden}
@@ -4070,7 +4072,7 @@ function holdingsOutputHTML(R){
         <div><b>1. Your statement</b>The CAS PDF from CAMS, KFintech, NSDL or CDSL, read on this device.</div>
         <div><b>2. Your holdings</b>Every fund and share with its value and cost fills the list on the left.</div>
         <div><b>3. Against the index</b>Your money and your risk against the same money in a Nifty 50 index fund.</div>
-        <div><b>4. On the frontier</b>Your funds, at your weights, on real daily prices in Test Real Investments.</div>
+        <div><b>4. On the frontier</b>Your funds and shares, at your weights, on real daily prices in Test Real Investments.</div>
       </div>
       <div class="cap">Read your Consolidated Account Statement on the left (no statement to hand? <button type="button" class="linkbtn" data-hd="stmtSample">try a made-up one</button>), search for a fund, or add a row and type its name and what it is worth today. You will see your real mix against the ${p.name} profile, the funds that do the same job, what Regular plans cost over ${s.years} years, and how new money and a sale could close the gap. Nothing is uploaded and no account is linked.</div>
       <div class="slab-chips"><button type="button" class="tglbtn" data-hd="example">Load an example (made-up amounts)</button></div>
@@ -4259,7 +4261,7 @@ function holdStmtApply(r, cut, sample){
     notes:r.notes.concat(pooled ? [pooled+' of the smallest holdings are pooled into one row: the list holds '+HOLD_MAX+'.'] : [])
       .concat(cut ? ['Only the first '+HOLD_STMT_PAGES+' pages were read.'] : []),
     complete:r.complete, equity:eq, schemes:eq ? eq.used : null,
-    funds:r.holdings.filter(h=>/^INF/.test(h.isin) && h.value>0).map(h=>({ isin:h.isin, name:h.name, value:h.value })), live:null };
+    funds:r.holdings.filter(h=>/^IN[EF]/.test(h.isin) && h.value>0).map(h=>({ isin:h.isin, name:h.name, value:h.value })), live:null };
   if(eq && eq.flows.length) liveEnsureBench(LIVE_BENCH.INR);
 }
 function holdStmtPanelHTML(c){
@@ -4277,7 +4279,7 @@ function holdStmtPanelHTML(c){
         <li><b>Get your statement.</b> A free PDF from CAMS or KFintech (mutual funds) or NSDL or CDSL (everything in demat). Which one, and where, is just below.</li>
         <li><b>Choose it here and type its password.</b> It is read on this device; the file and password are not uploaded or kept.</li>
         <li><b>Check the list it fills in.</b> Every holding with what it is worth and what you paid. Pick a category for any row without one, and tick "Held for over a year" where the statement could not tell.</li>
-        <li><b>Read the results on the right.</b> Your mix against your profile, you against a Nifty 50 index fund, and risk against the index. Then "Test these funds on real history" puts your own mix on the efficient frontier.</li>
+        <li><b>Read the results on the right.</b> Your mix against your profile, you against a Nifty 50 index fund, and risk against the index. Then "Test these holdings on real history" puts your own mix on the efficient frontier.</li>
       </ol>
       <details class="stmt-how"><summary>Which statement, and where to get it</summary>
         <p><b>Mutual funds, with every purchase:</b> the detailed CAS from CAMS or KFintech (camsonline.com, kfintech.com or mfcentral.com). Ask for a <i>detailed</i> statement from before your first investment. It is emailed as a PDF locked with a password you choose.</p>
@@ -4302,7 +4304,7 @@ function holdVsIndexData(){
   if(b.status==='error') return { error:b.error };
   const all=statementVsIndex(st.equity.flows, st.equity.endValue, st.asOf, b.prices);
   if(!all.ok) return { error:all.error };
-  const funds=(st.schemes||[]).map(s=>{ const v=statementVsIndex(s.flows, s.value, st.asOf, b.prices); return v.ok ? { name:s.name, sold:!(s.value>0), v, risk:statementRisk(s.navs, b.prices) } : null; })
+  const funds=(st.schemes||[]).map(s=>{ const v=statementVsIndex(s.flows, s.value, st.asOf, b.prices); return v.ok ? { name:s.name, sold:!(s.value>0), v, risk:s.navsNote ? { ok:false, error:s.navsNote, priceNote:true } : statementRisk(s.navs, b.prices) } : null; })
     .filter(Boolean).sort((a,b)=>a.v.gap-b.v.gap);
   return { all, funds, spec, eq:st.equity };
 }
@@ -4313,63 +4315,130 @@ function holdShortFund(n){ const pl=fundPlanFromName(n); return n.split(/\s+-\s+
 // on its own days. The dots are the secondary view; the sentence carries the answer.
 function holdRiskHTML(d){
   const pc=x=>(x*100).toFixed(1)+'%', measured=d.funds.filter(f=>f.risk && f.risk.ok), not=d.funds.filter(f=>!(f.risk && f.risk.ok));
-  if(!measured.length) return `<div class="section-label" style="margin-top:14px">Risk against the index</div><div class="cap">Not measured: each fund needs at least ${STMT_RISK_MIN.gaps+1} days of buying or selling over ${STMT_RISK_MIN.years} years on the statement, and a regular SIP gives that.</div>`;
+  const head='<div class="section-label" style="margin-top:14px">Risk against the index</div>';
+  // Each fund left out, with its own reason: too few days on the statement, or prices that do not show its growth.
+  const reason=f=>f.risk && f.risk.priceNote ? f.risk.error+', so its printed prices do not show its growth' : `bought or sold on too few days, or for under ${STMT_RISK_MIN.years} years`;
+  const notTxt=not.length ? 'Not measured: '+not.map(f=>advisorAttr(holdShortFund(f.name))+', '+advisorAttr(reason(f))).join('; ')+'.' : '';
+  if(!measured.length) return `${head}<div class="cap">Not measured: each fund needs at least ${STMT_RISK_MIN.gaps+1} days of buying or selling over ${STMT_RISK_MIN.years} years on the statement, and a regular SIP gives that.${not.some(f=>f.risk && f.risk.priceNote)?' '+notTxt:''}</div>`;
   const bumpier=measured.filter(f=>f.risk.fund.vol>f.risk.index.vol+0.005), worse=bumpier.filter(f=>f.risk.fund.ret<f.risk.index.ret);
-  const n=measured.length, fw=k=>k===1?'fund':'funds';
-  const lead=bumpier.length
-    ? `${bumpier.length} of the ${n} ${fw(n)} measured moved more than the index on the same days${worse.length?`, and ${worse.length} of ${bumpier.length===1?'it':'those'} also grew less: more ups and downs for less return`:', and grew more for it'}.`
-    : `None of the ${n} ${fw(n)} measured moved more than the index on the same days.`;
+  const n=measured.length, one=n===1, b=bumpier.length;
+  const subj=one ? 'The one fund measured' : `${b} of the ${n} funds measured`;
+  const lead=b
+    ? `${subj} moved more than the index on the same days${!worse.length ? ', and grew more for it' : b===1 ? ', and also grew less: more ups and downs for less return' : `, and ${worse.length===b ? (b===2?'both':'all of them') : worse.length+' of them'} also grew less: more ups and downs for less return`}.`
+    : one ? 'The one fund measured did not move more than the index on the same days.' : `None of the ${n} funds measured moved more than the index on the same days.`;
   const rows=measured.map(f=>`<tr><td title="${advisorAttr(f.name)}">${advisorAttr(holdShortFund(f.name))}</td><td>${pc(f.risk.fund.vol)} / ${pc(f.risk.index.vol)}</td><td>${pc(f.risk.fund.worst)} / ${pc(f.risk.index.worst)}</td><td>${pc(f.risk.fund.ret)} / ${pc(f.risk.index.ret)}</td></tr>`).join('');
   deferChartInit(()=>renderVsRiskChart('vs-risk-echart', measured));
-  return `<div class="section-label" style="margin-top:14px">Risk against the index</div>
+  return `${head}
     <p class="lg-head" style="font-size:15px">${lead}</p>
-    <div class="stmt-table-wrap"><table class="stmt-table"><thead><tr><th>Fund</th><th>Moved a year, yours / index</th><th>Worst fall, yours / index</th><th>Grew a year, yours / index</th></tr></thead><tbody>${rows}</tbody></table></div>
-    <div id="vs-risk-echart" class="echart" style="height:240px;margin-top:10px" aria-label="Each fund's yearly movement against its yearly growth, joined to the index fund measured on the same days"></div>
-    <div class="gr-note">Measured on the days each fund was bought or sold, from the prices printed on your statement, and the index fund on exactly those days, so the two are like for like; both read a little calmer than a day-by-day measure. Up and to the left is better: more growth for less movement. ${not.length?`Not measured (bought or sold on too few days, or for under ${STMT_RISK_MIN.years} years): ${advisorAttr(not.map(f=>holdShortFund(f.name)).join(', '))}.`:''}</div>`;
+    <div class="stmt-table-wrap"><table class="stmt-table"><thead><tr><th>Fund</th><th>Moved a year, yours / index</th><th>Worst fall, yours / index</th><th>Price grew a year, yours / index${infoIcon('How fast the price itself grew, from the first to the last day the fund was bought or sold on the statement. It is not the XIRR above, which weighs every rupee by how long it was in.')}</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div id="vs-risk-echart" class="echart" style="height:240px;margin-top:10px" aria-label="Each fund's yearly movement against how fast its price grew, joined to the index fund measured on the same days"></div>
+    <div class="gr-note">Measured on the days each fund was bought or sold, from the prices printed on your statement, and the index fund on exactly those days, so the two are like for like; both read a little calmer than a day-by-day measure. "Price grew a year" runs from the first to the last of those days, so it differs from the yearly return (XIRR) above. Up and to the left is better: more growth for less movement. ${notTxt}</div>`;
 }
 // One small panel per fund, all on the same scales: the fund (blue) and the index measured on that fund's own days
 // (hollow), joined. Pairing them in one shared plot crossed the joins and left every hollow dot unexplained.
-// "Test these funds on real history": the statement's funds (largest first, up to HOLD_LIVE_MAX) open in Test Real
-// Investments at the weights they are held in, so the frontier there shows where the person's real mix sits. ISINs
-// are turned into MFAPI scheme codes by /api/isin (AMFI's list); only the ISINs are sent, never amounts or names.
+// "Test these holdings on real history": the statement's funds and shares (largest first, up to HOLD_LIVE_MAX) open in
+// Test Real Investments at the weights they are held in, so the frontier there shows where the person's real mix sits.
+// A fund or ETF ISIN (INF...) becomes an MFAPI scheme code through /api/isin (AMFI's list: only the ISINs are sent);
+// a share ISIN (INE...) becomes its NSE symbol from data/nse-isin.json, a snapshot of NSE's own list read here, so
+// nothing about shares is sent at all. Prices for shares then come from Yahoo Finance as SYMBOL.NS.
 const HOLD_LIVE_MAX=6;
+let HOLD_NSE=null;
+function holdNseMap(){
+  if(!HOLD_NSE) HOLD_NSE=fetch('data/nse-isin.json').then(r=>{ if(!r.ok) throw new Error(); return r.json(); }).then(j=>j.map||{}).catch(()=>{ HOLD_NSE=null; return {}; });
+  return HOLD_NSE;
+}
 function holdLiveButtonHTML(){
   const st=HOLD_STMT, n=(st.funds||[]).length;
   if(st.status!=='done' || n<2) return '';
   const lv=st.live||{};
   return `<div class="section-label" style="margin-top:14px">Your mix on the efficient frontier</div>
-    <div class="cap">Open ${n>HOLD_LIVE_MAX?'your '+HOLD_LIVE_MAX+' largest funds':'these '+n+' funds'} in Test Real Investments, at the weights you hold them in, on their real daily prices: how they moved together, and where your mix sits against the best mixes of the same funds.${st.sample?' The made-up sample\'s funds are not real, so they will not be found.':''}</div>
-    <button type="button" class="tglbtn" data-hd="stmtLive"${lv.status==='loading'?' disabled':''}>${lv.status==='loading'?'Finding the funds…':'Test these funds on real history →'}</button>
+    <div class="cap">Open ${n>HOLD_LIVE_MAX?'your '+HOLD_LIVE_MAX+' largest holdings':'these '+n+' holdings'} in Test Real Investments, at the weights you hold them in, on their real daily prices: how they moved together, and where your mix sits against the best mixes of the same holdings.${st.sample?' The made-up sample\'s funds are not real, so they will not be found.':''}</div>
+    <button type="button" class="tglbtn" data-hd="stmtLive"${lv.status==='loading'?' disabled':''}>${lv.status==='loading'?'Finding them…':'Test these holdings on real history →'}</button>
     ${lv.status==='error'?`<div class="stmt-status is-error" role="alert">${advisorAttr(lv.error)}</div>`:''}
-    <div class="gr-note" style="margin:6px 0 0">Sends only the funds' ISIN codes, to look them up in AMFI's list of schemes.</div>`;
+    <div class="gr-note" style="margin:6px 0 0">Funds are looked up by their ISIN code alone in AMFI's list of schemes; shares are matched to their NSE symbol on this device.</div>`;
 }
-// While Test Real Investments still holds exactly the funds a statement sent, it says so: where they came from, the
-// weights (your real mix), and how to get back. Adding or removing a fund makes it an ordinary mix again.
+// The statement's weights belong to its instruments, not to places in a list. An instrument that fails to load (or is
+// set aside as unusable) leaves the frontier working on the rest, and the weights stored by position then either
+// land on the wrong instrument or fall back to equal ones while the note still says "your real mix". So each time
+// the tab draws, the held weights are laid over the instruments in use and renormalised, until the person changes
+// the mix (slider, frontier, table, advisor): from then on it is theirs, and the note says so.
+function liveSyncHeldWeights(){
+  const f=L.live.fromStatement;
+  if(!f) return;
+  const keys=L.live.items.map(it=>it.key);
+  if(keys.length!==f.keys.length || keys.some((k,i)=>k!==f.keys[i])){ L.live.fromStatement=null; return; }
+  if(f.touched) return;
+  const ready=liveReadyItems(), on=ready.map(it=>it.key).join(',');
+  if(ready.length<2) return;
+  // The same instruments as last time, with weights other than the ones put there: the person moved them.
+  if(f.appliedFor===on){
+    const cur=ready.length===2 ? [L.live.weight] : (L.live.selectedWeights || []);
+    if(cur.length!==f.applied.length || cur.some((v,i)=>Math.abs(v-f.applied[i])>1e-9)){ f.touched=true; return; }
+    return;
+  }
+  const raw=ready.map(it=>f.weights[f.keys.indexOf(it.key)] || 0), tot=raw.reduce((x,v)=>x+v,0);
+  if(!(tot>0)) return;
+  f.shown=raw.map(v=>v/tot);
+  if(ready.length===2){ L.live.weight=Math.round(f.shown[0]*100); f.applied=[L.live.weight]; }
+  else { L.live.selectedWeights=f.shown.slice(); f.applied=f.shown.slice(); }
+  f.appliedFor=on;
+}
+// While Test Real Investments still holds exactly what a statement sent, it says so: where it came from, the weights
+// in use (your real mix), what was left out, and how to get back. Adding or removing an instrument makes it an
+// ordinary mix again; moving the weights keeps the note but says the mix is no longer the statement's.
 function liveFromStatementHTML(){
   const f=L.live.fromStatement;
   if(!f) return '';
-  const keys=L.live.items.map(it=>it.key);
-  if(keys.length!==f.keys.length || keys.some((k,i)=>k!==f.keys[i])){ L.live.fromStatement=null; return ''; }
-  const names=L.live.items.map((it,i)=>advisorAttr(liveShortName(it))+' '+Math.round(f.weights[i]*100)+'%').join(', ');
-  return `<div class="from-stmt" role="note"><b>From your statement.</b> These ${keys.length} funds are ${f.missing?'the ones found of ':''}your largest holdings, at the weights you hold them in: ${names}. "Your mix" below is your real mix, and the frontier shows the best mixes of the same funds for each level of risk. ${f.missing?f.missing+' could not be found in AMFI\'s list of schemes and are left out. ':''}<button type="button" class="linkbtn" data-tab-switch="holdings">Back to My holdings</button></div>`;
+  const back='<button type="button" class="linkbtn" data-tab-switch="holdings">Back to My holdings</button>';
+  const notFound=f.missing ? `${f.missing} of your largest holdings could not be matched to a fund or a listed share and ${f.missing===1?'is':'are'} left out. ` : '';
+  // Failed to load, or set aside as unusable: not ready and no longer loading.
+  const dropped=L.live.items.filter(it=>{ const d=L.live.data[it.key]; return d && d.status!=='loading' && !liveReadyItems().includes(it); });
+  const droppedTxt=dropped.length ? `${advisorAttr(dropped.map(it=>liveShortName(it)).join(', '))} could not be used on real prices, so the held weights are spread over the rest. ` : '';
+  if(f.touched) return `<div class="from-stmt" role="note"><b>From your statement.</b> These started at the weights you hold them in; you have since changed the mix, so "Your mix" below is the one you chose, not the one you hold. ${notFound}${droppedTxt}${back}</div>`;
+  if(!f.appliedFor) return `<div class="from-stmt" role="note"><b>From your statement.</b> Loading the real prices of your largest holdings… ${notFound}${droppedTxt}${back}</div>`;
+  const on=f.appliedFor.split(','), names=on.map((k,i)=>{ const it=L.live.items.find(x=>x.key===k); return advisorAttr(liveShortName(it))+' '+Math.round(f.shown[i]*100)+'%'; }).join(', ');
+  return `<div class="from-stmt" role="note"><b>From your statement.</b> These ${on.length} are your largest holdings, at the weights you hold them in: ${names}. "Your mix" below is your real mix, and the frontier shows the best mixes of the same holdings for each level of risk. ${notFound}${droppedTxt}${back}</div>`;
 }
+// Only ISIN codes leave the device here (and only fund ones, to /api/isin); the symbols and scheme codes found then
+// go to /api/history for prices, as for any instrument added by hand. No names or amounts are sent. If one lookup
+// fails the other still counts: a statement of shares should not stop because AMFI's list is down.
 async function holdOpenInLive(){
-  const st=HOLD_STMT, rows=(st.funds||[]).slice().sort((a,b)=>b.value-a.value).slice(0,HOLD_LIVE_MAX);
+  const st=HOLD_STMT;
+  // One row per ISIN, its values summed, before taking the largest: two rows of one fund are one holding.
+  const byIsin={};
+  (st.funds||[]).forEach(x=>{ if(byIsin[x.isin]) byIsin[x.isin].value+=x.value; else byIsin[x.isin]={ isin:x.isin, name:x.name, value:x.value }; });
+  const rows=Object.values(byIsin).sort((a,b)=>b.value-a.value).slice(0,HOLD_LIVE_MAX);
   if(rows.length<2) return;
   st.live={ status:'loading' }; render();
   try{
-    const hit=await liveApiGet('/api/isin?codes='+rows.map(x=>x.isin).join(','));
-    const found=rows.filter(x=>hit[x.isin] && hit[x.isin].schemeCode);
-    if(found.length<2) throw new Error(found.length ? 'Only one of these funds is in AMFI\'s list of schemes, and a mix needs two.' : 'None of these funds is in AMFI\'s list of schemes'+(st.sample?' (the sample\'s funds are made up).':'.'));
+    const funds=rows.filter(x=>/^INF/.test(x.isin)), shares=rows.filter(x=>/^INE/.test(x.isin));
+    let lookupFailed=false;
+    const [hit, nse]=await Promise.all([
+      funds.length ? liveApiGet('/api/isin?codes='+funds.map(x=>x.isin).join(',')).catch(()=>{ lookupFailed=true; return {}; }) : {},
+      shares.length ? holdNseMap() : {}]);
+    // One item per instrument, its weight summed from every holding that is that instrument (two plans of one
+    // scheme share a code only rarely, but a share and its ETF never do).
+    const items=[], val=[];
+    rows.forEach(x=>{
+      let item=null;
+      if(hit[x.isin] && hit[x.isin].schemeCode){ const code=String(hit[x.isin].schemeCode); item={ key:'MF'+code, symbol:code, label:hit[x.isin].schemeName, type:'fund' }; }
+      else if(nse[x.isin]){ const sym=nse[x.isin]+'.NS'; item={ key:sym, symbol:sym, label:x.name, type:'equity' }; }
+      if(!item) return;
+      const k=items.findIndex(it=>it.key===item.key);
+      if(k===-1){ items.push(item); val.push(x.value); } else val[k]+=x.value;
+    });
+    const missing=rows.filter(x=>!(hit[x.isin] && hit[x.isin].schemeCode) && !nse[x.isin]).length;
+    const why=lookupFailed ? ' AMFI\'s list of funds could not be reached just now; try again in a minute.' : st.sample ? ' (the sample\'s funds are made up).' : '.';
+    if(items.length<2) throw new Error(items.length ? 'Only one of these holdings could be matched to a fund or a listed share, and a mix needs two.'+(lookupFailed?why:'') : 'None of these holdings could be matched to a fund or a listed share'+why);
     L.live.items=[]; L.live.data={}; L.live.selectedWeights=null;
-    found.forEach(x=>{ const code=String(hit[x.isin].schemeCode), item={ key:'MF'+code, symbol:code, label:hit[x.isin].schemeName, type:'fund' };
-      if(!L.live.items.some(it=>it.key===item.key)){ L.live.items.push(item); liveLoadInstrument(item); } });
-    const tot=found.reduce((a,x)=>a+x.value,0), w=found.map(x=>x.value/tot);
-    if(L.live.items.length===2) L.live.weight=Math.round(w[0]*100); else L.live.selectedWeights=w;
-    st.live={ status:'done', missing:rows.length-found.length };
-    L.live.fromStatement={ keys:L.live.items.map(it=>it.key), weights:w, missing:rows.length-found.length, sample:!!st.sample };
+    items.forEach(it=>{ L.live.items.push(it); liveLoadInstrument(it); });
+    const tot=val.reduce((a,v)=>a+v,0), w=val.map(v=>v/tot);
+    // Set straight away for the first draw; liveSyncHeldWeights re-lays them over whichever instruments load.
+    if(items.length===2) L.live.weight=Math.round(w[0]*100); else L.live.selectedWeights=w;
+    st.live={ status:'done', missing };
+    L.live.fromStatement={ keys:items.map(it=>it.key), weights:w, missing, sample:!!st.sample };
     L.tab='livefrontier';
-  }catch(e){ st.live={ status:'error', error:(e && e.message) || 'The funds could not be looked up.' }; }
+  }catch(e){ st.live={ status:'error', error:(e && e.message) || 'The holdings could not be looked up.' }; }
   render();
 }
 function renderVsRiskChart(id, measured){
@@ -4388,7 +4457,7 @@ function renderVsRiskChart(id, measured){
     grid.push({ left:(c*w+2)+'%', width:(w-6)+'%', top:(r*h+11*1/rows*1)+'%', height:(h-(26/rows))+'%', containLabel:true });
     title.push({ text:cut(holdShortFund(f.name)), left:(c*w+2)+'%', top:(r*h)+'%', textStyle:{ fontSize:12, fontWeight:600, color:CHART_TEXT.ink, fontFamily:"'Spline Sans Mono',monospace" } });
     xAxis.push({ gridIndex:i, type:'value', min:x0, max:x1, name:'moved a year', nameLocation:'middle', nameGap:22, nameTextStyle:{ color:CHART_TEXT.muted, fontSize:10 }, axisLabel:{ formatter:v=>v+'%', color:CHART_TEXT.muted, fontSize:10 }, interval:5 });
-    yAxis.push({ gridIndex:i, type:'value', min:y0, max:y1, axisLabel:{ formatter:v=>v+'%', color:CHART_TEXT.muted, fontSize:10 }, interval:5 });
+    yAxis.push({ gridIndex:i, type:'value', min:y0, max:y1, name:c===0?'price grew a year':'', nameLocation:'middle', nameGap:34, nameTextStyle:{ color:CHART_TEXT.muted, fontSize:10 }, axisLabel:{ formatter:v=>v+'%', color:CHART_TEXT.muted, fontSize:10 }, interval:5 });
     const a=[P(f.risk.index.vol),P(f.risk.index.ret)], b=[P(f.risk.fund.vol),P(f.risk.fund.ret)];
     series.push({ type:'line', xAxisIndex:i, yAxisIndex:i, data:[a,b], showSymbol:false, silent:true, lineStyle:{ width:1.2, color:'#B6C2D6' }, tooltip:{ show:false } });
     series.push({ name:'Index on its days', type:'scatter', xAxisIndex:i, yAxisIndex:i, data:[a], symbolSize:10, itemStyle:{ color:'#fff', borderColor:CHART_TEXT.ink, borderWidth:1.6 },
@@ -4397,7 +4466,7 @@ function renderVsRiskChart(id, measured){
       label:{ show:true, position:a[0]<=b[0]?'right':'left', formatter:'Fund', color:CHART_TEXT.blue, fontWeight:700, fontSize:11, fontFamily:"'Spline Sans Mono',monospace" } });
   });
   initChart(id, { grid, xAxis, yAxis, title, legend:{ show:false }, series,
-    tooltip:{ trigger:'item', confine:true, formatter:p=>p.seriesName+'<br/>moved '+p.value[0]+'% a year, grew '+p.value[1]+'% a year' } });
+    tooltip:{ trigger:'item', confine:true, formatter:p=>p.seriesName+'<br/>moved '+p.value[0]+'% a year, price grew '+p.value[1]+'% a year' } });
 }
 function holdVsIndexHTML(R){
   const st=HOLD_STMT, c=R.c, K=v=>c.compact(Math.round(Math.abs(v)));
@@ -4446,9 +4515,10 @@ function holdVsIndexForAdvisor(){
   return { index:d.spec.full, from:v.from, to:v.to, putInLessTakenOut:r0(v.invested), equityFundsWorth:r0(v.yourValue), sameMoneyInIndexFund:r0(v.indexValue),
     aheadOfIndex:r0(v.gap), yourYearlyReturnPct:yr(v) ? pc(v.yourXirr) : null, indexYearlyReturnPct:yr(v) ? pc(v.indexXirr) : null,
     funds:d.funds.map(f=>({ name:f.name, sold:f.sold, aheadOfIndex:r0(f.v.gap), yourYearlyReturnPct:yr(f.v) ? pc(f.v.yourXirr) : null, indexYearlyReturnPct:yr(f.v) ? pc(f.v.indexXirr) : null,
-      risk:f.risk && f.risk.ok ? { measuredOnDays:f.risk.points, movedAYearPct:pc(f.risk.fund.vol), indexMovedAYearPct:pc(f.risk.index.vol), worstFallPct:pc(f.risk.fund.worst), indexWorstFallPct:pc(f.risk.index.worst) } : null })),
+      risk:f.risk && f.risk.ok ? { measuredOnDays:f.risk.points, movedAYearPct:pc(f.risk.fund.vol), indexMovedAYearPct:pc(f.risk.index.vol), worstFallPct:pc(f.risk.fund.worst), indexWorstFallPct:pc(f.risk.index.worst),
+        priceGrewAYearPct:pc(f.risk.fund.ret), indexPriceGrewAYearPct:pc(f.risk.index.ret) } : { notMeasured:f.risk && f.risk.priceNote ? f.risk.error+', so its printed prices do not show its growth' : 'too few days of buying or selling on the statement' } })),
     leftOut:d.eq.left.concat(d.eq.unknown), leftOutIncompleteHistory:d.eq.incomplete,
-    note:'yearly returns are XIRR and are null under a year; risk is measured on the days each fund was bought or sold, the index on the same days; small- and mid-cap funds are set against the Nifty 50 too; past results, not a forecast' };
+    note:'yearly returns are XIRR and are null under a year; risk is measured on the days each fund was bought or sold, the index on the same days, and priceGrewAYearPct is the price growth from the first to the last of those days (not XIRR); small- and mid-cap funds are set against the Nifty 50 too; past results, not a forecast' };
 }
 function renderVsIndexChart(id, v, c){
   const dom=document.getElementById(id); if(!dom) return;
@@ -8292,6 +8362,7 @@ function liveOutputHTML(ready, rfPct){
 }
 
 function renderLiveFrontier(){
+  liveSyncHeldWeights();
   const c=cfg(), live=L.live;
   const ready=liveReadyItems();
   const rf=liveDefaultRf();

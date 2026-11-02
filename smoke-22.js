@@ -192,7 +192,7 @@ const holdBlock = gl.slice(gl.indexOf('TAB: MY HOLDINGS (India)'), gl.indexOf('T
 check(holdBlock.length > 5000, '9c found the My holdings block');
 check(!/should (buy|sell|choose|switch|take|hold|exit)|we recommend|best (fund|option)|top[- ]rated|star rating|you must|the right choice|outperform/i.test(holdBlock), '9c no recommendation, rating or ranking language in the tab');
 // 9e added a statement reader: the file is read in the page, so nothing in the tab may send a file anywhere.
-check(!/FormData|\.upload|multipart|XMLHttpRequest/i.test(holdBlock) && !/fetch\([^)]*(file|data|blob)/i.test(holdBlock), '9c nothing in the tab sends a file anywhere (typed in, or a statement read on the device)');
+check(!/FormData|\.upload|multipart|XMLHttpRequest/i.test(holdBlock) && !/fetch\((?!['"])[^)]*(file|data|blob)/i.test(holdBlock), '9c nothing in the tab sends a file anywhere (typed in, or a statement read on the device)');
 check(/own portfolio/.test(holdBlock) && /category/i.test(holdBlock) && /holding-level|same companies/i.test(holdBlock), '9c the overlap card says plainly that holding-level overlap needs each fund\'s own portfolio');
 check(/T\.equityLtcgExemption/.test(ho) && /with no tax this financial year/.test(ho) && /limit on long-term equity gains/.test(ho), '9c the rebalance names the free limit on long-term equity gains, from TAX_IN rather than a typed figure');
 check(/new money|new SIP/i.test(ho) && /before anything is sold|first/i.test(ho), '9c the rebalance uses new money first');

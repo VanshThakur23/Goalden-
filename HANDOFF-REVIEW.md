@@ -323,8 +323,9 @@ Ranked by value.
 - **Verdict:** maybe, after B1–B6.
 
 ### Deliberately still out
-- Statement (CAS) upload and account-aggregator linking: consent and
-  regulation. B1's typed entry gets most of the value without them.
+- Account-aggregator linking: consent and regulation. (Statement (CAS)
+  reading was later built in 9e without an upload: the PDF is read on the
+  device, and nothing identifying is kept.)
 - Product recommendations or insurance quotes: no honest data source, and
   that is advice.
 - Anything gamified.

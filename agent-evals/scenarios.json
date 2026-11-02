@@ -4,43 +4,90 @@
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": false,
-    "userMessages": ["hi"],
-    "expect": { "noTools": true }
+    "userMessages": [
+      "hi"
+    ],
+    "expect": {
+      "noTools": true
+    }
   },
   {
     "name": "goalden term: risk profile",
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": false,
-    "userMessages": ["what is a risk profile?"],
-    "expect": { "replyIncludes": "risk", "notToolsCalled": ["set_value", "build_goal_plan", "propose_plan"] }
+    "userMessages": [
+      "what is a risk profile?"
+    ],
+    "expect": {
+      "replyIncludes": "risk",
+      "notToolsCalled": [
+        "set_value",
+        "build_goal_plan",
+        "propose_plan"
+      ]
+    }
   },
   {
     "name": "goalden term: SIP",
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": false,
-    "userMessages": ["what is a sip?"],
-    "expect": { "replyIncludes": "sip", "notToolsCalled": ["set_value", "build_goal_plan", "propose_plan"] }
+    "userMessages": [
+      "what is a sip?"
+    ],
+    "expect": {
+      "replyIncludes": "sip",
+      "notToolsCalled": [
+        "set_value",
+        "build_goal_plan",
+        "propose_plan"
+      ]
+    }
   },
   {
     "name": "goalden term: inflation",
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": false,
-    "userMessages": ["what does inflation mean?"],
-    "expect": { "replyIncludes": "inflation", "notToolsCalled": ["set_value", "build_goal_plan", "propose_plan"] }
+    "userMessages": [
+      "what does inflation mean?"
+    ],
+    "expect": {
+      "replyIncludes": "inflation",
+      "notToolsCalled": [
+        "set_value",
+        "build_goal_plan",
+        "propose_plan"
+      ]
+    }
   },
   {
     "name": "goalden do-it-all mechanics (mock)",
     "page": "goalden.html",
     "country": "IN",
     "mockOnly": true,
-    "userMessages": ["help me plan my retirement"],
+    "userMessages": [
+      "help me plan my retirement"
+    ],
     "expect": {
-      "toolsCalled": ["build_goal_plan", "get_results", "compose_briefing"],
-      "fieldsSet": { "country": "IN", "goalType": "retirement", "age": 30, "retireAge": 60, "monthlyExpense": 50000, "risk": "balanced" },
-      "figures": { "corpus": "retirementCorpus", "monthlySIP": "retirementSIP" }
+      "toolsCalled": [
+        "build_goal_plan",
+        "get_results",
+        "compose_briefing"
+      ],
+      "fieldsSet": {
+        "country": "IN",
+        "goalType": "retirement",
+        "age": 30,
+        "retireAge": 60,
+        "monthlyExpense": 50000,
+        "risk": "balanced"
+      },
+      "figures": {
+        "corpus": "retirementCorpus",
+        "monthlySIP": "retirementSIP"
+      }
     }
   },
   {
@@ -48,10 +95,19 @@
     "page": "goalden-door2.html",
     "country": "IN",
     "mockOnly": true,
-    "userMessages": ["help me plan my retirement"],
+    "userMessages": [
+      "help me plan my retirement"
+    ],
     "expect": {
-      "toolsCalled": ["build_goal_plan", "get_results", "compose_briefing"],
-      "fieldsSet": { "country": "IN", "monthlyCapacity": 50000 }
+      "toolsCalled": [
+        "build_goal_plan",
+        "get_results",
+        "compose_briefing"
+      ],
+      "fieldsSet": {
+        "country": "IN",
+        "monthlyCapacity": 50000
+      }
     }
   },
   {
@@ -59,11 +115,24 @@
     "page": "goalden-lab.html",
     "country": "IN",
     "mockOnly": true,
-    "userMessages": ["help me plan my retirement"],
+    "userMessages": [
+      "help me plan my retirement"
+    ],
     "expect": {
-      "toolsCalled": ["run_full_analysis", "get_results", "compose_briefing"],
-      "notToolsCalled": ["navigate"],
-      "fieldsSet": { "tab": "retirement", "ret.age": 30, "ret.retireAge": 60, "ret.monthlyExpense": 50000 }
+      "toolsCalled": [
+        "run_full_analysis",
+        "get_results",
+        "compose_briefing"
+      ],
+      "notToolsCalled": [
+        "navigate"
+      ],
+      "fieldsSet": {
+        "tab": "retirement",
+        "ret.age": 30,
+        "ret.retireAge": 60,
+        "ret.monthlyExpense": 50000
+      }
     }
   },
   {
@@ -71,27 +140,67 @@
     "page": "goalden-lab.html",
     "country": "IN",
     "mockOnly": true,
-    "userMessages": ["explain this graph"],
-    "expect": { "toolsCalled": ["read_current_chart"], "notToolsCalled": ["set_value", "run_full_analysis", "compose_briefing"] }
+    "userMessages": [
+      "explain this graph"
+    ],
+    "expect": {
+      "toolsCalled": [
+        "read_current_chart"
+      ],
+      "notToolsCalled": [
+        "set_value",
+        "run_full_analysis",
+        "compose_briefing"
+      ]
+    }
   },
   {
     "name": "index do-it-all hands off with auto_continue (mock)",
     "page": "index.html",
     "country": "IN",
     "mockOnly": true,
-    "userMessages": ["help me plan my retirement", "A"],
-    "expect": { "toolsCalled": ["open_door"], "toolArgs": { "open_door": { "door": "full", "auto_continue": true } } }
+    "userMessages": [
+      "help me plan my retirement",
+      "A"
+    ],
+    "expect": {
+      "toolsCalled": [
+        "open_door"
+      ],
+      "toolArgs": {
+        "open_door": {
+          "door": "full",
+          "auto_continue": true
+        }
+      }
+    }
   },
   {
     "name": "goalden do-it-all retirement",
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["Help me plan my retirement. I'm in India, 30 years old, want to retire at 60, spend 50000 a month, balanced risk, no existing savings.", "A - do it all for me."],
+    "userMessages": [
+      "Help me plan my retirement. I'm in India, 30 years old, want to retire at 60, spend 50000 a month, balanced risk, no existing savings.",
+      "A - do it all for me."
+    ],
     "expect": {
-      "toolsCalled": ["build_goal_plan", "compose_briefing"],
-      "fieldsSet": { "age": 30, "retireAge": 60, "monthlyExpense": 50000, "risk": "balanced", "country": "IN", "goalType": "retirement" },
-      "figures": { "corpus": "retirementCorpus", "monthlySIP": "retirementSIP" }
+      "toolsCalled": [
+        "build_goal_plan",
+        "compose_briefing"
+      ],
+      "fieldsSet": {
+        "age": 30,
+        "retireAge": 60,
+        "monthlyExpense": 50000,
+        "risk": "balanced",
+        "country": "IN",
+        "goalType": "retirement"
+      },
+      "figures": {
+        "corpus": "retirementCorpus",
+        "monthlySIP": "retirementSIP"
+      }
     }
   },
   {
@@ -99,10 +208,22 @@
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["Plan my child's college fund. Annual fee is 500000 today, college starts in 10 years, 4-year course, growth risk.", "A - do it all for me."],
+    "userMessages": [
+      "Plan my child's college fund. Annual fee is 500000 today, college starts in 10 years, 4-year course, growth risk.",
+      "A - do it all for me."
+    ],
     "expect": {
-      "toolsCalled": ["build_goal_plan"],
-      "fieldsSet": { "annualFee": 500000, "yearsToCollege": 10, "courseDuration": 4, "risk": "growth", "country": "IN", "goalType": "education" }
+      "toolsCalled": [
+        "build_goal_plan"
+      ],
+      "fieldsSet": {
+        "annualFee": 500000,
+        "yearsToCollege": 10,
+        "courseDuration": 4,
+        "risk": "growth",
+        "country": "IN",
+        "goalType": "education"
+      }
     }
   },
   {
@@ -110,10 +231,21 @@
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["Help me save for a car costing 800000 today, needed in 5 years, balanced risk. I'm in India, no existing savings for this.", "A - do it all for me."],
+    "userMessages": [
+      "Help me save for a car costing 800000 today, needed in 5 years, balanced risk. I'm in India, no existing savings for this.",
+      "A - do it all for me."
+    ],
     "expect": {
-      "toolsCalled": ["build_goal_plan"],
-      "fieldsSet": { "genType": "car", "genAmount": 800000, "genYears": 5, "country": "IN", "goalType": "generic" }
+      "toolsCalled": [
+        "build_goal_plan"
+      ],
+      "fieldsSet": {
+        "genType": "car",
+        "genAmount": 800000,
+        "genYears": 5,
+        "country": "IN",
+        "goalType": "generic"
+      }
     }
   },
   {
@@ -121,18 +253,33 @@
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["Help me plan my retirement, but walk me through it step by step.", "B - walk me through it."],
-    "expect": { "notToolsCalled": ["build_goal_plan"] }
+    "userMessages": [
+      "Help me plan my retirement, but walk me through it step by step.",
+      "B - walk me through it."
+    ],
+    "expect": {
+      "notToolsCalled": [
+        "build_goal_plan"
+      ]
+    }
   },
   {
     "name": "door2 do-it-all full plan",
     "page": "goalden-door2.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["Build a full plan for me. I'm in India, and I'd call myself a moderate risk taker. My income is steady, it's just me relying on it, no loans, and this is a small slice of my savings. I can invest 50000 a month. I have a full 6+ months emergency fund already, don't need to prioritize it. I've been investing in market-linked products for 3-7 years. If the market dropped 30% I'd buy more, and it wouldn't be devastating, just a setback I can handle — I'd still sleep fine. Add a retirement goal: retire at 60, spending 60000 a month, I'm 30 now, no existing savings for it.", "A - do it all for me."],
+    "userMessages": [
+      "Build a full plan for me. I'm in India, and I'd call myself a moderate risk taker. My income is steady, it's just me relying on it, no loans, and this is a small slice of my savings. I can invest 50000 a month. I have a full 6+ months emergency fund already, don't need to prioritize it. I've been investing in market-linked products for 3-7 years. If the market dropped 30% I'd buy more, and it wouldn't be devastating, just a setback I can handle — I'd still sleep fine. Add a retirement goal: retire at 60, spending 60000 a month, I'm 30 now, no existing savings for it.",
+      "A - do it all for me."
+    ],
     "expect": {
-      "toolsCalled": ["build_goal_plan"],
-      "fieldsSet": { "country": "IN", "monthlyCapacity": 50000 }
+      "toolsCalled": [
+        "build_goal_plan"
+      ],
+      "fieldsSet": {
+        "country": "IN",
+        "monthlyCapacity": 50000
+      }
     }
   },
   {
@@ -140,10 +287,19 @@
     "page": "goalden-lab.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["In the Lab, run a retirement analysis for me: age 30, retire at 60, monthly expenses 50000, 10% growth while saving, 8% after retirement, 6% inflation.", "A - do it all for me."],
+    "userMessages": [
+      "In the Lab, run a retirement analysis for me: age 30, retire at 60, monthly expenses 50000, 10% growth while saving, 8% after retirement, 6% inflation.",
+      "A - do it all for me."
+    ],
     "expect": {
-      "toolsCalled": ["run_full_analysis"],
-      "fieldsSet": { "ret.age": 30, "ret.retireAge": 60, "ret.monthlyExpense": 50000 }
+      "toolsCalled": [
+        "run_full_analysis"
+      ],
+      "fieldsSet": {
+        "ret.age": 30,
+        "ret.retireAge": 60,
+        "ret.monthlyExpense": 50000
+      }
     }
   },
   {
@@ -151,10 +307,20 @@
     "page": "goalden-lab.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["Run a Monte Carlo simulation: invest 200000 a year for 20 years, 12% expected return, 15% volatility.", "A - do it all for me."],
+    "userMessages": [
+      "Run a Monte Carlo simulation: invest 200000 a year for 20 years, 12% expected return, 15% volatility.",
+      "A - do it all for me."
+    ],
     "expect": {
-      "toolsCalled": ["run_full_analysis"],
-      "fieldsSet": { "mc.sip": 200000, "mc.years": 20, "mc.meanReturn": 12, "mc.volatility": 15 }
+      "toolsCalled": [
+        "run_full_analysis"
+      ],
+      "fieldsSet": {
+        "mc.sip": 200000,
+        "mc.years": 20,
+        "mc.meanReturn": 12,
+        "mc.volatility": 15
+      }
     }
   },
   {
@@ -162,38 +328,72 @@
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["Should I buy RELIANCE now? I heard it will reach 3000 soon."],
-    "expect": { "noRecommendation": true }
+    "userMessages": [
+      "Should I buy RELIANCE now? I heard it will reach 3000 soon."
+    ],
+    "expect": {
+      "noRecommendation": true
+    }
   },
   {
     "name": "hesitant user gets a plan to approve",
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["I'm honestly not sure about any of this. Could you maybe set up a retirement plan for me? I'd like to review it before anything actually happens.", "A - do it all for me, but show me first.", "I'm in India, 30 years old, want to retire at 60, spend 50000 a month, balanced risk."],
-    "expect": { "toolsCalled": ["propose_plan"] }
+    "userMessages": [
+      "I'm honestly not sure about any of this. Could you maybe set up a retirement plan for me? I'd like to review it before anything actually happens.",
+      "A - do it all for me, but show me first.",
+      "I'm in India, 30 years old, want to retire at 60, spend 50000 a month, balanced risk."
+    ],
+    "expect": {
+      "toolsCalled": [
+        "propose_plan"
+      ]
+    }
   },
   {
     "name": "invalid value is rejected, not coerced",
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["Set my age to 500."],
-    "expect": { "fieldsSet": { "age": null } }
+    "userMessages": [
+      "Set my age to 500."
+    ],
+    "expect": {
+      "fieldsSet": {
+        "age": null
+      }
+    }
   },
   {
     "name": "door2 situation dump builds the plan without the menu",
     "page": "goalden-door2.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?"],
+    "userMessages": [
+      "I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?"
+    ],
     "expect": {
-      "toolsCalled": ["build_goal_plan"],
+      "toolsCalled": [
+        "build_goal_plan"
+      ],
       "menuOfferedAtMost": 0,
-      "fieldsSet": { "country": "IN" },
-      "fieldsRange": { "monthlyCapacity": [50000, 70000] },
-      "goalsInclude": ["retirement", "house"],
-      "goalsExclude": ["education"]
+      "fieldsSet": {
+        "country": "IN"
+      },
+      "fieldsRange": {
+        "monthlyCapacity": [
+          50000,
+          70000
+        ]
+      },
+      "goalsInclude": [
+        "retirement",
+        "house"
+      ],
+      "goalsExclude": [
+        "education"
+      ]
     }
   },
   {
@@ -201,12 +401,28 @@
     "page": "goalden-door2.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?", "The engineering college fee is about 3 lakh a year today.", "Actually drop the flat, we'll keep renting. And add a family trip abroad of 4 lakh in 2 years."],
+    "userMessages": [
+      "I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?",
+      "The engineering college fee is about 3 lakh a year today.",
+      "Actually drop the flat, we'll keep renting. And add a family trip abroad of 4 lakh in 2 years."
+    ],
     "expect": {
-      "anyToolCalled": ["remove_goal", "build_goal_plan"],
+      "anyToolCalled": [
+        "remove_goal",
+        "build_goal_plan"
+      ],
       "menuOfferedAtMost": 0,
-      "goalsInclude": ["retirement", "education", { "amount": 400000, "years": 2 }],
-      "goalsExclude": ["house"]
+      "goalsInclude": [
+        "retirement",
+        "education",
+        {
+          "amount": 400000,
+          "years": 2
+        }
+      ],
+      "goalsExclude": [
+        "house"
+      ]
     }
   },
   {
@@ -214,12 +430,26 @@
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["I'm 34 and live in Pune. We spend about 70k a month and I want to retire at 55. Balanced risk is fine.", "What if I retire at 58 instead?"],
+    "userMessages": [
+      "I'm 34 and live in Pune. We spend about 70k a month and I want to retire at 55. Balanced risk is fine.",
+      "What if I retire at 58 instead?"
+    ],
     "expect": {
-      "anyToolCalled": ["build_goal_plan", "set_value"],
+      "anyToolCalled": [
+        "build_goal_plan",
+        "set_value"
+      ],
       "menuOfferedAtMost": 0,
-      "noReplyIncludes": ["haven't run any numbers"],
-      "fieldsSet": { "goalType": "retirement", "age": 34, "retireAge": 58, "monthlyExpense": 70000, "country": "IN" }
+      "noReplyIncludes": [
+        "haven't run any numbers"
+      ],
+      "fieldsSet": {
+        "goalType": "retirement",
+        "age": 34,
+        "retireAge": 58,
+        "monthlyExpense": 70000,
+        "country": "IN"
+      }
     }
   },
   {
@@ -227,11 +457,21 @@
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["help me plan my retirement", "I'm 30, in India, I spend 50000 a month and want to retire at 60."],
+    "userMessages": [
+      "help me plan my retirement",
+      "I'm 30, in India, I spend 50000 a month and want to retire at 60."
+    ],
     "expect": {
-      "toolsCalled": ["build_goal_plan"],
+      "toolsCalled": [
+        "build_goal_plan"
+      ],
       "menuOfferedAtMost": 1,
-      "fieldsSet": { "age": 30, "retireAge": 60, "monthlyExpense": 50000, "goalType": "retirement" }
+      "fieldsSet": {
+        "age": 30,
+        "retireAge": 60,
+        "monthlyExpense": 50000,
+        "goalType": "retirement"
+      }
     }
   },
   {
@@ -239,11 +479,21 @@
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["Meri shaadi 2 saal mein hai, uske liye 10 lakh chahiye. Main India mein hoon."],
+    "userMessages": [
+      "Meri shaadi 2 saal mein hai, uske liye 10 lakh chahiye. Main India mein hoon."
+    ],
     "expect": {
-      "toolsCalled": ["build_goal_plan"],
+      "toolsCalled": [
+        "build_goal_plan"
+      ],
       "menuOfferedAtMost": 0,
-      "fieldsSet": { "goalType": "generic", "genType": "wedding", "genAmount": 1000000, "genYears": 2, "country": "IN" }
+      "fieldsSet": {
+        "goalType": "generic",
+        "genType": "wedding",
+        "genAmount": 1000000,
+        "genYears": 2,
+        "country": "IN"
+      }
     }
   },
   {
@@ -251,9 +501,13 @@
     "page": "goalden.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?"],
+    "userMessages": [
+      "I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?"
+    ],
     "expect": {
-      "toolCallCountAtLeast": { "build_goal_plan": 2 },
+      "toolCallCountAtLeast": {
+        "build_goal_plan": 2
+      },
       "menuOfferedAtMost": 0
     }
   },
@@ -262,10 +516,60 @@
     "page": "index.html",
     "country": "IN",
     "requiresLive": true,
-    "userMessages": ["I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?"],
+    "userMessages": [
+      "I'm 34, working in IT in Pune, take home is about 1.4 lakh a month. My wife doesn't work and we have one son who is 4. Monthly expenses are around 70k including rent. I have a car loan EMI of 12k for 2 more years. I've got 6 lakh in FDs and around 3 lakh in mutual funds. I want to save for my son's engineering college and retire by 55 comfortably. Also thinking of buying a flat worth 80 lakh in 5 years. What do I do?"
+    ],
     "expect": {
-      "toolCallArgs": { "open_door": { "door": "full", "auto_continue": true } },
+      "toolCallArgs": {
+        "open_door": {
+          "door": "full",
+          "auto_continue": true
+        }
+      },
       "menuOfferedAtMost": 0
+    }
+  },
+  {
+    "name": "lab yearly review starts the fixed checklist",
+    "page": "goalden-lab.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": [
+      "Do my yearly plan review"
+    ],
+    "expect": {
+      "toolsCalled": [
+        "start_yearly_review"
+      ]
+    }
+  },
+  {
+    "name": "lab annual bonus question is not a yearly review",
+    "page": "goalden-lab.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": [
+      "My annual bonus is 2 lakh, check if the old regime is better for me"
+    ],
+    "expect": {
+      "notToolsCalled": [
+        "start_yearly_review"
+      ]
+    }
+  },
+  {
+    "name": "lab statement question explains the box, invents no holdings",
+    "page": "goalden-lab.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": [
+      "Can I upload my CAS statement here?"
+    ],
+    "expect": {
+      "replyIncludes": "statement",
+      "notToolsCalled": [
+        "set_holdings"
+      ]
     }
   }
 ]

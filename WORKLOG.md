@@ -4691,3 +4691,27 @@ standing over the founder's shoulder.
 - Tools list and the landing page's Lab card mention reading the CAS statement.
 - Checked: real ISINs opened at 60/20/20 and the At a glance verdict ran on them; screenshots of both views.
 - Tests: 318/318 engine, smokes 02-24 all pass.
+
+## 2026-11-02 - Claude Code - 9e part 2 review fixes, and shares on the frontier
+- **Shares too:** "Test these holdings on real history" now sends share ISINs (INE...) as well. They map to
+  NSE symbols from `data/nse-isin.json` (2,635 shares, made by `data/make_nse_isin.py` from NSE's own list,
+  read on the device: nothing about shares is sent) and price from Yahoo as SYMBOL.NS. Rows of one ISIN
+  are merged before the largest six are taken; one fund lookup failing no longer stops shares opening.
+- **Held weights follow the instruments** (`liveSyncHeldWeights`, run each time Test Real Investments
+  draws): the statement's weights are laid over the instruments that actually loaded, by key, renormalised.
+  Before, one failing to load fell back to equal weights while the note still said "your real mix". Once
+  the person moves the mix (slider, frontier, table, advisor), it is theirs and the note says so; holdings
+  that could not be used on real prices are named.
+- **Dividend (IDCW) and split funds are not measured for risk:** their printed prices drop at each payout
+  or split, so a fall there is not a loss. The engine gives `navsNote` per scheme; the risk section names
+  each fund left out with its own reason. The growth column is "Price grew a year" (first to last day on
+  the statement), with a note that it differs from the XIRR above; the y-axis is named.
+- **Worker `/api/isin`:** finds each ISIN in the cached 1.5 MB AMFI list by search (3 ms for 4 codes)
+  instead of splitting it on every request, and gives up on AMFI after 25 s.
+- Advisor get_results: price growth per fund, and why a fund was not measured.
+- `.assetsignore`: resp_vedl*.json, VIDEO-PLAN.md, start.bat.
+- **Checked in a real browser:** sample statement (3 measured; the IDCW fund and a two-purchase fund named
+  with reasons); RELIANCE + TCS + a duplicate RELIANCE row + an unknown fund opened at 67/33 with "1 left
+  out"; moving the slider switched the note to "you have since changed the mix".
+- **Tests:** 319/319 engine (new: growth plan gives prices, IDCW plan does not); smokes 02-24 pass. Full
+  eval suite 23/24; the miss ("lab run Monte Carlo", model skipped run_full_analysis) passed 2 of 2 re-runs.

@@ -14,3 +14,7 @@ node_modules/**
 scratchpad
 scratchpad/**
 test-statements/*.py
+data/*.py
+resp_vedl*.json
+VIDEO-PLAN.md
+start.bat

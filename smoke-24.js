@@ -63,27 +63,39 @@ check(fs2.existsSync(path.join(root, 'test-statements/synthetic-cams-detailed.pd
 
 // ---- risk against the index, and the hand-off to the efficient frontier ----------------------------------------------
 const wk = read('src/worker.js'), py = read('local_server.py');
-check(/risk:statementRisk\(s\.navs, b\.prices\)/.test(fnBody(gl, 'holdVsIndexData')), '9e risk is measured from the statement\'s own prices against the index on the same days');
+check(/risk:s\.navsNote \? \{ ok:false, error:s\.navsNote, priceNote:true \} : statementRisk\(s\.navs, b\.prices\)/.test(fnBody(gl, 'holdVsIndexData')), '9e risk is measured from the statement\'s own prices against the index on the same days');
 const rk = fnBody(gl, 'holdRiskHTML');
 check(/more ups and downs for less return/.test(rk) && /Up and to the left is better/.test(rk) && /Not measured/.test(rk), '9e the risk section leads with a sentence and says what was not measured');
 const rc = fnBody(gl, 'renderVsRiskChart');
+check(/Price grew a year, yours \/ index/.test(rk) && /differs from the yearly return \(XIRR\)/.test(rk) && /name:c===0\?'price grew a year':''/.test(rc), '9e "price grew a year" is labelled as price growth, not the XIRR above');
+check(/The one fund measured/.test(rk) && !/of \$\{bumpier\.length===1\?'it'/.test(rk), '9e one fund is never "1 of the 1 funds"');
+check(/navsNote/.test(read('goalden-engine.js')) && /a dividend \(IDCW\) plan/.test(read('goalden-engine.js')), '9e IDCW and split funds are not measured on prices that drop at each payout');
 check(/legend:\{ show:false \}/.test(rc) && /formatter:'Index'/.test(rc) && /formatter:'Fund'/.test(rc) && !/#C0392B|#E74C3C|\bred\b/i.test(rc), '9e risk panels: direct labels, no legend, no red');
 check(/one small panel per fund/i.test(gl) && /interval:5/.test(rc), '9e one panel per fund on shared, round scales');
 check(/if \(url\.pathname === '\/api\/isin'\)/.test(wk) && /parsed\.path == '\/api\/isin'/.test(py), '9e /api/isin exists in the Worker and the local server');
 check(/portal\.amfiindia\.com\/spages\/NAVAll\.txt/.test(wk) && /portal\.amfiindia\.com\/spages\/NAVAll\.txt/.test(py), '9e both read AMFI\'s own scheme list');
-check(/\.split\(\/\\r\?\\n\/\)/.test(wk), '9e the Worker splits the list on line breaks (a real regex, not a stray character)');
+check(/text\.indexOf\(code\)/.test(wk) && /text\.lastIndexOf\('\\n', at\)/.test(wk) && /\.replace\(\/\\r\$\/, ''\)/.test(wk), '9e the Worker finds each ISIN in the cached list by search, not by splitting 1.5 MB on every request');
+check(/AbortSignal\.timeout\(25000\)/.test(wk), '9e the Worker gives up on AMFI after 25 seconds');
 check(/\.slice\(0, 40\)/.test(wk) && /\[:40\]/.test(py), '9e at most 40 ISINs per lookup');
 const lv = fnBody(gl, 'holdOpenInLive');
-check(/\/api\/isin\?codes='\+rows\.map\(x=>x\.isin\)\.join\(','\)/.test(lv) && !/value|name/.test((lv.match(/liveApiGet\([^)]*\)/) || [''])[0]), '9e only ISIN codes are sent for the lookup, never amounts or names');
+check(/\/api\/isin\?codes='\+funds\.map\(x=>x\.isin\)\.join\(','\)/.test(lv) && !/value|name/.test((lv.match(/liveApiGet\([^)]*\)/) || [''])[0]), '9e only ISIN codes are sent for the lookup, never amounts or names');
 check(/L\.live\.selectedWeights=w/.test(lv) && /L\.live\.weight=Math\.round\(w\[0\]\*100\)/.test(lv) && /L\.tab='livefrontier'/.test(lv), '9e the funds open at the weights they are held in');
-check(/found\.length<2/.test(lv), '9e fewer than two funds found says so instead of opening a one-fund mix');
+check(/items\.length<2/.test(lv), '9e fewer than two found says so instead of opening a one-instrument mix');
+check(/byIsin\[x\.isin\]/.test(lv) && lv.indexOf('byIsin') < lv.indexOf('.slice(0,HOLD_LIVE_MAX)'), '9e rows of one ISIN are merged before the largest six are taken');
+check(/\.catch\(\(\)=>\{ lookupFailed=true; return \{\}; \}\)/.test(lv), '9e a failed fund lookup does not stop shares from opening, and is said');
+const sy = fnBody(gl, 'liveSyncHeldWeights');
+check(/liveSyncHeldWeights\(\);\s*const c=cfg\(\), live=L\.live;/.test(fnBody(gl, 'renderLiveFrontier')), '9e held weights are laid over the instruments in use every time the tab draws');
+check(/f\.weights\[f\.keys\.indexOf\(it\.key\)\]/.test(sy) && /raw\.map\(v=>v\/tot\)/.test(sy), '9e held weights follow each instrument by key and are renormalised over the ones that loaded');
+check(/f\.touched=true/.test(sy) && /if\(f\.touched\) return;/.test(sy), '9e once the person moves the mix, it is theirs and is not reset');
+check(/you have since changed the mix/.test(fnBody(gl, 'liveFromStatementHTML')) && /could not be used on real prices/.test(fnBody(gl, 'liveFromStatementHTML')), '9e the note says when the mix was changed, and which holdings could not be used');
 
 // ---- the path from a statement to the frontier is explained where people are -------------------------------------
 check(/<ol class="stmt-steps">/.test(fnBody(gl, 'holdStmtPanelHTML')) && (fnBody(gl, 'holdStmtPanelHTML').match(/<li><b>/g) || []).length === 4, '9e the side panel explains the statement in four numbered steps');
 check(/class="stmt-flow"/.test(fnBody(gl, 'holdingsOutputHTML')) && /data-hd="stmtSample"/.test(fnBody(gl, 'holdingsOutputHTML')), '9e an empty My holdings shows the path from statement to frontier, with the sample to try');
 check(/read from your CAS statement/.test(gl) && /Read your CAS statement in My holdings/.test(read('index.html')), '9e the tools list and the landing page say the statement can be read');
 const fs3 = fnBody(gl, 'liveFromStatementHTML');
-check(/From your statement\./.test(fs3) && /data-tab-switch="holdings"/.test(fs3) && /L\.live\.fromStatement=null/.test(fs3), '9e Test Real Investments says the funds came from the statement, links back, and drops the note once the mix is changed');
+check(/From your statement\./.test(fs3) && /data-tab-switch="holdings"/.test(fs3) && /L\.live\.fromStatement=null/.test(fnBody(gl, 'liveSyncHeldWeights')), '9e Test Real Investments says the funds came from the statement, links back, and drops the note once the mix is changed');
+check(/priceGrewAYearPct/.test(fnBody(gl, 'holdVsIndexForAdvisor')) && /notMeasured/.test(fnBody(gl, 'holdVsIndexForAdvisor')), '9e the advisor gets the growth behind the risk, and why a fund was not measured');
 check(/L\.live\.fromStatement=\{ keys:/.test(fnBody(gl, 'holdOpenInLive')), '9e the hand-off records which funds came from the statement');
 
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
