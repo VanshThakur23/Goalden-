@@ -38,5 +38,28 @@ check(/legend:\{show:false\}/.test(chart) && !/#C0392B|#E74C3C|\bred\b/i.test(ch
 check(/const tiny=!!dom && dom\.clientWidth<360;/.test(chart) && /\(tiny\?'Index':name\)/.test(chart), '9e on a phone the index label shortens so the plot keeps its width');
 check(/showMinLabel:false/.test(chart), '9e the y-axis floor (not a round number) has no label');
 
+// ---- the statement (CAS) reader in My holdings -------------------------------------------------------------------
+const fs2 = require('fs');
+check(fs2.existsSync(path.join(root, 'vendor/pdfjs/pdf.min.js')) && fs2.existsSync(path.join(root, 'vendor/pdfjs/pdf.worker.min.js')) && fs2.existsSync(path.join(root, 'vendor/pdfjs/LICENSE')), '9e pdf.js is vendored with its licence (no CDN)');
+check(!/<script[^>]+pdf\.min\.js/.test(gl) && /sc\.src='vendor\/pdfjs\/pdf\.min\.js'/.test(fnBody(gl, 'holdLoadPdfJs')), '9e pdf.js loads only when a statement is read, not with the page');
+const rd = fnBody(gl, 'holdReadStatement');
+check(/isEvalSupported:false/.test(rd), '9e pdf.js never compiles code from a font in the file (CVE-2024-4367)');
+check(/PasswordException/.test(rd) && /e\.code===2/.test(rd), '9e a locked file and a wrong password each say what to do');
+// The one fetch in the reader loads the made-up sample from this site; nothing sends the chosen file or what is read from it.
+check((rd.match(/fetch\(/g) || []).length === 1 && /fetch\(HOLD_STMT_SAMPLE\.path\)/.test(rd) && !/XMLHttpRequest|localStorage|sessionStorage|FormData/.test(rd + fnBody(gl, 'holdStmtApply')), '9e the file and what is read from it are not sent or stored');
+check(/<input type="password" id="stmtPw" autocomplete="off"/.test(fnBody(gl, 'holdStmtPanelHTML')) && !/stmtPw[^>]*value=/.test(fnBody(gl, 'holdStmtPanelHTML')), '9e the password box is always drawn empty');
+check(/markGiven\('holdings\.rows', !sample\)/.test(fnBody(gl, 'holdStmtApply')), '9e holdings read from a statement are the person\'s own (the yearly review uses them); the made-up sample\'s are not');
+check(/HOLD_MAX-1/.test(fnBody(gl, 'holdStmtApply')), '9e more holdings than the list holds are pooled into one row, and said');
+check(/matchesStated/.test(fnBody(gl, 'holdStmtPanelHTML')), '9e the reader says whether its total matches the one printed on the statement');
+check(/return holdVsIndexHTML\(R\)\+stats/.test(fnBody(gl, 'holdingsOutputHTML')), '9e "You against the index" leads the results');
+const vs = fnBody(gl, 'holdVsIndexHTML');
+check(/behind<\/b> it: that is what these funds have cost you against it so far/.test(vs) && /ahead<\/b> of it/.test(vs), '9e the gap is said in rupees and in words');
+check(/You took out \$\{K\(v\.invested\)\} more than you put in/.test(vs) && /net of what you took out/.test(vs), '9e more taken out than put in is said that way round');
+check(/before tax and exit loads/.test(vs) && /d\.eq\.incomplete/.test(vs), '9e it says both sides are before tax, and names funds left out for an incomplete history');
+check(/under a year/.test(vs) && /const yr=f=>/.test(vs), '9e no yearly rate is shown for under a year');
+check(/Small- and mid-cap funds are set against the Nifty 50 as well/.test(vs) && /Left out: /.test(vs), '9e it says what it compares against and what it leaves out');
+check(/againstIndex:holdVsIndexForAdvisor\(\)/.test(gl) && /you cannot open files/.test(gl), '9e the advisor can read the comparison and knows the user reads the statement themselves');
+check(fs2.existsSync(path.join(root, 'test-statements/synthetic-cams-detailed.pdf')) && fs2.existsSync(path.join(root, 'test-statements/synthetic-nsdl.pdf')), '9e synthetic test statements are in the repo');
+
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
 process.exit(fail ? 1 : 0);

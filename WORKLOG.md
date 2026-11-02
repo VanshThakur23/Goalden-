@@ -4626,3 +4626,39 @@ standing over the founder's shoulder.
   adds "Mix vs index" at every week; the y-axis starts just below the lowest point; on a
   phone the index label is "Index". smoke-24 added (13 checks).
 - Checked at 1600px, docked advisor (442px chart) and 375px; no console errors.
+
+## 2026-11-02 - Claude Code - Group 9e: statement (CAS) import and "You against the index"
+- **Built.** My holdings has a "From your statement" box: the Consolidated Account Statement PDF
+  from CAMS/KFintech (detailed, mutual funds with every transaction) or NSDL/CDSL (shares, ETFs,
+  bonds, gold bonds, MFs) is opened in the browser with pdf.js 3.11.174 (vendored in
+  vendor/pdfjs, Apache-2.0, loaded only on use, isEvalSupported:false). The file and password
+  are never sent or stored; the password box is always redrawn empty. The parser
+  (goalden-engine.js: stmtLines, parseStatement, statementVsIndex, statementEquityFlows) keeps no
+  name, PAN, folio or account number. It fills the holdings list (largest first, pooled past 40),
+  checks its total against the statement's printed total, and marks long-term from purchase
+  dates (first in, first out). "Try a made-up one" reads test-statements/synthetic-cams-detailed.pdf
+  (password on the sample is a made-up PAN-shaped string); its rows are not "given", so the yearly
+  review ignores them.
+- **You against the index** (detailed statements only): every purchase and sale of the Indian
+  equity funds repeated on the same day in UTI Nifty 50 Index Fund (Direct); gap in rupees and XIRR,
+  fund by fund, with a chart. Debt/hybrid/gold/international/uncategorised funds and any fund held
+  before the statement starts or with a transaction that does not reconcile are left out and named.
+  No yearly rate under a year. get_results on My holdings returns it as againstIndex.
+- **Opus review: NO-GO, fixed.** Trailing numbers in descriptions shifted columns (now taken from the
+  right and every line checked: amount = units x price within 2%, running balance adds up); IDCW
+  payouts with 0 units were dropped; asOf could come from "valid to 31-Dec-2099" (now the valuation
+  date or the period in the first lines, capped at today); funds with an opening balance inflated the
+  comparison (now excluded); a transactions table after holdings was read as values (headings with no
+  value column now switch reading off); "put in more than you took out" read backwards; folio/PAN line
+  could join a wrapped scheme name; per-scheme "Total Cost Value" lines counted as a statement total;
+  NSDL/CDSL rows now default to held under a year.
+- **Also:** Test Real Investments growth chart made readable (earlier commit); review debt text "36%, a
+  typical rate"; fund table fills its card.
+- **Checked in a real browser:** both synthetic statements read with the right/wrong/no password,
+  totals match, comparison against live UTI Nifty 50 prices, 1600px / docked / 375px, no console errors.
+- **Tests:** 316/316 engine (new statement tests incl. every reviewer case); smokes 02-24 pass
+  (14/15/16 need python3 on PATH); smoke-22 guards updated (a file is read, never sent).
+- **Not done / next:** a real CAS has not been tried (only synthetic ones built from the public
+  layouts) - try one locally before relying on it. Risk against the index and the frontier view
+  are not built. pdf.js 4.x upgrade and vendored cmaps (CID fonts) when practical.
+- **Poster:** goalden-video/poster/Goalden-poster.pdf and .png (no college or student name).

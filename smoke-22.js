@@ -191,7 +191,8 @@ check(/data\.tab==='holdings' && L\.country==='IN'/.test(gl), '9c the handoff op
 const holdBlock = gl.slice(gl.indexOf('TAB: MY HOLDINGS (India)'), gl.indexOf('TAB: CROSS-BORDER'));
 check(holdBlock.length > 5000, '9c found the My holdings block');
 check(!/should (buy|sell|choose|switch|take|hold|exit)|we recommend|best (fund|option)|top[- ]rated|star rating|you must|the right choice|outperform/i.test(holdBlock), '9c no recommendation, rating or ranking language in the tab');
-check(!/type=["']file["']|FileReader|\.upload|multipart|statement upload/i.test(holdBlock.replace(/no statement|Nothing is uploaded|never uploaded|no account/gi, '')), '9c no file input or reader in the tab (typed in, never uploaded)');
+// 9e added a statement reader: the file is read in the page, so nothing in the tab may send a file anywhere.
+check(!/FormData|\.upload|multipart|XMLHttpRequest/i.test(holdBlock) && !/fetch\([^)]*(file|data|blob)/i.test(holdBlock), '9c nothing in the tab sends a file anywhere (typed in, or a statement read on the device)');
 check(/own portfolio/.test(holdBlock) && /category/i.test(holdBlock) && /holding-level|same companies/i.test(holdBlock), '9c the overlap card says plainly that holding-level overlap needs each fund\'s own portfolio');
 check(/T\.equityLtcgExemption/.test(ho) && /with no tax this financial year/.test(ho) && /limit on long-term equity gains/.test(ho), '9c the rebalance names the free limit on long-term equity gains, from TAX_IN rather than a typed figure');
 check(/new money|new SIP/i.test(ho) && /before anything is sold|first/i.test(ho), '9c the rebalance uses new money first');
@@ -201,7 +202,7 @@ check(/this page does not work that out|not worked out|tax is not worked out/i.t
 
 // ---- chart rules (the plan's explicit ones) -------------------------------------------------------------------------
 check(/barsChart\('hold-mix', rows\)/.test(ho) && /barsChart\('hold-cost', costBars, 28\+costBars\.length\*52\)/.test(ho), '9c both charts are horizontal bars with the value at each bar\'s end');
-check(!/type:\s*['"](pie|radar|gauge|funnel)['"]/.test(holdBlock) && !/legend/.test(holdBlock) && !/radius:\s*\[/.test(holdBlock), '9c no pie, donut, radar or legend');
+check(!/type:\s*['"](pie|radar|gauge|funnel)['"]/.test(holdBlock) && !/legend:\s*\{\s*show:\s*true|legend:\s*\{(?!\s*show:\s*false)/.test(holdBlock) && !/radius:\s*\[/.test(holdBlock), '9c no pie, donut, radar or legend');
 check(!/yAxisIndex|dualAxis/.test(holdBlock), '9c no second axis');
 check(!/#9C4A2C|#c0392b|#d9534f|\bred\b/i.test(holdBlock), '9c no red in the tab (red is only for a fired warning)');
 check(/color:'#2557C7'/.test(ho) && /color:'#B6C2D6'/.test(ho), '9c "yours" is the blue and "profile" the light grey, so the pair reads in greyscale');

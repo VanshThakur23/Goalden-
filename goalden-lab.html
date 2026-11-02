@@ -425,6 +425,18 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .scrub-readout{display:flex;flex-wrap:wrap;gap:2px 14px;min-height:22px;margin:0 0 6px;font-family:'Spline Sans Mono',monospace;font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
 .scrub-readout b{color:var(--paper);font-weight:600}
 .lg-head{margin:4px 0 10px;font-size:16px;line-height:1.5;color:var(--paper)}
+.stmt-box{border:1px solid rgba(37,87,199,.22);border-radius:6px;padding:10px 12px;margin:0 0 6px;background:rgba(37,87,199,.035)}
+.stmt-gets{margin:0 0 8px;padding-left:18px;font-size:12px;line-height:1.5;color:var(--dim)}
+.stmt-how{font-size:12px;line-height:1.5;color:var(--dim);margin:0 0 10px}.stmt-how summary{cursor:pointer;color:#1E4FBE}.stmt-how p{margin:6px 0}
+.stmt-box .hold-lbl{display:block;margin:0 0 8px}.stmt-box input[type=file],.stmt-box input[type=password]{display:block;width:100%;box-sizing:border-box;margin-top:3px;font:inherit;font-size:12px}
+.stmt-box input[type=password]{padding:6px 8px;border:1px solid rgba(20,40,63,.25);border-radius:4px}
+.stmt-status{margin-top:8px;font-size:12px;line-height:1.5;color:var(--paper)}.stmt-status.is-error{color:#9C4A2C}.stmt-note{margin-top:4px;color:var(--dim)}
+/* The results column is a 1fr grid track, which would otherwise widen to the table's longest unbreakable row. */
+.grid>.output{min-width:0}
+.stmt-table-wrap{overflow-x:auto;max-width:100%}.stmt-table{width:100%;min-width:100%;border-collapse:collapse;font-size:12px}.stmt-table th,.stmt-table td{text-align:left;padding:6px 8px 6px 0;border-bottom:1px solid rgba(20,40,63,.1);vertical-align:top}
+.stmt-table th{font-weight:600;color:var(--dim)}.stmt-table td:not(:first-child),.stmt-table th:not(:first-child){text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:#1E4FBE;text-decoration:underline;cursor:pointer}
+.stmt-sold{font-size:10px;color:var(--dim);border:1px solid rgba(20,40,63,.2);border-radius:3px;padding:0 4px}
 .lg-head b{font-weight:700}
 .lg-head .lg-gap{color:#1E4FBE}
 /* One line per value on a phone, so the number of lines never changes as the pointer moves (a line wrapping in or out would shift the chart under a finger). */
@@ -4048,7 +4060,7 @@ function holdingsOutputHTML(R){
   const T=TAX_IN;
   if(rev.total<=0) return `<div class="card is-primary">
       <h4>Add what you already own</h4>
-      <div class="cap">Search for a fund on the left, or add a row and type its name and what it is worth today. You will see your real mix against the ${p.name} profile, the funds that do the same job, what Regular plans cost over ${s.years} years, and how new money and a sale could close the gap. Nothing is uploaded and no account is linked.</div>
+      <div class="cap">Read your Consolidated Account Statement on the left, search for a fund, or add a row and type its name and what it is worth today. You will see your real mix against the ${p.name} profile, the funds that do the same job, what Regular plans cost over ${s.years} years, and how new money and a sale could close the gap. Nothing is uploaded and no account is linked.</div>
       <div class="slab-chips"><button type="button" class="tglbtn" data-hd="example">Load an example (made-up amounts)</button></div>
     </div>`;
 
@@ -4156,7 +4168,200 @@ function holdingsOutputHTML(R){
     }
   }
 
-  return stats+mixCard+dupCard+costCard+reCard;
+  return holdVsIndexHTML(R)+stats+mixCard+dupCard+costCard+reCard;
+}
+// ---- From your statement (CAS) --------------------------------------------------------------------------------------
+// The PDF is read here, in the browser, by pdf.js (vendor/pdfjs, loaded only when a statement is chosen); its text goes
+// to parseStatement in the engine. The file and its password are never sent anywhere or kept: the password is read
+// from the box at the click and the box is redrawn empty. What is kept, in this page's memory only, is what the parser
+// returns, which has no name, PAN, folio or account number in it.
+let HOLD_STMT={ status:'idle' };
+let HOLD_PDFJS=null;
+function holdLoadPdfJs(){
+  if(HOLD_PDFJS) return HOLD_PDFJS;
+  HOLD_PDFJS=new Promise((ok,no)=>{
+    if(window.pdfjsLib) return ok(window.pdfjsLib);
+    const sc=document.createElement('script');
+    sc.src='vendor/pdfjs/pdf.min.js';
+    sc.onload=()=>{
+      if(!window.pdfjsLib){ HOLD_PDFJS=null; return no(new Error('The PDF reader did not start.')); }
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc='vendor/pdfjs/pdf.worker.min.js';
+      ok(window.pdfjsLib);
+    };
+    sc.onerror=()=>{ HOLD_PDFJS=null; no(new Error('The PDF reader could not be loaded. Check your connection and try again.')); };
+    document.head.appendChild(sc);
+  });
+  return HOLD_PDFJS;
+}
+const HOLD_STMT_PAGES=80;
+// A made-up detailed statement (test-statements/, every name and number invented), for trying the reader without one.
+// Its password is a made-up PAN-shaped string printed on the sample itself; it unlocks nothing else.
+const HOLD_STMT_SAMPLE={ path:'test-statements/synthetic-cams-detailed.pdf', pw:'ABCDE1234F' };
+async function holdReadStatement(sample){
+  const fileEl=document.getElementById('stmtFile'), pwEl=document.getElementById('stmtPw');
+  let file=fileEl && fileEl.files && fileEl.files[0], pw=pwEl ? pwEl.value : '';
+  if(sample){
+    try{ const res=await fetch(HOLD_STMT_SAMPLE.path); if(!res.ok) throw new Error(); file=await res.blob(); pw=HOLD_STMT_SAMPLE.pw; }
+    catch(e){ HOLD_STMT={ status:'error', error:'The sample statement could not be loaded.' }; render(); return; }
+  }
+  if(!file){ HOLD_STMT={ status:'error', error:'Choose your statement PDF first.' }; render(); return; }
+  if(file.size>30e6){ HOLD_STMT={ status:'error', error:'That file is larger than a statement would be (over 30 MB).' }; render(); return; }
+  HOLD_STMT={ status:'reading' }; render();
+  try{
+    const lib=await holdLoadPdfJs();
+    const data=new Uint8Array(await file.arrayBuffer());
+    let doc;
+    // isEvalSupported:false: pdf.js then never compiles code from a font in the file (CVE-2024-4367 needs it on).
+    try{ doc=await lib.getDocument({ data, password:pw||undefined, isEvalSupported:false }).promise; }
+    catch(e){
+      if(e && e.name==='PasswordException') throw new Error(e.code===2 ? 'That password did not open the file. CAMS and KFintech statements use the password you chose when you asked for them; NSDL and CDSL ones usually use your PAN in capital letters.' : 'This statement is locked. Type its password above and read it again.');
+      throw new Error('This file could not be opened as a PDF.');
+    }
+    const pages=[], n=Math.min(doc.numPages, HOLD_STMT_PAGES);
+    for(let i=1;i<=n;i++){
+      const tc=await (await doc.getPage(i)).getTextContent();
+      pages.push(tc.items.map(it=>({ str:it.str, x:it.transform[4], y:it.transform[5], w:it.width })));
+    }
+    const cut=doc.numPages>n;
+    doc.destroy();
+    const r=parseStatement(stmtLines(pages), { today:reviewToday() });
+    if(!r.ok) throw new Error(r.error);
+    holdStmtApply(r, cut, !!sample);
+  }catch(e){ HOLD_STMT={ status:'error', error:(e && e.message) || 'The statement could not be read.' }; }
+  render();
+}
+// The statement replaces the list: largest first, and past HOLD_MAX rows the smallest are pooled into one.
+function holdStmtApply(r, cut, sample){
+  let rows=r.holdings.map(h=>cleanHoldRow({ name:h.name, cat:h.cat, value:Math.round(h.value), cost:h.cost!=null ? Math.round(h.cost) : null, plan:h.plan, longTerm:h.longTerm }))
+    .sort((a,b)=>b.value-a.value);
+  let pooled=0;
+  if(rows.length>HOLD_MAX){
+    const rest=rows.slice(HOLD_MAX-1); pooled=rest.length;
+    rows=rows.slice(0,HOLD_MAX-1).concat([cleanHoldRow({ name:'Other holdings from the statement ('+rest.length+')', cat:rest.every(x=>x.cat==='shares') ? 'shares' : '',
+      value:rest.reduce((a,x)=>a+x.value,0), cost:null, longTerm:true })]);
+  }
+  // A sample's rows are made up, so the yearly review does not take them as the person's.
+  L.holdings.rows=rows; markGiven('holdings.rows', !sample);
+  const eq=r.kind==='detailed' ? statementEquityFlows(r.schemes) : null;
+  HOLD_STMT={ status:'done', sample:!!sample, source:r.source, kind:r.kind, asOf:r.asOf, count:r.holdings.length, total:r.total, matchesStated:r.matchesStated,
+    notes:r.notes.concat(pooled ? [pooled+' of the smallest holdings are pooled into one row: the list holds '+HOLD_MAX+'.'] : [])
+      .concat(cut ? ['Only the first '+HOLD_STMT_PAGES+' pages were read.'] : []),
+    complete:r.complete, equity:eq, schemes:eq ? eq.used : null };
+  if(eq && eq.flows.length) liveEnsureBench(LIVE_BENCH.INR);
+}
+function holdStmtPanelHTML(c){
+  const st=HOLD_STMT, has=L.holdings.rows.length>0;
+  let status='';
+  if(st.status==='reading') status=`<div class="stmt-status" role="status">Reading the statement on this device…</div>`;
+  else if(st.status==='error') status=`<div class="stmt-status is-error" role="alert">${advisorAttr(st.error)}</div>`;
+  else if(st.status==='done') status=`<div class="stmt-status" role="status"><b>Read ${st.count} holding${st.count===1?'':'s'} worth ${c.compact(Math.round(st.total))}</b> from ${st.sample?'the made-up sample':(st.source==='NSDL'?'an':'a')+' '+advisorAttr(st.source)} statement${st.asOf?' dated '+fmtReviewDate(st.asOf):''}.
+      ${st.matchesStated ? 'The total matches the one printed on the statement.' : 'No total printed on the statement matched what was read: check the rows below against it.'}
+      ${st.notes.map(n=>`<div class="stmt-note">${advisorAttr(n)}</div>`).join('')}</div>`;
+  return `<div class="section-label" style="margin-top:14px">From your statement</div>
+    <div class="stmt-box">
+      <div class="gr-note" style="margin:0 0 6px">Your Consolidated Account Statement (CAS) can fill the list below. With it, this tab shows:</div>
+      <ul class="stmt-gets">
+        <li>every fund, share, ETF, bond and gold bond you hold, and what it is worth</li>
+        <li>what you paid, and which holdings are over a year old (for the tax-free limit)</li>
+        <li>with a CAMS or KFintech statement: what the same money, on the same days, would be worth today in a Nifty 50 index fund</li>
+      </ul>
+      <details class="stmt-how"><summary>Which statement, and where to get it</summary>
+        <p><b>Mutual funds, with every purchase:</b> the detailed CAS from CAMS or KFintech (camsonline.com, kfintech.com or mfcentral.com). Ask for a <i>detailed</i> statement from before your first investment. It is emailed as a PDF locked with a password you choose.</p>
+        <p><b>Shares, ETFs, bonds and gold bonds as well:</b> the CAS from NSDL or CDSL, emailed each month you have activity. Its password is usually your PAN in capital letters. It shows what you hold, not when you bought it.</p>
+        <p>Indian statements only. A scanned or photographed statement cannot be read.</p>
+      </details>
+      <label class="hold-lbl"><span>Statement PDF</span><input type="file" id="stmtFile" accept="application/pdf,.pdf"></label>
+      <label class="hold-lbl"><span>Its password, if it has one</span><input type="password" id="stmtPw" autocomplete="off" spellcheck="false"></label>
+      <button type="button" class="tglbtn stmt-go" data-hd="stmtRead"${st.status==='reading'?' disabled':''}>Read my statement${has?' (replaces the list)':''}</button>
+      <div class="gr-note" style="margin:6px 0 0">Read on this device: the file and its password are not uploaded or kept. No statement to hand? <button type="button" class="linkbtn" data-hd="stmtSample">Try a made-up one</button>.</div>
+      ${status}
+    </div>`;
+}
+// "You against the index" from a detailed statement: the equity funds' own purchases and sales, set against the same
+// money on the same days in the Nifty 50 index fund the Test Real Investments tab uses. Returns null until there is
+// something to compare, or {wait|error} while the index fund's prices load.
+function holdVsIndexData(){
+  const st=HOLD_STMT;
+  if(st.status!=='done' || st.kind!=='detailed' || !st.equity || !st.equity.flows.length) return null;
+  const spec=LIVE_BENCH.INR, b=L.live.bench && L.live.bench[spec.symbol];
+  if(!b || b.status==='loading' || b.status==='retry') return { wait:true };
+  if(b.status==='error') return { error:b.error };
+  const all=statementVsIndex(st.equity.flows, st.equity.endValue, st.asOf, b.prices);
+  if(!all.ok) return { error:all.error };
+  const funds=(st.schemes||[]).map(s=>{ const v=statementVsIndex(s.flows, s.value, st.asOf, b.prices); return v.ok ? { name:s.name, sold:!(s.value>0), v } : null; })
+    .filter(Boolean).sort((a,b)=>a.v.gap-b.v.gap);
+  return { all, funds, spec, eq:st.equity };
+}
+function holdVsIndexHTML(R){
+  const st=HOLD_STMT, c=R.c, K=v=>c.compact(Math.round(Math.abs(v)));
+  if(st.status!=='done') return '';
+  const head='<h4>You against the index</h4>'+(st.sample?'<div class="cap" style="margin:-4px 0 8px">From the made-up sample statement: these are not anyone’s real numbers.</div>':'');
+  if(st.kind!=='detailed') return `<div class="card">${head}<div class="cap">This ${advisorAttr(st.source)} statement shows what you hold today, not when you bought it, so it cannot say what the same money would have made in an index fund. A detailed statement from CAMS or KFintech has every purchase; read one of those for this comparison.</div></div>`;
+  if(!st.equity.flows.length) return `<div class="card">${head}<div class="cap">${st.equity.incomplete.length
+    ? `Not compared: the equity funds on this statement (${advisorAttr(st.equity.incomplete.join(', '))}) were held before it starts, or a transaction could not be read reliably. Ask CAMS or KFintech for a detailed statement from before your first investment.`
+    : 'There are no equity fund purchases on this statement to compare with the Nifty 50.'}</div></div>`;
+  const d=holdVsIndexData();
+  if(!d || d.wait) return `<div class="card">${head}<div class="cap">Loading the Nifty 50 index fund’s prices…</div></div>`;
+  if(d.error) return `<div class="card">${head}<div class="cap">Not compared: ${advisorAttr(d.error)}</div><button type="button" class="tglbtn" data-hd="stmtBench">Try again</button></div>`;
+  const v=d.all, ahead=v.gap>=0, pc=x=>x==null ? '-' : (x*100).toFixed(1)+'%';
+  // Under a year, a yearly rate blows a few weeks' move up into a year's; the money gap is shown, the rate is not.
+  const yr=f=>(Date.parse(f.v.to)-Date.parse(f.v.from))/864e5>=365;
+  const gapPts=v.yourXirr!=null && v.indexXirr!=null ? Math.abs(v.yourXirr-v.indexXirr)*100 : null;
+  const left=d.eq.left.concat(d.eq.unknown);
+  // "Example Flexi Cap Fund - Regular Plan - Growth" reads as "Example Flexi Cap Fund (Regular)" in a narrow table.
+  const short=n=>{ const pl=fundPlanFromName(n); return n.split(/\s+-\s+/)[0]+(pl==='direct'?' (Direct)':pl==='regular'?' (Regular)':''); };
+  const fundRows=d.funds.map(f=>`<tr><td title="${advisorAttr(f.name)}">${advisorAttr(short(f.name))}${f.sold?' <span class="stmt-sold">sold</span>':''}</td><td>${yr(f)?pc(f.v.yourXirr):'under a year'}</td><td>${yr(f)?pc(f.v.indexXirr):'under a year'}</td>
+      <td><b>${K(f.v.gap)}</b> ${f.v.gap>=0?'ahead':'behind'}</td></tr>`).join('');
+  deferChartInit(()=>renderVsIndexChart('vs-index-echart', v, c));
+  return `<div class="card is-primary">${head}
+    <p class="lg-head">${v.invested>=0 ? `You put in ${K(v.invested)}, net of what you took out,` : `You took out ${K(v.invested)} more than you put in`} across your equity funds. They are worth <b>${K(v.yourValue)}</b> today.
+      The same money, on the same days, in a Nifty 50 index fund would be worth <b>${K(v.indexValue)}</b>.
+      ${ahead ? `You are <b class="lg-gap">${K(v.gap)} ahead</b> of it.` : `You are <b class="lg-gap">${K(v.gap)} behind</b> it: that is what these funds have cost you against it so far.`}</p>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">Your equity funds${infoIcon('XIRR: the yearly return of every purchase and sale on its own date, the figure fund statements report.')}</div><div class="stat-value">${yr({v})?pc(v.yourXirr):'-'}</div><div class="stat-sub">${yr({v})?'a year, ':'not a yearly rate under a year; '}${fmtReviewDate(v.from)} to ${fmtReviewDate(v.to)}</div></div>
+      <div class="stat"><div class="stat-label">Nifty 50 index fund</div><div class="stat-value">${yr({v})?pc(v.indexXirr):'-'}</div><div class="stat-sub">a year, same money, same days</div></div>
+      <div class="stat"><div class="stat-label">${ahead?'Ahead by':'Behind by'}</div><div class="stat-value">${gapPts==null||!yr({v})?'-':gapPts.toFixed(1)}</div><div class="stat-sub">percentage points a year</div></div>
+    </div>
+    <div id="vs-index-echart" class="echart" style="height:320px" aria-label="What the money put in became in the Nifty 50 index fund, against what your equity funds are worth today"></div>
+    ${d.funds.length>1 ? `<div class="section-label" style="margin-top:12px">Fund by fund</div>
+    <div class="stmt-table-wrap"><table class="stmt-table"><thead><tr><th>Fund</th><th>Yours a year</th><th>Index a year</th><th>Against the index</th></tr></thead><tbody>${fundRows}</tbody></table></div>` : ''}
+    <div class="gr-note">Set against ${advisorAttr(d.spec.full)}, bought and sold on the same days as your equity funds. ${left.length?`Left out: ${advisorAttr(left.join(', '))} (debt, hybrid, gold, international or not named clearly enough to tell; they aim at something else). `:''}${d.eq.incomplete.length?`Also left out, because their history on this statement is incomplete or could not be read reliably: ${advisorAttr(d.eq.incomplete.join(', '))}. `:''}Small- and mid-cap funds are set against the Nifty 50 as well: it is the plain alternative, not their own index. Both sides are before tax and exit loads; the index fund's own costs are in its price. ${v.wentShort?'Your withdrawals at times took more than the index fund held in this comparison. ':''}Past results, not a forecast.</div>
+  </div>`;
+}
+// The comparison in plain numbers for get_results; undefined when there is none, so the key is left out.
+function holdVsIndexForAdvisor(){
+  const d=holdVsIndexData(), r0=Math.round, pc=x=>x==null ? null : +(x*100).toFixed(1);
+  if(!d) return undefined;
+  if(d.wait) return { note:'The index fund prices are still loading.' };
+  if(d.error) return { error:d.error };
+  const v=d.all, yr=x=>(Date.parse(x.to)-Date.parse(x.from))/864e5>=365;
+  return { index:d.spec.full, from:v.from, to:v.to, putInLessTakenOut:r0(v.invested), equityFundsWorth:r0(v.yourValue), sameMoneyInIndexFund:r0(v.indexValue),
+    aheadOfIndex:r0(v.gap), yourYearlyReturnPct:yr(v) ? pc(v.yourXirr) : null, indexYearlyReturnPct:yr(v) ? pc(v.indexXirr) : null,
+    funds:d.funds.map(f=>({ name:f.name, sold:f.sold, aheadOfIndex:r0(f.v.gap), yourYearlyReturnPct:yr(f.v) ? pc(f.v.yourXirr) : null, indexYearlyReturnPct:yr(f.v) ? pc(f.v.indexXirr) : null })),
+    leftOut:d.eq.left.concat(d.eq.unknown), leftOutIncompleteHistory:d.eq.incomplete,
+    note:'yearly returns are XIRR and are null under a year; small- and mid-cap funds are set against the Nifty 50 too; past results, not a forecast' };
+}
+function renderVsIndexChart(id, v, c){
+  const dom=document.getElementById(id); if(!dom) return;
+  const narrow=dom.clientWidth<520, K=x=>c.compact(Math.round(x));
+  const put=v.path.map(p=>[p.date, Math.round(p.put)]), idx=v.path.map(p=>[p.date, Math.round(p.index)]);
+  const labelRoom=narrow ? 92 : 170;
+  initChart(id, {
+    grid:{ left:8, right:labelRoom, top:14, bottom:24, containLabel:true }, legend:{ show:false },
+    xAxis:{ type:'time', axisLabel:{ color:CHART_TEXT.muted, hideOverlap:true }, axisTick:{ show:false } },
+    yAxis:{ type:'value', axisLabel:{ formatter:x=>c.compact(x), color:CHART_TEXT.muted } },
+    tooltip:{ trigger:'axis', confine:true, formatter:ps=>{ const a=Array.isArray(ps)?ps:[ps]; return fmtReviewDate(new Date(a[0].value[0]).toISOString().slice(0,10))+'<br/>'+a.map(p=>p.marker+p.seriesName+': '+K(p.value[1])).join('<br/>'); } },
+    series:[
+      { name:'Money put in', type:'line', step:'end', showSymbol:false, data:put, lineStyle:{ width:1.4, color:CHART_TEXT.muted }, itemStyle:{ color:CHART_TEXT.muted },
+        endLabel:{ show:true, formatter:p=>'Put in'+(narrow?'\n':' ')+K(p.value[1]), color:CHART_TEXT.muted, fontSize:10, fontFamily:"'Spline Sans Mono',monospace" }, labelLayout:{ moveOverlap:'shiftY' } },
+      { name:'In the index fund', type:'line', showSymbol:false, data:idx, lineStyle:{ width:2.4, color:CHART_TEXT.ink, type:[14,5] }, itemStyle:{ color:CHART_TEXT.ink }, z:3,
+        endLabel:{ show:true, formatter:p=>'Index fund'+(narrow?'\n':' ')+K(p.value[1]), color:CHART_TEXT.ink, fontWeight:700, fontSize:12, fontFamily:"'Spline Sans Mono',monospace" }, labelLayout:{ moveOverlap:'shiftY' } },
+      // Your funds are known only today (a statement has no daily value), so they are one point, not a line.
+      { name:'Your funds today', type:'scatter', data:[[v.to, Math.round(v.yourValue)]], symbolSize:12, itemStyle:{ color:'#2557C7' }, z:5,
+        // Above the point when ahead, below when behind, so it never sits on the index fund's end label.
+        label:{ show:true, position:v.gap>=0?'top':'bottom', align:'right', distance:10, formatter:()=>'Your funds'+(narrow?'\n':' ')+K(v.yourValue), color:CHART_TEXT.blue, fontWeight:700, fontSize:12, fontFamily:"'Spline Sans Mono',monospace" }, labelLayout:{ moveOverlap:'shiftY' } },
+    ],
+  });
 }
 // Outside #holdOut, which a typed edit repaints in place: the buttons here are bound once by attach() and would be dead after a repaint.
 function holdFooterHTML(){
@@ -4177,8 +4382,9 @@ function renderHoldings(){
     ${advisorChipsHTML('holdings')}
     ${profChips}
     ${fillNoteHTML(s)}
+    ${holdStmtPanelHTML(c)}
     <div class="section-label" style="margin-top:14px">What you hold</div>
-    <div class="gr-note" style="margin:0 0 10px">Type the name and what it is worth today. Nothing is uploaded and no account is linked.</div>
+    <div class="gr-note" style="margin:0 0 10px">Or type the name and what it is worth today. Nothing is uploaded and no account is linked.</div>
     <input type="search" id="holdSearch" class="live-searchbox" data-hs="q" value="${advisorAttr(HOLD_SEARCH.q)}" placeholder="Search a fund by name, e.g. flexi cap or nifty 50" aria-label="Search for a fund by name" autocomplete="off">
     <div id="holdSearchOut" class="live-results">${holdSearchHTML()}</div>
     <div style="margin-top:10px">${s.rows.map(holdRowHTML).join('')}</div>
@@ -4212,6 +4418,8 @@ function holdingsResultForAdvisor(){
   const R=computeHoldings(), rev=R.rev, p=R.p, rb=rev.rebalance, r0=Math.round;
   return { tool:'My holdings', note:'by category only; plans come from the names or from the user; the cost of Regular plans is an estimate; no fund is rated and none is recommended',
     profile:p.name, listedTotal:r0(rev.total), inMix:r0(rev.mixTotal),
+    statement:HOLD_STMT.status==='done' ? { source:HOLD_STMT.source, kind:HOLD_STMT.kind, asOf:HOLD_STMT.asOf, holdingsRead:HOLD_STMT.count, totalMatchesStatement:HOLD_STMT.matchesStated, notes:HOLD_STMT.notes } : undefined,
+    againstIndex:holdVsIndexForAdvisor(),
     mix:rev.mixTotal>0 ? rev.mix.map(m=>({ part:m.cls, yourSharePct:+(m.share*100).toFixed(1), profileSharePct:+(m.target*100).toFixed(1), driftPoints:+(m.drift*100).toFixed(1) })) : null, mixNote:rev.mixTotal>0 ? undefined : 'Nothing listed has a category inside the mix (equity, debt or hybrid) yet, so there are no shares to compare.',
     outsideMix:{ gold:r0(rev.outside.gold), other:r0(rev.outside.other), noCategory:r0(rev.unset) },
     sameJob:rev.overlap.map(o=>({ job:o.label, holdings:o.count, value:r0(o.value), names:o.names })),
@@ -8614,8 +8822,11 @@ function attach(){
     else if(f==='add'){ if(!holdAddRow('')) return; markGiven('holdings.rows'); }
     else if(f==='remove') s.rows.splice(+el.dataset.i,1);
     else if(f==='example'){ s.rows=holdExampleRows(); markGiven('holdings.rows', false); }   // made-up rows are never reviewed
-    else if(f==='clear'){ s.rows=[]; delete L.given['holdings.rows']; }
+    else if(f==='clear'){ s.rows=[]; delete L.given['holdings.rows']; HOLD_STMT={ status:'idle' }; }
     else if(f==='pick'){ if(!holdAddRow(el.dataset.name||'')) return; markGiven('holdings.rows'); HOLD_SEARCH={ q:'', busy:false, error:null, results:[] }; }
+    else if(f==='stmtRead'){ holdReadStatement(); return; }
+    else if(f==='stmtSample'){ holdReadStatement(true); return; }
+    else if(f==='stmtBench'){ (L.live.bench=L.live.bench||{})[LIVE_BENCH.INR.symbol]={ status:'retry' }; liveEnsureBench(LIVE_BENCH.INR); }
     else return;
     render();
   };
@@ -12424,7 +12635,7 @@ Tools:
 - Loans (India only): weighs prepaying the home loan against investing the same lump sum. Prepaying saves a certain rate; under the old tax regime the interest relief (up to ₹2 lakh a year, s.24(b)) lowers that rate by the user's slab, under the new regime there is no relief on a self-occupied home. The investment side is the user's own expected return, taxed as the kind of investment it is (equity fund, debt fund or FD). It shows a break-even (the return the investment must earn before tax to match) and never a verdict. It also takes credit-card and personal-loan balances and shows the order to clear them, highest rate first, and the interest that saves.
 - Tax regime (India only): old or new regime on the same pay, worked from salary, HRA, 80C, NPS, health premium and home-loan interest, with the tax under each, the difference, and the deductions the old regime needs to win. It also says what that means for the plan: on the new regime 80C, 80CCD(1B), 80D and home-loan interest give no tax benefit, so ELSS and PPF are chosen on returns and lock-in, not for tax. The rule year is shown on screen and is a figure to re-check against the Income Tax Department. Surcharge above ₹50 lakh is not modelled, and the HRA rule was read from a search excerpt, not the full page.
 - Cover (India only): how much insurance, never what it costs. Term cover for the family = their spending for the years they would rely on the income (grown by inflation, paid out of a pot earning a stated return) + loans + goal pots at today's value − savings − term cover already held; a retirement goal is left out. Health cover = a family floater plus a super top-up for the rest of a total target, grown at medical inflation, shown short with and without employer cover (which ends with the job). There are no premium figures anywhere; the health starting sizes by city are rules of thumb, not market figures or quotes.
-- My holdings (India only): what the user already owns, typed in (never uploaded), against the risk profile from the Full Plan. Shows the real mix of equity, debt and hybrid against the profile's shares (gold, other things and holdings with no category sit beside the mix), the funds that share a category and so a job ("four large-cap funds doing one job", by category only: whether two funds hold the same companies needs each fund's own portfolio, which this page does not read), what Regular plans cost over the years against Direct (an estimate, about 1% a year for an active fund and 0.4% for an index fund; debt, gold and arbitrage funds are not priced), and how to close a gap: new money first, then sales, with the equity tax worked from the cost the user gave (₹1.25 lakh a year of long-term gains is free, the rest 12.5% plus cess). It never rates or ranks a fund and never says which fund to buy or sell; moving from Regular to Direct is a sale and is taxed. Use set_holdings to enter what the user tells you, never an invented holding or amount.
+- My holdings (India only): what the user already owns, typed in or read from their Consolidated Account Statement (CAS) PDF, against the risk profile from the Full Plan. Shows the real mix of equity, debt and hybrid against the profile's shares (gold, other things and holdings with no category sit beside the mix), the funds that share a category and so a job ("four large-cap funds doing one job", by category only: whether two funds hold the same companies needs each fund's own portfolio, which this page does not read), what Regular plans cost over the years against Direct (an estimate, about 1% a year for an active fund and 0.4% for an index fund; debt, gold and arbitrage funds are not priced), and how to close a gap: new money first, then sales, with the equity tax worked from the cost the user gave (₹1.25 lakh a year of long-term gains is free, the rest 12.5% plus cess). It never rates or ranks a fund and never says which fund to buy or sell; moving from Regular to Direct is a sale and is taxed. Use set_holdings to enter what the user tells you, never an invented holding or amount. The user can fill the list from their CAS themselves, in the "From your statement" box on the tab (you cannot open files): the detailed statement from CAMS or KFintech (mutual funds, every purchase) or the one from NSDL or CDSL (shares, ETFs, bonds and gold bonds too). It is read on their device; the file and its password are never sent. With a detailed CAMS/KFintech statement the tab also shows "You against the index": the user's equity funds against the same money, on the same days, in a Nifty 50 index fund, overall and fund by fund (get_results returns it as againstIndex). Say the gap in rupees and in yearly return; a fund behind the index is information, not a reason to sell: selling is taxed and past returns do not repeat.
 - Cross-Border (FX): effect of currency movement on India-US investing.
 - Joint Children Corpus: overlapping education costs for multiple children from one pool.
 - Monte Carlo: thousands of random market paths to show plan likelihood, not just the average.

@@ -1274,7 +1274,7 @@ function yearlyReview(o) {
         const total = debts.reduce((s, x) => s + n(x.balance), 0);
         (Array.isArray(d.notEntered) ? d.notEntered : []).forEach(x => gap('No ' + String(x).toLowerCase() + ' balance entered, so it is left out.'));
         if (total <= 0) { notes.push('No costly debt in what was entered.'); break; }
-        const list = debts.map(x => String(x.name || 'debt').toLowerCase() + ' at ' + Math.round(n(x.rate) * 1000) / 10 + '%' + (x.rateGiven === false ? ' (a typical rate)' : ''));
+        const list = debts.map(x => String(x.name || 'debt').toLowerCase() + ' at ' + Math.round(n(x.rate) * 1000) / 10 + '%' + (x.rateGiven === false ? ', a typical rate' : ''));
         // How long it takes depends on the payments, so it is only said when every payment was given.
         const when = d.months == null ? (d.neverClears ? 'At the payments entered it never clears, so the payments have to go up.' : 'Enter what you pay each month in Loans to see how long it takes.')
           : d.neverClears ? 'At the payments entered it never clears, so the payments have to go up.' : 'At the payments entered it is gone in ' + Math.round(n(d.months)) + ' months.';
@@ -1382,6 +1382,396 @@ function yearlyReview(o) {
   const counts = { act: 0, ok: 0, partial: 0, missing: 0, skipped: 0, na: 0 };
   checks.forEach(c => { counts[c.status]++; });
   return { ok: true, dates, order, checks, actions, counts, figures };
+}
+
+/* ---------------------------------------------------------------------
+   STATEMENT (CAS) IMPORT. Reads the text of an Indian Consolidated Account
+   Statement: the detailed one from CAMS or KFintech (mutual funds, with every
+   transaction) and the holdings tables of an NSDL or CDSL statement (shares,
+   ETFs, bonds, gold bonds and mutual funds) or a CAMS/KFintech summary. The
+   PDF is opened in the browser (pdf.js); these functions only see its text
+   pieces and where they sit, so they run the same in tests.
+   Nothing that identifies the person is kept: no name, PAN, address, folio or
+   account number leaves the parser, only what each holding is and is worth.
+   The layouts follow the open-source casparser (MIT): lines are rebuilt from
+   positions, and columns are found from the table's own headings rather than
+   from a fixed order, because the depositories do not keep one.
+   --------------------------------------------------------------------- */
+const STMT_MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+// "05-Oct-2026", "05-10-2026", "05/10/2026", "5 Oct 2026" -> "2026-10-05"; null if it is not a real date.
+function stmtDate(s) {
+  const m = String(s || '').trim().match(/^(\d{1,2})[-\/ ]([A-Za-z]{3,9}|\d{1,2})[-\/ ,]+(\d{4})$/);
+  if (!m) return null;
+  const d = +m[1], mo = /\d/.test(m[2]) ? +m[2] : STMT_MON[m[2].slice(0, 3).toLowerCase()], y = +m[3];
+  if (!mo || mo > 12 || d < 1 || d > new Date(Date.UTC(y, mo, 0)).getUTCDate()) return null;
+  return y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+// "1,23,456.78" -> 123456.78; "(1,234.00)" and "-1,234" -> negative; null for anything else (ISINs, dates, "12%").
+function stmtNum(s) {
+  const t = String(s || '').replace(/\s+/g, '').replace(/^(₹|Rs\.?|INR)/i, '');
+  const m = t.match(/^(\()?(-)?(\d{1,3}(?:,\d{2,3})*|\d+)(\.\d+)?(\))?$/);
+  if (!m || (!!m[1] !== !!m[5])) return null;
+  const v = Number(m[3].replace(/,/g, '') + (m[4] || ''));
+  return m[1] || m[2] ? -v : v;
+}
+const STMT_ISIN = /\b(IN[A-Z0-9]{10})\b/;
+// Text pieces -> lines. pages: [[{str, x, y, w}]] in PDF units (y grows upwards). Pieces within 2.5 units of the same
+// height are one line; pieces closer than 3 units apart are one cell. Lines keep their cells (with x and right edge)
+// because the depository tables are read by column.
+function stmtLines(pages) {
+  const out = [];
+  (Array.isArray(pages) ? pages : []).forEach(items => {
+    const it = (Array.isArray(items) ? items : []).filter(p => p && typeof p.str === 'string' && p.str.trim() && isFinite(p.x) && isFinite(p.y))
+      .map(p => ({ str: p.str, x: +p.x, y: +p.y, x2: +p.x + Math.max(0, +p.w || 0) }));
+    it.sort((a, b) => b.y - a.y || a.x - b.x);
+    const rows = [];
+    it.forEach(p => {
+      const r = rows.find(r => Math.abs(r.y - p.y) <= 2.5);
+      if (r) r.items.push(p); else rows.push({ y: p.y, items: [p] });
+    });
+    rows.sort((a, b) => b.y - a.y).forEach(r => {
+      r.items.sort((a, b) => a.x - b.x);
+      const cells = [];
+      r.items.forEach(p => {
+        const c = cells[cells.length - 1];
+        if (c && p.x - c.x2 < 3) { c.text += (p.x - c.x2 > 0.8 && !/\s$/.test(c.text) ? ' ' : '') + p.str; c.x2 = Math.max(c.x2, p.x2); }
+        else cells.push({ text: p.str, x: p.x, x2: p.x2 });
+      });
+      cells.forEach(c => { c.text = c.text.replace(/\s+/g, ' ').trim(); });
+      const kept = cells.filter(c => c.text);
+      if (kept.length) out.push({ cells: kept, text: kept.map(c => c.text).join('\t') });
+    });
+  });
+  return out;
+}
+// What a statement line's ISIN and name say the holding is, as a My holdings category ('' when they do not settle it).
+function stmtCategory(isin, name) {
+  const n = String(name || '');
+  if (/^INF/.test(isin)) return holdingCategoryFromName(n) || '';
+  if (/^INE/.test(isin)) {
+    if (/\betf\b|bees\b|exchange traded/i.test(n)) return holdingCategoryFromName(n) || 'otherequity';
+    if (/\breit\b|\binvit\b|infrastructure investment trust|real estate investment trust/i.test(n)) return '';
+    if (/\bncd\b|debenture|\bbonds?\b|\d+(\.\d+)?\s*%|\bsr\b.*\bnc/i.test(n)) return 'bonddebt';
+    return 'shares';
+  }
+  if (/^IN\d/.test(isin)) return /\bsgb\b|sovereign gold|\bgold\b/i.test(n) ? 'gold' : 'gilt';
+  return '';
+}
+const STMT_SOURCES = [[/national securities depository|\bnsdl\b/i, 'NSDL'], [/central depository|\bcdsl\b/i, 'CDSL'],
+  [/\bkfin|karvy/i, 'KFintech'], [/\bcams\b|computer age management/i, 'CAMS']];
+
+// The detailed CAMS/KFintech statement: one block per scheme, opened by its "... ISIN: INF..." line and closed by
+// "Closing Unit Balance ... NAV on ... Total Cost Value ... Market Value on ...", with dated transactions between.
+// A transaction line ends in four numbers (amount, units, price, balance); a description can end in a number too
+// ("Systematic Investment (1)", "IDCW Reinvest @ Rs.0.25"), so the four are taken from the right. Every one is checked:
+// amount against units x price, and the balance against the one before plus these units. A scheme with a line that
+// fails is marked unreadable, so its numbers are never used, rather than used wrong.
+const STMT_PAYOUT = /(dividend|idcw).*(paid|payout)|(payout|paid).*(dividend|idcw)/i;
+const STMT_CHARGE = /stamp\s*duty|\bstt\b|\btds\b|\btax\b/i;
+// Lines that can carry who the person is; never part of a scheme name.
+const STMT_PERSONAL = /folio|\bpan\b|kyc|nominee|e-?mail|mobile|@|[A-Z]{5}\d{4}[A-Z]/i;
+function stmtParseMfDetailed(lines) {
+  const schemes = [];
+  let cur = null, bal = 0;
+  const num = String.raw`\(?-?[\d,]+(?:\.\d+)?\)?`, dt = String.raw`\d{1,2}-[A-Za-z]{3}-\d{4}`;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].text.replace(/\t/g, '  ');
+    const isin = t.match(/ISIN\s*:?\s*(INF[A-Z0-9]{9})/);
+    if (isin && !/Closing\s+Unit/i.test(t)) {
+      let nm = t.slice(0, isin.index);
+      // A scheme line starts with its code ("B205-..."). One that does not is the end of a name wrapped from the line
+      // above, unless that line is the folio, PAN or nominee line.
+      const above = i > 0 ? lines[i - 1].text.replace(/\t/g, ' ') : '';
+      if (!/^\s*[A-Z0-9]{1,8}\s*-\s*[A-Za-z]/.test(nm) && /^\s*[A-Z0-9]{1,8}\s*-\s*[A-Za-z]/.test(above) && !STMT_PERSONAL.test(above)) nm = above + ' ' + nm;
+      nm = nm.replace(/\(Advisor\s*:[^)]*\)/ig, '').replace(/Registrar\s*:.*$/i, '').replace(/^\s*[A-Z0-9]{1,8}\s*-\s*(?=[A-Za-z])/, '')
+        .replace(/[A-Z]{5}\d{4}[A-Z]/g, '').replace(/[\s-]+$/, '').replace(/^[\s-]+/, '').replace(/\s+/g, ' ').trim();
+      cur = { name: nm, isin: isin[1], open: null, close: null, nav: null, cost: null, value: null, valueDate: null, txns: [], bad: null };
+      schemes.push(cur); bal = 0;
+      continue;
+    }
+    if (!cur) continue;
+    let m;
+    if ((m = t.match(/Opening\s+Unit\s+Balance\s*:?\s*(-?[\d,]+\.\d+)/i))) { cur.open = stmtNum(m[1]); bal = cur.open || 0; }
+    if ((m = t.match(/Closing\s+Unit\s+Balance\s*:?\s*(-?[\d,]+\.\d+)/i))) cur.close = stmtNum(m[1]);
+    if ((m = t.match(new RegExp('NAV\\s+on\\s+(' + dt + ')\\s*:?\\s*(?:INR|Rs\\.?|₹)?\\s*(' + num + ')', 'i')))) cur.nav = stmtNum(m[2]);
+    if ((m = t.match(new RegExp('Cost\\s+Value\\s*:?\\s*(?:INR|Rs\\.?|₹)?\\s*(' + num + ')', 'i')))) cur.cost = stmtNum(m[1]);
+    if ((m = t.match(new RegExp('(?:Market\\s+Value|Valuation)\\s+on\\s+(' + dt + ')\\s*:?\\s*(?:INR|Rs\\.?|₹)?\\s*(' + num + ')', 'i')))) { cur.valueDate = stmtDate(m[1]); cur.value = stmtNum(m[2]); }
+    const d = t.match(new RegExp('^\\s*(' + dt + ')\\s+(.*)$'));
+    if (!d || !stmtDate(d[1])) continue;
+    const date = stmtDate(d[1]), toks = d[2].trim().split(/\s+/), nums = [];
+    while (toks.length && stmtNum(toks[toks.length - 1]) !== null) nums.unshift(stmtNum(toks.pop()));
+    const desc = toks.join(' ');
+    if (!nums.length) continue;
+    if (nums.length >= 4) {
+      const [amount, units, nav, balance] = nums.slice(-4);
+      if (!(Math.abs(units) > 0)) {
+        // No units moved: a dividend paid out, or a charge, printed in the full four-column form.
+        if (STMT_PAYOUT.test(desc) && !/reinvest/i.test(desc)) cur.txns.push({ date, desc, amount: Math.abs(amount), payout: true });
+        else if (STMT_CHARGE.test(desc)) cur.txns.push({ date, desc, amount: Math.abs(amount), charge: true });
+        continue;
+      }
+      const free = amount === 0 && /bonus|segregat|merger|consolidat|split/i.test(desc);
+      const priced = Math.abs(Math.abs(amount) - Math.abs(units) * nav) <= Math.max(1, Math.abs(amount) * 0.02);
+      const adds = Math.abs(bal + units - balance) <= Math.max(0.002, Math.abs(balance) * 1e-5);
+      if (!(free || priced) || !adds) cur.bad = cur.bad || { date, desc };
+      bal = balance;
+      cur.txns.push({ date, desc, amount, units, nav, balance });
+    } else if (STMT_CHARGE.test(desc)) cur.txns.push({ date, desc, amount: Math.abs(nums[nums.length - 1]), charge: true });
+    else if (STMT_PAYOUT.test(desc) && !/reinvest/i.test(desc)) cur.txns.push({ date, desc, amount: Math.abs(nums[nums.length - 1]), payout: true });
+  }
+  return schemes;
+}
+// One scheme's transactions as cash flows (money in negative, money out positive) and its remaining lots, oldest
+// first. Reinvested dividends and bonus units add units but no money. Lots are matched first in, first out.
+function stmtSchemeFlows(s) {
+  const flows = [], lots = [];
+  // Units held before the statement starts are the oldest lot: sold first, with no date or cost on the statement.
+  if (s.open > 0) lots.push({ date: null, units: s.open, cost: 0, opening: true });
+  s.txns.forEach(x => {
+    if (x.charge) { flows.push({ date: x.date, amount: -x.amount }); return; }
+    if (x.payout) { flows.push({ date: x.date, amount: x.amount }); return; }
+    const u = x.units, amt = Math.abs(x.amount);
+    if (u > 0) {
+      if (!/reinvest/i.test(x.desc) && amt > 0) flows.push({ date: x.date, amount: -amt });
+      lots.push({ date: x.date, units: u, cost: amt });
+    } else {
+      flows.push({ date: x.date, amount: amt });
+      let left = -u;
+      while (left > 1e-6 && lots.length) {
+        const l = lots[0], take = Math.min(left, l.units);
+        l.cost -= l.cost * take / l.units; l.units -= take; left -= take;
+        if (l.units <= 1e-6) lots.shift();
+      }
+    }
+  });
+  return { flows, lots };
+}
+// The holdings tables of an NSDL, CDSL or summary statement: every line with an ISIN under a holdings heading is a
+// holding; which number is its value, cost or units is decided by the column heading above it, matched by position.
+// A heading with no value column (a transactions table) switches reading off until the next heading, so its balances
+// are never taken for values.
+function stmtParseTables(lines) {
+  const out = [];
+  let cols = null;           // null: no heading seen yet; 'skip': under a table that is not holdings
+  const role = label => {
+    const l = label.toLowerCase();
+    if (/face/.test(l) && !/market|current/.test(l)) return null;
+    if (/average|per unit|\bnav\b|price|rate|profit|loss|gain|return|%/.test(l)) return null;
+    if (/cost|invested|purchase|acquisition/.test(l)) return 'cost';
+    if (/value|valuation/.test(l)) return 'value';
+    if (/free|frozen|pledge|lock|blocked|earmark|credit|debit|opening/.test(l)) return null;   // parts or movements of a balance
+    if (/units?\b|shares|quantity|\bqty\b|balance|\bbal\b|holding/.test(l)) return 'units';
+    return null;
+  };
+  const isNumCell = c => stmtNum(c.text) !== null;
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i];
+    // A section title for transactions ends whatever holdings table came before it.
+    if (L.cells.length <= 2 && /transaction|statement of (account|transactions)/i.test(L.text) && !STMT_ISIN.test(L.text)) { cols = 'skip'; continue; }
+    // A heading row: a cell reading "ISIN" (or "ISIN Code"), plus up to two wrapped heading lines either side.
+    if (L.cells.some(c => /^ISIN( code| no\.?)?$/i.test(c.text))) {
+      const block = [];
+      for (let k = Math.max(0, i - 2); k <= Math.min(lines.length - 1, i + 2); k++) {
+        const B = lines[k];
+        // Not a heading: a row of data, a section title, or a label line such as "DP ID: ...  Client ID: ...".
+        if (k !== i && (STMT_ISIN.test(B.text) || B.cells.some(isNumCell) || B.cells.some(c => /:/.test(c.text)) || B.cells.length < 2 && k < i)) { if (k > i) break; else continue; }
+        block.push(B);
+      }
+      // Wrapped headings stack: a cell joins the column it sits under, and a column never takes two cells of one line.
+      const groups = [];
+      block.forEach((B, bi) => B.cells.forEach(c => {
+        const mid = (c.x + c.x2) / 2;
+        const g = groups.find(g => g.line !== bi && (mid >= g.x - 6 && mid <= g.x2 + 6 || Math.abs(mid - (g.x + g.x2) / 2) < 18));
+        if (g) { g.text += ' ' + c.text; g.x = Math.min(g.x, c.x); g.x2 = Math.max(g.x2, c.x2); g.line = bi; } else groups.push({ text: c.text, x: c.x, x2: c.x2, line: bi });
+      }));
+      cols = groups.map(g => ({ x: g.x, x2: g.x2, role: role(g.text) }));
+      if (!cols.some(c => c.role === 'value')) cols = 'skip';
+      continue;
+    }
+    if (cols === 'skip') continue;
+    const im = L.text.match(STMT_ISIN);
+    if (!im) continue;
+    const numCells = L.cells.filter(isNumCell);
+    const textCells = L.cells.filter(c => !isNumCell(c) && !STMT_ISIN.test(c.text) && /[A-Za-z]{3}/.test(c.text) && !/^[A-Z0-9]{6,}$/.test(c.text) && !stmtDate(c.text) && !STMT_PERSONAL.test(c.text));
+    let name = textCells.sort((a, b) => b.text.length - a.text.length)[0];
+    name = name ? name.text : '';
+    // A name that wraps continues on the next line, under it, with no numbers and no ISIN.
+    const nx = lines[i + 1];
+    if (name && nx && !STMT_ISIN.test(nx.text) && !nx.cells.some(isNumCell) && nx.cells.length <= 2 && !/total/i.test(nx.text) && !STMT_PERSONAL.test(nx.text)) {
+      const nameCell = L.cells.find(c => c.text === name);
+      const cont = nx.cells.find(c => nameCell && Math.abs(c.x - nameCell.x) < 8);
+      if (cont) name += ' ' + cont.text;
+    }
+    const got = { value: null, cost: null, units: null };
+    if (cols) {
+      numCells.forEach(c => {
+        const mid = (c.x + c.x2) / 2;
+        let best = null, bd = Infinity;
+        cols.forEach(col => {
+          const d = mid >= col.x - 2 && mid <= col.x2 + 2 ? 0 : Math.min(Math.abs(mid - col.x), Math.abs(mid - col.x2));
+          if (d < bd) { bd = d; best = col; }
+        });
+        if (best && best.role && got[best.role] === null) got[best.role] = stmtNum(c.text);
+      });
+    }
+    // With no heading at all (some summary layouts), the last number is taken as the value, and said to be a guess.
+    const sure = got.value !== null;
+    if (!sure && !cols && numCells.length) got.value = stmtNum(numCells[numCells.length - 1].text);
+    if (!(got.value > 0)) continue;
+    out.push({ isin: im[1], name: name.replace(/\s+/g, ' ').trim(), value: got.value, cost: got.cost > 0 ? got.cost : null, units: got.units, sure });
+  }
+  return out;
+}
+// The amounts on the statement's own total lines (a line whose first cell is "Total", "Grand Total" or "Portfolio
+// value"), to check the holdings read add up to what it says. Per-scheme "Total Cost Value" lines are not totals.
+function stmtStatedTotals(lines) {
+  const v = [];
+  lines.forEach(L => {
+    if (!L.cells.length || !/^(grand\s+|sub\s*)?total\b|^portfolio\s+value/i.test(L.cells[0].text) || /cost\s+value\s*:/i.test(L.text) || STMT_ISIN.test(L.text)) return;
+    L.cells.forEach(c => { const n = stmtNum(c.text); if (n > 0) v.push(n); });
+  });
+  return v;
+}
+
+/* Reads a statement's lines. Returns {ok, source, kind:'detailed'|'holdings', asOf, holdings, schemes, flows, total,
+   stated, matchesStated, notes} or {ok:false, error}. holdings: [{name, isin, cat, plan, value, cost, longTerm, units}]
+   in My holdings' shape; schemes (detailed only): every scheme's name, category, flows, end value and whether its
+   history is complete and read cleanly, closed ones too, for the index comparison. o.today ('YYYY-MM-DD') dates the
+   one-year line for long-term holdings and caps the statement's date. */
+function parseStatement(lines, o) {
+  o = o || {};
+  if (!Array.isArray(lines) || !lines.length) return { ok: false, error: 'No text was found in this file. A scanned statement (a picture of a page) cannot be read; download the PDF your RTA or depository emailed.' };
+  const all = lines.map(L => L.text).join('\n');
+  const src = (STMT_SOURCES.find(([re]) => re.test(all)) || [null, 'statement'])[1];
+  const notes = [];
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(o.today || '') ? o.today : null;
+  const capped = d => d && (!today || d <= today) ? d : null;
+  // The statement's period comes from its first lines ("01-Jan-2020 To 23-Oct-2026", "as on 30-Sep-2026"), never from
+  // a date further down such as "SIP valid to 31-Dec-2099".
+  const head = lines.slice(0, 15).map(L => L.text).join('\n');
+  let from = null, asOf = null;
+  const pm = head.match(/(\d{1,2}[-\/ ](?:[A-Za-z]{3,9}|\d{1,2})[-\/ ,]+\d{4})\s+to\s+(\d{1,2}[-\/ ](?:[A-Za-z]{3,9}|\d{1,2})[-\/ ,]+\d{4})/i);
+  if (pm) { from = stmtDate(pm[1]); asOf = capped(stmtDate(pm[2])); }
+  if (!asOf) { const am = head.match(/as\s+(?:on|of)\s+(\d{1,2}[-\/ ](?:[A-Za-z]{3,9}|\d{1,2})[-\/ ,]+\d{4})/i); if (am) asOf = capped(stmtDate(am[1])); }
+  const yearAgo = d => new Date(Date.parse(d) - 365 * 864e5).toISOString().slice(0, 10);
+  if (/Closing\s+Unit\s+Balance/i.test(all)) {
+    const schemes = stmtParseMfDetailed(lines);
+    if (!schemes.length) return { ok: false, error: 'This looks like a CAMS or KFintech statement, but no scheme could be read from it.' };
+    // For a detailed statement the valuation date on the schemes is the one that counts.
+    const vd = schemes.map(s => capped(s.valueDate)).filter(Boolean).sort();
+    if (vd.length) asOf = vd[vd.length - 1];
+    const cut = yearAgo(today || asOf || '2000-01-01');
+    const holdings = [], allFlows = [], out = [], before = [], unread = [], mixedTerm = [];
+    schemes.forEach(s => {
+      const f = stmtSchemeFlows(s);
+      const value = s.value != null ? s.value : (s.close != null && s.nav != null ? s.close * s.nav : 0);
+      const lotUnits = f.lots.reduce((a, l) => a + l.units, 0);
+      const reconciles = s.close == null || Math.abs(lotUnits - s.close) <= Math.max(0.01, Math.abs(s.close) * 1e-4);
+      const clean = !s.bad && reconciles;
+      const complete = clean && !(s.open > 0);
+      if (!clean) unread.push(s.name);
+      else if (s.open > 0) before.push(s.name);
+      const cat = stmtCategory(s.isin, s.name);
+      out.push({ name: s.name, isin: s.isin, cat, value: value > 0 ? value : 0, flows: f.flows, complete });
+      if (clean) f.flows.forEach(x => allFlows.push(x));
+      if (!(value > 0)) return;
+      const lotCost = f.lots.reduce((a, l) => a + l.cost, 0);
+      const cost = s.cost > 0 ? s.cost : complete && lotCost > 0 ? lotCost : null;
+      // Long-term only when every unit still held was bought more than a year ago. A fund with some recent units is
+      // marked short-term (so the tax-free booking leaves it out) and said; units held before the statement starts
+      // count as long-term only if the statement starts more than a year ago.
+      let longTerm;
+      if (complete && f.lots.length) {
+        // (complete means no opening lot, so every lot has a date)
+        longTerm = f.lots.every(l => l.date < cut);
+        if (!longTerm && f.lots.some(l => l.date < cut)) mixedTerm.push(s.name);
+      } else longTerm = clean && !!from && from < cut && !s.txns.some(x => x.units > 0 && x.date >= cut);
+      holdings.push({ name: s.name, isin: s.isin, cat, plan: fundPlanFromName(s.name), value, cost, longTerm, units: s.close });
+    });
+    if (unread.length) notes.push('Could not read every transaction of ' + unread.join(', ') + ' reliably, so ' + (unread.length === 1 ? 'it is' : 'they are') + ' left out of the comparison with the index; ' + (unread.length === 1 ? 'its value is' : 'their values are') + ' still listed.');
+    if (before.length) notes.push(before.length + (before.length === 1 ? ' fund was' : ' funds were') + ' already held when this statement starts, so what was paid for them and when is not all on it; they are left out of the comparison with the index. For the full picture, ask for a detailed statement from the date of your first investment.');
+    if (mixedTerm.length) notes.push(mixedTerm.length + (mixedTerm.length === 1 ? ' fund has' : ' funds have') + ' units bought within the last year as well as older ones; they are marked as held under a year, so the tax-free booking leaves them out.');
+    allFlows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const total = holdings.reduce((a, h) => a + h.value, 0);
+    const stated = stmtStatedTotals(lines);
+    return { ok: true, source: src === 'statement' ? 'CAMS/KFintech' : src, kind: 'detailed', asOf, from, holdings, schemes: out, flows: allFlows,
+      total, stated, matchesStated: stated.some(v => Math.abs(v - total) <= Math.max(1, total * 1e-4)), complete: !before.length && !unread.length, notes };
+  }
+  const rows = stmtParseTables(lines);
+  if (!rows.length) return { ok: false, error: 'No holdings with an ISIN were found. Use the Consolidated Account Statement (CAS) PDF from CAMS, KFintech, NSDL or CDSL.' };
+  // One instrument held in two accounts is one holding here.
+  const by = {};
+  rows.forEach(r => {
+    const h = by[r.isin];
+    if (h) { h.value += r.value; h.cost = h.cost != null && r.cost != null ? h.cost + r.cost : null; h.units = h.units != null && r.units != null ? h.units + r.units : null; h.sure = h.sure && r.sure; }
+    else by[r.isin] = Object.assign({}, r);
+  });
+  // No purchase dates on a holdings statement: every row starts as held under a year, so nothing bought recently is
+  // counted as tax-free by default; the person ticks the ones held longer.
+  const holdings = Object.values(by).map(r => ({ name: r.name || r.isin, isin: r.isin, cat: stmtCategory(r.isin, r.name), plan: /^INF/.test(r.isin) ? fundPlanFromName(r.name) : 'unstated',
+    value: r.value, cost: r.cost, longTerm: false, units: r.units, sure: r.sure }));
+  if (holdings.some(h => !h.sure)) notes.push('Some values were read without a "Value" heading above them; check those rows.');
+  notes.push('This statement does not show when each holding was bought, so every row is marked as held under a year. Tick "Held for over a year" on the ones bought more than 12 months ago.');
+  const total = holdings.reduce((a, h) => a + h.value, 0);
+  const stated = stmtStatedTotals(lines);
+  return { ok: true, source: src, kind: 'holdings', asOf, from, holdings, schemes: null, flows: null, total, stated,
+    matchesStated: stated.some(v => Math.abs(v - total) <= Math.max(1, total * 1e-4)), complete: false, notes };
+}
+
+/* The same money, on the same dates, in an index fund. flows: [{date, amount}] (money in negative), sorted;
+   endValue: what the holdings are worth on asOf; prices: [{date, close}] of the index fund, sorted. Each flow buys
+   (or sells) index-fund units at that day's price (the last close on or before it). Returns {ok, invested, yourValue,
+   indexValue, gap, yourXirr, indexXirr, from, to, path:[{date, put, index}]} or {ok:false, error}. */
+function statementVsIndex(flows, endValue, asOf, prices) {
+  const fl = (Array.isArray(flows) ? flows : []).filter(f => f && /^\d{4}-\d{2}-\d{2}$/.test(f.date) && f.date <= asOf && isFinite(f.amount) && f.amount !== 0)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const px = (Array.isArray(prices) ? prices : []).filter(p => p && p.close > 0);
+  if (fl.length < 1 || !(endValue >= 0) || !asOf) return { ok: false, error: 'There are no dated purchases to compare.' };
+  if (!px.length) return { ok: false, error: 'The index fund prices are not loaded.' };
+  if (px[0].date > fl[0].date) return { ok: false, error: 'The index fund’s price history starts ' + px[0].date + ', after your first purchase.', startsAfter: px[0].date };
+  let j = -1;
+  const priceOn = d => { while (j + 1 < px.length && px[j + 1].date <= d) j++; return px[j].close; };
+  let units = 0, put = 0, wentShort = false;
+  const ev = fl.map(f => {
+    const du = -f.amount / priceOn(f.date);
+    units += du; put += -f.amount;
+    if (units < -1e-9) wentShort = true;
+    return { date: f.date, du, dput: -f.amount };
+  });
+  const pEnd = priceOn(asOf), indexValue = units * pEnd;
+  // The index holding through time, every fifth trading day (about weekly), for a chart.
+  const path = [];
+  let u = 0, pp = 0, e = 0, n = 0;
+  px.forEach(p => {
+    if (p.date < fl[0].date || p.date > asOf) return;
+    while (e < ev.length && ev[e].date <= p.date) { u += ev[e].du; pp += ev[e].dput; e++; }
+    if (n++ % 5 === 0) path.push({ date: p.date, put: pp, index: u * p.close });
+  });
+  if (path.length && path[path.length - 1].date === asOf) path.pop();
+  path.push({ date: asOf, put, index: indexValue });
+  const yourXirr = xirr(fl.concat([{ date: asOf, amount: endValue }]));
+  const indexXirr = xirr(fl.concat([{ date: asOf, amount: indexValue }]));
+  return { ok: true, invested: put, yourValue: endValue, indexValue, gap: endValue - indexValue, yourXirr, indexXirr,
+    from: fl[0].date, to: asOf, path, wentShort };
+}
+// The part of a detailed statement that is fair to set against a Nifty 50 index fund: Indian equity funds whose whole
+// history is on the statement and was read cleanly. Debt, hybrid, gold and international funds aim at something else;
+// a fund whose name does not say what it holds is not guessed; a fund already held when the statement starts would
+// count units never paid for. Each of those is left out and named. Closed funds count: what was sold, and when, is
+// part of the result.
+function statementEquityFlows(schemes) {
+  const used = [], left = [], unknown = [], incomplete = [], flows = [];
+  let endValue = 0;
+  (Array.isArray(schemes) ? schemes : []).forEach(s => {
+    const c = HOLDING_CATS_IN.find(x => x.id === s.cat);
+    if (!c) { unknown.push(s.name); return; }
+    if (c.cls !== 'equity' || c.id === 'intl') { left.push(s.name); return; }
+    if (!s.complete) { incomplete.push(s.name); return; }
+    used.push(s); endValue += s.value || 0;
+    (s.flows || []).forEach(f => flows.push(f));
+  });
+  flows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return { flows, endValue, used, left, unknown, incomplete };
 }
 
 /* =====================================================================
@@ -2293,6 +2683,7 @@ if (typeof module !== 'undefined' && module.exports) {
     loanSchedule, loanPrepay, homeLoanCompare, debtAvalanche, termCoverNeed, healthCoverPlan,
     RISK_PROFILES_IN, HOLDING_CATS_IN, holdingCategoryFromName, fundPlanFromName, REGULAR_EXTRA, regularExtra, reviewHoldings,
     REVIEW_AREAS, REVIEW_DRIFT_BAND, REVIEW_TAX_TIE, REVIEW_WHEN, reviewDates, reviewWhenOrder, yearlyReview,
+    stmtDate, stmtNum, stmtLines, stmtCategory, parseStatement, statementVsIndex, statementEquityFlows,
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow, rollingReturns, annualisedVol, returnReality, stepUpAnnualPlan,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,

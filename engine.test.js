@@ -4170,7 +4170,7 @@ test('review: an area the page could not review says what is still needed', () =
   assert.strictEqual(c.harvest.status, 'missing'); assert.match(c.harvest.finding, /category/);
   assert.strictEqual(c.holdings.status, 'partial'); assert.match(c.holdings.finding, /pick your risk profile/);
   const debt = r.actions.find(x => x.area === 'debt').text;
-  assert.match(debt, /36% \(a typical rate\)/); assert.match(debt, /Enter what you pay each month/);
+  assert.match(debt, /36%, a typical rate/); assert.match(debt, /Enter what you pay each month/);
 });
 test('review: no new money given means no invented split; unknown exemption use is said', () => {
   const a = rvFull();
@@ -4180,4 +4180,204 @@ test('review: no new money given means no invented split; unknown exemption use 
   assert.match(h.text, /Enter how much you add each month/); assert.strictEqual(h.amount, null);
   assert.match(r.actions.find(x => x.area === 'harvest').text, /assumes none of this year's Rs 125000 is used yet/);
   assert.match(r.checks[6].finding, /Existing savings were not entered/);
+});
+
+// ---- statement (CAS) import ---------------------------------------------------------------------------------------
+// A page from rows of [x, text]: each row is one line, 12 units below the last; a piece's width is 4 units a character.
+const stPage = rows => rows.map((r, i) => r.map(([x, str]) => ({ str, x, y: 800 - i * 12, w: str.length * 4 }))).flat();
+const stLines = (...pages) => engine.stmtLines(pages.map(stPage));
+
+test('statement: dates and amounts as statements print them', () => {
+  assert.strictEqual(engine.stmtDate('05-Oct-2026'), '2026-10-05');
+  assert.strictEqual(engine.stmtDate('05/10/2026'), '2026-10-05');
+  assert.strictEqual(engine.stmtDate('31-Feb-2026'), null);
+  assert.strictEqual(engine.stmtNum('1,23,456.78'), 123456.78);
+  assert.strictEqual(engine.stmtNum('(1,000.00)'), -1000);
+  assert.strictEqual(engine.stmtNum('₹ 2,500'), 2500);
+  for (const x of ['INF000X01011', '12%', '(5', '05-Oct-2026', '1234567/89']) assert.strictEqual(engine.stmtNum(x), null, x);
+});
+test('statement: pieces on one height are one line; close pieces are one cell, far ones separate cells', () => {
+  const L = engine.stmtLines([[{ str: 'Closing', x: 40, y: 500, w: 30 }, { str: 'Unit', x: 72, y: 500.8, w: 18 }, { str: '12.000', x: 300, y: 499.5, w: 30 }, { str: 'Next', x: 40, y: 488, w: 20 }]]);
+  assert.strictEqual(L.length, 2);
+  assert.deepStrictEqual(L[0].cells.map(c => c.text), ['Closing Unit', '12.000']);
+  assert.strictEqual(L[1].text, 'Next');
+});
+
+const ST_CAMS = () => stLines([
+  [[40, 'Consolidated Account Statement']], [[40, '01-Jan-2020 To 23-Oct-2026']], [[40, 'Test Person']],
+  [[40, 'Total'], [330, '1,00,000.00'], [470, '1,55,000.00']],
+  [[40, 'Folio No: 1234567 / 89'], [200, 'PAN: ABCDE1234F'], [330, 'KYC: OK']],
+  [[40, 'B205-Example Flexi Cap Fund - Regular Plan - Growth - ISIN: INF000X01011(Advisor: ARN-1)'], [470, 'Registrar : CAMS']],
+  [[40, 'Opening Unit Balance: 0.000']],
+  [[40, '05-Jan-2021'], [100, 'Purchase'], [300, '60,000.00'], [370, '600.000'], [440, '100.0000'], [510, '600.000']],
+  [[40, '05-Jan-2021'], [100, '*** Stamp Duty ***'], [300, '3.00']],
+  [[40, '05-Mar-2026'], [100, 'Purchase - Systematic'], [300, '40,000.00'], [370, '200.000'], [440, '200.0000'], [510, '800.000']],
+  [[40, '10-Apr-2026'], [100, 'Redemption'], [300, '(42,000.00)'], [370, '(200.000)'], [440, '210.0000'], [510, '600.000']],
+  [[40, 'Closing Unit Balance: 600.000'], [180, 'NAV on 23-Oct-2026: INR 250.0000'], [330, 'Total Cost Value: 60,000.00'], [430, 'Market Value on 23-Oct-2026: INR 1,50,000.00']],
+  [[40, 'T07-Test Mid Cap Fund - Regular Plan - IDCW Reinvestment - ISIN: INF000Z01013'], [470, 'Registrar : KFINTECH']],
+  [[40, 'Opening Unit Balance: 0.000']],
+  [[40, '06-May-2019'], [100, 'Purchase'], [300, '40,000.00'], [370, '1,000.000'], [440, '40.0000'], [510, '1,000.000']],
+  [[40, '02-Mar-2020'], [100, 'IDCW Reinvestment'], [300, '1,200.00'], [370, '30.000'], [440, '40.0000'], [510, '1,030.000']],
+  [[40, '14-Feb-2024'], [100, 'Redemption'], [300, '(61,800.00)'], [370, '(1,030.000)'], [440, '60.0000'], [510, '0.000']],
+  [[40, 'Closing Unit Balance: 0.000'], [180, 'NAV on 23-Oct-2026: INR 70.0000'], [330, 'Total Cost Value: 0.00'], [430, 'Market Value on 23-Oct-2026: INR 0.00']],
+  [[40, 'S40-Sample Liquid Fund - Direct Plan - Growth - ISIN: INF000Y01025'], [470, 'Registrar : CAMS']],
+  [[40, 'Opening Unit Balance: 0.000']],
+  [[40, '02-Jun-2025'], [100, 'Purchase'], [300, '5,000.00'], [370, '2.000'], [440, '2,500.0000'], [510, '2.000']],
+  [[40, 'Closing Unit Balance: 2.000'], [180, 'NAV on 23-Oct-2026: INR 2,500.0000'], [330, 'Total Cost Value: 5,000.00'], [430, 'Market Value on 23-Oct-2026: INR 5,000.00']],
+]);
+
+test('statement: a detailed CAMS/KFintech statement becomes holdings, flows and a checked total', () => {
+  const r = engine.parseStatement(ST_CAMS(), { today: '2026-10-28' });
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.kind, 'detailed'); assert.strictEqual(r.source, 'KFintech');
+  assert.strictEqual(r.asOf, '2026-10-23');
+  assert.deepStrictEqual(r.holdings.map(h => h.name), ['Example Flexi Cap Fund - Regular Plan - Growth', 'Sample Liquid Fund - Direct Plan - Growth']);
+  const f = r.holdings[0];
+  assert.strictEqual(f.cat, 'flexi'); assert.strictEqual(f.plan, 'regular'); assert.strictEqual(f.value, 150000); assert.strictEqual(f.cost, 60000);
+  // the April sale takes the oldest units first (first in, first out, as the tax rules do), so 200 of the March units
+  // are still held: the fund is part short-term, marked as such, and said
+  assert.strictEqual(f.longTerm, false);
+  assert.ok(r.notes.some(n => /1 fund has units bought within the last year as well as older ones/.test(n)));
+  assert.strictEqual(r.holdings[1].longTerm, true);
+  // the closed fund is not a holding, but its money in and out counts
+  const mid = r.schemes.find(s => /Mid Cap/.test(s.name));
+  assert.strictEqual(mid.value, 0); assert.deepStrictEqual(mid.flows.map(x => x.amount), [-40000, 61800]);
+  const flexi = r.schemes.find(s => /Flexi/.test(s.name));
+  assert.deepStrictEqual(flexi.flows.map(x => x.amount), [-60000, -3, -40000, 42000]);
+  assert.strictEqual(r.total, 155000); assert.strictEqual(r.matchesStated, true); assert.strictEqual(r.complete, true);
+  assert.ok(r.flows.length === 7 && r.flows.every((x, i) => i === 0 || r.flows[i - 1].date <= x.date));
+});
+test('statement: nothing that identifies the person comes out of the parser', () => {
+  const s = JSON.stringify(engine.parseStatement(ST_CAMS(), { today: '2026-10-28' }));
+  for (const x of ['ABCDE1234F', 'Test Person', '1234567', 'ARN-1']) assert.ok(!s.includes(x), x);
+});
+test('statement: units bought within the year make a fund short-term; a mixed one is said', () => {
+  const L = ST_CAMS().filter(l => !/^10-Apr-2026/.test(l.text))
+    .map(l => /^Closing Unit Balance: 600/.test(l.text) ? Object.assign({}, l, { text: l.text.replace('600.000', '800.000') }) : l);
+  const r = engine.parseStatement(L, { today: '2026-10-28' });
+  assert.strictEqual(r.holdings[0].longTerm, false);
+  assert.ok(r.notes.some(n => /bought within the last year as well as older ones/.test(n)));
+});
+// One scheme, its lines given as [date, description, amount, units, price, balance] (or [date, description, amount]).
+const stOne = (open, txns, close, value, extra) => stLines([[[40, 'Consolidated Account Statement']], [[40, '01-Jan-2020 To 23-Oct-2026']],
+  [[40, 'Folio No: 1234567 / 89'], [200, 'PAN: ABCDE1234F']],
+  [[40, 'B205-Example Flexi Cap Fund - Direct Plan - Growth - ISIN: INF000X01011'], [470, 'Registrar : CAMS']],
+  [[40, 'Opening Unit Balance: ' + open]]].concat(txns.map(t => [[40, t[0]], [100, t[1]]].concat(t.slice(2).map((v, k) => [300 + k * 70, v]))))
+  .concat([[[40, 'Closing Unit Balance: ' + close], [180, 'NAV on 23-Oct-2026: INR 50.0000'], [330, 'Total Cost Value: 4,000.00'], [430, 'Market Value on 23-Oct-2026: INR ' + value]]])
+  .concat(extra || []));
+test('statement: a fund already held when the statement starts is kept, but left out of the index comparison', () => {
+  const r = engine.parseStatement(stOne('10.000', [['05-Jan-2021', 'Purchase', '2,000.00', '50.000', '40.0000', '60.000']], '60.000', '3,000.00'), { today: '2026-10-28' });
+  assert.strictEqual(r.complete, false); assert.ok(r.notes.some(n => /already held when this statement starts/.test(n)));
+  assert.strictEqual(r.holdings[0].value, 3000);
+  // the statement starts in 2020 and nothing was bought in the last year, so every unit is over a year old
+  assert.strictEqual(r.holdings[0].longTerm, true);
+  const e = engine.statementEquityFlows(r.schemes);
+  assert.deepStrictEqual(e.incomplete, ['Example Flexi Cap Fund - Direct Plan - Growth']); assert.strictEqual(e.flows.length, 0); assert.strictEqual(e.endValue, 0);
+});
+test('statement: numbers at the end of a description do not shift the columns', () => {
+  const r = engine.parseStatement(stOne('0.000', [
+    ['10-Jan-2021', 'Systematic Investment (1)', '5,000.00', '100.000', '50.0000', '100.000'],
+    ['10-Feb-2021', 'IDCW Reinvest @ Rs.0.25', '250.00', '5.000', '50.0000', '105.000'],
+    ['10-Mar-2021', 'IDCW Paid @ Rs.0.50', '500.00', '0.000', '50.0000', '105.000'],
+    ['10-Mar-2021', 'IDCW Payout @ Rs.0.10', '105.00']], '105.000', '5,250.00'), { today: '2026-10-28' });
+  assert.strictEqual(r.complete, true, JSON.stringify(r.notes));
+  assert.deepStrictEqual(r.schemes[0].flows.map(f => f.amount), [-5000, 500, 105]);
+});
+test('statement: a line whose numbers do not add up leaves that fund out, named, rather than used wrong', () => {
+  const r = engine.parseStatement(stOne('0.000', [
+    ['10-Jan-2021', 'Purchase', '5,000.00', '100.000', '50.0000', '100.000'],
+    ['10-Feb-2021', 'Purchase', '5,000.00', '100.000', '50.0000', '150.000']], '150.000', '7,500.00'), { today: '2026-10-28' });
+  assert.ok(r.notes.some(n => /Could not read every transaction of Example Flexi Cap Fund/.test(n)));
+  assert.strictEqual(r.schemes[0].complete, false); assert.strictEqual(r.flows.length, 0);
+  assert.strictEqual(r.holdings[0].value, 7500);
+});
+test('statement: its date comes from its own period, capped at today, never a far date in the text', () => {
+  const r = engine.parseStatement(stOne('0.000', [['10-Jan-2021', 'Purchase - SIP valid to 31-Dec-2099', '5,000.00', '100.000', '50.0000', '100.000']], '100.000', '5,000.00',
+    [[[40, 'Mandate registered, valid to 31-Dec-2099']]]), { today: '2026-10-28' });
+  assert.strictEqual(r.asOf, '2026-10-23'); assert.strictEqual(r.from, '2020-01-01');
+});
+test('statement: a wrapped scheme name never takes the folio or PAN line above it', () => {
+  const L = stLines([[[40, 'Consolidated Account Statement']], [[40, 'Folio No: 1234567 / 89'], [200, 'PAN: ABCDE1234F']], [[40, 'Growth - ISIN: INF000X01011'], [470, 'Registrar : CAMS']],
+    [[40, 'Closing Unit Balance: 10.000'], [180, 'NAV on 23-Oct-2026: INR 50.0000'], [330, 'Total Cost Value: 400.00'], [430, 'Market Value on 23-Oct-2026: INR 500.00']]]);
+  const r = engine.parseStatement(L, { today: '2026-10-28' });
+  assert.ok(!/ABCDE1234F|Folio/.test(JSON.stringify(r)));
+});
+test('statement: a scheme name that wraps onto the line above ISIN is joined', () => {
+  const L = stLines([[[40, 'Consolidated Account Statement']], [[40, 'S12-Sample Long Name Small Cap Opportunities Fund - Direct Plan']], [[40, '- ISIN: INF000Y01017(Advisor: DIRECT)'], [430, 'Registrar : CAMS']],
+    [[40, 'Closing Unit Balance: 10.000'], [180, 'NAV on 23-Oct-2026: INR 50.0000'], [330, 'Total Cost Value: 400.00'], [430, 'Market Value on 23-Oct-2026: INR 500.00']]]);
+  const r = engine.parseStatement(L, { today: '2026-10-28' });
+  assert.strictEqual(r.holdings[0].name, 'Sample Long Name Small Cap Opportunities Fund - Direct Plan');
+  assert.strictEqual(r.holdings[0].cat, 'smallcap');
+});
+
+const ST_NSDL = () => stLines([
+  [[40, 'NSDL Consolidated Account Statement']], [[40, 'Statement for the period from 01-Sep-2026 to 30-Sep-2026']],
+  [[40, 'NSDL Demat Account'], [220, 'DP ID: IN300000'], [330, 'Client ID: 10000000']],
+  [[40, 'Equities (E)']],
+  [[40, 'ISIN'], [112, 'Stock'], [170, 'Company Name'], [312, 'Face Value'], [380, 'No. of'], [434, 'Market Price'], [520, 'Value']],
+  [[112, 'Symbol'], [328, '(Rs)'], [380, 'Shares'], [453, '(Rs)'], [520, '(Rs)']],
+  [[40, 'INE000A01011'], [112, 'EXBANK'], [170, 'EXAMPLE BANK LIMITED'], [335, '1.00'], [392, '100'], [450, '1,650.25'], [505, '1,65,025.00']],
+  [[40, 'INE000C01017'], [112, 'TESTPOW'], [170, 'TEST POWER GENERATION AND'], [330, '10.00'], [392, '300'], [455, '312.40'], [510, '93,720.00']],
+  [[170, 'TRANSMISSION LIMITED']],
+  [[40, 'INF000E01020'], [112, 'EXGOLD'], [170, 'EXAMPLE GOLD ETF'], [335, '1.00'], [392, '800'], [460, '78.35'], [510, '62,680.00']],
+  [[40, 'INE000R01014'], [112, 'EXREIT'], [170, 'EXAMPLE REIT'], [335, '1.00'], [392, '10'], [460, '300.00'], [515, '3,000.00']],
+  [[40, 'Mutual Fund Folios (F)']],
+  [[40, 'ISIN'], [170, 'ISIN Description'], [290, 'No. of Units'], [345, 'Total Cost'], [400, 'Current Value'], [465, 'Unrealised P/L'], [530, 'Return (%)']],
+  [[40, 'INF000W01015'], [170, 'WIDGET CORPORATE BOND FUND'], [300, '2,000.000'], [350, '60,000.00'], [405, '66,800.00'], [475, '6,800.00'], [540, '7.10']],
+  [[40, 'CDSL Demat Account'], [220, 'BO ID: 1200000000000000']],
+  [[40, 'ISIN'], [130, 'Security'], [330, 'Current Bal'], [400, 'Free Bal'], [520, 'Value']],
+  [[40, 'INE000A01011'], [130, 'EXAMPLE BANK LIMITED'], [335, '20.000'], [405, '20.000'], [510, '33,005.00']],
+  [[40, 'IN0020210000'], [130, 'SGB 2.50% 2029 SR-IV'], [335, '10'], [510, '73,500.00']],
+  [[40, 'Grand Total'], [505, '4,97,730.00']],
+]);
+test('statement: depository tables are read by their headings, not by column order', () => {
+  const r = engine.parseStatement(ST_NSDL(), { today: '2026-10-28' });
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.kind, 'holdings'); assert.strictEqual(r.source, 'NSDL'); assert.strictEqual(r.asOf, '2026-09-30');
+  const by = Object.fromEntries(r.holdings.map(h => [h.isin, h]));
+  // the same shares in two demat accounts are one holding
+  assert.strictEqual(by.INE000A01011.value, 198030); assert.strictEqual(by.INE000A01011.units, 120); assert.strictEqual(by.INE000A01011.cat, 'shares');
+  assert.strictEqual(by.INE000C01017.name, 'TEST POWER GENERATION AND TRANSMISSION LIMITED');
+  assert.strictEqual(by.INF000E01020.cat, 'gold');
+  assert.strictEqual(by.INE000R01014.cat, '');           // a REIT has no category here, so the person picks one
+  assert.strictEqual(by.IN0020210000.cat, 'gold');        // a sovereign gold bond
+  // the profit column sits to the right of the value and is not taken for it; cost comes from its own heading
+  assert.strictEqual(by.INF000W01015.value, 66800); assert.strictEqual(by.INF000W01015.cost, 60000); assert.strictEqual(by.INF000W01015.cat, 'bonddebt');
+  assert.strictEqual(r.total, 497730); assert.strictEqual(r.matchesStated, true);
+  // no purchase dates: nothing is counted as tax-free until the person ticks it
+  assert.ok(r.holdings.every(h => h.longTerm === false) && r.notes.some(n => /does not show when each holding was bought/.test(n)));
+  assert.ok(!JSON.stringify(r).includes('IN300000') && !JSON.stringify(r).includes('10000000'));
+});
+test('statement: a transactions table after the holdings is not read as holdings', () => {
+  const L = ST_NSDL().concat(stLines([[[40, 'Statement of Transactions']], [[40, 'ISIN'], [130, 'Security'], [330, 'Opening Balance'], [400, 'Credit'], [470, 'Closing Balance']],
+    [[40, 'INE000A01011'], [130, 'EXAMPLE BANK LIMITED'], [335, '120.000'], [405, '10.000'], [475, '130.000']]]));
+  const r = engine.parseStatement(L, { today: '2026-10-28' });
+  assert.strictEqual(r.holdings.find(h => h.isin === 'INE000A01011').value, 198030);
+});
+test('statement: what is not a statement says so', () => {
+  assert.strictEqual(engine.parseStatement([], {}).ok, false);
+  assert.match(engine.parseStatement(stLines([[[40, 'Hello'], [200, '1,000.00']]]), {}).error, /No holdings with an ISIN/);
+});
+
+test('statement vs index: the same money on the same days in the index fund', () => {
+  const px = [{ date: '2020-01-01', close: 10 }, { date: '2021-01-01', close: 15 }, { date: '2022-01-01', close: 20 }];
+  const v = engine.statementVsIndex([{ date: '2020-01-01', amount: -100 }], 150, '2022-01-01', px);
+  assert.strictEqual(v.ok, true); approx(v.indexValue, 200); approx(v.gap, -50); approx(v.invested, 100);
+  approx(v.indexXirr, Math.pow(2, 365 / 731) - 1, 1e-6);
+  assert.ok(v.yourXirr < v.indexXirr);
+  // a sale takes units out at that day's price
+  const w = engine.statementVsIndex([{ date: '2020-01-01', amount: -100 }, { date: '2021-01-01', amount: 75 }], 80, '2022-01-01', px);
+  approx(w.indexValue, 100); approx(w.invested, 25);
+  assert.strictEqual(w.path[w.path.length - 1].date, '2022-01-01');
+  assert.match(engine.statementVsIndex([{ date: '2019-06-01', amount: -100 }], 1, '2022-01-01', px).error, /starts 2020-01-01/);
+  assert.strictEqual(engine.statementVsIndex([], 1, '2022-01-01', px).ok, false);
+});
+test('statement vs index: only Indian equity funds are set against the Nifty 50', () => {
+  const e = engine.statementEquityFlows([
+    { name: 'A', cat: 'flexi', value: 100, flows: [{ date: '2021-01-01', amount: -50 }], complete: true },
+    { name: 'B', cat: 'liquid', value: 100, flows: [{ date: '2020-01-01', amount: -90 }], complete: true },
+    { name: 'C', cat: 'intl', value: 100, flows: [{ date: '2020-01-01', amount: -90 }], complete: true },
+    { name: 'D', cat: '', value: 100, flows: [{ date: '2020-01-01', amount: -90 }], complete: true },
+    { name: 'E', cat: 'smallcap', value: 0, flows: [{ date: '2020-01-01', amount: -10 }, { date: '2020-06-01', amount: 20 }], complete: true },
+  ]);
+  assert.deepStrictEqual(e.used.map(x => x.name), ['A', 'E']); assert.deepStrictEqual(e.left, ['B', 'C']); assert.deepStrictEqual(e.unknown, ['D']);
+  assert.strictEqual(e.endValue, 100); assert.deepStrictEqual(e.flows.map(f => f.date), ['2020-01-01', '2020-06-01', '2021-01-01']);
 });
