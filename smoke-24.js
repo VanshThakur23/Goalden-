@@ -78,5 +78,13 @@ check(/\/api\/isin\?codes='\+rows\.map\(x=>x\.isin\)\.join\(','\)/.test(lv) && !
 check(/L\.live\.selectedWeights=w/.test(lv) && /L\.live\.weight=Math\.round\(w\[0\]\*100\)/.test(lv) && /L\.tab='livefrontier'/.test(lv), '9e the funds open at the weights they are held in');
 check(/found\.length<2/.test(lv), '9e fewer than two funds found says so instead of opening a one-fund mix');
 
+// ---- the path from a statement to the frontier is explained where people are -------------------------------------
+check(/<ol class="stmt-steps">/.test(fnBody(gl, 'holdStmtPanelHTML')) && (fnBody(gl, 'holdStmtPanelHTML').match(/<li><b>/g) || []).length === 4, '9e the side panel explains the statement in four numbered steps');
+check(/class="stmt-flow"/.test(fnBody(gl, 'holdingsOutputHTML')) && /data-hd="stmtSample"/.test(fnBody(gl, 'holdingsOutputHTML')), '9e an empty My holdings shows the path from statement to frontier, with the sample to try');
+check(/read from your CAS statement/.test(gl) && /Read your CAS statement in My holdings/.test(read('index.html')), '9e the tools list and the landing page say the statement can be read');
+const fs3 = fnBody(gl, 'liveFromStatementHTML');
+check(/From your statement\./.test(fs3) && /data-tab-switch="holdings"/.test(fs3) && /L\.live\.fromStatement=null/.test(fs3), '9e Test Real Investments says the funds came from the statement, links back, and drops the note once the mix is changed');
+check(/L\.live\.fromStatement=\{ keys:/.test(fnBody(gl, 'holdOpenInLive')), '9e the hand-off records which funds came from the statement');
+
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
 process.exit(fail ? 1 : 0);

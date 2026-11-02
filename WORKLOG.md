@@ -4680,3 +4680,14 @@ standing over the founder's shoulder.
 - **Tests:** 318/318 engine; smokes 02-24 all pass.
 - **Not done:** shares (INE ISINs) are not handed to Test Real Investments (needs an ISIN-to-NSE-symbol
   list); a real CAS still untried; pdf.js 4.x and cmaps.
+
+## 2026-11-02 - Claude Code - Statement path explained in the app
+- My holdings side panel: the statement box is now four numbered steps (get it, choose it and type the
+  password, check the list it fills, read the results and open the frontier); "Which statement, and where to
+  get it" stays one click away. An empty tab shows the same path as a four-step strip (statement, holdings,
+  against the index, on the frontier) with "try a made-up one".
+- Test Real Investments says "From your statement" while it holds exactly the funds a statement sent (names
+  and held weights, what "Your mix" means, a link back); the note goes once the mix is changed.
+- Tools list and the landing page's Lab card mention reading the CAS statement.
+- Checked: real ISINs opened at 60/20/20 and the At a glance verdict ran on them; screenshots of both views.
+- Tests: 318/318 engine, smokes 02-24 all pass.

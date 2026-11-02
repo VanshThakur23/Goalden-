@@ -427,6 +427,12 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .lg-head{margin:4px 0 10px;font-size:16px;line-height:1.5;color:var(--paper)}
 .stmt-box{border:1px solid rgba(37,87,199,.22);border-radius:6px;padding:10px 12px;margin:0 0 6px;background:rgba(37,87,199,.035)}
 .stmt-gets{margin:0 0 8px;padding-left:18px;font-size:12px;line-height:1.5;color:var(--dim)}
+.stmt-steps{margin:0 0 10px;padding-left:20px;font-size:12px;line-height:1.5;color:var(--dim)}.stmt-steps li{margin:0 0 6px;padding-left:2px}.stmt-steps b{color:var(--paper)}
+.stmt-steps li::marker{color:#1E4FBE;font-weight:700}
+.stmt-flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0 10px}
+.stmt-flow div{border-top:3px solid #2557C7;padding-top:8px;font-size:12px;line-height:1.45;color:var(--dim)}.stmt-flow b{display:block;color:var(--paper);font-size:13px;margin-bottom:2px}
+@media(max-width:560px){.stmt-flow{grid-template-columns:1fr 1fr}}
+.from-stmt{border-left:4px solid #2557C7;background:rgba(37,87,199,.05);padding:10px 12px;margin:0 0 14px;font-size:12.5px;line-height:1.5;color:var(--paper)}
 .stmt-how{font-size:12px;line-height:1.5;color:var(--dim);margin:0 0 10px}.stmt-how summary{cursor:pointer;color:#1E4FBE}.stmt-how p{margin:6px 0}
 .stmt-box .hold-lbl{display:block;margin:0 0 8px}.stmt-box input[type=file],.stmt-box input[type=password]{display:block;width:100%;box-sizing:border-box;margin-top:3px;font:inherit;font-size:12px}
 .stmt-box input[type=password]{padding:6px 8px;border:1px solid rgba(20,40,63,.25);border-radius:4px}
@@ -4060,7 +4066,13 @@ function holdingsOutputHTML(R){
   const T=TAX_IN;
   if(rev.total<=0) return `<div class="card is-primary">
       <h4>Add what you already own</h4>
-      <div class="cap">Read your Consolidated Account Statement on the left, search for a fund, or add a row and type its name and what it is worth today. You will see your real mix against the ${p.name} profile, the funds that do the same job, what Regular plans cost over ${s.years} years, and how new money and a sale could close the gap. Nothing is uploaded and no account is linked.</div>
+      <div class="stmt-flow" aria-label="From your statement to the efficient frontier">
+        <div><b>1. Your statement</b>The CAS PDF from CAMS, KFintech, NSDL or CDSL, read on this device.</div>
+        <div><b>2. Your holdings</b>Every fund and share with its value and cost fills the list on the left.</div>
+        <div><b>3. Against the index</b>Your money and your risk against the same money in a Nifty 50 index fund.</div>
+        <div><b>4. On the frontier</b>Your funds, at your weights, on real daily prices in Test Real Investments.</div>
+      </div>
+      <div class="cap">Read your Consolidated Account Statement on the left (no statement to hand? <button type="button" class="linkbtn" data-hd="stmtSample">try a made-up one</button>), search for a fund, or add a row and type its name and what it is worth today. You will see your real mix against the ${p.name} profile, the funds that do the same job, what Regular plans cost over ${s.years} years, and how new money and a sale could close the gap. Nothing is uploaded and no account is linked.</div>
       <div class="slab-chips"><button type="button" class="tglbtn" data-hd="example">Load an example (made-up amounts)</button></div>
     </div>`;
 
@@ -4260,12 +4272,13 @@ function holdStmtPanelHTML(c){
       ${st.notes.map(n=>`<div class="stmt-note">${advisorAttr(n)}</div>`).join('')}</div>`;
   return `<div class="section-label" style="margin-top:14px">From your statement</div>
     <div class="stmt-box">
-      <div class="gr-note" style="margin:0 0 6px">Your Consolidated Account Statement (CAS) can fill the list below. With it, this tab shows:</div>
-      <ul class="stmt-gets">
-        <li>every fund, share, ETF, bond and gold bond you hold, and what it is worth</li>
-        <li>what you paid, and which holdings are over a year old (for the tax-free limit)</li>
-        <li>with a CAMS or KFintech statement: what the same money, on the same days, would be worth today in a Nifty 50 index fund</li>
-      </ul>
+      <div class="gr-note" style="margin:0 0 8px">Your Consolidated Account Statement (CAS) can fill this tab for you. How it works:</div>
+      <ol class="stmt-steps">
+        <li><b>Get your statement.</b> A free PDF from CAMS or KFintech (mutual funds) or NSDL or CDSL (everything in demat). Which one, and where, is just below.</li>
+        <li><b>Choose it here and type its password.</b> It is read on this device; the file and password are not uploaded or kept.</li>
+        <li><b>Check the list it fills in.</b> Every holding with what it is worth and what you paid. Pick a category for any row without one, and tick "Held for over a year" where the statement could not tell.</li>
+        <li><b>Read the results on the right.</b> Your mix against your profile, you against a Nifty 50 index fund, and risk against the index. Then "Test these funds on real history" puts your own mix on the efficient frontier.</li>
+      </ol>
       <details class="stmt-how"><summary>Which statement, and where to get it</summary>
         <p><b>Mutual funds, with every purchase:</b> the detailed CAS from CAMS or KFintech (camsonline.com, kfintech.com or mfcentral.com). Ask for a <i>detailed</i> statement from before your first investment. It is emailed as a PDF locked with a password you choose.</p>
         <p><b>Shares, ETFs, bonds and gold bonds as well:</b> the CAS from NSDL or CDSL, emailed each month you have activity. Its password is usually your PAN in capital letters. It shows what you hold, not when you bought it.</p>
@@ -4330,6 +4343,16 @@ function holdLiveButtonHTML(){
     ${lv.status==='error'?`<div class="stmt-status is-error" role="alert">${advisorAttr(lv.error)}</div>`:''}
     <div class="gr-note" style="margin:6px 0 0">Sends only the funds' ISIN codes, to look them up in AMFI's list of schemes.</div>`;
 }
+// While Test Real Investments still holds exactly the funds a statement sent, it says so: where they came from, the
+// weights (your real mix), and how to get back. Adding or removing a fund makes it an ordinary mix again.
+function liveFromStatementHTML(){
+  const f=L.live.fromStatement;
+  if(!f) return '';
+  const keys=L.live.items.map(it=>it.key);
+  if(keys.length!==f.keys.length || keys.some((k,i)=>k!==f.keys[i])){ L.live.fromStatement=null; return ''; }
+  const names=L.live.items.map((it,i)=>advisorAttr(liveShortName(it))+' '+Math.round(f.weights[i]*100)+'%').join(', ');
+  return `<div class="from-stmt" role="note"><b>From your statement.</b> These ${keys.length} funds are ${f.missing?'the ones found of ':''}your largest holdings, at the weights you hold them in: ${names}. "Your mix" below is your real mix, and the frontier shows the best mixes of the same funds for each level of risk. ${f.missing?f.missing+' could not be found in AMFI\'s list of schemes and are left out. ':''}<button type="button" class="linkbtn" data-tab-switch="holdings">Back to My holdings</button></div>`;
+}
 async function holdOpenInLive(){
   const st=HOLD_STMT, rows=(st.funds||[]).slice().sort((a,b)=>b.value-a.value).slice(0,HOLD_LIVE_MAX);
   if(rows.length<2) return;
@@ -4344,6 +4367,7 @@ async function holdOpenInLive(){
     const tot=found.reduce((a,x)=>a+x.value,0), w=found.map(x=>x.value/tot);
     if(L.live.items.length===2) L.live.weight=Math.round(w[0]*100); else L.live.selectedWeights=w;
     st.live={ status:'done', missing:rows.length-found.length };
+    L.live.fromStatement={ keys:L.live.items.map(it=>it.key), weights:w, missing:rows.length-found.length, sample:!!st.sample };
     L.tab='livefrontier';
   }catch(e){ st.live={ status:'error', error:(e && e.message) || 'The funds could not be looked up.' }; }
   render();
@@ -8277,6 +8301,7 @@ function renderLiveFrontier(){
     ${panelHead('Test Real Investments', 'livefrontier')}
     ${advisorChipsHTML('livefrontier')}
     <div class="cap" style="margin-bottom:14px">Pick real stocks, ETFs or funds and see the actual risk and return of mixing them, computed from real historical prices instead of long-run assumptions.</div>
+    ${liveFromStatementHTML()}
     ${explainDropdown('How is this calculated, and where does the data come from?', `
       <b>Data:</b> Real daily closing prices from Yahoo Finance, up to 10 years back (less if the instrument hasn't traded that long &ndash; the exact window and number of trading days used for each one is shown below, under "What each one did on its own"). Where Yahoo provides it, this uses the dividend- and split-adjusted close rather than the raw price, so a payout doesn't look like a price drop and the return reflects what an investor holding the instrument actually received, not just its ticker price.<br><br>
       <b>Return and risk:</b> Computed from that instrument's actual daily price changes &ndash; the average daily change, annualised using however many trading days its own data actually has per year (not a fixed 252-day assumption). Volatility is the day-to-day swing in those same daily changes, annualised the same way. Correlation between two instruments is how closely their daily changes have historically moved together, from &minus;1 (perfect opposites) to +1 (moved in lockstep).<br><br>
@@ -8383,7 +8408,7 @@ const TABS=[
     blurb:'Enter your pay and deductions and see which regime costs less, by how much, where the break-even sits, and what that means for ELSS, PPF, NPS and the rest of your plan.'},
   {id:'cover', short:'How much term and health cover you need, and the gap (India).', label:'Cover', icon:ICON_COVER,
     blurb:'Size term life cover from your household spending, loans and goals, and health cover as a floater plus a super top-up. Cover amounts and the gap only, never a premium.'},
-  {id:'holdings', short:'What you already own against your plan: mix, overlap, cost, rebalancing (India).', label:'My holdings', icon:ICON_HOLDINGS,
+  {id:'holdings', short:'What you already own, typed in or read from your CAS statement: mix, cost, you against the index (India).', label:'My holdings', icon:ICON_HOLDINGS,
     blurb:'Type in the funds you hold and see your real mix against your Full Plan risk profile, which funds do the same job, what Regular plans cost over the years, and how new money and a sale could close the gap. Nothing is uploaded.'},
   {id:'fx', short:'What currency moves do to India-US returns.', label:'Cross-Border', icon:ICON_FX,
     blurb:'See what currency movement does to real returns when you invest across India and the US.'},
