@@ -4381,3 +4381,27 @@ test('statement vs index: only Indian equity funds are set against the Nifty 50'
   assert.deepStrictEqual(e.used.map(x => x.name), ['A', 'E']); assert.deepStrictEqual(e.left, ['B', 'C']); assert.deepStrictEqual(e.unknown, ['D']);
   assert.strictEqual(e.endValue, 100); assert.deepStrictEqual(e.flows.map(f => f.date), ['2020-01-01', '2020-06-01', '2021-01-01']);
 });
+
+test('statement risk: movement and worst fall, fund and index on the same days', () => {
+  const pts = [], px = [];
+  for (let m = 0; m <= 48; m++) {
+    const d = new Date(Date.UTC(2020, m, 5)).toISOString().slice(0, 10);
+    pts.push({ date: d, nav: 100 * Math.pow(2, m / 48) });
+    px.push({ date: d, close: m === 24 ? 80 : 100 });
+  }
+  const r = engine.statementRisk(pts, px);
+  assert.strictEqual(r.ok, true); assert.strictEqual(r.points, 49);
+  assert.ok(r.fund.vol < 0.01 && r.fund.worst === 0); approx(r.fund.ret, Math.pow(2, 1 / r.years) - 1, 1e-9);
+  approx(r.index.worst, -0.2, 1e-9); assert.ok(r.index.vol > 0.1); approx(r.index.ret, 0, 1e-9);
+  assert.match(engine.statementRisk(pts.slice(0, 10), px).error, /too few days/);
+  assert.match(engine.statementRisk(pts.slice(0, 13), px).error, /under two years/);
+  assert.match(engine.statementRisk(pts, px.slice(5)).error, /do not go back far enough/);
+});
+test('statement risk: the fund prices come from its own clean transactions only', () => {
+  const r = engine.parseStatement(ST_CAMS(), { today: '2026-10-28' });
+  assert.deepStrictEqual(r.schemes.find(s => /Flexi/.test(s.name)).navs.map(p => p.nav), [100, 200, 210]);
+  const bad = engine.parseStatement(stOne('0.000', [
+    ['10-Jan-2021', 'Purchase', '5,000.00', '100.000', '50.0000', '100.000'],
+    ['10-Feb-2021', 'Purchase', '5,000.00', '100.000', '50.0000', '150.000']], '150.000', '7,500.00'), { today: '2026-10-28' });
+  assert.deepStrictEqual(bad.schemes[0].navs, []);
+});

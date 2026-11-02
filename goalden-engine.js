@@ -1672,7 +1672,10 @@ function parseStatement(lines, o) {
       if (!clean) unread.push(s.name);
       else if (s.open > 0) before.push(s.name);
       const cat = stmtCategory(s.isin, s.name);
-      out.push({ name: s.name, isin: s.isin, cat, value: value > 0 ? value : 0, flows: f.flows, complete });
+      // The fund's own price on each day it was bought or sold, one per day: what statementRisk measures it on.
+      const navs = [];
+      s.txns.forEach(x => { if (x.nav > 0 && Math.abs(x.units) > 0 && (!navs.length || navs[navs.length - 1].date !== x.date)) navs.push({ date: x.date, nav: x.nav }); });
+      out.push({ name: s.name, isin: s.isin, cat, value: value > 0 ? value : 0, flows: f.flows, complete, navs: clean ? navs : [] });
       if (clean) f.flows.forEach(x => allFlows.push(x));
       if (!(value > 0)) return;
       const lotCost = f.lots.reduce((a, l) => a + l.cost, 0);
@@ -1772,6 +1775,40 @@ function statementEquityFlows(schemes) {
   });
   flows.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return { flows, endValue, used, left, unknown, incomplete };
+}
+
+/* How much a fund moved, and its worst fall, against the index fund on exactly the same days. points: the fund's
+   price on the days it was bought or sold ([{date, nav}], sorted), from the statement itself; prices: the index
+   fund's daily closes. Sampled on the same days, so the two are like for like (both read a little calmer than a
+   daily measure would). Needs 12 gaps over at least two years; returns {ok:false, error} otherwise.
+   vol: yearly spread of returns, from each gap's log return weighted by its length. worst: deepest fall from a
+   previous high among the sampled days. ret: yearly growth from the first sampled day to the last. */
+const STMT_RISK_MIN = { gaps: 12, years: 2 };
+function statementRisk(points, prices) {
+  const pts = (Array.isArray(points) ? points : []).filter(p => p && p.nav > 0 && /^\d{4}-\d{2}-\d{2}$/.test(p.date));
+  const px = (Array.isArray(prices) ? prices : []).filter(p => p && p.close > 0);
+  if (pts.length < STMT_RISK_MIN.gaps + 1) return { ok: false, error: 'Bought or sold on too few days to measure.' };
+  const years = (Date.parse(pts[pts.length - 1].date) - Date.parse(pts[0].date)) / 864e5 / 365;
+  if (years < STMT_RISK_MIN.years) return { ok: false, error: 'Held for under two years on this statement.' };
+  if (!px.length || px[0].date > pts[0].date) return { ok: false, error: 'The index fund’s prices do not go back far enough.' };
+  let j = -1;
+  const idx = pts.map(p => { while (j + 1 < px.length && px[j + 1].date <= p.date) j++; return px[j].close; });
+  const measure = v => {
+    let rs = 0, ts = 0, peak = v[0], worst = 0;
+    const g = [];
+    for (let i = 1; i < v.length; i++) {
+      const dt = (Date.parse(pts[i].date) - Date.parse(pts[i - 1].date)) / 864e5 / 365;
+      if (dt <= 0) continue;
+      const lr = Math.log(v[i] / v[i - 1]);
+      g.push({ lr, dt }); rs += lr; ts += dt;
+      if (v[i] > peak) peak = v[i];
+      worst = Math.min(worst, v[i] / peak - 1);
+    }
+    const m = rs / ts;
+    const vol = Math.sqrt(g.reduce((a, x) => a + Math.pow(x.lr - m * x.dt, 2), 0) / ts);
+    return { vol, worst, ret: Math.pow(v[v.length - 1] / v[0], 1 / years) - 1 };
+  };
+  return { ok: true, points: pts.length, from: pts[0].date, to: pts[pts.length - 1].date, years, fund: measure(pts.map(p => p.nav)), index: measure(idx) };
 }
 
 /* =====================================================================
@@ -2683,7 +2720,7 @@ if (typeof module !== 'undefined' && module.exports) {
     loanSchedule, loanPrepay, homeLoanCompare, debtAvalanche, termCoverNeed, healthCoverPlan,
     RISK_PROFILES_IN, HOLDING_CATS_IN, holdingCategoryFromName, fundPlanFromName, REGULAR_EXTRA, regularExtra, reviewHoldings,
     REVIEW_AREAS, REVIEW_DRIFT_BAND, REVIEW_TAX_TIE, REVIEW_WHEN, reviewDates, reviewWhenOrder, yearlyReview,
-    stmtDate, stmtNum, stmtLines, stmtCategory, parseStatement, statementVsIndex, statementEquityFlows,
+    stmtDate, stmtNum, stmtLines, stmtCategory, parseStatement, statementVsIndex, statementEquityFlows, statementRisk, STMT_RISK_MIN,
     marketSeries, marketName, compoundPath, marketGrowthPath,
     rollingWindows, worstWindow, bestWindow, rollingReturns, annualisedVol, returnReality, stepUpAnnualPlan,
     SENSEX_ANNUAL_RETURNS, SP500_ANNUAL_RETURNS,

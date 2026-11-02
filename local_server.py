@@ -154,6 +154,32 @@ def fund_search(query):
     return [{'schemeCode': r.get('schemeCode'), 'schemeName': r.get('schemeName')} for r in data[:25]]
 
 
+# Mirrors /api/isin in src/worker.js: AMFI's daily scheme list maps each fund ISIN to the scheme code MFAPI uses.
+ISIN_LIST_URL = 'https://portal.amfiindia.com/spages/NAVAll.txt'
+_isin_cache = {'map': None, 'at': 0}
+
+
+def isin_lookup(codes):
+    if not _isin_cache['map'] or time.time() - _isin_cache['at'] > 12 * 3600:
+        req = urllib.request.Request(ISIN_LIST_URL, headers={'User-Agent': UA})
+        with urllib.request.urlopen(req, timeout=40) as res:
+            text = res.read().decode('utf-8', 'replace')
+        m = {}
+        for line in text.splitlines():
+            f = line.split(';')
+            if len(f) < 6 or not f[0].strip().isdigit():
+                continue
+            name = ' - '.join(x.strip() for x in f[3:6] if x.strip()) if len(f) >= 8 else f[3].strip()
+            for isin in (f[1], f[2]):
+                k = (isin or '').strip()
+                if re.fullmatch(r'IN[A-Z0-9]{10}', k):
+                    m[k] = {'schemeCode': f[0].strip(), 'schemeName': name}
+        if not m:
+            raise RuntimeError('AMFI scheme list was empty')
+        _isin_cache['map'], _isin_cache['at'] = m, time.time()
+    return {c: _isin_cache['map'][c] for c in codes if c in _isin_cache['map']}
+
+
 def symbol_search(query):
     url = (f'https://query1.finance.yahoo.com/v1/finance/search?'
            f'q={urllib.parse.quote(query)}&quotesCount=10&newsCount=0')
@@ -2178,6 +2204,16 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send_json(fund_search(q))
             except Exception as e:
                 return self._send_json({'error': _market_data_error(e, 'Fund search failed')}, 502)
+
+        if parsed.path == '/api/isin':
+            codes = [c.strip().upper() for c in ((qs.get('codes') or [''])[0]).split(',')]
+            codes = [c for c in codes if re.fullmatch(r'IN[A-Z0-9]{10}', c)][:40]
+            if not codes:
+                return self._send_json({'error': 'codes is required: comma-separated ISINs'}, 400)
+            try:
+                return self._send_json(isin_lookup(codes))
+            except Exception as e:
+                return self._send_json({'error': _market_data_error(e, 'ISIN lookup failed')}, 502)
 
         if parsed.path == '/api/symbolsearch':
             q = (qs.get('q') or [None])[0]

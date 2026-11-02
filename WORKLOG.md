@@ -4662,3 +4662,21 @@ standing over the founder's shoulder.
   layouts) - try one locally before relying on it. Risk against the index and the frontier view
   are not built. pdf.js 4.x upgrade and vendored cmaps (CID fonts) when practical.
 - **Poster:** goalden-video/poster/Goalden-poster.pdf and .png (no college or student name).
+
+## 2026-11-02 - Claude Code - 9e part 2: risk against the index, your mix on the efficient frontier
+- **Risk against the index** (engine `statementRisk`, Lab `holdRiskHTML` / `renderVsRiskChart`): each
+  equity fund's movement a year, worst fall and growth, measured from the NAVs printed on the statement on
+  the days it was bought or sold, with the index fund on exactly those days (like for like; needs 13 days
+  over 2+ years). A sentence leads ("2 of 3 funds moved more than the index... more ups and downs for less
+  return"), then a table, then one small panel per fund (fund dot vs index dot, shared round scales; an
+  earlier single shared plot crossed its joins and was dropped). get_results carries it per fund.
+- **Your mix on the efficient frontier**: "Test these funds on real history" opens the statement's funds
+  (largest 6) in Test Real Investments at the weights they are held in. New `/api/isin?codes=` in the
+  Worker and local_server maps fund ISINs to MFAPI scheme codes from AMFI's daily NAVAll.txt (cached 12 h;
+  max 40 codes; only ISINs are sent). The made-up sample's ISINs are refused with a clear message.
+- **smoke-14/15/16 now run on Windows**: they find Python 3 as `python3` or `python`. All 24 smokes pass.
+- **Checked in a real browser:** risk section on the sample (3 funds measured, 2 not); hand-off with real
+  ISINs (Bandhan Flexi Cap, ABSL Liquid, Axis Children's) opened at 60/20/20 with prices loaded.
+- **Tests:** 318/318 engine; smokes 02-24 all pass.
+- **Not done:** shares (INE ISINs) are not handed to Test Real Investments (needs an ISIN-to-NSE-symbol
+  list); a real CAS still untried; pdf.js 4.x and cmaps.

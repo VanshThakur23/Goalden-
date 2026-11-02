@@ -61,5 +61,22 @@ check(/Small- and mid-cap funds are set against the Nifty 50 as well/.test(vs) &
 check(/againstIndex:holdVsIndexForAdvisor\(\)/.test(gl) && /you cannot open files/.test(gl), '9e the advisor can read the comparison and knows the user reads the statement themselves');
 check(fs2.existsSync(path.join(root, 'test-statements/synthetic-cams-detailed.pdf')) && fs2.existsSync(path.join(root, 'test-statements/synthetic-nsdl.pdf')), '9e synthetic test statements are in the repo');
 
+// ---- risk against the index, and the hand-off to the efficient frontier ----------------------------------------------
+const wk = read('src/worker.js'), py = read('local_server.py');
+check(/risk:statementRisk\(s\.navs, b\.prices\)/.test(fnBody(gl, 'holdVsIndexData')), '9e risk is measured from the statement\'s own prices against the index on the same days');
+const rk = fnBody(gl, 'holdRiskHTML');
+check(/more ups and downs for less return/.test(rk) && /Up and to the left is better/.test(rk) && /Not measured/.test(rk), '9e the risk section leads with a sentence and says what was not measured');
+const rc = fnBody(gl, 'renderVsRiskChart');
+check(/legend:\{ show:false \}/.test(rc) && /formatter:'Index'/.test(rc) && /formatter:'Fund'/.test(rc) && !/#C0392B|#E74C3C|\bred\b/i.test(rc), '9e risk panels: direct labels, no legend, no red');
+check(/one small panel per fund/i.test(gl) && /interval:5/.test(rc), '9e one panel per fund on shared, round scales');
+check(/if \(url\.pathname === '\/api\/isin'\)/.test(wk) && /parsed\.path == '\/api\/isin'/.test(py), '9e /api/isin exists in the Worker and the local server');
+check(/portal\.amfiindia\.com\/spages\/NAVAll\.txt/.test(wk) && /portal\.amfiindia\.com\/spages\/NAVAll\.txt/.test(py), '9e both read AMFI\'s own scheme list');
+check(/\.split\(\/\\r\?\\n\/\)/.test(wk), '9e the Worker splits the list on line breaks (a real regex, not a stray character)');
+check(/\.slice\(0, 40\)/.test(wk) && /\[:40\]/.test(py), '9e at most 40 ISINs per lookup');
+const lv = fnBody(gl, 'holdOpenInLive');
+check(/\/api\/isin\?codes='\+rows\.map\(x=>x\.isin\)\.join\(','\)/.test(lv) && !/value|name/.test((lv.match(/liveApiGet\([^)]*\)/) || [''])[0]), '9e only ISIN codes are sent for the lookup, never amounts or names');
+check(/L\.live\.selectedWeights=w/.test(lv) && /L\.live\.weight=Math\.round\(w\[0\]\*100\)/.test(lv) && /L\.tab='livefrontier'/.test(lv), '9e the funds open at the weights they are held in');
+check(/found\.length<2/.test(lv), '9e fewer than two funds found says so instead of opening a one-fund mix');
+
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
 process.exit(fail ? 1 : 0);

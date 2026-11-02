@@ -2,7 +2,7 @@
 // tools, worker/local_server routing + limits stay in lock-step, the Lab's
 // chart follow-up chips point at real tabs, and the client-side text guards
 // (stream preview, speech, guardrail, markdown) behave.
-// Run with: node smoke-14.js   (needs python3 on PATH for the parity checks)
+// Run with: node smoke-14.js   (needs Python 3 on PATH, as python3 or python, for the parity checks)
 // Loads each page's real tool list through agent-evals/runner.js's vm loader,
 // so it tests the tools the pages actually ship, not a hand-copied list.
 'use strict';
@@ -10,6 +10,9 @@
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
+// Windows has "python" and often no "python3" (or only the Store stub that prints an install message); use whichever
+// one really is Python 3.
+const PY3 = ['python3', 'python'].find((c) => { const r = cp.spawnSync(c, ['-c', 'import sys; print(sys.version_info[0])'], { encoding: 'utf8' }); return r.status === 0 && String(r.stdout).trim() === '3'; }) || 'python3';
 
 const root = __dirname;
 let fail = 0;
@@ -70,7 +73,7 @@ cases.push({ page: 'goalden-lab.html', q: '(mid-chain) and now?', mustKeep: ['st
   { role: 'user', content: 'and now?' },
 ] } });
 
-const pyOut = JSON.parse(cp.execFileSync('python3', ['-B', '-c',
+const pyOut = JSON.parse(cp.execFileSync(PY3, ['-B', '-c',
   'import sys, json; sys.path.insert(0, sys.argv[1]); import local_server as ls\n' +
   'cases = json.load(sys.stdin)\n' +
   'print(json.dumps([[t["function"]["name"] for t in ls._filter_tools(c)] for c in cases]))',

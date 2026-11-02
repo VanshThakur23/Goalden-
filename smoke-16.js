@@ -6,12 +6,15 @@
 // both fetchers used to stop there with 'layout' instead of trying standalone.
 // Every upstream is stubbed (fetch / urllib.request.urlopen) — no network.
 // The two implementations must agree on every case.
-// Run with: node smoke-16.js   (needs python3 on PATH for the parity checks)
+// Run with: node smoke-16.js   (needs Python 3 on PATH, as python3 or python, for the parity checks)
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
+// Windows has "python" and often no "python3" (or only the Store stub that prints an install message); use whichever
+// one really is Python 3.
+const PY3 = ['python3', 'python'].find((c) => { const r = cp.spawnSync(c, ['-c', 'import sys; print(sys.version_info[0])'], { encoding: 'utf8' }); return r.status === 0 && String(r.stdout).trim() === '3'; }) || 'python3';
 
 const root = __dirname;
 let fail = 0;
@@ -121,7 +124,7 @@ for name, mp in CASES.items():
         out[name] = {'threw': str(e), 'calls': calls[0]}
 print(json.dumps(out))
 `;
-  const r = cp.spawnSync('python3', ['-c', script], { encoding: 'utf8', env: Object.assign({}, process.env, { PYTHONDONTWRITEBYTECODE: '1' }) });
+  const r = cp.spawnSync(PY3, ['-c', script], { encoding: 'utf8', env: Object.assign({}, process.env, { PYTHONDONTWRITEBYTECODE: '1' }) });
   if (r.status !== 0) { console.log(r.stderr); return null; }
   return JSON.parse(r.stdout.trim().split('\n').pop());
 }

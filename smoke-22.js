@@ -203,7 +203,8 @@ check(/this page does not work that out|not worked out|tax is not worked out/i.t
 // ---- chart rules (the plan's explicit ones) -------------------------------------------------------------------------
 check(/barsChart\('hold-mix', rows\)/.test(ho) && /barsChart\('hold-cost', costBars, 28\+costBars\.length\*52\)/.test(ho), '9c both charts are horizontal bars with the value at each bar\'s end');
 check(!/type:\s*['"](pie|radar|gauge|funnel)['"]/.test(holdBlock) && !/legend:\s*\{\s*show:\s*true|legend:\s*\{(?!\s*show:\s*false)/.test(holdBlock) && !/radius:\s*\[/.test(holdBlock), '9c no pie, donut, radar or legend');
-check(!/yAxisIndex|dualAxis/.test(holdBlock), '9c no second axis');
+// 9e's risk view is small multiples: several axes, but each on its own grid (one per panel), never two on one.
+check(!/yAxisIndex|dualAxis/.test(holdBlock.replace(fnBody(gl, 'renderVsRiskChart'), '')) && /yAxis\.push\(\{ gridIndex:i,/.test(fnBody(gl, 'renderVsRiskChart')) && /xAxis\.push\(\{ gridIndex:i,/.test(fnBody(gl, 'renderVsRiskChart')), '9c no second axis (the risk panels have one each, on their own grid)');
 check(!/#9C4A2C|#c0392b|#d9534f|\bred\b/i.test(holdBlock), '9c no red in the tab (red is only for a fired warning)');
 check(/color:'#2557C7'/.test(ho) && /color:'#B6C2D6'/.test(ho), '9c "yours" is the blue and "profile" the light grey, so the pair reads in greyscale');
 check(/function barsLabelWidth/.test(gl) && /containLabel:false/.test(fnBody(gl, 'renderBarsOption')), '9c the bar chart reserves its label margin from the measured names (containLabel left a short name clipped)');
