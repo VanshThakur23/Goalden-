@@ -4715,3 +4715,17 @@ standing over the founder's shoulder.
   out"; moving the slider switched the note to "you have since changed the mix".
 - **Tests:** 319/319 engine (new: growth plan gives prices, IDCW plan does not); smokes 02-24 pass. Full
   eval suite 23/24; the miss ("lab run Monte Carlo", model skipped run_full_analysis) passed 2 of 2 re-runs.
+
+## 2026-11-02 - Claude Code - "Where do I get my statement?" guide, check report, crypto plan
+- My holdings statement panel: "Where do I get my statement? What do you hold?" with four choices
+  (Mutual funds, Shares or ETFs (demat), Crypto, Nothing yet), each with numbered steps and links to the
+  official CAMS, KFintech, MF Central, CDSL and NSDL pages. It says the broker app is only where you
+  bought (the record and statement come from CAMS/KFintech or NSDL/CDSL), how to tell NSDL from CDSL by
+  the demat number, and that crypto is in no CAS (add it by hand). Replaces the collapsed "Which
+  statement" note.
+- "Something read wrong? A check report you can send": after a real read, a structure-only report
+  (pages, lines, kind, holdings by category, complete histories, total matched, note kinds), shown in
+  full in a read-only box with a copy button. No names, PAN, folios, ISINs or amounts. Not for the sample.
+- Advisor knows where each statement comes from.
+- CRYPTO-PLAN.md: what other apps do, the Indian rules (30% + cess, no set-off, 1% TDS), a three-step plan.
+- Tests: 319/319 engine; smokes 02-24 pass (7 new guide/report checks).

@@ -433,6 +433,13 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stmt-flow div{border-top:3px solid #2557C7;padding-top:8px;font-size:12px;line-height:1.45;color:var(--dim)}.stmt-flow b{display:block;color:var(--paper);font-size:13px;margin-bottom:2px}
 @media(max-width:560px){.stmt-flow{grid-template-columns:1fr 1fr}}
 .from-stmt{border-left:4px solid #2557C7;background:rgba(37,87,199,.05);padding:10px 12px;margin:0 0 14px;font-size:12.5px;line-height:1.5;color:var(--paper)}
+.stmt-guide{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 12px;background:rgba(37,87,199,.03)}
+.stmt-guide-q{font-size:12.5px;font-weight:600;color:var(--paper);margin:0 0 8px}
+.stmt-picks{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.stmt-pick{font:inherit;font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card,#fff);color:var(--paper);cursor:pointer}
+.stmt-pick[aria-pressed="true"]{background:#2557C7;border-color:#2557C7;color:#fff}
+.stmt-guide ol{margin:6px 0;padding-left:18px}.stmt-guide li{margin:0 0 5px}.stmt-guide a{color:#1E4FBE}
+.stmt-check textarea{width:100%;box-sizing:border-box;font:11px/1.45 'Spline Sans Mono',monospace;color:var(--paper);background:var(--card,#fff);border:1px solid var(--line);border-radius:6px;padding:6px;margin:4px 0}
 .stmt-how{font-size:12px;line-height:1.5;color:var(--dim);margin:0 0 10px}.stmt-how summary{cursor:pointer;color:#1E4FBE}.stmt-how p{margin:6px 0}
 .stmt-box .hold-lbl{display:block;margin:0 0 8px}.stmt-box input[type=file],.stmt-box input[type=password]{display:block;width:100%;box-sizing:border-box;margin-top:3px;font:inherit;font-size:12px}
 .stmt-box input[type=password]{padding:6px 8px;border:1px solid rgba(20,40,63,.25);border-radius:4px}
@@ -4220,7 +4227,7 @@ async function holdReadStatement(sample){
   }
   if(!file){ HOLD_STMT={ status:'error', error:'Choose your statement PDF first.' }; render(); return; }
   if(file.size>30e6){ HOLD_STMT={ status:'error', error:'That file is larger than a statement would be (over 30 MB).' }; render(); return; }
-  HOLD_STMT={ status:'reading' }; render();
+  HOLD_STMT={ status:'reading' }; HOLD_STMT_CHECK=null; render();
   try{
     const lib=await holdLoadPdfJs();
     const data=new Uint8Array(await file.arrayBuffer());
@@ -4238,7 +4245,8 @@ async function holdReadStatement(sample){
     }
     const cut=doc.numPages>n;
     doc.destroy();
-    const r=parseStatement(stmtLines(pages), { today:reviewToday() });
+    const ln=stmtLines(pages), r=parseStatement(ln, { today:reviewToday() });
+    holdStmtCheck({ r, pages:n, cut, lines:ln.length });
     if(!r.ok) throw new Error(r.error);
     holdStmtApply(r, cut, !!sample);
   }catch(e){ HOLD_STMT={ status:'error', error:(e && e.message) || 'The statement could not be read.' }; }
@@ -4276,22 +4284,80 @@ function holdStmtPanelHTML(c){
     <div class="stmt-box">
       <div class="gr-note" style="margin:0 0 8px">Your Consolidated Account Statement (CAS) can fill this tab for you. How it works:</div>
       <ol class="stmt-steps">
-        <li><b>Get your statement.</b> A free PDF from CAMS or KFintech (mutual funds) or NSDL or CDSL (everything in demat). Which one, and where, is just below.</li>
+        <li><b>Get your statement.</b> A free PDF by email. Which one depends on what you hold: pick it just below for the steps.</li>
         <li><b>Choose it here and type its password.</b> It is read on this device; the file and password are not uploaded or kept.</li>
         <li><b>Check the list it fills in.</b> Every holding with what it is worth and what you paid. Pick a category for any row without one, and tick "Held for over a year" where the statement could not tell.</li>
         <li><b>Read the results on the right.</b> Your mix against your profile, you against a Nifty 50 index fund, and risk against the index. Then "Test these holdings on real history" puts your own mix on the efficient frontier.</li>
       </ol>
-      <details class="stmt-how"><summary>Which statement, and where to get it</summary>
-        <p><b>Mutual funds, with every purchase:</b> the detailed CAS from CAMS or KFintech (camsonline.com, kfintech.com or mfcentral.com). Ask for a <i>detailed</i> statement from before your first investment. It is emailed as a PDF locked with a password you choose.</p>
-        <p><b>Shares, ETFs, bonds and gold bonds as well:</b> the CAS from NSDL or CDSL, emailed each month you have activity. Its password is usually your PAN in capital letters. It shows what you hold, not when you bought it.</p>
-        <p>Indian statements only. A scanned or photographed statement cannot be read.</p>
-      </details>
+      ${holdStmtGuideHTML()}
       <label class="hold-lbl"><span>Statement PDF</span><input type="file" id="stmtFile" accept="application/pdf,.pdf"></label>
       <label class="hold-lbl"><span>Its password, if it has one</span><input type="password" id="stmtPw" autocomplete="off" spellcheck="false"></label>
       <button type="button" class="tglbtn stmt-go" data-hd="stmtRead"${st.status==='reading'?' disabled':''}>Read my statement${has?' (replaces the list)':''}</button>
       <div class="gr-note" style="margin:6px 0 0">Read on this device: the file and its password are not uploaded or kept. No statement to hand? <button type="button" class="linkbtn" data-hd="stmtSample">Try a made-up one</button>.</div>
       ${status}
+      ${holdStmtCheckHTML()}
     </div>`;
+}
+// Where the statement comes from, by what the person holds. Most people know their broker app, not that the app is
+// only the shop: the record is kept by CAMS or KFintech (mutual funds) or by NSDL or CDSL (the demat account), and
+// those are who send the statement. Crypto is in neither, so it is said plainly rather than left to a failed read.
+let HOLD_GUIDE='';
+const HOLD_GUIDES={
+  mf:{ label:'Mutual funds', html:`<ol>
+    <li>Open the <a href="https://www.camsonline.com/Investors/Statements/Consolidated-Account-Statement" target="_blank" rel="noopener">CAMS statement page</a>. One request covers every fund house, including those KFintech looks after (<a href="https://mfs.kfintech.com/investor/General/ConsolidatedAccountStatement" target="_blank" rel="noopener">KFintech's page</a> and <a href="https://www.mfcentral.com" target="_blank" rel="noopener">MF Central</a> give the same statement).</li>
+    <li>Choose <b>Detailed</b> (it lists every purchase), for a period that starts before your first investment.</li>
+    <li>Type the email your funds are registered with, and make up a password (letters and numbers, starting with a letter). Keep it: you type it here.</li>
+    <li>The PDF arrives at that email in a few minutes. Save it, then choose it below.</li></ol>
+    <p>Bought through Groww, Zerodha Coin, Paytm Money, ET Money or your bank? It is the same statement: the app is where you bought, and CAMS and KFintech keep the record.</p>` },
+  demat:{ label:'Shares or ETFs (demat)', html:`<p>Your broker app (Zerodha, Groww, Upstox, Angel One…) is where you buy; your shares are kept in a demat account at NSDL or CDSL, and they send the statement. Your demat number, in the app's profile, tells you which: 16 digits is CDSL, starting with "IN" is NSDL.</p><ol>
+    <li><b>Easiest:</b> search your email for "Consolidated Account Statement" from NSDL or CDSL. It comes every month you buy or sell, and every six months otherwise.</li>
+    <li><b>CDSL, online:</b> the <a href="https://www.cdslindia.com/cas/logincas.aspx" target="_blank" rel="noopener">CDSL CAS page</a>: your PAN, the 16-digit demat number, date of birth and the OTP, then "Download CAS" for the months you want. DigiLocker has it too (search CDSL).</li>
+    <li><b>NSDL, online:</b> the <a href="https://nsdlcas.nsdl.com" target="_blank" rel="noopener">NSDL CAS site</a>.</li>
+    <li>Its password is usually your PAN in capital letters.</li></ol>
+    <p>It shows what you hold today, not when you bought it, so "You against the index" needs the mutual fund statement as well.</p>` },
+  crypto:{ label:'Crypto', html:`<p>Crypto (WazirX, CoinDCX, Binance…) is not kept in a demat account, so no CAS includes it and nothing here can read it in. Add it by hand: a row for each coin with what it is worth today, category "Something else". What you paid is in your exchange's tax report or transaction history.</p>
+    <p>In India a gain on crypto is taxed at a flat 30% plus cess, a loss cannot be set off against anything, and 1% is deducted as TDS when you sell above a yearly limit.</p>` },
+  none:{ label:'Nothing yet', html:`<p>Then there is nothing to download yet: a statement only exists once you hold a mutual fund or have a demat account. Try the made-up one to see what this tab shows, or add what you plan to buy by hand.</p>` }
+};
+function holdStmtGuideHTML(){
+  const g=HOLD_GUIDES[HOLD_GUIDE];
+  return `<div class="stmt-guide"><div class="stmt-guide-q">Where do I get my statement? What do you hold?</div>
+    <div class="stmt-picks" role="group" aria-label="What do you hold?">${Object.keys(HOLD_GUIDES).map(k=>`<button type="button" class="stmt-pick" data-hd="stmtGuide" data-val="${k}" aria-pressed="${HOLD_GUIDE===k}">${HOLD_GUIDES[k].label}</button>`).join('')}</div>
+    ${g ? `<div class="stmt-how">${g.html}</div>` : ''}
+    <div class="stmt-how" style="margin:6px 0 0">Indian statements only. A scanned or photographed one cannot be read.</div></div>`;
+}
+// What a read found, as structure only (counts, yes/no, which kind of note), so someone can send it when a statement
+// reads wrong. Built from the parser's output, never its text: no fund names, PAN, folio numbers or amounts.
+let HOLD_STMT_CHECK=null;
+function holdStmtCheck(o){
+  const kind=n=>/already held when this statement starts/.test(n) ? 'held before the statement starts'
+    : /Could not read every transaction/.test(n) ? 'a fund\'s transactions could not all be read'
+    : /bought within the last year as well as older/.test(n) ? 'short- and long-term units mixed'
+    : /pooled into one row/.test(n) ? 'smallest holdings pooled'
+    : /pages were read/.test(n) ? 'not every page read'
+    : /could not be read|not read/i.test(n) ? 'a holding could not be read' : 'other';
+  const r=o.r, lines=['Goalden statement check (structure only: no names, PAN, folio numbers or amounts)',
+    'result: '+(r && r.ok ? 'read' : 'not read: '+((o.error || (r && r.error) || 'unknown').replace(/[A-Z]{5}\d{4}[A-Z]|\d{6,}/g,'#'))),
+    'pages: '+o.pages+(o.cut ? ' (cut at '+HOLD_STMT_PAGES+')' : ''), 'text lines: '+o.lines];
+  if(r && r.ok){
+    const sch=r.schemes || [], cats={};
+    r.holdings.forEach(h=>{ const k=h.cat || 'none'; cats[k]=(cats[k]||0)+1; });
+    lines.push('statement: '+r.source+' '+r.kind, 'holdings: '+r.holdings.length+' ('+Object.keys(cats).map(k=>k+' '+cats[k]).join(', ')+')',
+      'with cost: '+r.holdings.filter(h=>h.cost!=null).length+', marked long-term: '+r.holdings.filter(h=>h.longTerm).length,
+      'total matches the printed one: '+(r.matchesStated ? 'yes' : 'no'));
+    if(r.kind==='detailed') lines.push('funds with transactions: '+sch.length+', complete histories: '+sch.filter(x=>x.complete).length
+      +', with prices for risk: '+sch.filter(x=>x.navs && x.navs.length).length);
+    const nk={}; r.notes.forEach(n=>{ const k=kind(n); nk[k]=(nk[k]||0)+1; });
+    lines.push('notes: '+(r.notes.length ? Object.keys(nk).map(k=>k+' '+nk[k]).join('; ') : 'none'));
+  }
+  HOLD_STMT_CHECK=lines.join('\n');
+}
+function holdStmtCheckHTML(){
+  if(!HOLD_STMT_CHECK || HOLD_STMT.sample) return '';
+  return `<details class="stmt-how stmt-check"><summary>Something read wrong? A check report you can send</summary>
+    <p>Only counts and yes or no, as you can see: nothing that names you, your funds or your money. Copy it into a message to whoever looks after this app.</p>
+    <textarea readonly rows="11" aria-label="Statement check report">${advisorAttr(HOLD_STMT_CHECK)}</textarea>
+    <button type="button" class="linkbtn" data-hd="stmtCheckCopy">Copy the report</button></details>`;
 }
 // "You against the index" from a detailed statement: the equity funds' own purchases and sales, set against the same
 // money on the same days in the Nifty 50 index fund the Test Real Investments tab uses. Returns null until there is
@@ -9007,6 +9073,8 @@ function attach(){
     else if(f==='pick'){ if(!holdAddRow(el.dataset.name||'')) return; markGiven('holdings.rows'); HOLD_SEARCH={ q:'', busy:false, error:null, results:[] }; }
     else if(f==='stmtRead'){ holdReadStatement(); return; }
     else if(f==='stmtSample'){ holdReadStatement(true); return; }
+    else if(f==='stmtGuide' && HOLD_GUIDES[el.dataset.val]) HOLD_GUIDE=HOLD_GUIDE===el.dataset.val ? '' : el.dataset.val;
+    else if(f==='stmtCheckCopy'){ const t=el.parentNode.querySelector('textarea'); try{ navigator.clipboard.writeText(HOLD_STMT_CHECK); el.textContent='Copied'; }catch(e){ t.select(); } return; }
     else if(f==='stmtLive'){ holdOpenInLive(); return; }
     else if(f==='stmtBench'){ (L.live.bench=L.live.bench||{})[LIVE_BENCH.INR.symbol]={ status:'retry' }; liveEnsureBench(LIVE_BENCH.INR); }
     else return;
@@ -12817,7 +12885,7 @@ Tools:
 - Loans (India only): weighs prepaying the home loan against investing the same lump sum. Prepaying saves a certain rate; under the old tax regime the interest relief (up to ₹2 lakh a year, s.24(b)) lowers that rate by the user's slab, under the new regime there is no relief on a self-occupied home. The investment side is the user's own expected return, taxed as the kind of investment it is (equity fund, debt fund or FD). It shows a break-even (the return the investment must earn before tax to match) and never a verdict. It also takes credit-card and personal-loan balances and shows the order to clear them, highest rate first, and the interest that saves.
 - Tax regime (India only): old or new regime on the same pay, worked from salary, HRA, 80C, NPS, health premium and home-loan interest, with the tax under each, the difference, and the deductions the old regime needs to win. It also says what that means for the plan: on the new regime 80C, 80CCD(1B), 80D and home-loan interest give no tax benefit, so ELSS and PPF are chosen on returns and lock-in, not for tax. The rule year is shown on screen and is a figure to re-check against the Income Tax Department. Surcharge above ₹50 lakh is not modelled, and the HRA rule was read from a search excerpt, not the full page.
 - Cover (India only): how much insurance, never what it costs. Term cover for the family = their spending for the years they would rely on the income (grown by inflation, paid out of a pot earning a stated return) + loans + goal pots at today's value − savings − term cover already held; a retirement goal is left out. Health cover = a family floater plus a super top-up for the rest of a total target, grown at medical inflation, shown short with and without employer cover (which ends with the job). There are no premium figures anywhere; the health starting sizes by city are rules of thumb, not market figures or quotes.
-- My holdings (India only): what the user already owns, typed in or read from their Consolidated Account Statement (CAS) PDF, against the risk profile from the Full Plan. Shows the real mix of equity, debt and hybrid against the profile's shares (gold, other things and holdings with no category sit beside the mix), the funds that share a category and so a job ("four large-cap funds doing one job", by category only: whether two funds hold the same companies needs each fund's own portfolio, which this page does not read), what Regular plans cost over the years against Direct (an estimate, about 1% a year for an active fund and 0.4% for an index fund; debt, gold and arbitrage funds are not priced), and how to close a gap: new money first, then sales, with the equity tax worked from the cost the user gave (₹1.25 lakh a year of long-term gains is free, the rest 12.5% plus cess). It never rates or ranks a fund and never says which fund to buy or sell; moving from Regular to Direct is a sale and is taxed. Use set_holdings to enter what the user tells you, never an invented holding or amount. The user can fill the list from their CAS themselves, in the "From your statement" box on the tab (you cannot open files): the detailed statement from CAMS or KFintech (mutual funds, every purchase) or the one from NSDL or CDSL (shares, ETFs, bonds and gold bonds too). It is read on their device; the file and its password are never sent. With a detailed CAMS/KFintech statement the tab also shows "You against the index": the user's equity funds against the same money, on the same days, in a Nifty 50 index fund, overall and fund by fund (get_results returns it as againstIndex). Say the gap in rupees and in yearly return; a fund behind the index is information, not a reason to sell: selling is taxed and past returns do not repeat.
+- My holdings (India only): what the user already owns, typed in or read from their Consolidated Account Statement (CAS) PDF, against the risk profile from the Full Plan. Shows the real mix of equity, debt and hybrid against the profile's shares (gold, other things and holdings with no category sit beside the mix), the funds that share a category and so a job ("four large-cap funds doing one job", by category only: whether two funds hold the same companies needs each fund's own portfolio, which this page does not read), what Regular plans cost over the years against Direct (an estimate, about 1% a year for an active fund and 0.4% for an index fund; debt, gold and arbitrage funds are not priced), and how to close a gap: new money first, then sales, with the equity tax worked from the cost the user gave (₹1.25 lakh a year of long-term gains is free, the rest 12.5% plus cess). It never rates or ranks a fund and never says which fund to buy or sell; moving from Regular to Direct is a sale and is taxed. Use set_holdings to enter what the user tells you, never an invented holding or amount. The user can fill the list from their CAS themselves, in the "From your statement" box on the tab (you cannot open files): the detailed statement from CAMS or KFintech (mutual funds, every purchase) or the one from NSDL or CDSL (shares, ETFs, bonds and gold bonds too). Where to get it: mutual funds, on camsonline.com (Statements, CAS - CAMS+KFintech, choose Detailed; one request covers every fund house, emailed in minutes, locked with a password they choose); shares, the NSDL or CDSL statement already emailed to them (password usually their PAN in capitals), or the CDSL CAS page with PAN, demat number and an OTP. A broker app (Zerodha, Groww...) is only where they bought: the record and the statement come from these. Crypto is in no CAS: they add it by hand as "Something else". The panel's "Where do I get my statement?" shows the same steps. It is read on their device; the file and its password are never sent. With a detailed CAMS/KFintech statement the tab also shows "You against the index": the user's equity funds against the same money, on the same days, in a Nifty 50 index fund, overall and fund by fund (get_results returns it as againstIndex). Say the gap in rupees and in yearly return; a fund behind the index is information, not a reason to sell: selling is taxed and past returns do not repeat.
 - Cross-Border (FX): effect of currency movement on India-US investing.
 - Joint Children Corpus: overlapping education costs for multiple children from one pool.
 - Monte Carlo: thousands of random market paths to show plan likelihood, not just the average.

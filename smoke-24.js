@@ -90,13 +90,24 @@ check(/f\.touched=true/.test(sy) && /if\(f\.touched\) return;/.test(sy), '9e onc
 check(/you have since changed the mix/.test(fnBody(gl, 'liveFromStatementHTML')) && /could not be used on real prices/.test(fnBody(gl, 'liveFromStatementHTML')), '9e the note says when the mix was changed, and which holdings could not be used');
 
 // ---- the path from a statement to the frontier is explained where people are -------------------------------------
-check(/<ol class="stmt-steps">/.test(fnBody(gl, 'holdStmtPanelHTML')) && (fnBody(gl, 'holdStmtPanelHTML').match(/<li><b>/g) || []).length === 4, '9e the side panel explains the statement in four numbered steps');
+check(/<ol class="stmt-steps">/.test(fnBody(gl, 'holdStmtPanelHTML')) && ((fnBody(gl, 'holdStmtPanelHTML').match(/<ol class="stmt-steps">([\s\S]*?)<\/ol>/) || ['', ''])[1].match(/<li><b>/g) || []).length === 4, '9e the side panel explains the statement in four numbered steps');
 check(/class="stmt-flow"/.test(fnBody(gl, 'holdingsOutputHTML')) && /data-hd="stmtSample"/.test(fnBody(gl, 'holdingsOutputHTML')), '9e an empty My holdings shows the path from statement to frontier, with the sample to try');
 check(/read from your CAS statement/.test(gl) && /Read your CAS statement in My holdings/.test(read('index.html')), '9e the tools list and the landing page say the statement can be read');
 const fs3 = fnBody(gl, 'liveFromStatementHTML');
 check(/From your statement\./.test(fs3) && /data-tab-switch="holdings"/.test(fs3) && /L\.live\.fromStatement=null/.test(fnBody(gl, 'liveSyncHeldWeights')), '9e Test Real Investments says the funds came from the statement, links back, and drops the note once the mix is changed');
 check(/priceGrewAYearPct/.test(fnBody(gl, 'holdVsIndexForAdvisor')) && /notMeasured/.test(fnBody(gl, 'holdVsIndexForAdvisor')), '9e the advisor gets the growth behind the risk, and why a fund was not measured');
 check(/L\.live\.fromStatement=\{ keys:/.test(fnBody(gl, 'holdOpenInLive')), '9e the hand-off records which funds came from the statement');
+
+// ---- where to get the statement, by what the person holds, and a report that can be sent ---------------------------
+const gd = fnBody(gl, 'holdStmtGuideHTML');
+check(/\$\{holdStmtGuideHTML\(\)\}/.test(fnBody(gl, 'holdStmtPanelHTML')) && /What do you hold\?/.test(gd) && /aria-pressed/.test(gd), '9e the statement panel asks what you hold and shows the steps for it, on the page');
+check(['mf:', 'demat:', 'crypto:', 'none:'].every(k => gl.includes('  ' + k + '{ label:')), '9e steps for mutual funds, demat shares, crypto and nothing yet');
+check(/camsonline\.com\/Investors\/Statements\/Consolidated-Account-Statement/.test(gl) && /cdslindia\.com\/cas\/logincas\.aspx/.test(gl) && /nsdlcas\.nsdl\.com/.test(gl), '9e it links to the official CAMS, CDSL and NSDL pages');
+check(/is not kept in a demat account, so no CAS includes it/.test(gl) && /the app is where you bought/.test(gl), '9e it says the broker app is only the shop, and crypto is in no statement');
+const ck = fnBody(gl, 'holdStmtCheck');
+check(/holdStmtCheck\(\{ r, pages:n, cut, lines:ln\.length \}\)/.test(rd) && !/\.name|\.value|\.isin|\.folio|\.total/.test(ck.replace(/r\.holdings\.length|cats/g, '')), '9e the check report is counts only: no names, ISINs, folios or amounts');
+check(/HOLD_STMT\.sample\) return ''/.test(fnBody(gl, 'holdStmtCheckHTML')) && /<textarea readonly/.test(fnBody(gl, 'holdStmtCheckHTML')), '9e the report is shown in full before it is copied, and not for the sample');
+check(/Where to get it: mutual funds, on camsonline\.com/.test(gl), '9e the advisor can say where to get a statement');
 
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
 process.exit(fail ? 1 : 0);
