@@ -321,6 +321,7 @@ Ranked by value.
   price growth**, not a verdict.
 - **Effort:** M.
 - **Verdict:** maybe, after B1–B6.
+- **Status:** built 2026-11-03 as the Lab's Rent or buy tab (see WORKLOG).
 
 ### Deliberately still out
 - Account-aggregator linking: consent and regulation. (Statement (CAS)
