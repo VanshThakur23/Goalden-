@@ -308,6 +308,9 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stat-row.four{grid-template-columns:repeat(4,minmax(0,1fr))}
 /* Four stats in a card that is only ~400px wide on a desktop: always 2x2. */
 .stat-row.pairs{grid-template-columns:repeat(2,minmax(0,1fr))}
+/* A month's rupees to the last digit (₹74,426) is too wide for half a phone: the Rent or buy pair stacks there. */
+@media(max-width:440px){.stat-row.pairs.rb-month{grid-template-columns:1fr}}
+.stmt-table tr.rb-yours td{font-weight:700;color:var(--paper)}
 .slab-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .slab-chips .tglbtn{flex:0 0 auto;border:1px solid rgba(37,87,199,.35);border-radius:3px;padding:8px 10px;min-height:36px}
 /* Retirement Income: the three buckets as one strip in time order. The keys sit in a grid below it, not under their own
@@ -2192,6 +2195,11 @@ const L = {
   loans:{ balance:2500000, rate:8.75, years:15, regime:'old', slab:null,
           amount:500000, expected:10, kind:'equity',
           cardBal:150000, cardRate:36, cardPay:6000, plBal:400000, plRate:14, plPay:12000, extra:5000 },
+  // Rent or buy (B7). A ₹1 crore flat in a large city renting at ₹25,000 a month: a 3% rental yield, typical of Indian
+  // metros. stamp is stamp duty plus registration (often 5-7% plus about 1%, which some states cap; states differ). maint is upkeep and
+  // property tax as a share of the home's value a year. Every figure is the person's to change; none is a forecast.
+  rentbuy:{ price:10000000, down:20, stamp:7, loanRate:8.5, loanYears:20, maint:0.6, sell:1,
+            rent:25000, rentGrowth:5, priceGrowth:5, invReturn:10, years:15, regime:'new', slab:null },
   // Tax regime. Defaults are a salaried person in a metro on 18 L, which the new regime wins by a little: the tab opens on
   // a result, not a blank. note is the "filled from" line, shown only while the numbers still match what the button set.
   tax:{ gross:1800000, basic:720000, hra:288000, rent:360000, metro:true, ageBand:'under60',
@@ -2314,7 +2322,7 @@ function nextStepCard(items){
 // tab's own state is reset without touching any other tab's inputs or
 // the global country/currency choice.
 const TAB_STATE_KEYS={
-  retirement:['ret'], stepup:['step'], swp:['swp'], income:['income'], loans:['loans'], taxregime:['tax'], cover:['cover'], holdings:['holdings'], fx:['fx'], joint:['joint'],
+  retirement:['ret'], stepup:['step'], swp:['swp'], income:['income'], loans:['loans'], rentbuy:['rentbuy'], taxregime:['tax'], cover:['cover'], holdings:['holdings'], fx:['fx'], joint:['joint'],
   mc:['mc'], portfolio:['portfolio'], livefrontier:['live'],
   instruments:['instCategory','instSearch'], health:['health'], review:['review'],
   statements:['statements'],
@@ -3546,6 +3554,153 @@ function renderLoans(){
     ])}
   </div>
   </div>`;
+}
+// ---- Rent or buy (B7) -----------------------------------------------------------------------------------------------
+// The engine runs the two households month by month (rentVsBuy). This tab shows where each stands after the years the
+// person expects to stay, both before tax on the gains, and the yearly price growth at which they come out level. No
+// verdict: the break-even is set beside the growth the person assumed, and the rest is theirs to judge.
+function clampRentBuy(s){
+  const D=L_DEFAULTS.rentbuy;
+  s.price=incClamp(s.price,1000000,100000000,D.price);
+  s.down=incClamp(s.down,10,100,D.down);
+  s.stamp=incClamp(s.stamp,0,12,D.stamp);
+  s.loanRate=incClamp(s.loanRate,6,14,D.loanRate);
+  s.loanYears=Math.round(incClamp(s.loanYears,5,30,D.loanYears));
+  s.maint=incClamp(s.maint,0,3,D.maint);
+  s.sell=incClamp(s.sell,0,5,D.sell);
+  s.rent=incClamp(s.rent,2000,500000,D.rent);
+  s.rentGrowth=incClamp(s.rentGrowth,0,12,D.rentGrowth);
+  s.priceGrowth=incClamp(s.priceGrowth,-5,15,D.priceGrowth);
+  s.invReturn=incClamp(s.invReturn,3,15,D.invReturn);
+  s.years=Math.round(incClamp(s.years,3,30,D.years));
+  s.regime=s.regime==='old'?'old':'new';
+}
+// RBI's limits on how much of a home's price a bank may lend: 90% up to ₹30 lakh, 80% to ₹75 lakh, 75% above. A down
+// payment under the minimum is not possible, so the minimum is used, and the slider says so.
+function rbMinDown(price){ return price<=3000000 ? 10 : price<=7500000 ? 20 : 25; }
+function rentBuyInput(s, extra){
+  return Object.assign({ price:s.price, downPct:Math.max(s.down, rbMinDown(s.price))/100, stampPct:s.stamp/100, loanRate:s.loanRate/100, loanYears:s.loanYears,
+    maintPct:s.maint/100, sellPct:s.sell/100, rent:s.rent, rentGrowth:s.rentGrowth/100, priceGrowth:s.priceGrowth/100,
+    invReturn:s.invReturn/100, years:s.years, regime:s.regime, slab:loanSlabPct(s)/100 }, extra||{});
+}
+const RB_STAYS=[5,10,15,20,25];
+function computeRentBuy(){
+  const c=cfg(), s=L.rentbuy; clampRentBuy(s);
+  const rb=rentVsBuy(rentBuyInput(s));
+  // How long you stay moves the line most (stamp duty is paid once, whatever the stay), so the break-even is shown for
+  // several stays, the person's own among them.
+  const stays=Array.from(new Set(RB_STAYS.concat([s.years]))).sort((a,b)=>a-b).map(y=>{ const x=rentVsBuy(rentBuyInput(s,{ years:y })); return { years:y, breakEven:x.breakEven, beyond:x.beyond }; });
+  return { c, s, rb, stays, slabPct:loanSlabPct(s) };
+}
+function rbPct(x){ return (x*100).toFixed(1)+'%'; }
+function rbBeText(x){
+  if(x.breakEven!=null) return rbPct(x.breakEven)+' a year';
+  return x.beyond==='below' ? 'buying is ahead even if prices fall 10% a year' : 'faster than 30% a year';
+}
+function renderRentBuy(){
+  if(L.country!=='IN') return indiaOnlyTab('Rent or buy','rentbuy','Rent or buy here uses Indian stamp duty, the Indian home-loan interest deduction and Indian tax slabs, so the numbers would be wrong for another country.');
+  const R=computeRentBuy(), c=R.c, s=R.s, rb=R.rb, K=v=>c.compact(Math.round(Math.abs(v))), M=v=>c.fmt(Math.round(v));
+  const ahead=rb.gap>=0, fm=rb.firstMonth, buyOut=fm.instalment+fm.upkeep;
+  const be=rb.breakEven, assumed=s.priceGrowth/100;
+  const beLine=be!=null
+    ? `Buying comes out ahead only if the home's price grows faster than <b>${rbPct(be)} a year</b>; you assumed ${s.priceGrowth}%.`
+    : rb.beyond==='below' ? 'Buying comes out ahead even if the price falls 10% a year: the rent here is high for the price.'
+    : 'Renting comes out ahead even if the price grows 30% a year: the rent here is low for the price, or the investments are assumed to grow fast.';
+  const lead=`After ${s.years} years, buying leaves you <b class="lg-gap">${K(rb.gap)} ${ahead?'ahead of':'behind'}</b> renting and investing the difference, if the price grows ${s.priceGrowth}% a year and the investments ${s.invReturn}%. ${beLine}`;
+  deferChartInit(()=>renderRentBuyChart('rb-path-echart', rb, c));
+  // A table, not bars: a break-even can be negative or outside the range searched, which a bar from zero cannot show.
+  const stayRows=R.stays.map(x=>`<tr${x.years===s.years?' class="rb-yours"':''}><td>${x.years} years${x.years===s.years?' (yours)':''}</td><td>${x.breakEven!=null ? rbPct(x.breakEven)+' a year' : x.beyond==='below' ? 'buying ahead even at -10% a year' : 'renting ahead even at 30% a year'}</td></tr>`).join('');
+  const diffTxt=buyOut>fm.rent ? `the renter puts the ${M(buyOut-fm.rent)} difference into investments` : `the buyer puts the ${M(fm.rent-buyOut)} difference into investments`;
+  const pathCard=`<div class="card is-primary"><h4>What each leaves you</h4>
+      <p class="lg-head">${lead}</p>
+      <div id="rb-path-echart" class="echart" style="height:340px" aria-label="What buying and renting each leave you, year by year, before tax"></div>
+      <div class="gr-note">Buying: the home's value after the cost of selling it (${s.sell}%), less what is still owed, plus anything the buyer had left over to invest. Renting: the investments. Both before tax on the gains: selling either would owe tax, and which owes more depends on when you sell. Upkeep grows with the home's value; rent rises once a year.</div></div>`;
+  const monthCard=`<div class="card"><h4>The first month, and the money up front</h4>
+      <div class="cap">Up front, the buyer pays ${K(rb.down)} down and ${K(rb.stamp)} in stamp duty and registration: ${K(rb.upfront)}. The renter invests that ${K(rb.upfront)} instead. Then each month the buyer pays the instalment and upkeep, the renter the rent, and ${diffTxt}, so both spend the same.</div>
+      <div class="stat-row pairs rb-month">
+        <div class="stat"><div class="stat-label">Buyer pays a month</div><div class="stat-value">${M(buyOut)}</div><div class="stat-sub">instalment ${M(fm.instalment)} + upkeep ${M(fm.upkeep)}</div></div>
+        <div class="stat"><div class="stat-label">Renter pays a month</div><div class="stat-value">${M(fm.rent)}</div><div class="stat-sub">rising ${s.rentGrowth}% a year</div></div>
+      </div>
+      <div class="gr-note">The loan is ${K(rb.loan)} over ${s.loanYears} years at ${s.loanRate}%. ${s.regime==='old' ? `Old regime: the tax on up to ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} of interest a year comes back at your ${R.slabPct}% slab and cess, ${K(rb.taxBack)} over the ${s.years} years, and goes to the buyer.` : 'New regime: no tax relief on a home you live in.'} Left out: ${s.regime==='old'?'<b>the HRA exemption a salaried renter usually gets in the old regime</b>, which buying the home you live in ends, so the old-regime result here leans towards buying; ':''}the 80C relief on the principal in the old regime (EPF usually fills 80C already); the renter's security deposit (often 2-10 months' rent), which earns nothing; home insurance; moving costs; and what owning or renting is worth to you beyond money.</div></div>`;
+  const stayCard=`<div class="card"><h4>How long you stay changes the line</h4>
+      <div class="cap">The yearly price growth buying needs to come out level, for different stays, with everything else as set. Stamp duty is paid once, so a short stay has to make it back quickly.</div>
+      <div class="stmt-table-wrap" id="rb-stays"><table class="stmt-table"><thead><tr><th>If you stay</th><th>Break-even price growth</th></tr></thead><tbody>${stayRows}</tbody></table></div>
+      <div class="gr-note">Indian city homes have mostly rented for 2-4% of their price a year; at that yield the break-even often sits above typical inflation, and it moves with the return you assume for the investments. Past price growth differs a lot by city and by decade: set the break-even beside your own guess.</div></div>`;
+
+  const slabChips=`<div class="cap" style="margin-top:8px" id="rbSlabLbl">Your income-tax slab:</div><div class="slab-chips" role="group" aria-labelledby="rbSlabLbl">${LOAN_SLABS.map(v=>`<button type="button" class="tglbtn${v===R.slabPct?' active':''}" data-rb="slab" data-val="${v}" aria-pressed="${v===R.slabPct}">${v}%</button>`).join('')}</div>`;
+  const F=(label, k, min, max, step, shown, tip)=>`<div class="field"><label>${label}${tip?infoIcon(tip):''} <b>${shown}</b></label><input type="range" min="${min}" max="${max}" step="${step}" value="${s[k]}" data-k="${k}" data-tab="rentbuy"></div>`;
+  return `<div class="grid${L.panelCollapsed?' panel-collapsed':''}">
+  <div class="panel">
+    ${panelHead('Rent or buy', 'rentbuy')}
+    ${advisorChipsHTML('rentbuy')}
+    <div class="section-label">The home</div>
+    ${F('Price', 'price', 1000000, 100000000, 100000, c.compact(s.price))}
+    ${F('Rent for the same home, a month', 'rent', 2000, 500000, 500, c.fmt(s.rent), 'What a home like this rents for, so the two sides live in the same place.')}
+    ${F('Years you expect to stay', 'years', 3, 30, 1, s.years)}
+    <hr class="divider">
+    <div class="section-label">Buying</div>
+    ${F('Down payment', 'down', 10, 100, 1, s.down+'%', 'Banks may lend at most 90% of the price up to ₹30 lakh, 80% up to ₹75 lakh and 75% above (RBI), so 10-25% at least is paid from savings.')}
+    ${s.down<rbMinDown(s.price)?`<div class="gr-note" style="margin:-4px 0 10px">At ${c.compact(s.price)} a bank lends at most ${100-rbMinDown(s.price)}%, so this uses a ${rbMinDown(s.price)}% down payment.</div>`:''}
+    ${F('Stamp duty and registration', 'stamp', 0, 12, 0.5, s.stamp+'%', 'Set by your state: often 5-7% stamp duty plus about 1% registration, sometimes less for a woman buyer.')}
+    ${F('Home loan rate', 'loanRate', 6, 14, 0.05, s.loanRate+'%')}
+    ${F('Loan years', 'loanYears', 5, 30, 1, s.loanYears)}
+    ${F('Upkeep and property tax, a year', 'maint', 0, 3, 0.1, s.maint+'% of value', 'Society maintenance, repairs and property tax, as a share of what the home is worth.')}
+    ${F('Cost of selling at the end', 'sell', 0, 5, 0.5, s.sell+'%', 'Brokerage and other costs when the home is sold.')}
+    <div class="cap" id="rbRegLbl">The tax regime you file under:</div>
+    <div class="toggle-row" role="group" aria-labelledby="rbRegLbl">
+      <button type="button" class="tglbtn${s.regime==='old'?' active':''}" data-rb="regime" data-val="old" aria-pressed="${s.regime==='old'}">Old regime<br>(interest relief)</button>
+      <button type="button" class="tglbtn${s.regime==='new'?' active':''}" data-rb="regime" data-val="new" aria-pressed="${s.regime==='new'}">New regime<br>(no relief)</button>
+    </div>
+    ${s.regime==='old'?slabChips:''}
+    <hr class="divider">
+    <div class="section-label">Your assumptions</div>
+    ${F('Home price growth, a year', 'priceGrowth', -5, 15, 0.1, s.priceGrowth+'%', 'Your guess, not a forecast. The result says the growth at which buying and renting come out level, so you can set it beside your guess.')}
+    ${F('Rent rise, a year', 'rentGrowth', 0, 12, 0.5, s.rentGrowth+'%', 'Rent agreements in India often rise about 5% a year.')}
+    ${F('What the invested money earns, a year', 'invReturn', 3, 15, 0.1, s.invReturn+'%', 'Your assumption for the renter’s investments (and any the buyer makes), before tax.')}
+  </div>
+  <div class="output">
+    <div class="stat-row">
+      <div class="stat"><div class="stat-label">After ${s.years} years</div><div class="stat-value">${K(rb.gap)}</div><div class="stat-sub">buying ${ahead?'ahead':'behind'}, before tax</div></div>
+      <div class="stat"><div class="stat-label">Break-even price growth${infoIcon('The yearly growth in the home’s price at which buying and renting-and-investing end level after your stay. Above it buying comes out ahead; below it renting does. A line to set beside your own guess, not advice.')}</div><div class="stat-value">${be!=null?rbPct(be):rb.beyond==='below'?'under -10%':'over 30%'}</div><div class="stat-sub">a year; you assumed ${s.priceGrowth}%</div></div>
+      <div class="stat"><div class="stat-label">Rent as a share of price</div><div class="stat-value">${rbPct(rb.rentYield)}</div><div class="stat-sub">a year (the rental yield)</div></div>
+    </div>
+    ${pathCard}
+    ${monthCard}
+    ${stayCard}
+    ${nextStepCard([
+      {q:'Buying with a loan? See whether prepaying it or investing the money does more.', tab:'loans'},
+      {q:'The home-loan interest relief is old-regime only: which regime are you on?', tab:'taxregime'},
+    ])}
+  </div>
+  </div>`;
+}
+// Buying (blue, solid) and renting (ink, long dash) year by year, named at their ends; a light band between them marks
+// the gap. Two lines on one axis, no legend, no red or green: the same rules as every chart in the Lab.
+function renderRentBuyChart(id, rb, c){
+  const dom=document.getElementById(id); if(!dom) return;
+  const narrow=dom.clientWidth<520, K=x=>c.compact(Math.round(x));
+  const buy=rb.path.map(p=>[p.year, Math.round(p.buy)]), rent=rb.path.map(p=>[p.year, Math.round(p.rent)]);
+  initChart(id, {
+    grid:{ left:8, right:narrow?96:160, top:14, bottom:28, containLabel:true }, legend:{ show:false },
+    xAxis:{ type:'value', min:0, max:rb.path[rb.path.length-1].year, interval:Math.max(1, Math.round(rb.path.length/6)), name:'years', nameLocation:'middle', nameGap:24, nameTextStyle:{ color:CHART_TEXT.muted, fontSize:10 }, axisLabel:{ color:CHART_TEXT.muted } },
+    yAxis:{ type:'value', axisLabel:{ formatter:x=>c.compact(x), color:CHART_TEXT.muted } },
+    tooltip:{ trigger:'axis', confine:true, formatter:ps=>{ const a=Array.isArray(ps)?ps:[ps]; return 'Year '+a[0].value[0]+'<br/>'+a.map(p=>p.marker+p.seriesName+': '+K(p.value[1])).join('<br/>'); } },
+    series:[
+      { name:'Buying', type:'line', showSymbol:false, data:buy, lineStyle:{ width:3, color:'#2557C7' }, itemStyle:{ color:'#2557C7' }, z:3,
+        endLabel:{ show:true, formatter:p=>'Buying'+(narrow?'\n':' ')+K(p.value[1]), color:CHART_TEXT.blue, fontWeight:700, fontSize:12, fontFamily:"'Spline Sans Mono',monospace" }, labelLayout:{ moveOverlap:'shiftY' } },
+      { name:'Renting and investing', type:'line', showSymbol:false, data:rent, lineStyle:{ width:2.4, color:CHART_TEXT.ink, type:[14,5] }, itemStyle:{ color:CHART_TEXT.ink }, z:3,
+        endLabel:{ show:true, formatter:p=>'Renting'+(narrow?'\n':' ')+K(p.value[1]), color:CHART_TEXT.ink, fontWeight:700, fontSize:12, fontFamily:"'Spline Sans Mono',monospace" }, labelLayout:{ moveOverlap:'shiftY' } },
+    ],
+  });
+}
+function rentBuyAdvisorResults(){
+  const R=computeRentBuy(), c=R.c, s=R.s, rb=R.rb;
+  return { ok:true, tool:'Rent or buy', charts:[
+    { kind:'comparison', title:'What buying and renting each leave you', xAxis:'years (0 → '+s.years+')', yAxis:'rupees, before tax on gains', note:'renter invests the money up front and whatever the buyer pays beyond the rent each month (or the buyer invests the difference when rent is higher); both before tax; no verdict, a break-even price growth',
+      points:[{ label:'buying, after '+s.years+' years', value:c.fmt(Math.round(rb.buy)) }, { label:'renting and investing', value:c.fmt(Math.round(rb.rent)) }, { label:'break-even price growth', value:rbBeText(rb) }, { label:'price growth assumed', value:s.priceGrowth+'% a year' }] },
+    { kind:'stays', title:'Break-even price growth by how long you stay', xAxis:'', yAxis:'yearly price growth', note:'stamp duty is paid once, so short stays need faster growth',
+      points:R.stays.map(x=>({ label:x.years+' years', value:rbBeText(x) })) },
+  ] };
 }
 // What the advisor can quote for this tab: the same numbers the cards show.
 function loansAdvisorResults(){
@@ -8591,6 +8746,7 @@ const ICON_HEALTH=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const ICON_STATEMENTS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M9 12h7"/><path d="M9 16h7"/><path d="M9 8h3"/></svg>`;
 
 const ICON_INCOME=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1.6 11a1 1 0 0 1-1 .9H7.6a1 1 0 0 1-1-.9L5 8z"/><path d="M5 8c0-2.2 3.1-4 7-4s7 1.8 7 4"/><path d="M9.5 13h5"/></svg>`;
+const ICON_RENTBUY=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 11.5 8 7l5.5 4.5"/><path d="M4 10.5v8h8v-8"/><path d="M15 9h6.5M19 6.5 21.5 9 19 11.5"/><path d="M21.5 16H15M17.5 13.5 15 16l2.5 2.5"/></svg>`;
 const ICON_LOANS=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 11 12 4l8.5 7"/><path d="M5.5 10v9.5h13V10"/><path d="M12 9.5v7"/><path d="M9.8 11.5h3.4a1.4 1.4 0 0 1 0 2.8h-2.4a1.4 1.4 0 0 0 0 2.8h3.4"/></svg>`;
 const ICON_TAXREGIME=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-2.5 6a3 3 0 0 0 5 0L5 7z"/><path d="M19 7l-2.5 6a3 3 0 0 0 5 0L19 7z"/></svg>`;
 const ICON_COVER=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5.5c0 4.3 2.9 7.8 7 9.5 4.1-1.7 7-5.2 7-9.5V6l-7-3z"/><path d="M9.2 12l2 2 3.6-4"/></svg>`;
@@ -8614,6 +8770,8 @@ const TABS=[
     blurb:'Once you have the pot: split it into buckets, compare drawing it as an SWP or FD interest after tax, see a crash hit two ways of drawing, and size the NPS pension.'},
   {id:'loans', short:'Prepay the home loan or invest, and clear costly debt first (India).', label:'Loans', icon:ICON_LOANS,
     blurb:'Set the certain saving from prepaying a home loan, after tax, beside what the same money is expected to earn, with the break-even and no verdict. Then see the order to clear credit-card and personal-loan debt.'},
+  {id:'rentbuy', short:'Rent or buy a home: what each leaves you, and the price growth where they meet (India).', label:'Rent or buy', icon:ICON_RENTBUY,
+    blurb:'Buying with a loan against renting and investing the difference, month by month for as long as you stay, with stamp duty, upkeep and the old-regime interest relief. Shows the yearly price growth at which the two come out level, and no verdict.'},
   {id:'taxregime', short:'Old or new income-tax regime on your pay (India).', label:'Tax regime', icon:ICON_TAXREGIME,
     blurb:'Enter your pay and deductions and see which regime costs less, by how much, where the break-even sits, and what that means for ELSS, PPF, NPS and the rest of your plan.'},
   {id:'cover', short:'How much term and health cover you need, and the gap (India).', label:'Cover', icon:ICON_COVER,
@@ -8875,6 +9033,7 @@ function render(opts){
   else if(L.tab==='swp') main.innerHTML=renderSWP();
   else if(L.tab==='income') main.innerHTML=renderIncome();
   else if(L.tab==='loans') main.innerHTML=renderLoans();
+  else if(L.tab==='rentbuy') main.innerHTML=renderRentBuy();
   else if(L.tab==='taxregime') main.innerHTML=renderTaxRegime();
   else if(L.tab==='cover') main.innerHTML=renderCover();
   else if(L.tab==='holdings') main.innerHTML=renderHoldings();
@@ -8980,7 +9139,7 @@ function attach(){
   document.querySelectorAll('input[type=range][data-k]').forEach(el=>{
     el.addEventListener('input',()=>{
       const k=el.dataset.k, tab=el.dataset.tab||'ret';
-      const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='income'?L.income : tab==='loans'?L.loans : tab==='tax'?L.tax : tab==='cover'?L.cover : tab==='holdings'?L.holdings : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
+      const target = tab==='step'?L.step : tab==='swp'?L.swp : tab==='income'?L.income : tab==='loans'?L.loans : tab==='rentbuy'?L.rentbuy : tab==='tax'?L.tax : tab==='cover'?L.cover : tab==='holdings'?L.holdings : tab==='fx'?L.fx : tab==='joint'?L.joint : tab==='mc'?L.mc : tab==='health'?L.health : L.ret;
       let v=parseFloat(el.value);
       if(k==='shockYear'){ L.ret.shock.year=v; }
       else if(k==='swpShockYear'){ L.swp.shock.year=v; }
@@ -9109,6 +9268,14 @@ function attach(){
         s.kind=v==='debt'||v==='fd'?v:'equity';
         if(s.expected===LOAN_KIND_DEFAULT[was]) s.expected=LOAN_KIND_DEFAULT[s.kind];
       }
+      render();
+    });
+  });
+  document.querySelectorAll('[data-rb]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const f=el.dataset.rb, v=el.dataset.val, s=L.rentbuy;
+      if(f==='slab'){ s.slab=+v; markGiven('rentbuy.slab'); }
+      else if(f==='regime'){ s.regime=v==='old'?'old':'new'; markGiven('rentbuy.regime'); }
       render();
     });
   });
@@ -12835,10 +13002,10 @@ document.body.addEventListener('click', e=>{
    directly — every mutation goes through executeAdvisorTool.
    ===================================================================== */
 const ADVISOR_TABS = ['home'].concat(TABS.map(t => t.id));
-const TAB_FOR = { ret:'retirement', step:'stepup', swp:'swp', income:'income', loans:'loans', tax:'taxregime', cover:'cover', holdings:'holdings', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+const TAB_FOR = { ret:'retirement', step:'stepup', swp:'swp', income:'income', loans:'loans', rentbuy:'rentbuy', tax:'taxregime', cover:'cover', holdings:'holdings', fx:'fx', joint:'joint', mc:'mc', health:'health' };
 // These five tabs are built on Indian rules, so a value for one of them is refused when the Lab is set to the US:
 // otherwise the number would be stored and the person dropped on a screen that only says "switch to India".
-const INDIA_ONLY_STATE = ['income', 'loans', 'tax', 'cover', 'holdings'];
+const INDIA_ONLY_STATE = ['income', 'loans', 'rentbuy', 'tax', 'cover', 'holdings'];
 
 const ADVISOR_FIELDS = {
   country: { path:['country'], type:'string', enum:['IN','US'], desc:'Country/currency: IN for India ₹, US for United States $.' },
@@ -12889,6 +13056,20 @@ const ADVISOR_FIELDS = {
   'income.npsPot': { path:['income','npsPot'], type:'integer', min:0, max:50000000, desc:'NPS pot at retirement (rupees).' },
   'income.annuityShare': { path:['income','annuityShare'], type:'integer', min:20, max:100, desc:'Percent of the NPS pot used to buy a pension (at least 20).' },
   'income.annuityRate': { path:['income','annuityRate'], type:'number', min:3, max:9, desc:'Pension rate % (the person\'s own assumption, not a quote).' },
+  'rentbuy.price': { path:['rentbuy','price'], type:'integer', min:1000000, max:100000000, desc:'Price of the home being weighed (rupees).' },
+  'rentbuy.rent': { path:['rentbuy','rent'], type:'integer', min:2000, max:500000, desc:'Monthly rent for the same home (rupees).' },
+  'rentbuy.years': { path:['rentbuy','years'], type:'integer', min:3, max:30, desc:'Years the person expects to stay.' },
+  'rentbuy.down': { path:['rentbuy','down'], type:'number', min:10, max:100, desc:'Down payment, % of the price.' },
+  'rentbuy.stamp': { path:['rentbuy','stamp'], type:'number', min:0, max:12, desc:'Stamp duty plus registration, % of the price (set by the state).' },
+  'rentbuy.loanRate': { path:['rentbuy','loanRate'], type:'number', min:6, max:14, desc:'Home loan interest % a year.' },
+  'rentbuy.loanYears': { path:['rentbuy','loanYears'], type:'integer', min:5, max:30, desc:'Home loan length in years.' },
+  'rentbuy.maint': { path:['rentbuy','maint'], type:'number', min:0, max:3, desc:'Upkeep and property tax, % of the home\'s value a year.' },
+  'rentbuy.sell': { path:['rentbuy','sell'], type:'number', min:0, max:5, desc:'Cost of selling at the end, % of the value.' },
+  'rentbuy.priceGrowth': { path:['rentbuy','priceGrowth'], type:'number', min:-5, max:15, desc:'The person\'s own assumption for the home\'s price growth % a year (not a forecast).' },
+  'rentbuy.rentGrowth': { path:['rentbuy','rentGrowth'], type:'number', min:0, max:12, desc:'Rent rise % a year.' },
+  'rentbuy.invReturn': { path:['rentbuy','invReturn'], type:'number', min:3, max:15, desc:'What the invested money earns % a year, before tax (the person\'s assumption).' },
+  'rentbuy.regime': { path:['rentbuy','regime'], type:'string', enum:['old','new'], desc:'Tax regime: old (home-loan interest relief up to ₹2 lakh a year) or new (none).' },
+  'rentbuy.slab': { path:['rentbuy','slab'], type:'integer', enum:[0,5,10,15,20,25,30], desc:'Income-tax slab in percent (counts only in the old regime).' },
   'loans.balance': { path:['loans','balance'], type:'integer', min:100000, max:50000000, desc:'Home loan still owed (rupees).' },
   'loans.rate': { path:['loans','rate'], type:'number', min:6, max:14, desc:'Home loan interest rate % a year.' },
   'loans.years': { path:['loans','years'], type:'integer', min:1, max:30, desc:'Years left on the home loan.' },
@@ -12952,6 +13133,7 @@ Tools:
 - Retirement Lab: age, retire age, monthly expenses, lifestyle %, inflation, growth before/after retirement, life expectancy; stress-tests with a real historical market crash, plus a drawdown Monte Carlo to show sequence-of-returns risk.
 - Build a Portfolio: mixes fund categories with preset or custom weights and shows the efficient frontier (return vs risk trade-off).
 - Test Real Investments (Live Frontier): picks real stocks/ETFs/funds and shows how mixing them actually performed — real risk, real return, real history.
+- Rent or buy (India): buying a home with a loan against renting the same home and investing the difference, month by month for the stay, with stamp duty, upkeep, selling costs and the old-regime s.24(b) interest relief. Gives what each leaves after the stay (both before tax on gains) and the break-even yearly price growth, for the person's stay and for 5-25 years. Never say which to choose: set the break-even beside their own price-growth guess, and say that past price growth differs by city and decade. In the old regime the tab counts the buyer's interest relief but not the HRA exemption a salaried renter usually gets, so say its old-regime result leans towards buying.
 - Crypto (Bitcoin BTC-INR, Ether ETH-INR, any COIN-INR/COIN-USD symbol, or a My holdings row in category crypto): its past ten years are a rise that cannot be planned on. Never call a crypto-heavy mix best or suggest moving towards one, never use a crypto or crypto-mix return as a growth rate anywhere (ret.preRate, meanReturn, a projection), and never suggest buying or selling crypto. Talk about it only as risk: how much a small slice adds to the ups and downs and the worst fall. Tool results mark it with crypto:true.
 - Step-Up SIP: a SIP that grows with income each year.
 - Sustainable Withdrawal (SWP): whether a corpus can fund a fixed inflation-adjusted withdrawal for a set span.
@@ -13119,6 +13301,9 @@ function advisorChipsHTML(tab) {
   } else if (tab === 'income') {
     chips.push("Buckets or one pot: which holds up in a crash?");
     chips.push("How is an SWP taxed compared with FD interest?");
+  } else if (tab === 'rentbuy') {
+    chips.push("How fast must prices grow for buying to win?");
+    chips.push("What if I stay only 7 years?");
   } else if (tab === 'loans') {
     chips.push("Prepay the home loan or invest: where is the break-even?");
     chips.push("Which of my debts should I clear first?");
@@ -13326,7 +13511,7 @@ function advisorTools() {
     { type:'function', function:{ name:'start_yearly_review', description:'The yearly plan review. Lays out the fixed checklist (savings and the emergency fund, costly debt, term and health cover, tax regime, holdings against the profile, tax-free equity gains, retirement through a crash, retirement income) for the user to approve, ending with a dated to-do list as a report. Use it whenever the user asks to review their plan, for a yearly or annual review or check-up, or what to do with their money this year. Never write this checklist yourself with propose_plan, and never leave a check out.' } },
     { type:'function', function:{ name:'review_check', description:'Run one check of the yearly review on the user\'s own numbers: returns its status (act, ok, partial, missing, skipped, na), the finding, and its dated actions. Normally run as a step of the plan start_yearly_review lays out.', parameters:{ type:'object', properties:{ area:{ type:'string', enum:REVIEW_AREAS.map(a => a.id) } }, required:['area'] } } },
     { type:'function', function:{ name:'set_holdings', description:'My holdings (India only): type in funds and other holdings the user has TOLD you about, with the amounts they gave (never invent a holding or an amount). mode "add" (default) appends and skips a row whose name and amount are already listed; "replace" removes every row already listed (the reply says how many) and starts again, so use it only when the user asked to start over. Each: name (as the user said it, e.g. "Parag Parikh Flexi Cap Direct Growth"), value (what it is worth now, rupees), optional cost (what they put in, rupees), optional category, optional plan, optional heldOverAYear (false if bought under a year ago; equity only). category is for when the name does not say it: leave it out and the app reads it from the name (a name that states a category keeps it); if the reply lists noCategoryYet, ASK the user what each is. Categories: '+HOLDING_CATS_IN.map(c => c.id + ' (' + c.label + ')').join(', ')+'. Never use this to suggest a fund.', parameters:{ type:'object', properties:{ mode:{ type:'string', enum:['add','replace'] }, holdings:{ type:'array', items:{ type:'object', properties:{ name:{ type:'string' }, value:{ type:'number' }, cost:{ type:'number' }, category:{ type:'string', enum:HOLDING_CATS_IN.map(c => c.id) }, plan:{ type:'string', enum:['direct','regular','unstated'] }, heldOverAYear:{ type:'boolean' } }, required:['name','value'] } } }, required:['holdings'] } } },
-    { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, income, loans, taxregime, cover, holdings, fx, joint, mc or health (income, loans, taxregime, cover and holdings are India only). params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP; loans: balance, rate, years, regime, slab, amount, expected, kind; taxregime: gross, basic, hra, rent, metro, c80, nps1b, health, homeLoan; cover: monthly, years, loans, savings, existing, healthTarget, ownHealth, employerHealth; holdings: profile, sip, sipMonths, years, expected, exemptUsed, with the rows themselves entered by set_holdings).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','income','loans','taxregime','cover','holdings','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
+    { type:'function', function:{ name:'run_full_analysis', description:'Run one Lab tool end-to-end in ONE call: switch to the tab, apply every input, and run its calculation — much faster than many set_value calls. tab: retirement, stepup, swp, income, loans, rentbuy, taxregime, cover, holdings, fx, joint, mc or health (income, loans, rentbuy, taxregime, cover and holdings are India only). params keys are bare field names for that tab (e.g. retirement: age, retireAge, monthlyExpense, preRate, postRate, inflation, lifeExp; mc: sip, years, meanReturn, volatility; health: capacity, totalSIP; loans: balance, rate, years, regime, slab, amount, expected, kind; rentbuy: price, rent, years, down, stamp, loanRate, loanYears, maint, sell, priceGrowth, rentGrowth, invReturn, regime, slab; taxregime: gross, basic, hra, rent, metro, c80, nps1b, health, homeLoan; cover: monthly, years, loans, savings, existing, healthTarget, ownHealth, employerHealth; holdings: profile, sip, sipMonths, years, expected, exemptUsed, with the rows themselves entered by set_holdings).', parameters:{ type:'object', properties:{ tab:{ type:'string', enum:['retirement','stepup','swp','income','loans','rentbuy','taxregime','cover','holdings','fx','joint','mc','health'] }, params:{ type:'object' } }, required:['tab','params'] } } },
     { type:'function', function:{ name:'read_other_page', description:'Read-only snapshot of another page\'s saved data (from that page\'s own localStorage). page: door1 (Quick Calculate) or door2 (The Full Plan). Returns {page, asOf, state} — context to quote from, NEVER to be merged into this page\'s inputs.', parameters:{ type:'object', properties:{ page:{ type:'string', enum:Object.keys(OTHER_PAGE_KEYS) } }, required:['page'] } } },
   ];
 }
@@ -13334,7 +13519,7 @@ function advisorTools() {
 function advisorFieldSelector(spec) {
   const key = spec.path[spec.path.length - 1];
   const tab = spec.path[0];
-  const tabAttr = { ret: '', step: 'step', swp: 'swp', income: 'income', loans: 'loans', tax: 'tax', cover: 'cover', holdings: 'holdings', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' }[tab] || '';
+  const tabAttr = { ret: '', step: 'step', swp: 'swp', income: 'income', loans: 'loans', rentbuy: 'rentbuy', tax: 'tax', cover: 'cover', holdings: 'holdings', fx: 'fx', joint: 'joint', mc: 'mc', health: 'health' }[tab] || '';
   return tabAttr ? 'input[data-k="' + key + '"][data-tab="' + tabAttr + '"]' : 'input[data-k="' + key + '"]';
 }
 
@@ -13741,9 +13926,9 @@ function advisorReadCurrentChart() {
     if (L.country !== 'IN') return { ok:false, error:'Retirement Income uses Indian tax rules; the user needs to switch the country to India.' };
     return incomeAdvisorResults();
   }
-  if (tab === 'loans' || tab === 'taxregime' || tab === 'cover' || tab === 'holdings') {
+  if (tab === 'loans' || tab === 'rentbuy' || tab === 'taxregime' || tab === 'cover' || tab === 'holdings') {
     if (L.country !== 'IN') return { ok:false, error:'This tool uses Indian tax rules; the user needs to switch the country to India.' };
-    return tab === 'loans' ? loansAdvisorResults() : tab === 'taxregime' ? taxAdvisorResults() : tab === 'holdings' ? holdingsAdvisorResults() : coverAdvisorResults();
+    return tab === 'loans' ? loansAdvisorResults() : tab === 'rentbuy' ? rentBuyAdvisorResults() : tab === 'taxregime' ? taxAdvisorResults() : tab === 'holdings' ? holdingsAdvisorResults() : coverAdvisorResults();
   }
   if (tab === 'fx') {
     const f = L.fx;
@@ -13891,8 +14076,17 @@ function advisorGetResults() {
       crash:{ scenario:R.ep ? R.ep.label + ' in year ' + s.shock.year : 'none', bucketPlanAtEnd:end(R.hit.buckets), singleRebalancedPotAtEnd:end(R.hit.mix) },
       nps:{ pot:s.npsPot, pensionPerMonthAfterTax:Math.round(R.nps.monthlyAfter), cashKept:Math.round(R.nps.lumpKept) } }, flags:[] };
   }
-  if (tab === 'loans' || tab === 'taxregime' || tab === 'cover' || tab === 'holdings') {
+  if (tab === 'loans' || tab === 'rentbuy' || tab === 'taxregime' || tab === 'cover' || tab === 'holdings') {
     if (L.country !== 'IN') return { ok:false, error:'This tool uses Indian tax rules; the user needs to switch the country to India.' };
+  }
+  if (tab === 'rentbuy') {
+    const R = computeRentBuy(), s = R.s, rb = R.rb, r0 = Math.round;
+    return { ok:true, result:{ tool:'Rent or buy', note:'a break-even price growth, not a verdict: price growth and the investment return are the user\'s assumptions; both sides before tax on gains',
+      years:s.years, price:s.price, rentPerMonth:s.rent, rentalYieldPct:+(rb.rentYield*100).toFixed(2), regime:s.regime,
+      buyingAfterYears:r0(rb.buy), rentingAndInvestingAfterYears:r0(rb.rent), buyingAheadBy:r0(rb.gap),
+      breakEvenPriceGrowthPct:rb.breakEven == null ? null : +(rb.breakEven*100).toFixed(2), breakEvenOutsideRange:rb.beyond || undefined, priceGrowthAssumedPct:s.priceGrowth,
+      upFront:{ down:r0(rb.down), stampAndRegistration:r0(rb.stamp) }, firstMonth:{ instalment:r0(rb.firstMonth.instalment), upkeep:r0(rb.firstMonth.upkeep), rent:r0(rb.firstMonth.rent) },
+      oldRegimeTaxBack:r0(rb.taxBack), breakEvenByStay:R.stays.map(x => ({ years:x.years, breakEvenPct:x.breakEven == null ? null : +(x.breakEven*100).toFixed(2), outside:x.beyond || undefined })) }, flags:[] };
   }
   if (tab === 'review') {
     // The amounts sit at the top level (health1, cover2, ...) so a review report's figures are audited against a
@@ -13947,6 +14141,8 @@ const ADVISOR_HIGHLIGHT_TARGETS = {
   drawdown: '#ret-drawdown, #swp-drawdown',
   incomedraw: '#inc-draw',
   incomecrash: '#inc-crash',
+  rbpath: '#rb-path-echart',
+  rbstays: '#rb-stays',
   loancompare: '#loan-compare',
   loandebts: '#loan-debts',
   taxcompare: '#tax-compare',
@@ -14247,8 +14443,8 @@ function executeAdvisorTool(name, args) {
     const start = performance.now();
     const tab = args && args.tab;
     const params = (args && args.params) || {};
-    const PREFIX = { retirement:'ret', stepup:'step', swp:'swp', income:'income', loans:'loans', taxregime:'tax', cover:'cover', holdings:'holdings', fx:'fx', joint:'joint', mc:'mc', health:'health' };
-    if (!PREFIX[tab]) return JSON.stringify({ ok:false, error:'Invalid tab. Valid: retirement, stepup, swp, income, loans, taxregime, cover, holdings, fx, joint, mc, health. (portfolio/livefrontier use set_weights/add_instrument.)' });
+    const PREFIX = { retirement:'ret', stepup:'step', swp:'swp', income:'income', loans:'loans', rentbuy:'rentbuy', taxregime:'tax', cover:'cover', holdings:'holdings', fx:'fx', joint:'joint', mc:'mc', health:'health' };
+    if (!PREFIX[tab]) return JSON.stringify({ ok:false, error:'Invalid tab. Valid: retirement, stepup, swp, income, loans, rentbuy, taxregime, cover, holdings, fx, joint, mc, health. (portfolio/livefrontier use set_weights/add_instrument.)' });
     if (typeof params !== 'object' || Array.isArray(params)) return JSON.stringify({ ok:false, error:'params must be an object.' });
     const prefix = PREFIX[tab];
     if (INDIA_ONLY_STATE.includes(prefix) && L.country !== 'IN') return JSON.stringify({ ok:false, error:'That tool uses Indian tax rules and the Lab is set to the United States. Ask the user whether to switch the country to India first (set_value country IN).' });
@@ -14379,6 +14575,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
       'stepup': ['What does stepping up cost me in total?', 'What if my income grows slower?', 'How much of the gain is real vs inflation?'],
       'swp': ['What happens if markets crash early?', 'How much could I withdraw for 30 years?', 'Why does inflation matter here?'],
       'income': ['How is an SWP taxed compared with FD interest?', 'Which of the two holds up better in this crash, and why?', 'What does the NPS pension cover?'],
+      'rentbuy': ['What if prices grow only 4% a year?', 'Why does a short stay need faster growth?', 'What does the old regime change here?'],
       'loans': ['Why is the break-even higher on the new regime?', 'What if the investment earns less than I assumed?', 'Why clear the card before the home loan?'],
       'taxregime': ['What would I need to deduct for the old regime to win?', 'Does this change what I put in ELSS or PPF?', 'What is not counted here?'],
       'cover': ['What does the cover figure leave out?', 'Why show the gap without employer cover?', 'What if my spending changes?'],

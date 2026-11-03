@@ -4430,3 +4430,43 @@ test('statement risk: the fund prices come from its own clean transactions only'
     ['10-Feb-2021', 'Purchase', '5,000.00', '100.000', '50.0000', '150.000']], '150.000', '7,500.00'), { today: '2026-10-28' });
   assert.deepStrictEqual(bad.schemes[0].navs, []);
 });
+
+// ---- Rent or buy (B7) ---------------------------------------------------------------------------------------------
+const RB = { price: 10000000, downPct: 0.2, stampPct: 0.07, loanRate: 0.085, loanYears: 20, maintPct: 0.006, sellPct: 0.01,
+  rent: 25000, rentGrowth: 0.05, priceGrowth: 0.05, invReturn: 0.10, years: 15, regime: 'new', slab: 0.2 };
+test('rent or buy: both sides spend the same money; whoever pays less in a month invests the difference', () => {
+  // with no growth on the pots, what the renter put in less what the buyer put in is exactly what one paid more
+  const r = engine.rentVsBuy(Object.assign({}, RB, { invReturn: 0 }));
+  approx(r.rentPot - r.buyPot, r.paidBuy - r.paidRent, 1);
+  approx(r.upfront, 2000000 + 700000);
+  approx(r.emi, 8000000 * (0.085 / 12) / (1 - Math.pow(1 + 0.085 / 12, -240)), 0.01);
+  assert.strictEqual(r.path.length, 16); assert.strictEqual(r.path[15].year, 15);
+});
+test('rent or buy: the break-even price growth leaves the two level, and more growth favours buying', () => {
+  const r = engine.rentVsBuy(RB);
+  assert.ok(r.breakEven > 0.07 && r.breakEven < 0.10, String(r.breakEven));   // a 3% rental yield needs a fast-rising price
+  assert.ok(Math.abs(engine.rentVsBuyRun(RB, r.breakEven).gap) < 100);
+  assert.ok(engine.rentVsBuyRun(RB, 0.06).gap < engine.rentVsBuyRun(RB, 0.09).gap);
+  assert.ok(r.gap < 0 && r.crossYear === null);
+  approx(r.rentYield, 0.03);
+});
+test('rent or buy: the old regime gives back tax on up to Rs 2 lakh of interest a year, which lowers the break-even', () => {
+  const n = engine.rentVsBuy(RB), o = engine.rentVsBuy(Object.assign({}, RB, { regime: 'old', slab: 0.3 }));
+  assert.strictEqual(n.taxBack, 0);
+  approx(o.taxBack, 15 * 200000 * 0.3 * 1.04, 1);   // interest stays above Rs 2 lakh for all 15 years on an 80 L loan
+  assert.ok(o.breakEven < n.breakEven);
+});
+test('rent or buy: outside -10% to 30% a year the answer is "below" or "above", not a made-up number', () => {
+  const cheap = engine.rentVsBuy(Object.assign({}, RB, { rent: 150000 }));
+  assert.strictEqual(cheap.breakEven, null); assert.strictEqual(cheap.beyond, 'below');
+  const dear = engine.rentVsBuy(Object.assign({}, RB, { rent: 2000, invReturn: 0.60, years: 5 }));
+  assert.strictEqual(dear.breakEven, null); assert.strictEqual(dear.beyond, 'above');
+  assert.strictEqual(engine.rentVsBuy({}).ok, false);
+});
+test('rent or buy: when the gap crosses twice (high upkeep, a fast fall), the break-even is the crossing above which buying stays ahead', () => {
+  const o = Object.assign({}, RB, { downPct: 0.25, maintPct: 0.02, sellPct: 0, rent: 60000, years: 30 });
+  assert.ok(engine.rentVsBuyRun(o, -0.10).gap > 0 && engine.rentVsBuyRun(o, 0).gap < 0);   // ahead at -10%, behind at 0%
+  const r = engine.rentVsBuy(o);
+  assert.strictEqual(r.beyond, null); assert.ok(r.breakEven > 0.02 && r.breakEven < 0.05, String(r.breakEven));
+  assert.ok(engine.rentVsBuyRun(o, r.breakEven + 0.01).gap > 0 && engine.rentVsBuyRun(o, r.breakEven - 0.01).gap < 0);
+});

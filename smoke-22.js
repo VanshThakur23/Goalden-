@@ -164,7 +164,7 @@ check(/case 'set_holdings'/.test(gl), '9c the advisor shows a status line while 
 check(/holdings:'holdings'/.test(gl) || /holdings: ?\['holdings'\]/.test(gl) || /holdings:\s*'holdings'/.test(gl) || /\bholdings\b[^\n]*TAB_FOR/.test(gl) || /TAB_FOR/.test(gl), '9c TAB_FOR knows the tab');
 check(/PREFIX = \{[^}]*holdings:'holdings'/.test(gl), '9c run_full_analysis maps the tab to its fields');
 check(/function holdingsResultForAdvisor/.test(gl) && /holdingsResultForAdvisor\(\)/.test(fnBody(gl, 'advisorGetResults')), '9c get_results reads the tab');
-check((gl.match(/if \(tab === 'loans' \|\| tab === 'taxregime' \|\| tab === 'cover' \|\| tab === 'holdings'\) \{/g) || []).length === 2, '9c both readers (chart and numbers) handle the tab');
+check((gl.match(/if \(tab === 'loans' \|\| (tab === 'rentbuy' \|\| )?tab === 'taxregime' \|\| tab === 'cover' \|\| tab === 'holdings'\) \{/g) || []).length === 2, '9c both readers (chart and numbers) handle the tab');
 check(/holdmix: '#hold-mix'/.test(gl) && /holdcost: '#hold-cost'/.test(gl), '9c the advisor can point at the two charts');
 check(/noCategory:r0\(rev\.unset\)/.test(fnBody(gl, 'holdingsResultForAdvisor')) && /no fund is rated and none is recommended/.test(fnBody(gl, 'holdingsResultForAdvisor')), '9c what the advisor reads lists what has no category and says no fund is rated');
 check(/Nothing you type is uploaded or kept on a server/.test(hf) && /if you use the advisor, your holdings are sent along with your question/.test(hf), '9c the footer says nothing typed is uploaded, except the search words and what goes to the advisor with a question');

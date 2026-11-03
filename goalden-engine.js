@@ -944,6 +944,92 @@ function debtAvalanche(o) {
 }
 
 /* ---------------------------------------------------------------------
+   Rent or buy (B7). Two households with the same money and the same monthly
+   outgoings, month by month, for as long as the person expects to stay:
+     buyer   pays the down payment and stamp duty and registration up front,
+             then the instalment and upkeep (a share of the home's value, so
+             it grows with the price); in the old regime it gets back the tax
+             on the loan interest it may deduct (s.24(b), up to Rs 2 lakh a
+             year on a self-occupied home), at its slab plus cess
+     renter  invests what the buyer paid up front, pays the rent (raised once
+             a year), and invests whatever the buyer paid that month beyond it
+   Whichever side pays less in a month invests the difference, so neither is
+   given money the other did not have. At the end the buyer has the home,
+   less the cost of selling it and what is still owed, plus its own pot; the
+   renter has its pot. Both before tax on the gains: selling either the home
+   or the investments would owe tax, and which costs more depends on when.
+   breakEven is the yearly price growth at which the two end level, found by
+   bisection: the answer is a line to compare with one's own guess, not a
+   verdict. Interest is monthly at rate/12, as in loanSchedule.
+   o = { price, downPct, stampPct, loanRate, loanYears, maintPct, sellPct,
+         rent (a month), rentGrowth, priceGrowth, invReturn, years,
+         regime ('old' | 'new'), slab (fraction) }   rates are fractions
+   --------------------------------------------------------------------- */
+function rentVsBuyRun(o, priceGrowth) {
+  const price = accNum(o.price), down = price * accNum(o.downPct), loan = price - down;
+  const upfront = down + price * accNum(o.stampPct);
+  const r = accNum(o.loanRate) / 12, n = Math.max(1, Math.round(accNum(o.loanYears) * 12));
+  const emi = loan <= 0 ? 0 : (r === 0 ? loan / n : loan * r / (1 - Math.pow(1 + r, -n)));
+  const months = Math.max(12, Math.round(accNum(o.years) * 12));
+  const gP = Math.pow(1 + priceGrowth, 1 / 12) - 1, gI = Math.pow(1 + accNum(o.invReturn), 1 / 12) - 1;
+  const relief = o.regime === 'old' ? accNum(o.slab) * (1 + TAX_IN.cess) : 0, cap = TAX_REGIME_IN.homeLoanInterest;
+  let bal = loan, value = price, rent = accNum(o.rent), buyPot = 0, rentPot = upfront, yearInterest = 0;
+  let paidBuy = upfront, paidRent = 0, taxBack = 0, interestPaid = 0;
+  const path = [{ year: 0, buy: value * (1 - accNum(o.sellPct)) - bal, rent: rentPot }];
+  let firstMonth = null;
+  for (let m = 1; m <= months; m++) {
+    const i = bal > 0 ? bal * r : 0, pay = bal > 0 ? Math.min(emi, bal + i) : 0;
+    bal = Math.max(0, bal + i - pay); yearInterest += i; interestPaid += i;
+    const upkeep = value * accNum(o.maintPct) / 12;
+    const buyOut = pay + upkeep;
+    if (m === 1) firstMonth = { instalment: pay, upkeep, rent };
+    // the pots grow first, then this month's difference goes into whichever side paid less
+    buyPot *= 1 + gI; rentPot *= 1 + gI;
+    if (buyOut > rent) rentPot += buyOut - rent; else buyPot += rent - buyOut;
+    paidBuy += buyOut; paidRent += rent;
+    value *= 1 + gP;
+    if (m % 12 === 0) {
+      const back = Math.min(yearInterest, cap) * relief;
+      buyPot += back; taxBack += back; yearInterest = 0;
+      rent *= 1 + accNum(o.rentGrowth);
+      path.push({ year: m / 12, buy: value * (1 - accNum(o.sellPct)) - bal + buyPot, rent: rentPot });
+    }
+  }
+  const sellCost = value * accNum(o.sellPct);
+  const buy = value - sellCost - bal + buyPot;
+  return { buy, rent: rentPot, gap: buy - rentPot, homeValue: value, sellCost, owed: bal, buyPot, rentPot,
+    emi, upfront, down, stamp: price * accNum(o.stampPct), loan, firstMonth, taxBack, interestPaid, paidBuy, paidRent, path };
+}
+function rentVsBuy(o) {
+  o = o || {};
+  if (!(accNum(o.price) > 0)) return { ok: false, error: 'a home price is needed' };
+  const g = accNum(o.priceGrowth), base = rentVsBuyRun(o, g);
+  // The gap is not always rising in the price growth: with high upkeep and a long stay, a home whose price falls fast
+  // costs more upkeep early than it loses in value, so the gap can rise again at the far low end and cross twice. So
+  // -10% to 30% a year is scanned in half-point steps, and the break-even is the highest crossing from behind to
+  // ahead: above it buying stays ahead. "below": never behind in the range; "above": still behind at 30%.
+  const f = x => rentVsBuyRun(o, x).gap;
+  const LO = -0.10, HI = 0.30, STEP = 0.005;
+  let breakEven = null, beyond = null, at = null, prev = f(LO), anyBehind = prev < 0;
+  for (let x = LO + STEP; x <= HI + 1e-9; x += STEP) {
+    const v = f(x);
+    if (v < 0) anyBehind = true;
+    if (prev < 0 && v >= 0) at = x;
+    prev = v;
+  }
+  if (!anyBehind) beyond = 'below';
+  else if (prev < 0) beyond = 'above';
+  else if (at !== null) {
+    let lo = at - STEP, hi = at;
+    for (let k = 0; k < 50; k++) { const mid = (lo + hi) / 2; if (f(mid) < 0) lo = mid; else hi = mid; }
+    breakEven = (lo + hi) / 2;
+  }
+  const cross = base.path.find(p => p.year > 0 && p.buy >= p.rent);
+  return { ok: true, ...base, priceGrowth: g, breakEven, beyond, crossYear: cross ? cross.year : null,
+    rentYield: accNum(o.rent) * 12 / accNum(o.price) };
+}
+
+/* ---------------------------------------------------------------------
    Protection check: how much cover, not what it costs (there is no honest
    premium source, so none is shown).
    termCoverNeed: the lump sum a family would need if the earner were gone =
@@ -2746,7 +2832,7 @@ if (typeof module !== 'undefined' && module.exports) {
     RETIRE_ACCOUNTS_IN, epfMonthlyContribution, epfFutureValue, ppfFutureValue, npsFutureValue, npsCountedShare, retirementAccountsFV,
     incomeBuckets, incomeStrategies, incomeDrawPlan, incomeSwitchTax, npsAnnuityPlan,
     TAX_REGIME_IN, slabTax, slabRate, regimeTax, hraExemption, epfEmployeeYearly, compareRegimes,
-    loanSchedule, loanPrepay, homeLoanCompare, debtAvalanche, termCoverNeed, healthCoverPlan,
+    loanSchedule, loanPrepay, homeLoanCompare, debtAvalanche, rentVsBuy, rentVsBuyRun, termCoverNeed, healthCoverPlan,
     RISK_PROFILES_IN, HOLDING_CATS_IN, holdingCategoryFromName, fundPlanFromName, REGULAR_EXTRA, regularExtra, reviewHoldings,
     REVIEW_AREAS, REVIEW_DRIFT_BAND, REVIEW_TAX_TIE, REVIEW_WHEN, reviewDates, reviewWhenOrder, yearlyReview,
     stmtDate, stmtNum, stmtLines, stmtCategory, parseStatement, statementVsIndex, statementEquityFlows, statementRisk, STMT_RISK_MIN,

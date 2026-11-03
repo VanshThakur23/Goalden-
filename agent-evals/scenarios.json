@@ -571,5 +571,26 @@
         "set_holdings"
       ]
     }
+    },
+  {
+    "name": "lab rent or buy runs the tab with the user's numbers",
+    "page": "goalden-lab.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": [
+      "Should I buy a 1.2 crore flat or rent it? Rent would be 30,000 a month and I'd stay about 10 years.",
+      "A - do it all for me."
+    ],
+    "expect": {
+      "toolsCalled": [
+        "run_full_analysis"
+      ],
+      "fieldsSet": {
+        "rentbuy.price": 12000000,
+        "rentbuy.rent": 30000,
+        "rentbuy.years": 10
+      },
+      "replyIncludes": "break-even"
+    }
   }
 ]

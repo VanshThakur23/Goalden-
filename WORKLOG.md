@@ -4749,3 +4749,26 @@ standing over the founder's shoulder.
 - Opus review: NO-GO on the first pass (multi-asset jump, Best balance button, 10-year growth, TDS wording);
   all five MUST-FIX and the SHOULD-FIX items fixed and browser-checked.
 - Tests: 320/320 engine (new crypto test); smokes 02-24 pass.
+
+## 2026-11-03 - Claude Code - B7 Rent or buy (new Lab tab, India)
+- Engine `rentVsBuy` / `rentVsBuyRun`: two households, month by month for the stay. The buyer pays down
+  payment + stamp duty/registration, then instalment + upkeep (% of the growing value), and in the old regime
+  gets back the tax on up to Rs 2 lakh of interest a year (s.24(b), slab + cess). The renter invests the
+  up-front money and pays rent (rising yearly). Whoever pays less in a month invests the difference. At the
+  end: home less selling cost and what is owed, plus the buyer's pot, against the renter's pot, both before
+  tax on gains. The break-even yearly price growth is the highest crossing from behind to ahead, scanned in
+  0.5-point steps from -10% to 30% then bisected (the gap can cross twice with high upkeep and a fast fall).
+- Lab tab "Rent or buy": a two-line wealth chart (buying blue solid, renting ink dashed, end labels), the
+  first month and the money up front, and the break-even for 5-25-year stays (a table, so a negative or
+  out-of-range break-even reads plainly). The down payment is at least what RBI's lending limits leave
+  (10/20/25% by price), and the slider says so. "Left out" names the renter's HRA exemption in the old regime
+  (so the old-regime result leans towards buying), 80C on principal, the security deposit, insurance, moving.
+  No verdict anywhere; the break-even sits beside the person's own price-growth guess.
+- Advisor: set_value rentbuy.*, run_full_analysis tab "rentbuy", get_results and the chart reader, chips,
+  follow-ups, highlight targets, knowledge line (never say which to choose; the old-regime HRA caveat).
+  New eval scenario "lab rent or buy runs the tab with the user's numbers": passed live.
+- Opus review: NO-GO (negative break-evens vanished from the bars; old regime one-sided without HRA), plus
+  the double-crossing, RBI lending limit, deposit, highlight/follow-ups. All fixed.
+- Crypto step 3 (exchange CSV) is on hold: exchanges do not publish their export layouts (WazirX exports
+  Excel), so it needs a real export to build against.
+- Tests: 325/325 engine (5 new); smokes 02-25 pass (smoke-25 new; 20/21/22 loosened for the new tab).

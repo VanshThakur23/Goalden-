@@ -35,20 +35,20 @@ const rl = fnBody(gl, 'renderLoans'), rt = fnBody(gl, 'renderTaxRegime'), rc = f
 check(/loans:\{ balance:2500000, rate:8\.75, years:15, regime:'old', slab:null,/.test(gl), '9b L.loans holds the tab state, slab null = the default slab');
 check(/tax:\{ gross:1800000, basic:720000, hra:288000, rent:360000, metro:true, ageBand:'under60',/.test(gl), '9b L.tax holds the tab state');
 check(/cover:\{ monthly:60000, years:15, inflation:6, returnRate:7, loans:2500000, goalExtra:0, goals:\[\]/.test(gl), '9b L.cover holds the tab state');
-check(/income:\['income'\], loans:\['loans'\], taxregime:\['tax'\], cover:\['cover'\]/.test(gl), '9b Reset on each tab restores its own state (TAB_STATE_KEYS)');
+check(/income:\['income'\], loans:\['loans'\], (rentbuy:\['rentbuy'\], )?taxregime:\['tax'\], cover:\['cover'\]/.test(gl), '9b Reset on each tab restores its own state (TAB_STATE_KEYS)');
 check(/\{id:'loans', short:/.test(gl) && /\{id:'taxregime', short:/.test(gl) && /\{id:'cover', short:/.test(gl) && /icon:ICON_LOANS/.test(gl) && /icon:ICON_TAXREGIME/.test(gl) && /icon:ICON_COVER/.test(gl), '9b the three tabs are in TABS, each with its own icon');
 check(/else if\(L\.tab==='loans'\) main\.innerHTML=renderLoans\(\);/.test(gl) && /else if\(L\.tab==='taxregime'\) main\.innerHTML=renderTaxRegime\(\);/.test(gl) && /else if\(L\.tab==='cover'\) main\.innerHTML=renderCover\(\);/.test(gl), '9b render() dispatches to all three');
-check(/tab==='loans'\?L\.loans : tab==='tax'\?L\.tax : tab==='cover'\?L\.cover/.test(gl), '9b the slider handler targets L.loans, L.tax and L.cover');
+check(/tab==='loans'\?L\.loans : (tab==='rentbuy'\?L\.rentbuy : )?tab==='tax'\?L\.tax : tab==='cover'\?L\.cover/.test(gl), '9b the slider handler targets L.loans, L.tax and L.cover');
 check(/querySelectorAll\('\[data-ln\]'\)/.test(gl) && /querySelectorAll\('\[data-tx\]'\)/.test(gl) && /querySelectorAll\('\[data-cv\]'\)/.test(gl), '9b the pills and the fill buttons have click handlers');
 check(/function tabFromQuery/.test(gl) && /TABS\.some\(x=>x\.id===t\)/.test(gl), '9b ?tab=taxregime opens the tab (Door 2 links to it)');
 
 // ---- India only: another country gets a note, never wrong numbers ----------------------------------
 check(/if\(L\.country!=='IN'\) return indiaOnlyTab\('Loans'/.test(rl) && /if\(L\.country!=='IN'\) return indiaOnlyTab\('Tax regime'/.test(rt) && /if\(L\.country!=='IN'\) return indiaOnlyTab\('Cover'/.test(rc), '9b all three refuse a non-India country before computing anything');
 check(/data-country="IN">Switch to India/.test(fnBody(gl, 'indiaOnlyTab')), '9b the note has a one-click switch to India');
-check(/const INDIA_ONLY_STATE = \['income', 'loans', 'tax', 'cover', 'holdings'\];/.test(gl), '9b the advisor knows which state keys are India-only');
+check(/const INDIA_ONLY_STATE = \['income', 'loans', ('rentbuy', )?'tax', 'cover', 'holdings'\];/.test(gl), '9b the advisor knows which state keys are India-only');
 check((gl.match(/INDIA_ONLY_STATE\.includes\(/g) || []).length === 2, '9b set_value and run_full_analysis both refuse an India-only value outside India');
-check(/if \(tab === 'loans' \|\| tab === 'taxregime' \|\| tab === 'cover' \|\| tab === 'holdings'\) \{\n    if \(L\.country !== 'IN'\) return \{ ok:false/.test(gl), '9b the chart and numbers readers say so outside India');
-check((gl.match(/if \(tab === 'loans' \|\| tab === 'taxregime' \|\| tab === 'cover' \|\| tab === 'holdings'\) \{/g) || []).length === 2, '9b both readers (chart and numbers) handle the three tabs, and the holdings tab of 9c');
+check(/if \(tab === 'loans' \|\| (tab === 'rentbuy' \|\| )?tab === 'taxregime' \|\| tab === 'cover' \|\| tab === 'holdings'\) \{\n    if \(L\.country !== 'IN'\) return \{ ok:false/.test(gl), '9b the chart and numbers readers say so outside India');
+check((gl.match(/if \(tab === 'loans' \|\| (tab === 'rentbuy' \|\| )?tab === 'taxregime' \|\| tab === 'cover' \|\| tab === 'holdings'\) \{/g) || []).length === 2, '9b both readers (chart and numbers) handle the three tabs, and the holdings tab of 9c');
 
 // ---- clamps: the page's own, against the engine's and the advisor's ranges ---------------------------
 const grab = (re, what) => { const m = gl.match(re); if (!m) throw new Error('cannot find ' + what); return m[0]; };
@@ -168,8 +168,8 @@ check(/tab:tab, cover:G\.country==='IN'&&G\.cover\?coverState\(\):null/.test(g2)
 }
 
 // ---- advisor --------------------------------------------------------------------------------------------------------
-check(/TAB_FOR = \{[^}]*loans:'loans', tax:'taxregime', cover:'cover'/.test(gl) && /loans: 'loans', tax: 'tax', cover: 'cover'/.test(gl), '9b TAB_FOR and the touched-selector map know the three tabs');
-check(/enum:\['retirement','stepup','swp','income','loans','taxregime','cover','holdings','fx','joint','mc','health'\]/.test(gl) && /loans:'loans', taxregime:'tax', cover:'cover'/.test(gl), '9b run_full_analysis accepts loans, taxregime and cover (the tax tab\'s state key is "tax")');
+check(/TAB_FOR = \{[^}]*loans:'loans', (rentbuy:'rentbuy', )?tax:'taxregime', cover:'cover'/.test(gl) && /loans: 'loans', (rentbuy: 'rentbuy', )?tax: 'tax', cover: 'cover'/.test(gl), '9b TAB_FOR and the touched-selector map know the three tabs');
+check(/enum:\['retirement','stepup','swp','income','loans',('rentbuy',)?'taxregime','cover','holdings','fx','joint','mc','health'\]/.test(gl) && /loans:'loans', (rentbuy:'rentbuy', )?taxregime:'tax', cover:'cover'/.test(gl), '9b run_full_analysis accepts loans, taxregime and cover (the tax tab\'s state key is "tax")');
 check(/type === 'boolean'/.test(fnBody(gl, 'advisorSetValue')) && /must be true or false/.test(fnBody(gl, 'advisorSetValue')), '9b set_value takes true/false for the two yes-or-no inputs');
 check(/tool:'Loans', charts:\[/.test(gl) && /tool:'Tax regime', charts:\[/.test(gl) && /tool:'Cover', charts:\[/.test(gl), '9b the advisor can read the charts of all three');
 check(/tool:'Loans', note:/.test(gl) && /tool:'Tax regime', rulesAsOf:TAX_REGIME_IN\.asOf/.test(gl) && /tool:'Cover', note:'sizes only; no premiums are shown or known'/.test(gl), '9b the advisor can read the numbers of all three, with the rule year and the no-premium note');
