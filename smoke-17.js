@@ -41,7 +41,7 @@ for (const fn of ['liveNudgesHTML', 'liveRangePillsHTML', 'liveVerdictHTML', 're
   check(new RegExp('function ' + fn + '\\(').test(gl), `goalden-lab.html: ${fn} defined`);
 }
 check(/const LIVE_RANGES=\[\{id:'1'[^\]]*\{id:'max'/.test(gl), 'goalden-lab.html: period pills run 1Y, 3Y, 5Y, 10Y, Max');
-check(/liveRangePillsHTML\(ready\) \+ liveVerdictHTML\(/.test(gl.replace(/\s+/g, ' ')) || /liveRangePillsHTML\(ready\)\s*\+\s*liveVerdictHTML\(/.test(gl), 'goalden-lab.html: the verdict card sits directly under the pills');
+check(/liveRangePillsHTML\(ready\) \+ liveVerdictHTML\(/.test(gl.replace(/\s+/g, ' ')) || /liveRangePillsHTML\(ready\)\s*\+\s*(\(hasCrypto \? liveCryptoNoteHTML\(ready\) : ''\)\s*\+\s*)?liveVerdictHTML\(/.test(gl), 'goalden-lab.html: the verdict card sits directly under the pills (after the crypto note when there is one)');
 check(/data-live-range/.test(gl), 'goalden-lab.html: pills carry a data-live-range handler hook');
 check(/live\.verdicts = L\.live\._verdict && L\.live\._verdict\.sig === nowSig/.test(gl), 'goalden-lab.html: the advisor sees the verdicts, and only when they match the mix on screen');
 

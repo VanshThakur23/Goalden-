@@ -4729,3 +4729,23 @@ standing over the founder's shoulder.
 - Advisor knows where each statement comes from.
 - CRYPTO-PLAN.md: what other apps do, the Indian rules (30% + cess, no set-off, 1% TDS), a three-step plan.
 - Tests: 319/319 engine; smokes 02-24 pass (7 new guide/report checks).
+
+## 2026-11-03 - Claude Code - Crypto steps 1 and 2 (CRYPTO-PLAN.md)
+- **My holdings: crypto is its own category** ("Crypto (Bitcoin, Ether, other coins)"), read from names like
+  Bitcoin, BTC, Ethereum, USDT. It sits beside the mix (no risk profile has a crypto part). A card shows its
+  share of everything (flagged over 5%), past falls (Bitcoin -77% Nov 2021-Nov 2022, over -80% in 2018), and
+  the tax on selling each coin: 31.2% of each gain (TAX_IN.vda + cess), a loss set off against nothing (not
+  even another coin), 1% TDS held back on every exchange sale (a prepayment). Outside the Rs 1.25 lakh equity
+  booking. Old rows saved as "Something else" with a coin's name move to Crypto.
+- **Test Real Investments: Bitcoin and Ether** (BTC-INR/ETH-INR; BTC-USD/ETH-USD for the US) in a Crypto
+  class, never among the empty-search starters. The price audit treats crypto's real moves as real (jump bar
+  60%, a CRYPTO caution flag instead of "implausible"; still unusable past 300%/250%). Crypto is its own
+  market, so its links to shares are measured week by week (it trades at weekends).
+- **Never a recommendation or a planning rate:** with crypto in the mix there is no "best split" verdict,
+  no Best balance / jump buttons, no 10-year "grows to" figure, and the mix return is not carried to
+  Retirement. A note above the numbers says the frontier leans on crypto's past rise. Advisor tools mark
+  crypto (crypto:true, cryptoNote) and one rule in ADVISOR_KNOWLEDGE forbids using its return anywhere.
+- A name typed under the wrong class filter ("bitcoin" with Equity on) still finds it, and says so.
+- Opus review: NO-GO on the first pass (multi-asset jump, Best balance button, 10-year growth, TDS wording);
+  all five MUST-FIX and the SHOULD-FIX items fixed and browser-checked.
+- Tests: 320/320 engine (new crypto test); smokes 02-24 pass.

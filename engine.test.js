@@ -3892,6 +3892,23 @@ test('holdings: a cost of zero or garbage means the cost is not known', () => {
   assert.strictEqual(r.rows[0].cost, null);
   assert.strictEqual(r.rebalance.sells[0].worked, false);
 });
+test('holdings: crypto sits beside the mix, and each coin\'s gain is taxed at 30% plus cess with no loss set off', () => {
+  const r = engine.reviewHoldings({ target: { eq: 0.6, de: 0.4, hy: 0 }, holdings: [
+    { name: 'Nifty 50 index fund', cat: 'index', value: 900000, cost: 600000 },
+    { name: 'Bitcoin', cat: 'crypto', value: 100000, cost: 40000 }, { name: 'Ether', cat: 'crypto', value: 30000, cost: 50000 },
+    { name: 'Some coin', cat: 'crypto', value: 20000 }] });
+  approx(r.mixTotal, 900000); approx(r.outside.crypto, 150000); approx(r.crypto.share, 150000 / 1050000);
+  // Bitcoin's 60,000 gain is taxed in full; Ether's 20,000 loss does not reduce it; the coin with no cost is not guessed.
+  approx(r.crypto.taxIfSold, 60000 * 0.30 * 1.04); approx(r.crypto.lossNotSetOff, 20000); assert.strictEqual(r.crypto.unknownCost, 1);
+  approx(r.crypto.tds, 1500);
+  // not a fund (no plan), and none of it reaches the equity rebalancing or its tax-free limit
+  assert.strictEqual(r.rows.find(x => x.name === 'Bitcoin').plan, null);
+  assert.ok(r.rebalance.sells.every(s => s.cls !== 'crypto'));
+  for (const n of ['Bitcoin', 'BTC', 'Ethereum', 'my crypto', 'USDT', 'Dogecoin']) assert.strictEqual(engine.holdingCategoryFromName(n), 'crypto', n);
+  for (const n of ['Tata Ethical Fund', 'Invesco India - Invesco Global Blockchain FoF', 'Nippon India ETF Gold BeES']) assert.notStrictEqual(engine.holdingCategoryFromName(n), 'crypto', n);
+  const none = engine.reviewHoldings({ holdings: [{ name: 'A', cat: 'largecap', value: 1000 }] });
+  assert.strictEqual(none.crypto.value, 0); assert.strictEqual(none.crypto.tds, 0);
+});
 test('holdings: the mix is shares of equity + debt + hybrid, with gold, other and unplaced money shown beside it', () => {
   const r = engine.reviewHoldings({ target: { eq: 0.5, de: 0.35, hy: 0.15 }, holdings: [
     { name: 'A', cat: 'largecap', value: 600000 }, { name: 'B', cat: 'liquid', value: 300000 }, { name: 'C', cat: 'baf', value: 100000 },

@@ -235,6 +235,12 @@ const TAX_IN = {
   asOf: 'FY 2026-27', cess: 0.04,
   equityLtcg: 0.125, equityLtcgExemption: 125000, equityStcg: 0.20,
   otherLtcg: 0.125,
+  // Crypto and other virtual digital assets: a flat 30% on the gain (plus cess; surcharge at high incomes is left out),
+  // only the cost deductible, a loss set off against nothing (not even another coin's gain) and never carried forward;
+  // 1% TDS on each sale, a prepayment, not an extra tax. The Rs 50,000 / Rs 10,000 yearly limits turn on whether the
+  // BUYER is a "specified person", so an Indian exchange deducts it on every sale from the first rupee, losses included.
+  // s.115BBH and s.194S of the 1961 Act until 31 Mar 2026, carried into the Income-tax Act 2025; Budget 2026 kept them.
+  vda: 0.30, vdaTds: 0.01,
   grandfatherDate: '2018-01-31',   // s.112A: cost is stepped up to this day's price
   debtSlabFrom: '2023-04-01',
   newRegimeSlabs: [0, 15, 20, 25, 30],   // marginal rates that actually apply; see above
@@ -999,7 +1005,7 @@ const RISK_PROFILES_IN = {
   aggressive:       { name: 'Aggressive',              eq: 0.85, de: 0.10, hy: 0.05 },
 };
 
-// cls: equity / debt / hybrid are the three parts of a risk profile; gold and other sit outside it.
+// cls: equity / debt / hybrid are the three parts of a risk profile; gold, crypto and other sit outside it.
 // job: categories with the same job are the ones the duplicate note groups (a Nifty 50 index fund and a large-cap fund
 // hold largely the same companies); null means no claim is made about overlap.
 const HOLDING_CATS_IN = [
@@ -1025,7 +1031,8 @@ const HOLDING_CATS_IN = [
   { id: 'arbitrage',  label: 'Arbitrage fund',                                 cls: 'hybrid', job: 'arbitrage',  jobLabel: 'arbitrage' },
   { id: 'otherhybrid', label: 'Other hybrid fund',                             cls: 'hybrid', job: null },
   { id: 'gold',       label: 'Gold or silver fund, ETF or bond',               cls: 'gold',   job: 'gold',       jobLabel: 'gold' },
-  { id: 'other',      label: 'Something else (property, crypto, ...)',         cls: 'other',  job: null },
+  { id: 'crypto',     label: 'Crypto (Bitcoin, Ether, other coins)',           cls: 'crypto', job: null },
+  { id: 'other',      label: 'Something else (property, ...)',                 cls: 'other',  job: null },
 ];
 
 // The category a fund's own name settles, or null. Order matters: the more specific words come first ("dynamic asset
@@ -1036,6 +1043,9 @@ function holdingCategoryFromName(name) {
   if (!n.trim()) return null;
   if (/nasdaq|fang|nyse|\b(us|u\.s\.|international|global|overseas|world|emerging markets?|feeder|china|japan|hang seng|taiwan|europe|asia)\b|s&p ?500/.test(n)) return 'intl';
   if (/\bgold\b|\bsilver\b/.test(n)) return 'gold';
+  // No Indian mutual fund holds coins, and a blockchain fund of funds says "global" and is placed above, so these words
+  // mean the coin itself.
+  if (/\b(bitcoin|btc|ethereum|ether|eth|crypto|cryptocurrency|solana|dogecoin|xrp|ripple|cardano|usdt|tether|usdc|bnb|polygon|matic|litecoin|ltc|shiba)\b/.test(n)) return 'crypto';
   if (/arbitrage/.test(n)) return 'arbitrage';
   if (/balanced advantage|dynamic asset|asset allocat/.test(n)) return 'baf';
   if (/aggressive hybrid|equity\s*(&|and)\s*debt/.test(n)) return 'aggrhybrid';
@@ -1098,7 +1108,7 @@ function reviewHoldings(o) {
   const clampN = (v, lo, hi, d) => { v = Number(v); return isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; };
   const rows = (Array.isArray(o && o.holdings) ? o.holdings : []).slice(0, 60).map(h => {
     const name = String((h && h.name) || '').slice(0, 80), cat = h && Object.prototype.hasOwnProperty.call(catOf, h.cat) ? h.cat : '';
-    const isFund = !!cat && !['shares', 'fd', 'other'].includes(cat);
+    const isFund = !!cat && !['shares', 'fd', 'other', 'crypto'].includes(cat);
     return { name, cat, cls: cat ? catOf[cat].cls : null, job: cat ? catOf[cat].job : null, value: accNum(h && h.value),
       cost: h && accNum(h.cost) > 0 ? accNum(h.cost) : null,   // a cost of 0, blank or garbled means "not known", not "a free gift"
       plan: isFund || !cat ? (['direct', 'regular', 'unstated'].includes(h && h.plan) ? h.plan : fundPlanFromName(name)) : null,
@@ -1107,8 +1117,8 @@ function reviewHoldings(o) {
 
   const total = rows.reduce((s, r) => s + r.value, 0);
   const by = { equity: 0, debt: 0, hybrid: 0 };
-  let gold = 0, other = 0, unset = 0;
-  rows.forEach(r => { if (!r.cat) unset += r.value; else if (by[r.cls] !== undefined) by[r.cls] += r.value; else if (r.cls === 'gold') gold += r.value; else other += r.value; });
+  let gold = 0, other = 0, unset = 0, cryptoValue = 0;
+  rows.forEach(r => { if (!r.cat) unset += r.value; else if (by[r.cls] !== undefined) by[r.cls] += r.value; else if (r.cls === 'gold') gold += r.value; else if (r.cls === 'crypto') cryptoValue += r.value; else other += r.value; });
   const mixTotal = by.equity + by.debt + by.hybrid;
   const tg = o && o.target ? { equity: accNum(o.target.eq), debt: accNum(o.target.de), hybrid: accNum(o.target.hy) } : null;
   const tgSum = tg ? tg.equity + tg.debt + tg.hybrid : 0;
@@ -1173,7 +1183,22 @@ function reviewHoldings(o) {
     unknownCost: eqRows.filter(r => r.longTerm && r.cost === null).reduce((s, r) => s + r.value, 0),
     shortTerm: eqRows.filter(r => !r.longTerm).reduce((s, r) => s + r.value, 0) };
 
-  return { total, rows, mixTotal, mix, outside: { gold, other }, unset, overlap, cost, rebalance, target: tgt };
+  // Crypto, beside the mix: its share of everything listed, and the tax if each coin were sold today. Each gain is taxed
+  // on its own and a loss is not set off, so the tax is the sum over the coins that are up; a coin that is down saves
+  // nothing. Rows with no cost cannot be worked out and are counted, not guessed.
+  const cRows = rows.filter(r => r.cls === 'crypto').map(r => {
+    const gain = r.cost === null ? null : r.value - r.cost;
+    return { name: r.name, value: r.value, cost: r.cost, gain, tax: gain === null ? null : Math.max(0, gain) * T.vda * cess };
+  });
+  const cKnown = cRows.filter(r => r.gain !== null);
+  const crypto = { value: cryptoValue, share: total > 0 ? cryptoValue / total : 0, rows: cRows,
+    taxIfSold: cKnown.reduce((s, r) => s + r.tax, 0),
+    lossNotSetOff: cKnown.filter(r => r.gain < 0).reduce((s, r) => s - r.gain, 0),
+    unknownCost: cRows.filter(r => r.gain === null).length,
+    tds: cryptoValue * T.vdaTds,   // on selling all of it through an exchange
+    rate: T.vda * cess };
+
+  return { total, rows, mixTotal, mix, outside: { gold, other, crypto: cryptoValue }, unset, overlap, cost, rebalance, target: tgt, crypto };
 }
 
 /* ---------------------------------------------------------------------

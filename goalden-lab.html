@@ -3947,7 +3947,10 @@ function holdParseAmount(v){
 function cleanHoldRow(r){
   r=r&&typeof r==='object'?r:{};
   const cost=holdNum(r.cost);
-  return { name:String(r.name==null?'':r.name).slice(0,80), cat:HOLDING_CATS_IN.some(c=>c.id===r.cat)?r.cat:'', pc:!!r.pc,
+  let cat=HOLDING_CATS_IN.some(c=>c.id===r.cat)?r.cat:'';
+  // Before crypto had a category, a coin was saved as "Something else"; it moves across so the crypto card sees it.
+  if((cat==='other' || !cat) && holdingCategoryFromName(r.name)==='crypto') cat='crypto';
+  return { name:String(r.name==null?'':r.name).slice(0,80), cat, pc:!!r.pc,
     value:holdNum(r.value), cost:cost>0?cost:null,
     plan:['direct','regular','unstated'].includes(r.plan)?r.plan:'unstated', pp:!!r.pp, longTerm:r.longTerm!==false };
 }
@@ -3984,7 +3987,7 @@ function holdCatOptions(){
   if(holdCatOptionsHTML) return holdCatOptionsHTML;
   const grp=(label,cls)=>`<optgroup label="${label}">${HOLDING_CATS_IN.filter(c=>c.cls===cls).map(c=>`<option value="${c.id}">${c.label}</option>`).join('')}</optgroup>`;
   return holdCatOptionsHTML=`<option value="">Not set: left out of the mix</option>`+grp('Equity','equity')+grp('Debt','debt')+grp('Hybrid','hybrid')
-    +`<optgroup label="Outside the mix">${HOLDING_CATS_IN.filter(c=>c.cls==='gold'||c.cls==='other').map(c=>`<option value="${c.id}">${c.label}</option>`).join('')}</optgroup>`;
+    +`<optgroup label="Outside the mix">${HOLDING_CATS_IN.filter(c=>c.cls==='gold'||c.cls==='crypto'||c.cls==='other').map(c=>`<option value="${c.id}">${c.label}</option>`).join('')}</optgroup>`;
 }
 function holdRowHTML(r,i){
   const n=i+1;
@@ -4007,7 +4010,7 @@ function holdRowHTML(r,i){
 // Shows what a row's category lets it show: a plan only for funds, "held over a year" only for equity.
 function holdSyncRow(row,r){
   const cat=HOLDING_CATS_IN.find(x=>x.id===r.cat);
-  const isFund=!!cat && !['shares','fd','other'].includes(cat.id), eq=!!cat && cat.cls==='equity';
+  const isFund=!!cat && !['shares','fd','other','crypto'].includes(cat.id), eq=!!cat && cat.cls==='equity';
   const q=s=>row.querySelector(s);
   q('[data-hf="cat"]').value=r.cat; q('[data-hf="plan"]').value=r.plan;
   q('.hold-plan').hidden=!isFund; q('.hold-lt').hidden=!eq;
@@ -4106,7 +4109,7 @@ function holdingsOutputHTML(R){
       rows.push({name:n+': profile', value:m.target*100, label:pct(m.target), color:'#B6C2D6'});
     });
     const off=rev.mix.filter(m=>Math.abs(m.drift)>=0.01).map(m=>`${HOLD_CLS_NAME[m.cls].toLowerCase()} is ${pts(m.drift)} ${m.drift>0?'over':'under'}`);
-    const beside=[]; if(rev.outside.gold>0) beside.push(`${K(rev.outside.gold)} in gold`); if(rev.outside.other>0) beside.push(`${K(rev.outside.other)} in other things`); if(rev.unset>0) beside.push(`${K(rev.unset)} with no category yet`);
+    const beside=[]; if(rev.outside.gold>0) beside.push(`${K(rev.outside.gold)} in gold`); if(rev.outside.crypto>0) beside.push(`${K(rev.outside.crypto)} in crypto`); if(rev.outside.other>0) beside.push(`${K(rev.outside.other)} in other things`); if(rev.unset>0) beside.push(`${K(rev.unset)} with no category yet`);
     mixCard=`<div class="card is-primary"><h4>Your mix against ${p.name}</h4>
       <div class="cap">Of ${K(rev.mixTotal)} in equity, debt and hybrid holdings, ${pct(eq.share)} is equity, ${pct(de.share)} debt and ${pct(hy.share)} hybrid. The ${p.name} profile asks for ${pct(eq.target)}, ${pct(de.target)} and ${pct(hy.target)}. ${off.length?`Against it, ${off.join(', ')}.`:'You are within a point of it on all three.'}</div>
       ${barsChart('hold-mix', rows)}
@@ -4189,7 +4192,23 @@ function holdingsOutputHTML(R){
     }
   }
 
-  return holdVsIndexHTML(R)+stats+mixCard+dupCard+costCard+reCard;
+  return holdVsIndexHTML(R)+stats+mixCard+holdCryptoHTML(rev,K,pct)+dupCard+costCard+reCard;
+}
+// Crypto beside the mix. It is kept out of the profile's shares on purpose: no risk profile has a crypto part, and
+// counting it as equity would make a coin look like a diversified fund. The card says how big a slice it is, how far
+// it has fallen before, and what selling it would cost in tax under India's own rules for it (TAX_IN.vda).
+function holdCryptoHTML(rev,K,pct){
+  const cr=rev.crypto;
+  if(!cr || !(cr.value>0)) return '';
+  const big=cr.share>0.05, known=cr.rows.filter(r=>r.gain!==null);
+  const taxTxt=known.length
+    ? `Sold today, ${known.length===cr.rows.length ? 'it' : 'the '+known.length+' '+(known.length===1?'coin':'coins')+' with a cost'} would cost about <b>${K(cr.taxIfSold)}</b> in tax: ${(cr.rate*100).toFixed(1)}% of each coin's gain (30% plus cess)${cr.lossNotSetOff>0?`. The ${K(cr.lossNotSetOff)} lost on coins that are down saves nothing: a crypto loss cannot be set off against any gain, not even another coin's, or carried forward`:''}.`
+    : 'Add what you paid for each coin on the left to see the tax on selling it.';
+  return `<div class="card"><h4>Crypto</h4>
+    <p class="lg-head" style="font-size:15px">${K(cr.value)} in crypto: <b>${pct(cr.share)}</b> of everything you listed.${big?' That is more than the 5% or less many planners keep it to: a slice you could lose without the plan noticing.':''}</p>
+    <div class="cap">It is shown beside your mix, not in it: no risk profile has a crypto part, and it moves far more than an equity fund. Bitcoin fell about 77% from November 2021 to November 2022, and more than 80% in 2018; smaller coins have fallen further and some have not come back.</div>
+    <div class="cap" style="margin-top:8px">${taxTxt}${cr.unknownCost?` ${cr.unknownCost} ${cr.unknownCost===1?'coin has':'coins have'} no cost yet, so ${cr.unknownCost===1?'its':'their'} tax is not worked out.`:''}${cr.tds>0?` Selling all of it, ${K(cr.tds)} would be held back: 1% of each sale is held back as TDS (an Indian exchange deducts it on every sale, even one at a loss; the yearly limits matter mainly for sales between people); it counts towards your tax, it is not extra.`:''}</div>
+    <div class="gr-note">The Indian rules for crypto, ${advisorAttr(TAX_IN.asOf)}: a flat 30% plus 4% cess on the gain (plus surcharge at high incomes), only the purchase cost deductible, no tax-free limit and no lower long-term rate, so none of this goes in the ₹1.25 lakh tax-free equity booking. Your plan's projections never count on crypto growing. Not advice to buy or sell.</div></div>`;
 }
 // ---- From your statement (CAS) --------------------------------------------------------------------------------------
 // The PDF is read here, in the browser, by pdf.js (vendor/pdfjs, loaded only when a statement is chosen); its text goes
@@ -4315,8 +4334,8 @@ const HOLD_GUIDES={
     <li><b>NSDL, online:</b> the <a href="https://nsdlcas.nsdl.com" target="_blank" rel="noopener">NSDL CAS site</a>.</li>
     <li>Its password is usually your PAN in capital letters.</li></ol>
     <p>It shows what you hold today, not when you bought it, so "You against the index" needs the mutual fund statement as well.</p>` },
-  crypto:{ label:'Crypto', html:`<p>Crypto (WazirX, CoinDCX, Binance…) is not kept in a demat account, so no CAS includes it and nothing here can read it in. Add it by hand: a row for each coin with what it is worth today, category "Something else". What you paid is in your exchange's tax report or transaction history.</p>
-    <p>In India a gain on crypto is taxed at a flat 30% plus cess, a loss cannot be set off against anything, and 1% is deducted as TDS when you sell above a yearly limit.</p>` },
+  crypto:{ label:'Crypto', html:`<p>Crypto (WazirX, CoinDCX, Binance…) is not kept in a demat account, so no CAS includes it and nothing here can read it in. Add it by hand: a row for each coin (its name, like Bitcoin, sets the category "Crypto"), with what it is worth today and what you paid, from your exchange's tax report or transaction history. This tab then shows its share of everything and the tax on selling it.</p>
+    <p>In India a gain on crypto is taxed at a flat 30% plus cess, a loss cannot be set off against anything, and 1% of each sale is held back as TDS, which counts towards the tax.</p>` },
   none:{ label:'Nothing yet', html:`<p>Then there is nothing to download yet: a statement only exists once you hold a mutual fund or have a demat account. Try the made-up one to see what this tab shows, or add what you plan to buy by hand.</p>` }
 };
 function holdStmtGuideHTML(){
@@ -4666,7 +4685,9 @@ function holdingsResultForAdvisor(){
     statement:HOLD_STMT.status==='done' ? { source:HOLD_STMT.source, kind:HOLD_STMT.kind, asOf:HOLD_STMT.asOf, holdingsRead:HOLD_STMT.count, totalMatchesStatement:HOLD_STMT.matchesStated, notes:HOLD_STMT.notes } : undefined,
     againstIndex:holdVsIndexForAdvisor(),
     mix:rev.mixTotal>0 ? rev.mix.map(m=>({ part:m.cls, yourSharePct:+(m.share*100).toFixed(1), profileSharePct:+(m.target*100).toFixed(1), driftPoints:+(m.drift*100).toFixed(1) })) : null, mixNote:rev.mixTotal>0 ? undefined : 'Nothing listed has a category inside the mix (equity, debt or hybrid) yet, so there are no shares to compare.',
-    outsideMix:{ gold:r0(rev.outside.gold), other:r0(rev.outside.other), noCategory:r0(rev.unset) },
+    outsideMix:{ gold:r0(rev.outside.gold), crypto:r0(rev.outside.crypto), other:r0(rev.outside.other), noCategory:r0(rev.unset) },
+    crypto:rev.crypto.value>0 ? { value:r0(rev.crypto.value), shareOfAllPct:+(rev.crypto.share*100).toFixed(1), taxIfSoldToday:r0(rev.crypto.taxIfSold), lossNotSetOff:r0(rev.crypto.lossNotSetOff), coinsWithNoCost:rev.crypto.unknownCost,
+      tdsIfAllSold:r0(rev.crypto.tds), rule:'flat 30% plus 4% cess on each coin\'s gain; a loss is set off against nothing, not even another coin, and not carried forward; 1% TDS on each sale (exchanges deduct it on every sale, even at a loss) is a prepayment, not extra tax; outside the mix and outside the Rs 1.25 lakh equity exemption' } : undefined,
     sameJob:rev.overlap.map(o=>({ job:o.label, holdings:o.count, value:r0(o.value), names:o.names })),
     regularPlans:{ extraPerYear:r0(rev.cost.perYear), overYears:rev.cost.years, lessAtTheEnd:r0(rev.cost.drag), notPriced:rev.cost.unpriced, planNotStated:rev.cost.unstated, alreadyDirect:rev.cost.direct },
     gettingBack:{ overItsShareNow:r0(rb.overNow), newMoneyCounted:r0(rb.newMoney), stillOverAfterNewMoney:r0(rb.overAfter), monthsOfNewMoneyAlone:rb.monthsToFix,
@@ -5050,15 +5071,18 @@ let frontierJumpHandler = null;
 // onLiveMultiFrontierPick, ...) — reused as-is rather than duplicated,
 // so "click the button" and "click the chart" always agree on what
 // adopting a mix means.
-function frontierTakeawayHTML(currentPoint, sharpe, frontier, onJump){
-  const gap = frontierGap(frontier, currentPoint);
+// cryptoMix: crypto is in the mix, so "the best line" is drawn by its past rise: the gap is named, nothing moves there.
+function frontierTakeawayHTML(currentPoint, sharpe, frontier, onJump, cryptoMix){
+  const gap = cryptoMix ? null : frontierGap(frontier, currentPoint);
   const pct = v=>(v*100).toFixed(1)+'%';
   // Verdict colour is the green text token (on-frontier, good news) or the
   // warning token (a gap, room to improve) -- never --red, which this app reserves
   // for actual errors, not "you could be doing better." AA text tokens; the
   // chart's own greens and ochres are marks, not text.
   const verdictColor = gap ? '#9C4A2C' : '#256F55';
-  const verdictText = gap
+  const verdictText = cryptoMix
+    ? `With crypto in this mix, the blue line's best mixes lean on its past rise, so none of them is suggested here. Read the chart for how much risk each slice adds.`
+    : gap
     ? `You're leaving <b style="color:${verdictColor}">${(gap.gapPct*100).toFixed(1)} points</b> of return on the table at this risk level.`
     : `This mix is already on the best line available &ndash; nothing here earns more for the risk you're taking.`;
 
@@ -5074,7 +5098,9 @@ function frontierTakeawayHTML(currentPoint, sharpe, frontier, onJump){
   }
 
   const detail = `<div>This mix earns <b style="color:var(--paper)">${pct(currentPoint.ret)}</b> a year for <b style="color:var(--paper)">${pct(currentPoint.vol)}</b> risk &ndash; a <span class="term" data-def="Return earned per unit of risk, above a safe baseline (a bank FD). Higher is better: above 1 is generally good, above 2 very good, for a real portfolio over a full market cycle." data-you="${advisorAttr('This mix scores '+sharpe.toFixed(2)+' on that scale; a plain bank deposit scores 0, because it earns only the baseline.')}">Sharpe ratio</span> of <b style="color:var(--gold)">${sharpe.toFixed(2)}</b>. In plain terms: for every extra point of risk this mix takes on above safe cash, it earns about ${sharpe.toFixed(2)} points of extra return.</div>
-  <div style="margin-top:8px">${gap
+  <div style="margin-top:8px">${cryptoMix
+    ? `The blue line is the most return each risk level got on this history. With crypto in the mix, that line is drawn by crypto's past rise, so the distance to it is not something to close.`
+    : gap
     ? `The blue line is the <i>most</i> return possible at each risk level. At this exact risk (${pct(currentPoint.vol)}), the best mix on it earns <b style="color:#256F55">${pct(gap.frontierRetHere)}</b> &ndash; <b style="color:#256F55">${(gap.gapPct*100).toFixed(1)} points more</b> than this mix, for the identical risk. Click any point on the blue line, or the button above, to move there.`
     : `This mix already sits right on the blue line &ndash; for the risk being taken, it's already earning about as much as this combination can give.`}</div>`;
 
@@ -6371,6 +6397,12 @@ const IN_REALASSET = [
   {symbol:'BIRET.NS',name:'Brookfield India Real Estate Trust REIT',kind:'reit'},
   {symbol:'INDIGRID.NS',name:'IndiGrid InvIT (power transmission)',kind:'invit'},
 ];
+// Crypto, priced in the country's own currency (Yahoo's BTC-INR is Bitcoin in rupees). Its own class, and left out
+// of the empty-search starters, so it is there for anyone who looks and never offered as a default pick.
+const IN_CRYPTO = [{symbol:'BTC-INR',name:'Bitcoin (in rupees)'},{symbol:'ETH-INR',name:'Ether (in rupees)'}];
+const US_CRYPTO = [{symbol:'BTC-USD',name:'Bitcoin'},{symbol:'ETH-USD',name:'Ether'}];
+// Yahoo's crypto symbols are COIN-CURRENCY; no share or ETF ticker takes that shape.
+function liveIsCrypto(it){ return /^[A-Z0-9]{2,10}-(INR|USD|EUR|GBP)$/i.test(String((it && it.symbol) || '')); }
 const INSTRUMENT_INDEX_IN = [
   ...tagBlock(IN_STOCKS, {kind:'stock', klass:'equity'}),
   ...tagBlock(IN_ETF_EQUITY, {kind:'etf', klass:'equity'}),
@@ -6378,6 +6410,7 @@ const INSTRUMENT_INDEX_IN = [
   ...tagBlock(IN_ETF_INTL, {kind:'etf', klass:'intl'}),
   ...tagBlock(IN_ETF_DEBT, {kind:'etf', klass:'debt'}),
   ...tagBlock(IN_REALASSET, {klass:'realasset'}),
+  ...tagBlock(IN_CRYPTO, {kind:'crypto', klass:'crypto'}),
 ];
 
 const US_STOCKS = [
@@ -6485,6 +6518,7 @@ const INSTRUMENT_INDEX_US = [
   ...tagBlock(US_ETF_REALASSET, {klass:'realasset'}),
   ...tagBlock(US_ETF_DEBT, {kind:'etf', klass:'debt'}),
   ...tagBlock(US_ETF_INTL, {kind:'etf', klass:'intl'}),
+  ...tagBlock(US_CRYPTO, {kind:'crypto', klass:'crypto'}),
 ];
 
 // Ranked, not just filtered: with ~120-215 entries per country now (up from
@@ -6493,9 +6527,18 @@ const INSTRUMENT_INDEX_US = [
 // "V" against the old US list already collided with Visa/Chevron/Devon...;
 // worse now). Exact symbol > symbol-starts-with > name-starts-with >
 // substring, each tier alphabetised, keeps the list usable as it grows.
-const KLASS_LABELS={equity:'Equity',debt:'Debt',gold:'Gold & silver',realasset:'Real assets',intl:'International'};
-const KLASS_ORDER=['equity','debt','gold','realasset','intl'];
+const KLASS_LABELS={equity:'Equity',debt:'Debt',gold:'Gold & silver',realasset:'Real assets',intl:'International',crypto:'Crypto'};
+const KLASS_ORDER=['equity','debt','gold','realasset','intl','crypto'];
+// A name typed under the wrong filter ("bitcoin" with Equity on) still finds it in its own class, before the wider
+// market search goes looking for a lookalike.
 function searchInstrumentIndex(query, countryCode, klassFilter){
+  const own=searchInstrumentIndexIn(query, countryCode, klassFilter);
+  if(own.length || !(query||'').trim() || !klassFilter || klassFilter==='all') return own;
+  const other=searchInstrumentIndexIn(query, countryCode, 'all');
+  other.otherClass=true;
+  return other;
+}
+function searchInstrumentIndexIn(query, countryCode, klassFilter){
   const full = countryCode==='IN' ? INSTRUMENT_INDEX_IN : INSTRUMENT_INDEX_US;
   const list = (klassFilter && klassFilter!=='all') ? full.filter(i=>i.klass===klassFilter) : full;
   const q=(query||'').trim().toLowerCase();
@@ -6506,7 +6549,7 @@ function searchInstrumentIndex(query, countryCode, klassFilter){
     // that always showed ten large-cap stocks and made debt, gold and
     // international invisible until you already knew to search for them.
     const starters=[];
-    KLASS_ORDER.forEach(k=>{ starters.push(...full.filter(i=>i.klass===k).slice(0,2)); });
+    KLASS_ORDER.filter(k=>k!=='crypto').forEach(k=>{ starters.push(...full.filter(i=>i.klass===k).slice(0,2)); });
     return starters;
   }
   const tiers=[[],[],[],[]]; // exact symbol, symbol-starts, name-starts, substring
@@ -6568,7 +6611,7 @@ function computeDailyReturns(prices){
 // or smoothed here: it's only labelled. liveReadyItems() is where a
 // flagged instrument actually gets excluded (or kept, if the person
 // explicitly overrides it) — this function just reports.
-function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoAnnual, hasCatastrophicLoss, isFund){
+function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoAnnual, hasCatastrophicLoss, isFund, isCrypto){
   const flags=[];
   let level='ok';
   const bump=(lvl,code,msg,detail)=>{
@@ -6616,7 +6659,9 @@ function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoA
   // every Nifty index fund; 15% still flagged the real +17.7% election
   // day (18 May 2009) in older regular plans. 20% is the NSE market-wide
   // circuit breaker, so a diversified fund can't really move more in a day.
-  const jumpThreshold = isFund ? 0.20 : 0.35;
+  // Crypto has no circuit limit and trades every day: Bitcoin really fell 37% on 12 Mar 2020. A jump there is only
+  // suspect past 60%.
+  const jumpThreshold = isCrypto ? 0.60 : isFund ? 0.20 : 0.35;
   let worstJump=null;
   rets.forEach(x=>{ if(!worstJump || Math.abs(x.r)>Math.abs(worstJump.r)) worstJump=x; });
   if(worstJump && Math.abs(worstJump.r)>jumpThreshold){
@@ -6637,6 +6682,14 @@ function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoA
   if(rets.length>0 && zeroDays/rets.length>0.30) bump('caution','STALE',`${Math.round(zeroDays/rets.length*100)}% of days show exactly no price change — this barely moves, so its risk figure will look unrealistically low.`);
 
   if(hasCatastrophicLoss) bump('unusable','IMPLAUSIBLE','A single-day move to zero or below in this series — the compounded return cannot be computed.');
+  else if(isCrypto && (annualReturn>3 || annualVol>2.5)) bump('unusable','IMPLAUSIBLE',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — beyond even crypto's real history, almost certainly a data defect.`);
+  else if(isCrypto){
+    // Bitcoin's ten years really did average over 100% a year at 60-70% risk, so the figures are not a data defect.
+    // They are flagged for what they are instead: real, and not a rate anyone can plan on.
+    bump('caution','CRYPTO',`Crypto: ${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk is what really happened${worstJump?`, including a ${(worstJump.r*100).toFixed(0)}% day on ${worstJump.date}`:''}. A rise like this past one is not a rate to plan on, and falls of 70-80% have followed it.`);
+    if(geoAnnual!=null && Math.sign(annualReturn)!==Math.sign(geoAnnual) && annualReturn!==0 && geoAnnual!==0)
+      bump('caution','SIGNFLIP',`The average daily move was ${annualReturn>0?'positive':'negative'}, but compounded over the full window this was ${geoAnnual>0?'a net gain':'a net loss'} — see the note below.`);
+  }
   else{
     if(annualReturn>1.00 || annualVol>1.50) bump('unusable','IMPLAUSIBLE',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — implausible for a real instrument, almost certainly a data defect rather than genuine performance.`);
     else if(annualReturn>0.60 || annualVol>0.80) bump('caution','WILD',`${(annualReturn*100).toFixed(0)}% expected return / ${(annualVol*100).toFixed(0)}% risk — unusually extreme; worth a second look before trusting it.`);
@@ -6647,7 +6700,7 @@ function auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoA
 
   return {level, flags};
 }
-function computeReturnStats(prices, isFund){
+function computeReturnStats(prices, isFund, isCrypto){
   const rets=computeDailyReturns(prices);
   const n=rets.length;
   const mean=rets.reduce((s,x)=>s+x.r,0)/n;
@@ -6679,7 +6732,7 @@ function computeReturnStats(prices, isFund){
     cagr = Math.pow(prices[prices.length-1].close/prices[0].close, 1/spanYears) - 1;
   }
 
-  const quality = auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoAnnual, hasCatastrophicLoss, !!isFund);
+  const quality = auditPriceSeries(prices, rets, spanYears, annualReturn, annualVol, geoAnnual, hasCatastrophicLoss, !!isFund, !!isCrypto);
 
   return {returns:rets, n, dailyMean:mean, dailySd:sd, tradingDaysPerYear,
     annualReturn, annualVol, geoAnnual, cagr, spanYears,
@@ -6827,7 +6880,7 @@ async function liveLoadInstrument(item){
   if(chipsEl) chipsEl.innerHTML = L.live.items.map(it=>liveChipHTML(it)).join('') || '<span class="cap">Add two or more to see a frontier.</span>';
   try{
     const raw=await liveFetchHistory(item);
-    L.live.data[item.key]={status:'ready', label:raw.label||item.label, currency:raw.currency, prices:raw.prices, source:raw.source||null, sourceNote:raw.sourceNote||null, stats:computeReturnStats(raw.prices, item.type==='fund')};
+    L.live.data[item.key]={status:'ready', label:raw.label||item.label, currency:raw.currency, prices:raw.prices, source:raw.source||null, sourceNote:raw.sourceNote||null, stats:computeReturnStats(raw.prices, item.type==='fund', liveIsCrypto(item))};
   }catch(e){
     L.live.data[item.key]={status:'error', label:item.label, error:(e&&e.message)||'Could not fetch this instrument.'};
   }
@@ -6893,7 +6946,7 @@ async function liveAddFreeText(){
     const raw2=await liveFetchHistory({type:'equity', symbol});
     const item={key:symbol, symbol, label:raw2.label||symbol, type:'equity'};
     L.live.items.push(item);
-    L.live.data[item.key]={status:'ready', label:raw2.label||symbol, currency:raw2.currency, prices:raw2.prices, source:raw2.source||null, sourceNote:raw2.sourceNote||null, stats:computeReturnStats(raw2.prices, false)};
+    L.live.data[item.key]={status:'ready', label:raw2.label||symbol, currency:raw2.currency, prices:raw2.prices, source:raw2.source||null, sourceNote:raw2.sourceNote||null, stats:computeReturnStats(raw2.prices, false, liveIsCrypto(item))};
     L.live.freeText=''; L.live.freeTextError=null;
   }catch(e){
     L.live.freeTextError=(e&&e.message)||'Could not find that ticker.';
@@ -7189,12 +7242,14 @@ function liveWindowStats(items, full){
     // Under ~6 months of overlap the statistics are noise; fall back to the
     // full histories and say so on screen rather than print fake precision.
     if(cut.length<120){ tooShort=true; return d.stats; }
-    const st=computeReturnStats(cut, it.type==='fund');
+    const st=computeReturnStats(cut, it.type==='fund', liveIsCrypto(it));
     // Weekly (last close of each ISO week) returns and a market tag, used by
     // computeCovarianceMatrix for cross-market pairs.
     const byWeek=new Map(); cut.forEach(p=>{ const dt=new Date(p.date+'T00:00:00Z'); const day=(dt.getUTCDay()+6)%7; const monday=new Date(dt-day*864e5).toISOString().slice(0,10); byWeek.set(monday, p.close); });
     const wk=[...byWeek.entries()]; const weekly=[]; for(let k=1;k<wk.length;k++) weekly.push({date:wk[k][0], r:wk[k][1]/wk[k-1][1]-1});
-    return Object.assign({}, st, {weekly, market: d.currency || 'INR'});
+    // Crypto counts as its own market: it trades at weekends, so its Monday return holds three days' moves against a
+    // share's one, and same-date daily returns would understate how they move together.
+    return Object.assign({}, st, {weekly, market: liveIsCrypto(it) ? 'CRYPTO' : (d.currency || 'INR')});
   });
   const years=(new Date(win.end)-new Date(win.start))/(365.25*24*3600*1000);
   const res={stats, window:Object.assign({}, win, {years, tooShort, converted:conv})};
@@ -7789,7 +7844,8 @@ function liveEquityResultsHTML(){
     ? `<div class="cap" style="padding:0 2px 8px">${L.live.klassFilter==='all'?'A couple of starting picks from every asset class. Search above to see more, or filter to just one.':`Showing ${(KLASS_LABELS[L.live.klassFilter]||'').toLowerCase()} only.`}</div>`
     : '';
   if(!results.length) return emptyNote + liveMarketResultsHTML(already);
-  return emptyNote + results.map(r=>{
+  const otherNote = results.otherClass ? `<div class="cap" style="padding:0 2px 8px">Nothing under ${(KLASS_LABELS[L.live.klassFilter]||'this filter').toLowerCase()}; found in other classes:</div>` : '';
+  return emptyNote + otherNote + results.map(r=>{
     const disabled=already.has(r.symbol);
     return `<button class="live-result-btn"${disabled?' disabled style="opacity:.35;cursor:default"':` data-live-add-equity="${r.symbol}" data-live-add-name="${r.name}"`}>
       <span>${r.name}${disabled?' <span class="cap" style="font-size:10.5px">(added)</span>':''}</span>
@@ -8122,9 +8178,15 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
     : `Real prices show <b style="color:var(--paper)">${a.symbol}</b> and <b style="color:var(--paper)">${b.symbol}</b> ${corrWord} (correlation <b style="color:var(--gold)">${c12.toFixed(2)}</b>). Because they move together this closely, blending them buys very little risk reduction &ndash; you're mostly just averaging their returns, not diversifying risk away.`;
   const tanSharpe = tanVol>0 ? (tanRet-rf)/tanVol : 0;
   const sharpeGap = tanSharpe - currentSharpe;
-  const hasGap = sharpeGap > 0.05;
-  const verdictColor = hasGap ? '#9C4A2C' : '#256F55';   // text, so the AA tokens
-  const verdictText = hasGap
+  // With crypto in the pair, the best-Sharpe split is its past rise talking (it lands at 60% Bitcoin on 2016-2026), so
+  // it is named as that and nothing offers to move there.
+  const cryptoPair = liveIsCrypto(a) || liveIsCrypto(b);
+  const hasGap = sharpeGap > 0.05 && !cryptoPair;
+  const verdictColor = cryptoPair ? 'var(--paper)' : hasGap ? '#9C4A2C' : '#256F55';   // text, so the AA tokens
+  const bothCrypto = liveIsCrypto(a) && liveIsCrypto(b);
+  const verdictText = cryptoPair
+    ? `On this history alone the "best" split would be ${(wTan*100).toFixed(0)}% ${advisorAttr(a.symbol)} / ${((1-wTan)*100).toFixed(0)}% ${advisorAttr(b.symbol)}: that is crypto's past rise talking, not a mix to hold. What this shows is your split's risk, ${(currentVol*100).toFixed(1)}% a year${bothCrypto ? '' : `, against ${((liveIsCrypto(a)?volB:volA)*100).toFixed(1)}% without the crypto`}.`
+    : hasGap
     ? `The best trade-off between risk and reward here is <b style="color:${verdictColor}">${(wTan*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:${verdictColor}">${((1-wTan)*100).toFixed(0)}% ${b.symbol}</b> &ndash; your split earns less reward per unit of risk than that.`
     : `Your split is already close to the best trade-off between risk and reward these two instruments can offer.`;
 
@@ -8200,7 +8262,7 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
       <div class="fc-dest-nums">${pct(retDest)} return &middot; ${pct(volDest)} risk</div>
     </button>`;
   };
-  const destsHTML = noTradeoff ? '' : `<div class="fc-dests">
+  const destsHTML = noTradeoff || cryptoPair ? '' : `<div class="fc-dests">
     ${destCard('Play it safe', wMinVar, minVarRet, minVarVol)}
     ${destCard('Best balance', wTan, tanRet, tanVol, 'fc-dest-rec')}
     ${destCard('Go for growth', wGrowth, hiEnd.ret, hiEnd.vol)}
@@ -8208,10 +8270,12 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
 
   const detail = `<div>${corrLine}</div>
   <div style="margin-top:8px">Your mix earns <b style="color:var(--paper)">${pct(currentRet)}</b> a year for <b style="color:var(--paper)">${pct(currentVol)}</b> risk &ndash; Sharpe <b style="color:var(--gold)">${currentSharpe.toFixed(2)}</b>.</div>
-  <div style="margin-top:8px">${hasGap
+  <div style="margin-top:8px">${cryptoPair
+    ? `The highest return per unit of risk on this history is at ${(wTan*100).toFixed(0)}% ${a.symbol} / ${((1-wTan)*100).toFixed(0)}% ${b.symbol}, earning ${pct(tanRet)} for ${pct(tanVol)} risk. With crypto in the pair that point is set by its past rise, so it is shown, not suggested.`
+    : hasGap
     ? `The single best trade-off between risk and reward here (the <span class="term" data-def="The point on the curve with the highest Sharpe ratio: the mix that earns the most extra return per unit of extra risk, above the risk-free rate. Where the Capital Allocation Line touches the frontier.">tangency point</span>) is <b style="color:var(--gold)">${(wTan*100).toFixed(0)}% ${a.symbol}</b> / <b style="color:var(--gold)">${((1-wTan)*100).toFixed(0)}% ${b.symbol}</b>, earning ${pct(tanRet)} for ${pct(tanVol)} risk (Sharpe ${tanSharpe.toFixed(2)}). Drag the slider toward it, click the dark dot on the chart, or use the button above, to close the gap.`
     : `The single best trade-off between risk and reward these two instruments can offer is ${(wTan*100).toFixed(0)}% ${a.symbol} / ${((1-wTan)*100).toFixed(0)}% ${b.symbol} &ndash; your split is already close to it.`}</div>
-  ${moneyDetailLine}
+  ${cryptoPair ? '' : moneyDetailLine}
   ${rangeDetailLine}`;
 
   return `<div class="fcard">
@@ -8221,14 +8285,14 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
       <div class="stat fc-tile"><div class="stat-label">Your risk</div><div class="stat-value">${pct(currentVol)}</div></div>
       <div class="stat fc-tile"><div class="stat-label">Sharpe ratio</div><div class="stat-value">${currentSharpe.toFixed(2)}</div></div>
     </div>
-    <div class="fc-money-tiles">
+    ${cryptoPair ? '' : `<div class="fc-money-tiles">
       <div class="stat fc-money-tile fc-money-in"><div class="stat-label">You put in</div><div class="stat-value">${cfgC.compact(illustrateAmt)}</div></div>
       <div class="stat fc-money-tile fc-money-out"><div class="stat-label">Grows to in ${illustrateYrs} yrs</div><div class="stat-value">${cfgC.compact(illustrateFv)}</div></div>
-    </div>
+    </div>`}
     ${divBenefitHTML}
     ${destsHTML}
     ${edgeLine}
-    ${shortMoneyLine}
+    ${cryptoPair ? '' : shortMoneyLine}
     ${rangeLine}
     ${jumpBtn}
     ${explainDropdown('Show the full breakdown', detail)}
@@ -8317,8 +8381,8 @@ function liveMultiAssetHTML(computed, rfPct){
     <h4>Efficient frontier${infoIcon('The faint dots are 3,000 random weight combinations (seeded, so they repeat identically), to show the range of mixes you could hold. The blue line is solved exactly: for each risk level it is the long-only mix with the highest possible return, the same method Build a Portfolio uses.')}</h4>
     <div class="cap">Annualised from real daily prices over the shared window: ${items.map(it=>it.symbol).join(', ')}. Higher up is more return, further right is more risk &ndash; the blue line is the best you could have done at each risk level, and the ringed marker labelled YOUR MIX is where this exact mix actually sits.</div>
     ${frontierChart(cloud, frontier, assetPoints, currentPoint, 'live-multi-frontier-echart', onLiveMultiFrontierPick, rf)}
-    <div class="gr-note" style="margin-top:10px">${frontierTakeawayHTML(currentPoint, currentSharpe, frontier, onLiveMultiFrontierPick)}</div>
-    ${moneyLine}
+    <div class="gr-note" style="margin-top:10px">${frontierTakeawayHTML(currentPoint, currentSharpe, frontier, onLiveMultiFrontierPick, items.some(liveIsCrypto))}</div>
+    ${items.some(liveIsCrypto) ? '' : moneyLine}
     ${rangeLine}
   </div>
   <div class="card">
@@ -8416,7 +8480,8 @@ function liveOutputHTML(ready, rfPct){
   // carried figure is always the whole shared history's, never a 1Y or 3Y pill's:
   // a short lucky or unlucky stretch would pass as a long-run rate.
   const mixRet = liveFullWindowMixRet(isTwoAsset ? ready : multiComputed.items, growthWeights);
-  return errorBanner + liveRangePillsHTML(ready) + liveVerdictHTML(isTwoAsset ? ready : multiComputed.items, growthWeights) + (isTwoAsset ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(multiComputed, rfPct))
+  const hasCrypto = ready.some(liveIsCrypto);
+  return errorBanner + liveRangePillsHTML(ready) + (hasCrypto ? liveCryptoNoteHTML(ready) : '') + liveVerdictHTML(isTwoAsset ? ready : multiComputed.items, growthWeights) + (isTwoAsset ? liveTwoAssetHTML(ready, rfPct) : liveMultiAssetHTML(multiComputed, rfPct))
     + liveGrowthCardHTML(isTwoAsset ? ready : multiComputed.items, growthWeights)
     + liveSipCardHTML(isTwoAsset ? ready : multiComputed.items, growthWeights)
     + instrumentDropdown
@@ -8424,7 +8489,15 @@ function liveOutputHTML(ready, rfPct){
       The <b>expected-return</b> figure ((1+average daily move)<sup>trading days per year</sup> &minus; 1) is what the frontier, Sharpe ratio and tangency point below are built from. Mean-variance portfolio math needs a return figure that combines <i>linearly</i> across assets &ndash; a compounded return does not have that property, so the optimiser can't use it. This is also the convention used in the coursework this tool extends (a two-asset frontier worksheet), hand-checked against its own SBI figures (~29.9% return, ~21.3% risk over a comparable window) before being trusted here.<br><br>
       The <b>compounded</b> figure is what actually holding the instrument the whole window would have turned into &ndash; the number a real account statement would show. The two can disagree a lot for a volatile instrument: something that falls 50% then rises 50% averages 0% on the expected-return measure but is actually down 25% compounded. Both numbers are real; they answer different questions, so both are shown rather than picking one and hiding the other.
     `)
-    + nextStepCard([{q:'Turn this real-world return into a savings plan.', tab:'retirement', carry:{field:'ret.preRate', value:Math.max(4, Math.min(16, Math.round(mixRet*1000)/10))}}]);
+    + (hasCrypto
+      ? `<div class="gr-note" role="note">Not carried into a savings plan: this mix holds crypto, and its past rise is not a rate to plan decades on. Take crypto out to carry the rest's return across.</div>`
+      : nextStepCard([{q:'Turn this real-world return into a savings plan.', tab:'retirement', carry:{field:'ret.preRate', value:Math.max(4, Math.min(16, Math.round(mixRet*1000)/10))}}]));
+}
+// Said once, above the numbers, whenever crypto is in the mix: the frontier is built from what happened, and crypto's
+// decade makes any mix holding it look best in hindsight. Read it for the risk a small slice adds, not for how much.
+function liveCryptoNoteHTML(items){
+  const coin={ BTC:'Bitcoin', ETH:'Ether' }, names=items.filter(liveIsCrypto).map(it=>{ const c=it.symbol.split('-')[0].toUpperCase(); return advisorAttr(coin[c] || c); }).join(' and ');
+  return `<div class="from-stmt" role="note"><b>${names} in this mix.</b> Everything below is built from what really happened, and crypto's past ten years make any mix holding it look best in hindsight, so the "best" mixes lean towards it. Read this for how much a small slice adds to the ups and downs and the worst fall, not for how much to hold. Its links with the others are measured week by week, because crypto trades at weekends. Not advice to buy or sell.</div>`;
 }
 
 function renderLiveFrontier(){
@@ -12879,13 +12952,14 @@ Tools:
 - Retirement Lab: age, retire age, monthly expenses, lifestyle %, inflation, growth before/after retirement, life expectancy; stress-tests with a real historical market crash, plus a drawdown Monte Carlo to show sequence-of-returns risk.
 - Build a Portfolio: mixes fund categories with preset or custom weights and shows the efficient frontier (return vs risk trade-off).
 - Test Real Investments (Live Frontier): picks real stocks/ETFs/funds and shows how mixing them actually performed — real risk, real return, real history.
+- Crypto (Bitcoin BTC-INR, Ether ETH-INR, any COIN-INR/COIN-USD symbol, or a My holdings row in category crypto): its past ten years are a rise that cannot be planned on. Never call a crypto-heavy mix best or suggest moving towards one, never use a crypto or crypto-mix return as a growth rate anywhere (ret.preRate, meanReturn, a projection), and never suggest buying or selling crypto. Talk about it only as risk: how much a small slice adds to the ups and downs and the worst fall. Tool results mark it with crypto:true.
 - Step-Up SIP: a SIP that grows with income each year.
 - Sustainable Withdrawal (SWP): whether a corpus can fund a fixed inflation-adjusted withdrawal for a set span.
 - Retirement Income (India only): once there is a pot, how to draw it. Splits it into liquid, debt and equity buckets by when each part is needed; compares an SWP from a fund with FD interest after Indian tax (an SWP taxes only the gain part of each sale, FD interest is taxed in full at the slab, and moving a fund pot into an FD costs tax to sell it first; both balances are shown as what would be left after tax if everything were sold that year); runs one historical crash through the bucket plan and through a single rebalanced pot; sizes the NPS pension (for most subscribers at least 20% of the pot must buy an annuity, government employees still at least 40%, small pots have their own rules; cash up to 60% is tax-free; the annuity rate is the user's own assumption, not a quote). It shows both sides of each comparison and never picks one for the user.
 - Loans (India only): weighs prepaying the home loan against investing the same lump sum. Prepaying saves a certain rate; under the old tax regime the interest relief (up to ₹2 lakh a year, s.24(b)) lowers that rate by the user's slab, under the new regime there is no relief on a self-occupied home. The investment side is the user's own expected return, taxed as the kind of investment it is (equity fund, debt fund or FD). It shows a break-even (the return the investment must earn before tax to match) and never a verdict. It also takes credit-card and personal-loan balances and shows the order to clear them, highest rate first, and the interest that saves.
 - Tax regime (India only): old or new regime on the same pay, worked from salary, HRA, 80C, NPS, health premium and home-loan interest, with the tax under each, the difference, and the deductions the old regime needs to win. It also says what that means for the plan: on the new regime 80C, 80CCD(1B), 80D and home-loan interest give no tax benefit, so ELSS and PPF are chosen on returns and lock-in, not for tax. The rule year is shown on screen and is a figure to re-check against the Income Tax Department. Surcharge above ₹50 lakh is not modelled, and the HRA rule was read from a search excerpt, not the full page.
 - Cover (India only): how much insurance, never what it costs. Term cover for the family = their spending for the years they would rely on the income (grown by inflation, paid out of a pot earning a stated return) + loans + goal pots at today's value − savings − term cover already held; a retirement goal is left out. Health cover = a family floater plus a super top-up for the rest of a total target, grown at medical inflation, shown short with and without employer cover (which ends with the job). There are no premium figures anywhere; the health starting sizes by city are rules of thumb, not market figures or quotes.
-- My holdings (India only): what the user already owns, typed in or read from their Consolidated Account Statement (CAS) PDF, against the risk profile from the Full Plan. Shows the real mix of equity, debt and hybrid against the profile's shares (gold, other things and holdings with no category sit beside the mix), the funds that share a category and so a job ("four large-cap funds doing one job", by category only: whether two funds hold the same companies needs each fund's own portfolio, which this page does not read), what Regular plans cost over the years against Direct (an estimate, about 1% a year for an active fund and 0.4% for an index fund; debt, gold and arbitrage funds are not priced), and how to close a gap: new money first, then sales, with the equity tax worked from the cost the user gave (₹1.25 lakh a year of long-term gains is free, the rest 12.5% plus cess). It never rates or ranks a fund and never says which fund to buy or sell; moving from Regular to Direct is a sale and is taxed. Use set_holdings to enter what the user tells you, never an invented holding or amount. The user can fill the list from their CAS themselves, in the "From your statement" box on the tab (you cannot open files): the detailed statement from CAMS or KFintech (mutual funds, every purchase) or the one from NSDL or CDSL (shares, ETFs, bonds and gold bonds too). Where to get it: mutual funds, on camsonline.com (Statements, CAS - CAMS+KFintech, choose Detailed; one request covers every fund house, emailed in minutes, locked with a password they choose); shares, the NSDL or CDSL statement already emailed to them (password usually their PAN in capitals), or the CDSL CAS page with PAN, demat number and an OTP. A broker app (Zerodha, Groww...) is only where they bought: the record and the statement come from these. Crypto is in no CAS: they add it by hand as "Something else". The panel's "Where do I get my statement?" shows the same steps. It is read on their device; the file and its password are never sent. With a detailed CAMS/KFintech statement the tab also shows "You against the index": the user's equity funds against the same money, on the same days, in a Nifty 50 index fund, overall and fund by fund (get_results returns it as againstIndex). Say the gap in rupees and in yearly return; a fund behind the index is information, not a reason to sell: selling is taxed and past returns do not repeat.
+- My holdings (India only): what the user already owns, typed in or read from their Consolidated Account Statement (CAS) PDF, against the risk profile from the Full Plan. Shows the real mix of equity, debt and hybrid against the profile's shares (gold, other things and holdings with no category sit beside the mix), the funds that share a category and so a job ("four large-cap funds doing one job", by category only: whether two funds hold the same companies needs each fund's own portfolio, which this page does not read), what Regular plans cost over the years against Direct (an estimate, about 1% a year for an active fund and 0.4% for an index fund; debt, gold and arbitrage funds are not priced), and how to close a gap: new money first, then sales, with the equity tax worked from the cost the user gave (₹1.25 lakh a year of long-term gains is free, the rest 12.5% plus cess). It never rates or ranks a fund and never says which fund to buy or sell; moving from Regular to Direct is a sale and is taxed. Use set_holdings to enter what the user tells you, never an invented holding or amount. The user can fill the list from their CAS themselves, in the "From your statement" box on the tab (you cannot open files): the detailed statement from CAMS or KFintech (mutual funds, every purchase) or the one from NSDL or CDSL (shares, ETFs, bonds and gold bonds too). Where to get it: mutual funds, on camsonline.com (Statements, CAS - CAMS+KFintech, choose Detailed; one request covers every fund house, emailed in minutes, locked with a password they choose); shares, the NSDL or CDSL statement already emailed to them (password usually their PAN in capitals), or the CDSL CAS page with PAN, demat number and an OTP. A broker app (Zerodha, Groww...) is only where they bought: the record and the statement come from these. Crypto is in no CAS: they add it by hand, one row per coin with its value and cost (category crypto, read from names like Bitcoin); the tab then shows it beside the mix with its tax: a flat 30% plus cess on each coin's gain, a loss set off against nothing, 1% TDS held back on each sale by the exchange (a prepayment), none of it in the Rs 1.25 lakh equity exemption. The panel's "Where do I get my statement?" shows the same steps. It is read on their device; the file and its password are never sent. With a detailed CAMS/KFintech statement the tab also shows "You against the index": the user's equity funds against the same money, on the same days, in a Nifty 50 index fund, overall and fund by fund (get_results returns it as againstIndex). Say the gap in rupees and in yearly return; a fund behind the index is information, not a reason to sell: selling is taxed and past returns do not repeat.
 - Cross-Border (FX): effect of currency movement on India-US investing.
 - Joint Children Corpus: overlapping education costs for multiple children from one pool.
 - Monte Carlo: thousands of random market paths to show plan likelihood, not just the average.
@@ -12997,7 +13071,7 @@ function advisorGetInstrumentStats(symbol) {
   const d = L.live.data[item.key];
   if (!d || !d.stats) return { ok:false, error:'No statistics for "'+symbol+'".' };
   const s = d.stats;
-  return { ok:true, symbol: item.symbol, label: d.label, currency: d.currency, annualReturn: s.annualReturn, annualVol: s.annualVol, geoAnnual: s.geoAnnual, cagr: s.cagr, n: s.n, startDate: s.startDate, endDate: s.endDate, spanYears: s.spanYears, quality: s.quality };
+  return { ok:true, symbol: item.symbol, label: d.label, currency: d.currency, crypto: liveIsCrypto(item) || undefined, annualReturn: s.annualReturn, annualVol: s.annualVol, geoAnnual: s.geoAnnual, cagr: s.cagr, n: s.n, startDate: s.startDate, endDate: s.endDate, spanYears: s.spanYears, quality: s.quality };
 }
 function advisorGetDetail(path) {
   // Dotted-path lookup into the COMPACT state (never raw L), so no price array
@@ -13445,7 +13519,7 @@ async function advisorAddInstrument(symbol) {
   try {
     const raw = await liveFetchHistory(item);
     L.live.items.push(item);
-    L.live.data[item.key] = { status:'ready', label: raw.label || item.label, currency: raw.currency, prices: raw.prices, source: raw.source || null, sourceNote: raw.sourceNote || null, stats: computeReturnStats(raw.prices, item.type === 'fund') };
+    L.live.data[item.key] = { status:'ready', label: raw.label || item.label, currency: raw.currency, prices: raw.prices, source: raw.source || null, sourceNote: raw.sourceNote || null, stats: computeReturnStats(raw.prices, item.type === 'fund', liveIsCrypto(item)) };
     render();
     return JSON.stringify({ ok:true, added: Object.assign({ symbol: item.symbol, label: L.live.data[item.key].label }, raw.sourceNote ? { priceSource: raw.sourceNote } : {}) });
   } catch (e) {
@@ -13514,6 +13588,7 @@ function advisorCompareLive() {
   const curSharpe = curVol > 0 ? (curRet - rf)/curVol : 0;
   return { ok:true, result: {
     holdings, correlations, tangency, minVariance: minVar,
+    cryptoNote: items.some(liveIsCrypto) ? 'Crypto is in this mix: the tangency (best-Sharpe) weights lean on its past rise and are not a mix to suggest; never use these returns as a growth rate.' : undefined,
     currentMix: { weights: wVec.map(w => +w.toFixed(3)), returnPct: +(curRet*100).toFixed(2), volPct: +(curVol*100).toFixed(2), sharpe: +curSharpe.toFixed(2) },
     riskFreeRatePct: +(rf*100).toFixed(2),
   } };
@@ -13793,7 +13868,8 @@ function advisorGetResults() {
     const items = liveReadyItems();
     if (!items.length) return { ok:false, error:'No instruments loaded yet in Test Real Investments — the user needs to add some (or use add_instrument).' };
     const lm = liveComputeMulti();
-    return { ok:true, result:{ tool:'Test Real Investments', holdings: lm.items.map((it, i) => ({ symbol:it.symbol, label:it.label, annualReturnPct:+(lm.returns[i]*100).toFixed(2), annualVolPct:+(lm.vols[i]*100).toFixed(2) })) } };
+    return { ok:true, result:{ tool:'Test Real Investments', holdings: lm.items.map((it, i) => ({ symbol:it.symbol, label:it.label, crypto:liveIsCrypto(it) || undefined, annualReturnPct:+(lm.returns[i]*100).toFixed(2), annualVolPct:+(lm.vols[i]*100).toFixed(2) })),
+      cryptoNote: lm.items.some(liveIsCrypto) ? 'This mix holds crypto: its past return is not a rate to plan on, and the best-Sharpe mixes lean on it. Not carried into any plan; describe risk only.' : undefined } };
   }
   if (tab === 'instruments') {
     const idx = c.code === 'IN' ? INSTRUMENT_INDEX_IN : INSTRUMENT_INDEX_US;

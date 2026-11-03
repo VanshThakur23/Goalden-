@@ -109,5 +109,29 @@ check(/holdStmtCheck\(\{ r, pages:n, cut, lines:ln\.length \}\)/.test(rd) && !/\
 check(/HOLD_STMT\.sample\) return ''/.test(fnBody(gl, 'holdStmtCheckHTML')) && /<textarea readonly/.test(fnBody(gl, 'holdStmtCheckHTML')), '9e the report is shown in full before it is copied, and not for the sample');
 check(/Where to get it: mutual funds, on camsonline\.com/.test(gl), '9e the advisor can say where to get a statement');
 
+// ---- crypto, step 1: its own category beside the mix, with India's own tax rules -----------------------------------
+const eng = read('goalden-engine.js'), cy = fnBody(gl, 'holdCryptoHTML');
+check(/\{ id: 'crypto',\s+label: 'Crypto \(Bitcoin, Ether, other coins\)',\s+cls: 'crypto'/.test(eng) && /vda: 0\.30, vdaTds: 0\.01,/.test(eng) && !/vdaTdsLimit/.test(eng + gl), 'crypto is its own category, taxed by TAX_IN.vda');
+check(/holdCryptoHTML\(rev,K,pct\)/.test(gl) && /cannot be set off against any gain, not even another coin's/.test(cy) && /Not advice to buy or sell/.test(cy), 'the crypto card says the share, the no-set-off rule, and gives no advice');
+check(/Bitcoin fell about 77% from November 2021 to November 2022/.test(cy) && /cr\.share>0\.05/.test(cy) && !/#C0392B|#E74C3C|\bred\b/i.test(cy), 'it says how far it has fallen, flags a slice over 5%, and uses no red');
+check(/crypto:rev\.crypto\.value>0 \?/.test(gl) && /never suggest buying or selling crypto/.test(gl), 'the advisor gets the crypto figures and is told not to advise or project it');
+check(/c\.cls==='gold'\|\|c\.cls==='crypto'\|\|c\.cls==='other'/.test(gl) && /\['shares','fd','other','crypto'\]/.test(gl), 'crypto is offered outside the mix, and is not a fund (no plan, no held-a-year box)');
+
+// ---- crypto, step 2: Bitcoin and Ether in Test Real Investments, never a recommendation or a planning rate ----------
+check(/const IN_CRYPTO = \[\{symbol:'BTC-INR'/.test(gl) && /KLASS_ORDER\.filter\(k=>k!=='crypto'\)/.test(gl), 'crypto is in the built-in list, but never among the empty-search starters');
+check(/const jumpThreshold = isCrypto \? 0\.60/.test(gl) && /bump\('caution','CRYPTO'/.test(gl), 'crypto\'s real moves are flagged as real, not held back as bad data');
+check((gl.match(/computeReturnStats\([^)]*liveIsCrypto\(/g) || []).length === 4, 'every place that measures an instrument knows whether it is crypto');
+check(/market: liveIsCrypto\(it\) \? 'CRYPTO'/.test(gl), 'crypto is its own market, so its links to shares are measured week by week');
+check(/hasCrypto\s*\?\s*`<div class="gr-note" role="note">Not carried into a savings plan/.test(gl), 'a mix with crypto is never carried into a savings plan');
+check(/const hasGap = sharpeGap > 0\.05 && !cryptoPair;/.test(gl) && /that is crypto's past rise talking, not a mix to hold/.test(gl), 'a crypto pair gets no "best split" verdict or jump button');
+check(/function searchInstrumentIndexIn\(/.test(gl) && /searchInstrumentIndexIn\(query, countryCode, 'all'\)/.test(gl), 'a name typed under the wrong filter still finds it');
+
+// ---- crypto review fixes: no "best" mix, no forward growth, TDS as exchanges apply it ------------------------------
+check(/const destsHTML = noTradeoff \|\| cryptoPair \? ''/.test(gl) && /\$\{cryptoPair \? '' : moneyDetailLine\}/.test(gl) && /\$\{cryptoPair \? '' : `<div class="fc-money-tiles">/.test(gl), 'a crypto pair has no destination buttons and no 10-year growth');
+check(/function frontierTakeawayHTML\(currentPoint, sharpe, frontier, onJump, cryptoMix\)/.test(gl) && /const gap = cryptoMix \? null :/.test(gl) && /\$\{items\.some\(liveIsCrypto\) \? '' : moneyLine\}/.test(gl), 'three or more with crypto: no gap to close, no jump, no 10-year growth');
+check(/an Indian exchange deducts it on every sale, even one at a loss/.test(gl) && !/sell more than \$\{K\(TAX_IN/.test(gl), 'TDS is said as exchanges apply it: 1% of every sale');
+check(/crypto:liveIsCrypto\(it\) \|\| undefined/.test(gl) && /cryptoNote: items\.some\(liveIsCrypto\)/.test(gl) && /never use a crypto or crypto-mix return as a growth rate anywhere/.test(gl), 'advisor tools mark crypto, and one rule covers it everywhere');
+check(/holdingCategoryFromName\(r\.name\)==='crypto'\) cat='crypto'/.test(fnBody(gl, 'cleanHoldRow')), 'a coin saved as "Something else" before moves to Crypto');
+
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
 process.exit(fail ? 1 : 0);

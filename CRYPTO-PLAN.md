@@ -1,7 +1,6 @@
 # Crypto in Goalden: plan
 
-Status: proposed, not built. Today crypto can only be typed into My holdings as "Something else", which
-leaves it out of the mix.
+Status: steps 1 and 2 built (2026-11-03); step 3 not started.
 
 ## What other apps do
 
