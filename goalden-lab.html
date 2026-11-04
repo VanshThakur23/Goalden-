@@ -3447,7 +3447,7 @@ function renderLoans(){
   const beCap=cmp.breakEven==null?'more than 100% a year':pct(cmp.breakEven)+' a year before tax';
   const gap=cmp.gapPerYear;
   // The quoted rate is charged monthly; the investment's return is yearly. Both are put on one footing here.
-  const compTxt=` Charged monthly, that is <b>${pct(cmp.loanRate)}</b> a year compounded, the same footing as a yearly return.`;
+  const compTxt=` With the interest charged monthly, the saving works out at <b>${pct(cmp.loanRate)}</b> a year, on the same footing as a yearly return.`;
   const cap1=`${loanCap}${compTxt} The same ${money(s.amount)} in ${kindWord} is expected to earn ${pct(cmp.expectedAfterTax)} a year after tax, if the ${s.expected}% you assumed holds. It would have to earn ${beCap} to match. Prepaying is a saving that is certain at today's rate; the fund's return is an expectation, and a fund can have a bad decade.`;
   const gapCap=Math.abs(gap)<1 ? `On ${money(s.amount)} the two come out level in the first year.` : `On ${money(s.amount)}, investing would come out about ${money(Math.abs(gap))} a year ${gap>0?'ahead of':'behind'} prepaying in the first year, if the return holds.`;
   const bars=[{name:'Prepaying saves', value:cmp.loanRate, label:pct(cmp.loanRate), color:'#2557C7'},
@@ -3544,7 +3544,7 @@ function renderLoans(){
   </div>
   <div class="output">
     <div class="stat-row">
-      <div class="stat"><div class="stat-label">Prepaying saves${infoIcon('The yearly rate the money you put into the loan stops costing you, after any tax relief. In the old regime, interest is deductible only up to ₹2 lakh a year, so relief is lost only on the part of the interest that was inside that limit.')}</div><div class="stat-value">${pct(cmp.loanRate)}</div><div class="stat-sub">a year, after tax, certain</div></div>
+      <div class="stat"><div class="stat-label">Prepaying saves${infoIcon('The yearly rate the money you put into the loan stops costing you, after any tax relief. In the old regime, interest is deductible only up to ₹2 lakh a year, so relief is lost only on the part of the interest that was inside that limit. The loan charges interest monthly, so this is the saving over a year with that compounding, to compare with a yearly return.')}</div><div class="stat-value">${pct(cmp.loanRate)}</div><div class="stat-sub">a year, after tax, certain</div></div>
       <div class="stat"><div class="stat-label">Investing earns</div><div class="stat-value">${pct(cmp.expectedAfterTax)}</div><div class="stat-sub">a year, after tax, expected</div></div>
       <div class="stat"><div class="stat-label">Break-even${infoIcon('The return the investment must earn before tax to leave you as well off as prepaying. Above it the investment comes out ahead on paper; below it the loan does. It is a line, not advice: the return is not certain, and prepaying cannot be undone.')}</div><div class="stat-value">${cmp.breakEven==null?'over 100%':pct(cmp.breakEven)}</div><div class="stat-sub">before tax, to match</div></div>
     </div>
@@ -3710,7 +3710,7 @@ function loansAdvisorResults(){
   const R=computeLoans(), c=R.c, s=R.s, cmp=R.cmp, pre=R.pre, av=R.av, pct=loanPct;
   return { ok:true, tool:'Loans', charts:[
     { kind:'comparison', title:'Prepay the home loan or invest', xAxis:'', yAxis:'yearly rate', note:'prepaying saves a certain rate at today\'s loan rate; the investment return is the user\'s assumption, not a forecast; '+(s.regime==='old'?'old regime: interest relief only up to ₹2 lakh a year':'new regime: no relief on a self-occupied home loan')+'; no verdict, a break-even',
-      points:[{ label:'prepaying saves (after tax)', value:pct(cmp.loanRate)+' a year' }, { label:'investing earns (after tax, expected)', value:pct(cmp.expectedAfterTax)+' a year' }, { label:'investment must earn before tax to match', value:cmp.breakEven==null?'over 100%':pct(cmp.breakEven) }, { label:'first-year interest', value:c.fmt(Math.round(cmp.schedule.firstYearInterest)) }] },
+      points:[{ label:'prepaying saves (after tax, a year, with the interest charged monthly)', value:pct(cmp.loanRate)+' a year' }, { label:'investing earns (after tax, expected)', value:pct(cmp.expectedAfterTax)+' a year' }, { label:'investment must earn before tax to match', value:cmp.breakEven==null?'over 100%':pct(cmp.breakEven) }, { label:'first-year interest', value:c.fmt(Math.round(cmp.schedule.firstYearInterest)) }] },
     { kind:'prepay', title:'What prepaying does', xAxis:'', yAxis:'', note:'before tax, instalment unchanged',
       points:[{ label:'lump sum', value:c.fmt(Math.round(Math.min(s.amount,s.balance))) }, { label:'loan ends sooner by', value:fmtMonths(pre.monthsSaved) }, { label:'interest saved', value:c.fmt(Math.round(pre.interestSaved)) }, { label:'instalment', value:c.fmt(Math.round(cmp.schedule.emi)) }] },
     { kind:'debt', title:'Costly debt, highest rate first', xAxis:'', yAxis:'', note:'a payment that does not cover a month\'s interest never clears; extra goes to the highest rate first',
@@ -4374,6 +4374,9 @@ function holdCryptoHTML(rev,K,pct){
 // from the box at the click and the box is redrawn empty. What is kept, in this page's memory only, is what the parser
 // returns, which has no name, PAN, folio or account number in it.
 let HOLD_STMT={ status:'idle' };
+// True while the list holds rows a statement filled (even after one is edited or another statement is being read):
+// those rows are never written to this browser's storage. Cleared only when the list is cleared or replaced by hand.
+let HOLD_ROWS_FROM_STMT=false;
 let HOLD_PDFJS=null;
 function holdLoadPdfJs(){
   if(HOLD_PDFJS) return HOLD_PDFJS;
@@ -4440,7 +4443,7 @@ function holdStmtApply(r, cut, sample){
       value:rest.reduce((a,x)=>a+x.value,0), cost:null, longTerm:true })]);
   }
   // A sample's rows are made up, so the yearly review does not take them as the person's.
-  L.holdings.rows=rows; markGiven('holdings.rows', !sample);
+  L.holdings.rows=rows; markGiven('holdings.rows', !sample); HOLD_ROWS_FROM_STMT=true;
   const eq=r.kind==='detailed' ? statementEquityFlows(r.schemes) : null;
   HOLD_STMT={ status:'done', sample:!!sample, source:r.source, kind:r.kind, asOf:r.asOf, count:r.holdings.length, total:r.total, matchesStated:r.matchesStated,
     notes:r.notes.concat(pooled ? [pooled+' of the smallest holdings are pooled into one row: the list holds '+HOLD_MAX+'.'] : [])
@@ -4674,7 +4677,7 @@ async function holdOpenInLive(){
     const why=lookupFailed ? ' AMFI\'s list of funds could not be reached just now; try again in a minute.' : st.sample ? ' (the sample\'s funds are made up).' : '.';
     if(items.length<2) throw new Error(items.length ? 'Only one of these holdings could be matched to a fund or a listed share, and a mix needs two.'+(lookupFailed?why:'') : 'None of these holdings could be matched to a fund or a listed share'+why);
     L.live.items=[]; L.live.data={}; L.live.selectedWeights=null;
-    items.forEach(it=>{ L.live.items.push(it); liveLoadInstrument(it); });
+    items.forEach(it=>{ it.fromStmt=true; L.live.items.push(it); liveLoadInstrument(it); });
     const tot=val.reduce((a,v)=>a+v,0), w=val.map(v=>v/tot);
     // Set straight away for the first draw; liveSyncHeldWeights re-lays them over whichever instruments load.
     if(items.length===2) L.live.weight=Math.round(w[0]*100); else L.live.selectedWeights=w;
@@ -9311,8 +9314,8 @@ function attach(){
     if(f==='profile' && HOLD_PROFILES.includes(el.dataset.val)){ s.profile=el.dataset.val; markGiven('holdings.profile'); }
     else if(f==='add'){ if(!holdAddRow('')) return; markGiven('holdings.rows'); }
     else if(f==='remove') s.rows.splice(+el.dataset.i,1);
-    else if(f==='example'){ s.rows=holdExampleRows(); markGiven('holdings.rows', false); }   // made-up rows are never reviewed
-    else if(f==='clear'){ s.rows=[]; delete L.given['holdings.rows']; HOLD_STMT={ status:'idle' }; }
+    else if(f==='example'){ s.rows=holdExampleRows(); markGiven('holdings.rows', false); HOLD_ROWS_FROM_STMT=false; }   // made-up rows are never reviewed
+    else if(f==='clear'){ s.rows=[]; delete L.given['holdings.rows']; HOLD_STMT={ status:'idle' }; HOLD_ROWS_FROM_STMT=false; }
     else if(f==='pick'){ if(!holdAddRow(el.dataset.name||'')) return; markGiven('holdings.rows'); HOLD_SEARCH={ q:'', busy:false, error:null, results:[] }; }
     else if(f==='stmtRead'){ holdReadStatement(); return; }
     else if(f==='stmtSample'){ holdReadStatement(true); return; }
@@ -12844,40 +12847,80 @@ try{ L.headerCollapsed = localStorage.getItem('goaldenLabHeaderCollapsed')==='1'
 // Lab only saved cosmetics, so persist a COMPACT snapshot (stateForAdvisor, no
 // raw price arrays) so read_other_page on the other doors has real Lab data.
 const LAB_STATE_KEY = 'goaldenLabState';
-function persistLabState(){ try{ localStorage.setItem(LAB_STATE_KEY, JSON.stringify(Object.assign({}, stateForAdvisor(), { _savedAt: Date.now() }))); }catch(e){} persistLabInputs(); }
+function persistLabState(){
+  try{
+    const snap=Object.assign({}, stateForAdvisor(), { _savedAt: Date.now() });
+    // Nothing a statement filled is written to storage: not its rows, not the instruments it sent on.
+    if(HOLD_ROWS_FROM_STMT){ snap.holdings=Object.assign({}, snap.holdings, { rows:[] }); snap.given=Object.assign({}, snap.given); delete snap.given['holdings.rows']; }
+    if(snap.live && Array.isArray(snap.live.items) && snap.live.items.some(it=>it.fromStmt)){
+      const keep=snap.live.items.filter(it=>!it.fromStmt);
+      snap.live=Object.assign({}, snap.live, { items:keep, data:Object.fromEntries(Object.entries(snap.live.data||{}).filter(([k])=>keep.some(it=>it.key===k))) });
+    }
+    localStorage.setItem(LAB_STATE_KEY, JSON.stringify(snap));
+  }catch(e){}
+  persistLabInputs();
+}
 // Refresh-resume: every tab's inputs, and which of them the person set (L.given), so a reload or a closed tab does
 // not lose the plan. Kept in this browser only. Left out: Test Real Investments' prices and Read the Company's
 // statements (both fetched again), and holdings read from a CAS statement, because the reader says the statement is
 // not kept (rows typed by hand are kept).
 function persistLabInputs(){
   try{
-    const o={ v:1, country:L.country, given:Object.assign({}, L.given), at:Date.now() };
-    LAB_INPUT_KEYS.forEach(k=>{ if(L[k]!==undefined) o[k]=L[k]; });
-    if(typeof HOLD_STMT!=='undefined' && HOLD_STMT.status==='done'){ o.holdings=Object.assign({}, L.holdings, { rows:[] }); delete o.given['holdings.rows']; }
+    // Each value that differs from its default is kept with that default, so if a default changes later an untouched
+    // old one is not brought back as if the person had chosen it (reviewGiven reads "differs from the default" as theirs).
+    const o={ v:2, country:L.country, given:{}, vals:{}, at:Date.now() };
+    LAB_INPUT_KEYS.forEach(sec=>{
+      const D=L_DEFAULTS[sec]; if(!D || !L[sec]) return;
+      Object.keys(D).forEach(k=>{
+        if(sec==='holdings' && k==='rows' && HOLD_ROWS_FROM_STMT) return;
+        if(JSON.stringify(L[sec][k])!==JSON.stringify(D[k])) o.vals[sec+'.'+k]={ v:L[sec][k], d:D[k] };
+      });
+    });
+    Object.keys(L.given).forEach(g=>{ if(!(g==='holdings.rows' && HOLD_ROWS_FROM_STMT)) o.given[g]=L.given[g]; });
     localStorage.setItem(LAB_INPUTS_KEY, JSON.stringify(o));
   }catch(e){}
 }
-// Only keys the defaults have, holding the same kind of value, come back; anything else in storage is ignored. Each
-// tab clamps its own values on the next draw, so one out of range is put back in range there.
+// A saved value comes back only as the same kind as its default: a primitive for a primitive (or a null default), an
+// array of numbers, strings or plain objects for an array, a plain object for an object (merged key by key). Each
+// tab clamps and cleans its own values on the next read, so one out of range is put back in range there.
+function labSameKind(v, d){
+  const plain=x=>x!==null && typeof x==='object' && !Array.isArray(x);
+  if(d===null) return v===null || ['number','string','boolean'].includes(typeof v);
+  if(Array.isArray(d)) return Array.isArray(v) && v.length<=200 && v.every(x=>['number','string'].includes(typeof x) || plain(x));
+  if(plain(d)) return plain(v);
+  return typeof v===typeof d;
+}
 function labMergeSaved(dst, src, def){
   Object.keys(def).forEach(k=>{
     if(!Object.prototype.hasOwnProperty.call(src, k)) return;
     const d=def[k], v=src[k];
-    if(d!==null && typeof d==='object' && !Array.isArray(d)){ if(v && typeof v==='object' && !Array.isArray(v)){ if(!dst[k] || typeof dst[k]!=='object') dst[k]={}; labMergeSaved(dst[k], v, d); } }
-    else if(Array.isArray(d)){ if(Array.isArray(v)) dst[k]=JSON.parse(JSON.stringify(v)); }
-    else if(d===null || v===null || typeof v===typeof d) dst[k]=v;
+    if(!labSameKind(v, d)) return;
+    if(d!==null && typeof d==='object' && !Array.isArray(d)){ if(!dst[k] || typeof dst[k]!=='object') dst[k]={}; labMergeSaved(dst[k], v, d); }
+    else dst[k]=JSON.parse(JSON.stringify(v));
   });
 }
 function restoreLabInputs(){
+  // A plan handed over from another page, or a link to one tab, starts from that and the defaults, not from last time.
+  try{ if(localStorage.getItem('goaldenLabHandoff') || tabFromQuery()) return false; }catch(e){}
   let o=null;
   try{ o=JSON.parse(localStorage.getItem(LAB_INPUTS_KEY)||'null'); }catch(e){ return false; }
-  if(!o || o.v!==1) return false;
+  if(!o || o.v!==2 || !o.vals || typeof o.vals!=='object') return false;
+  let any=false;
   try{
-    LAB_INPUT_KEYS.forEach(k=>{ if(o[k] && typeof o[k]==='object' && L_DEFAULTS[k]) labMergeSaved(L[k], o[k], L_DEFAULTS[k]); });
+    Object.keys(o.vals).forEach(path=>{
+      const [sec, k]=path.split('.'), e=o.vals[path];
+      if(!LAB_INPUT_KEYS.includes(sec) || !L_DEFAULTS[sec] || !Object.prototype.hasOwnProperty.call(L_DEFAULTS[sec], k) || !e || typeof e!=='object') return;
+      const d=L_DEFAULTS[sec][k], given=!!(o.given && o.given[path]);
+      if(!given && JSON.stringify(e.d)!==JSON.stringify(d)) return;   // its default has changed since: the new one stands
+      if(!labSameKind(e.v, d)) return;
+      if(d!==null && typeof d==='object' && !Array.isArray(d)) labMergeSaved(L[sec][k], e.v, d);
+      else L[sec][k]=JSON.parse(JSON.stringify(e.v));
+      any=true;
+    });
     if(o.country==='IN' || o.country==='US') L.country=o.country;
-    if(o.given && typeof o.given==='object') Object.keys(o.given).forEach(g=>{ if(typeof g==='string' && g.length<60) L.given[g]=!!o.given[g]; });
+    if(o.given && typeof o.given==='object') Object.keys(o.given).forEach(g=>{ const sec=g.split('.')[0]; if(g.length<60 && LAB_INPUT_KEYS.includes(sec)){ L.given[g]=!!o.given[g]; if(o.given[g]) any=true; } });
   }catch(e){ return false; }
-  return Object.keys(L.given).some(g=>L.given[g]);
+  return any;
 }
 // Said once, so a person on a shared computer knows these are not the starting numbers, with a way back to them.
 function labResumeNotice(){
@@ -14459,6 +14502,7 @@ function briefingFromSummary(fn){
     if(L.country!=='IN') return { ok:false, error:'This part uses Indian tax rules; switch the country to India to include it.' };
     const r=fn();
     if(!r || !r.ok) return { ok:false, error:(r && r.error) || 'This part needs more input first.' };
+    if(!(r.charts||[]).filter(Boolean).length) return { ok:false, error:r.note || 'This part needs more input first.' };
     const cap=t=>t.charAt(0).toUpperCase()+t.slice(1);
     return { ok:true, html:(r.charts||[]).filter(Boolean).map(ch=>`<div class="card"><h4>${advisorAttr(ch.title)}</h4>
       <table class="stmt-table"><tbody>${(ch.points||[]).map(pt=>`<tr><td>${advisorAttr(pt.label)}</td><td>${advisorAttr(String(pt.value))}</td></tr>`).join('')}</tbody></table>

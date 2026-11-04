@@ -57,16 +57,21 @@ const tabs = (gl.slice(gl.indexOf('const TABS=['), gl.indexOf('\n];', gl.indexOf
 const words = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty'];
 check(new RegExp(words[tabs] + ' tools sharing one underlying engine').test(gl), 'the advisor is told the right number of Lab tools (' + tabs + ')');
 check(/single questions only the Lab has a tool for: rent or buy a home/.test(read('index.html')), 'the landing advisor sends rent-or-buy, loans, regime, cover and holdings questions to the Lab');
-check(/const quoted = loan\.lump, target = Math\.pow\(1 \+ quoted \/ 12, 12\) - 1;/.test(eng) && /compTxt/.test(gl), 'the home loan is compared on its compounded yearly rate, and says so');
+check(/const quoted = loan\.lump, target = r > 0 \? \(Math\.pow\(1 \+ r \/ 12, 12\) - 1\) \* quoted \/ r : 0;/.test(eng) && /compTxt/.test(gl), 'the home loan is compared on its compounded yearly saving (relief scales it), and says so');
 
 // ---- the Lab picks up where it left off, without keeping a statement
 const pi = fnBody(gl, 'persistLabInputs'), ri = fnBody(gl, 'restoreLabInputs');
-check(/persistLabInputs\(\); \}/.test(fnBody(gl, 'persistLabState')) && /const LAB_INPUT_KEYS=\['ret','step','swp','income','loans','rentbuy','tax','cover','holdings'/.test(gl), 'every tab\'s inputs are saved with the snapshot');
+check(/persistLabInputs\(\);\s*\}/.test(fnBody(gl, 'persistLabState')) && /const LAB_INPUT_KEYS=\['ret','step','swp','income','loans','rentbuy','tax','cover','holdings'/.test(gl), 'every tab\'s inputs are saved with the snapshot');
 check(gl.indexOf("const LAB_INPUTS_KEY='goaldenLabInputs';") < gl.indexOf('const labResumed = restoreLabInputs();') && gl.indexOf('const labResumed = restoreLabInputs();') < gl.indexOf('const queryTab = tabFromQuery();'), 'the restore runs after its keys exist and before any hand-off, so a hand-off still wins');
-check(/HOLD_STMT\.status==='done'\)\{ o\.holdings=Object\.assign\(\{\}, L\.holdings, \{ rows:\[\] \}\); delete o\.given\['holdings\.rows'\]; \}/.test(pi), 'holdings read from a statement are never saved');
-check(/labMergeSaved\(L\[k\], o\[k\], L_DEFAULTS\[k\]\)/.test(ri) && /typeof v===typeof d/.test(fnBody(gl, 'labMergeSaved')), 'only keys the defaults have, of the same kind, come back');
+check(/if\(sec==='holdings' && k==='rows' && HOLD_ROWS_FROM_STMT\) return;/.test(pi) && /HOLD_ROWS_FROM_STMT=true;/.test(fnBody(gl, 'holdStmtApply')) && /if\(HOLD_ROWS_FROM_STMT\)\{ snap\.holdings=/.test(fnBody(gl, 'persistLabState')) && /it\.fromStmt=true;/.test(fnBody(gl, 'holdOpenInLive')) && /filter\(it=>!it\.fromStmt\)/.test(fnBody(gl, 'persistLabState')), 'nothing a statement filled is saved: not in the inputs, not in the snapshot, not the instruments it sent on');
+check((gl.match(/; HOLD_ROWS_FROM_STMT=false;/g) || []).length === 2 && /let HOLD_ROWS_FROM_STMT=false;/.test(gl), 'the statement mark is cleared only when the list is cleared or replaced by the example');
+check(/vals\[sec\+'\.'\+k\]=\{ v:L\[sec\]\[k\], d:D\[k\] \}/.test(pi) && /if\(!given && JSON\.stringify\(e\.d\)!==JSON\.stringify\(d\)\) return;/.test(ri) && /labSameKind\(e\.v, d\)/.test(ri), 'only changed values come back, of the same kind, and not one whose default has since changed (unless the person set it)');
+check(/if\(localStorage\.getItem\('goaldenLabHandoff'\) \|\| tabFromQuery\(\)\) return false;/.test(ri), 'a hand-off or a tab link starts fresh, not from last time');
 check(/if\(labResumed\) labResumeNotice\(\);/.test(gl) && /Start fresh/.test(fnBody(gl, 'labResumeNotice')), 'a resumed Lab says so, with Start fresh');
 check(/rows typed by hand are remembered in this browser/.test(gl), 'My holdings says typed rows are remembered in this browser');
+
+check(/if\(!\(r\.charts\|\|\[\]\)\.filter\(Boolean\)\.length\) return \{ ok:false, error:r\.note/.test(fnBody(gl, 'briefingFromSummary')), 'a tab with nothing to show gives a reason, not an empty report section');
+check(/A situation with several goals, a family or loans still goes to The Full Plan/.test(read('index.html')), 'a full situation still goes to The Full Plan');
 
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
 process.exit(fail ? 1 : 0);

@@ -3730,8 +3730,9 @@ test('home loan compare: relief only inside the Rs 2 lakh limit, and none on the
   approx(small.old.avg, small.old.marginal);
   approx(small.new.marginal, 0.09);
   // an FD's interest is taxed at the same slab, so it needs the loan's own pre-tax rate to match, compounded monthly
-  approx(small.breakEven, eff(small.loanRateQuoted) / (1 - 0.3 * 1.04), 1e-6);
-  approx(small.loanRateQuoted, 0.09 * (1 - 0.3 * 1.04)); approx(small.loanRate, eff(small.loanRateQuoted));
+  approx(small.breakEven, small.loanRate / (1 - 0.3 * 1.04), 1e-6);
+  // the relief is a yearly refund on the interest saved, so it scales the compounded saving, not compounded itself
+  approx(small.loanRateQuoted, 0.09 * (1 - 0.3 * 1.04)); approx(small.loanRate, eff(0.09) * (1 - 0.3 * 1.04));
   const big = engine.homeLoanCompare({ balance: 4e6, rate: 0.09, years: 20, slab: 0.3, regime: 'old', amount: 5e5, expected: 0.12, kind: 'fd' });
   assert.strictEqual(big.old.capped, true);
   approx(big.old.marginal, 0.09, 1e-12);        // the next rupee prepaid gets no relief

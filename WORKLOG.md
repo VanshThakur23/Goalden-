@@ -4800,3 +4800,24 @@ standing over the founder's shoulder.
 - Checked in a real browser: a six-section report; reload restores rent-or-buy price, age, a typed
   Bitcoin row and L.given with the note; a statement read is not saved; Start fresh clears it.
 - Tests: 325/325 engine; smokes 02-25 pass (smoke-25 grows report and resume checks).
+
+## 2026-11-04 - Claude Code - Review fixes for the resume, report sections and loan rate
+- Opus review: NO-GO on one privacy point. Statement holdings still reached localStorage: the older
+  snapshot (goaldenLabState, used by read_other_page) saved all of L.holdings.rows, and the inputs filter
+  keyed on HOLD_STMT.status, so a second read in progress saved the first statement's rows. Now a
+  HOLD_ROWS_FROM_STMT mark is set by holdStmtApply and cleared only by Clear or the example rows; while it
+  is set neither save keeps the rows (or their given flag), and instruments a statement sent to Test Real
+  Investments (it.fromStmt) are left out of the snapshot. Checked in the browser, including mid-second-read.
+- The inputs save is now v2: only values that differ from their default, each with that default. On
+  restore a value comes back only if the person set it or its default is unchanged, so a later default
+  change (as rentbuy.down did) is not read as the person's own number. Kinds are checked (arrays of numbers,
+  strings or plain objects, at most 200; primitives for null defaults). A hand-off or a ?tab= link starts
+  from defaults, with no "numbers are back" note.
+- Loans: relief is a yearly refund on the interest saved, so it scales the compounded saving:
+  loanRate = eff(r) x (after-tax rate / r) (was eff(after-tax rate), about 7bp low). Labels say "a year,
+  with the interest charged monthly".
+- A report section for a tab with nothing to show (My holdings with no rows) gives the reason instead of
+  an empty section. Landing routing adds "a situation with several goals, a family or loans still goes to
+  The Full Plan"; both routing evals pass.
+- Full eval suite before these fixes: 26/26 passed. Tests: 325/325 engine; smokes 02-25 pass.
+- Known: after a ?tab= link or a hand-off, the first draw saves that fresh state over the earlier save.
