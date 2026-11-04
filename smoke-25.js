@@ -52,5 +52,12 @@ check(/rentbuy:'rentbuy', taxregime:'tax'/.test(gl) && /'loans','rentbuy','taxre
 check(/if \(tab === 'rentbuy'\) \{\n    const R = computeRentBuy\(\)/.test(gl) && /rentBuyAdvisorResults\(\)/.test(gl), 'get_results and the chart reader both know the tab');
 check(/- Rent or buy \(India\):[^\n]*Never say which to choose/.test(gl), 'the advisor is told it gives a break-even, never a choice');
 
+// ---- the tool count in the advisor's knowledge matches the tabs, and the landing page sends Lab-only questions there
+const tabs = (gl.slice(gl.indexOf('const TABS=['), gl.indexOf('\n];', gl.indexOf('const TABS=['))).match(/\{id:'/g) || []).length;
+const words = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen', 'Twenty'];
+check(new RegExp(words[tabs] + ' tools sharing one underlying engine').test(gl), 'the advisor is told the right number of Lab tools (' + tabs + ')');
+check(/single questions only the Lab has a tool for: rent or buy a home/.test(read('index.html')), 'the landing advisor sends rent-or-buy, loans, regime, cover and holdings questions to the Lab');
+check(/const quoted = loan\.lump, target = Math\.pow\(1 \+ quoted \/ 12, 12\) - 1;/.test(eng) && /compTxt/.test(gl), 'the home loan is compared on its compounded yearly rate, and says so');
+
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
 process.exit(fail ? 1 : 0);

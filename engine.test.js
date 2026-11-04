@@ -3722,21 +3722,24 @@ test('loan prepayment: a lump sum ends the loan sooner and saves interest; nothi
   const all = engine.loanPrepay({ balance: 1e6, rate: 0.09, years: 10, prepay: 5e6 });
   assert.strictEqual(all.months, 0, 'a prepayment above the balance clears it');
 });
+const eff = x => Math.pow(1 + x / 12, 12) - 1;
 test('home loan compare: relief only inside the Rs 2 lakh limit, and none on the new regime', () => {
   const small = engine.homeLoanCompare({ balance: 1.5e6, rate: 0.09, years: 20, slab: 0.3, regime: 'old', amount: 5e5, expected: 0.12, kind: 'fd' });
   assert.strictEqual(small.old.capped, false);
   approx(small.old.marginal, 0.09 * (1 - 0.3 * 1.04));
   approx(small.old.avg, small.old.marginal);
   approx(small.new.marginal, 0.09);
-  // an FD's interest is taxed at the same slab, so it needs the loan's own pre-tax rate to match
-  approx(small.breakEven, 0.09, 1e-6);
+  // an FD's interest is taxed at the same slab, so it needs the loan's own pre-tax rate to match, compounded monthly
+  approx(small.breakEven, eff(small.loanRateQuoted) / (1 - 0.3 * 1.04), 1e-6);
+  approx(small.loanRateQuoted, 0.09 * (1 - 0.3 * 1.04)); approx(small.loanRate, eff(small.loanRateQuoted));
   const big = engine.homeLoanCompare({ balance: 4e6, rate: 0.09, years: 20, slab: 0.3, regime: 'old', amount: 5e5, expected: 0.12, kind: 'fd' });
   assert.strictEqual(big.old.capped, true);
   approx(big.old.marginal, 0.09, 1e-12);        // the next rupee prepaid gets no relief
   assert.ok(big.old.avg < big.old.marginal && big.old.avg > small.old.marginal, 'relief is spread thin over a bigger loan');
   const nw = engine.homeLoanCompare({ balance: 1.5e6, rate: 0.09, years: 20, slab: 0.3, regime: 'new', amount: 5e5, expected: 0.12, kind: 'fd' });
-  approx(nw.loanRate, 0.09);
-  approx(nw.breakEven, 0.09 / (1 - 0.3 * 1.04), 1e-6);
+  approx(nw.loanRate, eff(0.09)); approx(nw.loanRateQuoted, 0.09);
+  approx(nw.breakEven, eff(0.09) / (1 - 0.3 * 1.04), 1e-6);
+  approx(eff(0.0875), 0.0911, 1e-4);   // a quoted 8.75% charged monthly costs 9.11% a year
 });
 test('home loan compare: a lump sum that takes the interest under the Rs 2 lakh limit loses only part of the relief', () => {
   const o = { balance: 2.5e6, rate: 0.0875, years: 15, slab: 0.2, regime: 'old', expected: 0.12, kind: 'equity' };
@@ -3746,19 +3749,19 @@ test('home loan compare: a lump sum that takes the interest under the Rs 2 lakh 
   assert.strictEqual(lump.old.capped, true, 'the loan starts above the limit');
   assert.ok(lump.afterPrepay.firstYearInterest < 200000, 'after the lump sum the interest is under the limit');
   assert.ok(lump.afterPrepay.reliefLost > 0);
-  assert.ok(lump.loanRate > 0.0875 * (1 - tax) && lump.loanRate < 0.0875, 'between the full-relief and no-relief rates');
+  assert.ok(lump.loanRateQuoted > 0.0875 * (1 - tax) && lump.loanRateQuoted < 0.0875, 'between the full-relief and no-relief rates');
   // the rate is the nominal rate less the share of the interest drop that had relief
-  approx(lump.loanRate, 0.0875 * (1 - lump.afterPrepay.reliefLost / lump.afterPrepay.removed), 1e-12);
-  assert.strictEqual(next.loanRate, 0.0875, 'with no amount to weigh it is the next rupee: no relief above the limit');
+  approx(lump.loanRateQuoted, 0.0875 * (1 - lump.afterPrepay.reliefLost / lump.afterPrepay.removed), 1e-12);
+  assert.strictEqual(next.loanRateQuoted, 0.0875, 'with no amount to weigh it is the next rupee: no relief above the limit');
   assert.ok(lump.breakEven < next.breakEven, 'a lower loan-side rate needs a lower investment return to match');
   approx(lump.gapPerYear, 5e5 * (lump.expectedAfterTax - lump.loanRate), 1e-9);
   // far above the limit, even a big lump sum leaves the interest above it, so nothing is lost
   const far = engine.homeLoanCompare({ balance: 6e6, rate: 0.0875, years: 15, slab: 0.2, regime: 'old', amount: 5e5, expected: 0.12, kind: 'equity' });
   assert.strictEqual(far.afterPrepay.reliefLost, 0);
-  approx(far.loanRate, 0.0875, 1e-12);
+  approx(far.loanRateQuoted, 0.0875, 1e-12);
   // clearing the whole loan loses the relief on all of the interest that was claimed
   const clear = engine.homeLoanCompare(Object.assign({ amount: 5e6 }, o));
-  approx(clear.loanRate, clear.old.avg, 1e-9);
+  approx(clear.loanRateQuoted, clear.old.avg, 1e-9);
   assert.strictEqual(clear.afterPrepay.firstYearInterest, 0);
 });
 test('home loan compare: equity break-even is above the loan rate (tax on the gain), and the gap has a sign', () => {
@@ -3770,7 +3773,7 @@ test('home loan compare: equity break-even is above the loan rate (tax on the ga
   assert.ok(hi.expectedAfterTax > lo.expectedAfterTax);
   // the investment's after-tax return at the break-even equals the loan rate
   const at = engine.homeLoanCompare(Object.assign({ expected: lo.breakEven }, o));
-  approx(at.expectedAfterTax, 0.09, 1e-6);
+  approx(at.expectedAfterTax, eff(0.09), 1e-6);
   // a loan at 0% needs nothing; one that nothing can match is reported as null
   assert.strictEqual(engine.homeLoanCompare(Object.assign({}, o, { rate: 0, expected: 0.1 })).breakEven, 0);
   assert.strictEqual(engine.homeLoanCompare(Object.assign({}, o, { rate: 2.5, expected: 0.1, years: 20 })).breakEven, null);

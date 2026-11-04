@@ -177,7 +177,7 @@ check(/interestRelieved:s\.regime === 'old'/.test(gl), '9b the advisor is not to
 check(/loancompare: '#loan-compare'/.test(gl) && /taxcompare: '#tax-compare'/.test(gl) && /termcover: '#cover-term'/.test(gl) && /healthcover: '#cover-health'/.test(gl), '9b the charts are highlight targets');
 check(/'loans': \['Why is the break-even higher on the new regime\?'/.test(gl) && /'taxregime': \[/.test(gl) && /'cover': \[/.test(gl), '9b each tab has its own follow-up chips');
 check(/else if \(tab === 'loans'\)/.test(gl) && /else if \(tab === 'taxregime'\)/.test(gl) && /else if \(tab === 'cover'\)/.test(gl), '9b each tab has its own suggestion chips');
-check(/Sixteen tools sharing one underlying engine/.test(gl) && /- Loans \(India only\)/.test(gl) && /- Tax regime \(India only\)/.test(gl) && /- Cover \(India only\)/.test(gl), '9b the advisor\'s knowledge text describes the three tools and their limits');
+check(/(Sixteen|Eighteen) tools sharing one underlying engine/.test(gl) && /- Loans \(India only\)/.test(gl) && /- Tax regime \(India only\)/.test(gl) && /- Cover \(India only\)/.test(gl), '9b the advisor\'s knowledge text describes the three tools and their limits');
 check(!/sk-[A-Za-z0-9]{20,}|DEEPSEEK_API_KEY\s*=\s*['"][^'"]+['"]/.test(gl + g2), '9b no API key in the pages');
 
 // ---- review fixes: limits the advisor must not silently clamp, plain-pay tax text, lump-sum loan rate ------

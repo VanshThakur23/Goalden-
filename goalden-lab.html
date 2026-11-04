@@ -3441,11 +3441,13 @@ function renderLoans(){
   let loanCap;
   if(s.regime==='new') loanCap=`On the new regime a self-occupied home loan gets no tax relief, so prepaying saves the full ${s.rate}%.`;
   else if(cmp.old.capped && cmp.afterPrepay.reliefLost<1) loanCap=`At ${s.rate}% on ${c.compact(s.balance)} your first year's interest is about ${money(first)}. The old regime lets you deduct only ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} a year (s.24(b)), and even after ${money(s.amount)} is paid in the interest is still above that, so the interest you stop paying gets no relief: prepaying saves the full ${s.rate}%.`;
-  else if(cmp.old.capped) loanCap=`At ${s.rate}% on ${c.compact(s.balance)} your first year's interest is about ${money(first)}, above the ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} a year the old regime lets you deduct (s.24(b)). Paying ${money(s.amount)} in takes it to about ${money(cmp.afterPrepay.firstYearInterest)}, which is under the limit, so part of the interest you stop paying would have had relief. Prepaying saves ${s.rate}% less the relief you lose on that part at your ${R.slabPct}% slab and cess: ${pct(cmp.loanRate)}.`;
-  else loanCap=`At ${s.rate}% on ${c.compact(s.balance)} your first year's interest is about ${money(first)}, all inside the ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} a year the old regime lets you deduct (s.24(b)). Prepaying saves ${s.rate}% less the tax relief you would have had at your ${R.slabPct}% slab and cess: ${pct(cmp.loanRate)}.`;
+  else if(cmp.old.capped) loanCap=`At ${s.rate}% on ${c.compact(s.balance)} your first year's interest is about ${money(first)}, above the ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} a year the old regime lets you deduct (s.24(b)). Paying ${money(s.amount)} in takes it to about ${money(cmp.afterPrepay.firstYearInterest)}, which is under the limit, so part of the interest you stop paying would have had relief. Prepaying saves ${s.rate}% less the relief you lose on that part at your ${R.slabPct}% slab and cess: ${pct(cmp.loanRateQuoted)}.`;
+  else loanCap=`At ${s.rate}% on ${c.compact(s.balance)} your first year's interest is about ${money(first)}, all inside the ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} a year the old regime lets you deduct (s.24(b)). Prepaying saves ${s.rate}% less the tax relief you would have had at your ${R.slabPct}% slab and cess: ${pct(cmp.loanRateQuoted)}.`;
   const beCap=cmp.breakEven==null?'more than 100% a year':pct(cmp.breakEven)+' a year before tax';
   const gap=cmp.gapPerYear;
-  const cap1=`${loanCap} The same ${money(s.amount)} in ${kindWord} is expected to earn ${pct(cmp.expectedAfterTax)} a year after tax, if the ${s.expected}% you assumed holds. It would have to earn ${beCap} to match. Prepaying is a saving that is certain at today's rate; the fund's return is an expectation, and a fund can have a bad decade.`;
+  // The quoted rate is charged monthly; the investment's return is yearly. Both are put on one footing here.
+  const compTxt=` Charged monthly, that is <b>${pct(cmp.loanRate)}</b> a year compounded, the same footing as a yearly return.`;
+  const cap1=`${loanCap}${compTxt} The same ${money(s.amount)} in ${kindWord} is expected to earn ${pct(cmp.expectedAfterTax)} a year after tax, if the ${s.expected}% you assumed holds. It would have to earn ${beCap} to match. Prepaying is a saving that is certain at today's rate; the fund's return is an expectation, and a fund can have a bad decade.`;
   const gapCap=Math.abs(gap)<1 ? `On ${money(s.amount)} the two come out level in the first year.` : `On ${money(s.amount)}, investing would come out about ${money(Math.abs(gap))} a year ${gap>0?'ahead of':'behind'} prepaying in the first year, if the return holds.`;
   const bars=[{name:'Prepaying saves', value:cmp.loanRate, label:pct(cmp.loanRate), color:'#2557C7'},
               {name:'Investing earns, after tax', value:cmp.expectedAfterTax, label:pct(cmp.expectedAfterTax), color:'#B8740F'}];
@@ -13127,7 +13129,7 @@ const ADVISOR_KNOWLEDGE = `Goalden is one personal-finance planning app with thr
 - Level 3 — The Lab (this page): full assumption control, Monte Carlo, efficient frontier, and live real-market-data testing.
 The user is currently on Level 3.
 
-This is "Goalden — The Lab" (Level 3): full assumption control and live market-data testing. Sixteen tools sharing one underlying engine.
+This is "Goalden — The Lab" (Level 3): full assumption control and live market-data testing. Eighteen tools sharing one underlying engine.
 
 Tools:
 - Retirement Lab: age, retire age, monthly expenses, lifestyle %, inflation, growth before/after retirement, life expectancy; stress-tests with a real historical market crash, plus a drawdown Monte Carlo to show sequence-of-returns risk.
@@ -14104,7 +14106,7 @@ function advisorGetResults() {
     const R = computeLoans(), s = R.s, cmp = R.cmp, pre = R.pre, av = R.av, sc = cmp.schedule;
     return { ok:true, result:{ tool:'Loans', note:'break-even, not a verdict: the investment return is the user\'s assumption',
       homeLoan:{ balance:s.balance, ratePct:s.rate, yearsLeft:s.years, regime:s.regime, slabPct:R.slabPct, instalment:Math.round(sc.emi), firstYearInterest:Math.round(sc.firstYearInterest), interestRelieved:s.regime === 'old' ? Math.round(cmp.old.claim) : 0, reliefCappedAt2Lakh:s.regime === 'old' && cmp.old.capped },
-      prepayingSavesPctAfterTax:+(cmp.loanRate * 100).toFixed(2),
+      prepayingSavesPctAfterTax:+(cmp.loanRate * 100).toFixed(2), prepayingSavesQuotedPctAfterTax:+(cmp.loanRateQuoted * 100).toFixed(2), rateNote:'the quoted rate is charged monthly; prepayingSavesPctAfterTax is it compounded over a year, to compare with a yearly return',
       investingEarnsPctAfterTax:+(cmp.expectedAfterTax * 100).toFixed(2),
       investmentMustEarnBeforeTaxPct:cmp.breakEven == null ? null : +(cmp.breakEven * 100).toFixed(2),
       lumpSum:{ amount:s.amount, kind:s.kind, expectedBeforeTaxPct:s.expected, loanEndsSoonerByMonths:pre.monthsSaved, interestSavedBeforeTax:Math.round(pre.interestSaved) },

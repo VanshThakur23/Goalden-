@@ -592,5 +592,23 @@
       },
       "replyIncludes": "break-even"
     }
+  },
+  {
+    "name": "landing rent-or-buy question opens The Lab",
+    "page": "index.html",
+    "country": "IN",
+    "requiresLive": true,
+    "userMessages": [
+      "Should I rent or buy a flat? It costs 90 lakh and rents for 22,000 a month."
+    ],
+    "expect": {
+      "toolCallArgs": {
+        "open_door": {
+          "door": "lab",
+          "auto_continue": true
+        }
+      },
+      "menuOfferedAtMost": 0
+    }
   }
 ]

@@ -4772,3 +4772,14 @@ standing over the founder's shoulder.
 - Crypto step 3 (exchange CSV) is on hold: exchanges do not publish their export layouts (WazirX exports
   Excel), so it needs a real export to build against.
 - Tests: 325/325 engine (5 new); smokes 02-25 pass (smoke-25 new; 20/21/22 loosened for the new tab).
+
+## 2026-11-04 - Claude Code - Polish: routing, tool count, home-loan rate on one footing
+- Landing page advisor: single questions only the Lab answers (rent or buy, prepay or invest, debt order,
+  tax regime, cover, a holdings or CAS review, drawing a retirement income, how real stocks did) now open
+  the Lab; a full life situation still opens the Full Plan. New eval "landing rent-or-buy question opens
+  The Lab" passes live, and "landing situation opens The Full Plan" still passes.
+- Lab knowledge text said "Sixteen tools"; there are 18. smoke-25 now checks the word against TABS.
+- Loans: the quoted home-loan rate is charged monthly, so prepaying is now set against the investment on
+  the compounded yearly rate ((1 + r/12)^12 - 1: 7.81% instead of 7.55% after tax on the default). The
+  caption says so; get_results carries both. Was a known "Not done" since 9b.
+- Tests: 325/325 engine (loan tests updated for the compounded rate); smokes 02-25 pass.

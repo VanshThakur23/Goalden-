@@ -861,8 +861,10 @@ function loanPrepay(o) {
          expected (pre-tax yearly return), kind ('equity' | 'debt' | 'fd') }.
    kind 'fd': interest is taxed every year at the slab. 'debt': the gain is taxed at the slab when sold. 'equity':
    12.5% on the gain above the Rs 1.25 lakh exemption when sold, which the amount is held to for `years`. Returns
-   are annualised so they compare with the loan's yearly rate. breakEven is the pre-tax return that matches the
-   loan (null if it is beyond 100% a year). */
+   are annualised so they compare with the loan's yearly rate. The loan's rate is quoted yearly but charged monthly
+   (rate/12), so a rupee prepaid saves the compounded yearly rate, (1 + r/12)^12 - 1: 9.11% on a quoted 8.75%.
+   loanRate is that compounded figure (what the investment's yearly return is set against); loanRateQuoted is the
+   quoted one. breakEven is the pre-tax return that matches the loan (null if it is beyond 100% a year). */
 function homeLoanCompare(o) {
   const R = TAX_REGIME_IN, cess = 1 + TAX_IN.cess, slab = Number(o.slab) || 0, r = accNum(o.rate), tax = slab * cess;
   const sched = loanSchedule(o), first = sched.firstYearInterest;
@@ -891,14 +893,14 @@ function homeLoanCompare(o) {
     const t = kind === 'debt' ? gain * tax : Math.max(0, gain - TAX_IN.equityLtcgExemption) * TAX_IN.equityLtcg * cess;
     return Math.pow((fv - t) / A, 1 / n) - 1;
   };
-  const target = loan.lump;
+  const quoted = loan.lump, target = Math.pow(1 + quoted / 12, 12) - 1;
   let breakEven = 0;
   if (afterTax(0) < target) {
     if (afterTax(1) < target) breakEven = null;
     else { let lo = 0, hi = 1; for (let i = 0; i < 80; i++) { const mid = (lo + hi) / 2; if (afterTax(mid) >= target) hi = mid; else lo = mid; } breakEven = hi; }
   }
   const expectedAfterTax = afterTax(o.expected);
-  return { schedule: sched, old: oldReg, new: newReg, loanRate: target, expectedAfterTax, breakEven,
+  return { schedule: sched, old: oldReg, new: newReg, loanRate: target, loanRateQuoted: quoted, expectedAfterTax, breakEven,
     afterPrepay: { firstYearInterest: firstAfter, removed, reliefLost },
     gapPerYear: amt * (expectedAfterTax - target) };
 }
