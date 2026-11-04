@@ -46,6 +46,22 @@ Lab's tools, through a plan the user approves, and returns a dated to-do list
 (this month, before 31 March, at ITR filing, next year) built only from
 numbers the user gave.
 
+## The Lab's Indian money questions
+
+Beside the planners, the Lab has one tab per question an Indian household asks
+most, each showing both sides and a break-even rather than a verdict:
+**Retirement Income** (buckets, SWP against FD interest after tax, the NPS
+pension), **Loans** (prepay the home loan or invest, on the compounded rate;
+costly debt highest rate first), **Rent or buy** (month by month for the stay,
+stamp duty, upkeep, the old-regime interest relief; the yearly price growth at
+which they meet, `rentVsBuy`), **Tax regime**, **Cover** (term and health, the
+amounts only, never a premium) and **My holdings** above. Crypto is its own
+holdings category taxed by India's own rule (30% plus cess on each coin's gain,
+no loss set off) and can be tried in Test Real Investments, where it never gets
+a "best mix" or a planning rate ([`CRYPTO-PLAN.md`](CRYPTO-PLAN.md)). The Lab
+remembers each tab's inputs in the browser across a reload, except holdings
+read from a statement.
+
 ## Agent architecture
 
 The advisor is a real tool-calling agent, not a wrapper around a chat

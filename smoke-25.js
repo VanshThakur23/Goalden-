@@ -33,7 +33,7 @@ check(/rentVsBuy, rentVsBuyRun,/.test(eng), 'exported for the tests');
 // ---- the tab
 const rr = fnBody(gl, 'renderRentBuy');
 check(/\{id:'rentbuy', short:'Rent or buy a home/.test(gl) && /else if\(L\.tab==='rentbuy'\) main\.innerHTML=renderRentBuy\(\);/.test(gl), 'Rent or buy is a Lab tab');
-check(/rentbuy:\{ price:10000000, down:20, stamp:7/.test(gl) && /rentbuy:\['rentbuy'\]/.test(gl), 'it has defaults and its own Reset');
+check(/rentbuy:\{ price:10000000, down:25, stamp:7/.test(gl) && /rentbuy:\['rentbuy'\]/.test(gl), 'it has defaults and its own Reset');
 check(/indiaOnlyTab\('Rent or buy'/.test(rr), 'India only (stamp duty, s.24(b), Indian slabs)');
 check(/Buying comes out ahead only if the home's price grows faster than/.test(rr) && !/you should (buy|rent)|better to (buy|rent)|we recommend/i.test(rr), 'it gives the break-even beside the person\'s guess, and no verdict');
 check(/Both before tax on the gains/.test(rr) && /Left out: [\s\S]{0,300}the 80C relief on the principal/.test(rr), 'it says both sides are before tax, and what is left out');
@@ -58,6 +58,15 @@ const words = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight
 check(new RegExp(words[tabs] + ' tools sharing one underlying engine').test(gl), 'the advisor is told the right number of Lab tools (' + tabs + ')');
 check(/single questions only the Lab has a tool for: rent or buy a home/.test(read('index.html')), 'the landing advisor sends rent-or-buy, loans, regime, cover and holdings questions to the Lab');
 check(/const quoted = loan\.lump, target = Math\.pow\(1 \+ quoted \/ 12, 12\) - 1;/.test(eng) && /compTxt/.test(gl), 'the home loan is compared on its compounded yearly rate, and says so');
+
+// ---- the Lab picks up where it left off, without keeping a statement
+const pi = fnBody(gl, 'persistLabInputs'), ri = fnBody(gl, 'restoreLabInputs');
+check(/persistLabInputs\(\); \}/.test(fnBody(gl, 'persistLabState')) && /const LAB_INPUT_KEYS=\['ret','step','swp','income','loans','rentbuy','tax','cover','holdings'/.test(gl), 'every tab\'s inputs are saved with the snapshot');
+check(gl.indexOf("const LAB_INPUTS_KEY='goaldenLabInputs';") < gl.indexOf('const labResumed = restoreLabInputs();') && gl.indexOf('const labResumed = restoreLabInputs();') < gl.indexOf('const queryTab = tabFromQuery();'), 'the restore runs after its keys exist and before any hand-off, so a hand-off still wins');
+check(/HOLD_STMT\.status==='done'\)\{ o\.holdings=Object\.assign\(\{\}, L\.holdings, \{ rows:\[\] \}\); delete o\.given\['holdings\.rows'\]; \}/.test(pi), 'holdings read from a statement are never saved');
+check(/labMergeSaved\(L\[k\], o\[k\], L_DEFAULTS\[k\]\)/.test(ri) && /typeof v===typeof d/.test(fnBody(gl, 'labMergeSaved')), 'only keys the defaults have, of the same kind, come back');
+check(/if\(labResumed\) labResumeNotice\(\);/.test(gl) && /Start fresh/.test(fnBody(gl, 'labResumeNotice')), 'a resumed Lab says so, with Start fresh');
+check(/rows typed by hand are remembered in this browser/.test(gl), 'My holdings says typed rows are remembered in this browser');
 
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
 process.exit(fail ? 1 : 0);

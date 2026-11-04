@@ -452,6 +452,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stmt-table-wrap{overflow-x:auto;max-width:100%}.stmt-table{width:100%;min-width:100%;border-collapse:collapse;font-size:12px}.stmt-table th,.stmt-table td{text-align:left;padding:6px 8px 6px 0;border-bottom:1px solid rgba(20,40,63,.1);vertical-align:top}
 .stmt-table th{font-weight:600;color:var(--dim)}.stmt-table td:not(:first-child),.stmt-table th:not(:first-child){text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:#1E4FBE;text-decoration:underline;cursor:pointer}
+.lab-resume{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:850;background:#fff;color:#14283F;border:1px solid rgba(20,40,63,.18);border-left:4px solid #2557C7;border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 10px 30px rgba(20,40,63,.18);max-width:calc(100vw - 32px)}
 .stmt-sold{font-size:10px;color:var(--dim);border:1px solid rgba(20,40,63,.2);border-radius:3px;padding:0 4px}
 .lg-head b{font-weight:700}
 .lg-head .lg-gap{color:#1E4FBE}
@@ -2198,7 +2199,7 @@ const L = {
   // Rent or buy (B7). A ₹1 crore flat in a large city renting at ₹25,000 a month: a 3% rental yield, typical of Indian
   // metros. stamp is stamp duty plus registration (often 5-7% plus about 1%, which some states cap; states differ). maint is upkeep and
   // property tax as a share of the home's value a year. Every figure is the person's to change; none is a forecast.
-  rentbuy:{ price:10000000, down:20, stamp:7, loanRate:8.5, loanYears:20, maint:0.6, sell:1,
+  rentbuy:{ price:10000000, down:25, stamp:7, loanRate:8.5, loanYears:20, maint:0.6, sell:1,
             rent:25000, rentGrowth:5, priceGrowth:5, invReturn:10, years:15, regime:'new', slab:null },
   // Tax regime. Defaults are a salaried person in a metro on 18 L, which the new regime wins by a little: the tab opens on
   // a result, not a blank. note is the "filled from" line, shown only while the numbers still match what the button set.
@@ -4786,7 +4787,7 @@ function renderVsIndexChart(id, v, c){
 }
 // Outside #holdOut, which a typed edit repaints in place: the buttons here are bound once by attach() and would be dead after a repaint.
 function holdFooterHTML(){
-  return `<div class="gr-note">Categories come from the fund's name or from you; a holding with none is left out of the mix and said so. Plans are read from the name only. No fund is rated or ranked here, and nothing says which fund to buy or sell. Nothing you type is uploaded or kept on a server. The search box sends the words typed in it to a fund-name lookup, and if you use the advisor, your holdings are sent along with your question so it can answer from them.</div>`
+  return `<div class="gr-note">Categories come from the fund's name or from you; a holding with none is left out of the mix and said so. Plans are read from the name only. No fund is rated or ranked here, and nothing says which fund to buy or sell. Nothing you type is uploaded or kept on a server; rows typed by hand are remembered in this browser until you clear them (rows read from a statement are not). The search box sends the words typed in it to a fund-name lookup, and if you use the advisor, your holdings are sent along with your question so it can answer from them.</div>`
     +nextStepCard([
       {q:'See how a few real funds would actually have moved together, on real history.', tab:'livefrontier'},
       {q:'Is your monthly saving enough for your goals? Check Plan Health.', tab:'health'},
@@ -12817,6 +12818,11 @@ function tabFromQuery(){
   }catch(e){}
   return null;
 }
+// Declared here, above the restore below that reads them at load (a const further down would not exist yet).
+const LAB_INPUTS_KEY='goaldenLabInputs';
+const LAB_INPUT_KEYS=['ret','step','swp','income','loans','rentbuy','tax','cover','holdings','fx','joint','mc','portfolio','health'];
+// Before any hand-off is read, so a plan sent from another page still wins over what was here last time.
+const labResumed = restoreLabInputs();
 const queryTab = tabFromQuery();
 if(queryTab){
   L.tab = queryTab;
@@ -12838,7 +12844,50 @@ try{ L.headerCollapsed = localStorage.getItem('goaldenLabHeaderCollapsed')==='1'
 // Lab only saved cosmetics, so persist a COMPACT snapshot (stateForAdvisor, no
 // raw price arrays) so read_other_page on the other doors has real Lab data.
 const LAB_STATE_KEY = 'goaldenLabState';
-function persistLabState(){ try{ localStorage.setItem(LAB_STATE_KEY, JSON.stringify(Object.assign({}, stateForAdvisor(), { _savedAt: Date.now() }))); }catch(e){} }
+function persistLabState(){ try{ localStorage.setItem(LAB_STATE_KEY, JSON.stringify(Object.assign({}, stateForAdvisor(), { _savedAt: Date.now() }))); }catch(e){} persistLabInputs(); }
+// Refresh-resume: every tab's inputs, and which of them the person set (L.given), so a reload or a closed tab does
+// not lose the plan. Kept in this browser only. Left out: Test Real Investments' prices and Read the Company's
+// statements (both fetched again), and holdings read from a CAS statement, because the reader says the statement is
+// not kept (rows typed by hand are kept).
+function persistLabInputs(){
+  try{
+    const o={ v:1, country:L.country, given:Object.assign({}, L.given), at:Date.now() };
+    LAB_INPUT_KEYS.forEach(k=>{ if(L[k]!==undefined) o[k]=L[k]; });
+    if(typeof HOLD_STMT!=='undefined' && HOLD_STMT.status==='done'){ o.holdings=Object.assign({}, L.holdings, { rows:[] }); delete o.given['holdings.rows']; }
+    localStorage.setItem(LAB_INPUTS_KEY, JSON.stringify(o));
+  }catch(e){}
+}
+// Only keys the defaults have, holding the same kind of value, come back; anything else in storage is ignored. Each
+// tab clamps its own values on the next draw, so one out of range is put back in range there.
+function labMergeSaved(dst, src, def){
+  Object.keys(def).forEach(k=>{
+    if(!Object.prototype.hasOwnProperty.call(src, k)) return;
+    const d=def[k], v=src[k];
+    if(d!==null && typeof d==='object' && !Array.isArray(d)){ if(v && typeof v==='object' && !Array.isArray(v)){ if(!dst[k] || typeof dst[k]!=='object') dst[k]={}; labMergeSaved(dst[k], v, d); } }
+    else if(Array.isArray(d)){ if(Array.isArray(v)) dst[k]=JSON.parse(JSON.stringify(v)); }
+    else if(d===null || v===null || typeof v===typeof d) dst[k]=v;
+  });
+}
+function restoreLabInputs(){
+  let o=null;
+  try{ o=JSON.parse(localStorage.getItem(LAB_INPUTS_KEY)||'null'); }catch(e){ return false; }
+  if(!o || o.v!==1) return false;
+  try{
+    LAB_INPUT_KEYS.forEach(k=>{ if(o[k] && typeof o[k]==='object' && L_DEFAULTS[k]) labMergeSaved(L[k], o[k], L_DEFAULTS[k]); });
+    if(o.country==='IN' || o.country==='US') L.country=o.country;
+    if(o.given && typeof o.given==='object') Object.keys(o.given).forEach(g=>{ if(typeof g==='string' && g.length<60) L.given[g]=!!o.given[g]; });
+  }catch(e){ return false; }
+  return Object.keys(L.given).some(g=>L.given[g]);
+}
+// Said once, so a person on a shared computer knows these are not the starting numbers, with a way back to them.
+function labResumeNotice(){
+  const n=document.createElement('div');
+  n.className='lab-resume'; n.setAttribute('role','status');
+  n.innerHTML='Your numbers from last time on this device are back. <button type="button" class="linkbtn" id="labStartFresh">Start fresh</button>';
+  document.body.appendChild(n);
+  document.getElementById('labStartFresh').addEventListener('click',()=>{ try{ localStorage.removeItem(LAB_INPUTS_KEY); localStorage.removeItem(LAB_STATE_KEY); }catch(e){} location.reload(); });
+  setTimeout(()=>n.remove(), 12000);
+}
 
 // read_other_page is READ-ONLY: it returns a separate, clearly-labeled object
 // from another page's localStorage, never merged into L (so a field like
@@ -14403,6 +14452,19 @@ function briefingComparison() {
     '</div></div>' };
 }
 
+// The India tabs' report sections are drawn from the same summary the advisor reads for each tab (each chart's title,
+// its points and its caveat), so a report says what the tab says, with the tab's own "not a verdict" notes kept.
+function briefingFromSummary(fn){
+  return function(){
+    if(L.country!=='IN') return { ok:false, error:'This part uses Indian tax rules; switch the country to India to include it.' };
+    const r=fn();
+    if(!r || !r.ok) return { ok:false, error:(r && r.error) || 'This part needs more input first.' };
+    const cap=t=>t.charAt(0).toUpperCase()+t.slice(1);
+    return { ok:true, html:(r.charts||[]).filter(Boolean).map(ch=>`<div class="card"><h4>${advisorAttr(ch.title)}</h4>
+      <table class="stmt-table"><tbody>${(ch.points||[]).map(pt=>`<tr><td>${advisorAttr(pt.label)}</td><td>${advisorAttr(String(pt.value))}</td></tr>`).join('')}</tbody></table>
+      ${ch.note?`<div class="gr-note">${advisorAttr(cap(ch.note))}.</div>`:''}</div>`).join('') };
+  };
+}
 const BRIEFING_SECTIONS = {
   headline: { title: 'Your number', build: briefingHeadline },
   retirement: { title: 'Retirement projection', build: resultCanvasRetirement },
@@ -14416,6 +14478,12 @@ const BRIEFING_SECTIONS = {
   fx: { title: 'Cross-border FX', build: resultCanvasFX },
   joint: { title: 'Joint children corpus', build: resultCanvasJoint },
   health: { title: 'Plan health', build: resultCanvasHealth },
+  income: { title: 'Drawing a retirement income', build: briefingFromSummary(incomeAdvisorResults) },
+  loans: { title: 'Prepay the home loan or invest, and costly debt', build: briefingFromSummary(loansAdvisorResults) },
+  rentbuy: { title: 'Rent or buy', build: briefingFromSummary(rentBuyAdvisorResults) },
+  taxregime: { title: 'Old or new tax regime', build: briefingFromSummary(taxAdvisorResults) },
+  cover: { title: 'Term and health cover', build: briefingFromSummary(coverAdvisorResults) },
+  holdings: { title: 'What you already own', build: briefingFromSummary(holdingsAdvisorResults) },
   review: { title: 'To-do list and the checks behind it', build: briefingReview },
   assumptions: { title: 'Assumptions used', build: briefingAssumptions },
   next: { title: 'What to do next', build: briefingNext },
@@ -14597,6 +14665,7 @@ window.GOALDEN_ADVISOR_CONFIG = {
 };
 
 render();
+if(labResumed) labResumeNotice();
 </script>
 <script src="gtip.js"></script>
 <script src="advisor.js"></script>

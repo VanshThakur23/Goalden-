@@ -4783,3 +4783,20 @@ standing over the founder's shoulder.
   the compounded yearly rate ((1 + r/12)^12 - 1: 7.81% instead of 7.55% after tax on the default). The
   caption says so; get_results carries both. Was a known "Not done" since 9b.
 - Tests: 325/325 engine (loan tests updated for the compounded rate); smokes 02-25 pass.
+
+## 2026-11-04 - Claude Code - Report sections for the India tabs, Lab refresh-resume
+- compose_briefing has sections for Retirement Income, Loans, Rent or buy, Tax regime, Cover and My
+  holdings, built by `briefingFromSummary` from the same summary the advisor reads for each tab (each
+  chart's title, points and caveat), escaped. Was "Not done" since 9a/9b.
+- The Lab now picks up where it left off: `persistLabInputs` saves every tab's inputs and L.given with
+  the existing snapshot; `restoreLabInputs` brings back only keys the defaults have, of the same kind
+  (each tab clamps on the next draw), before any hand-off is read (so a hand-off still wins). A note says
+  "Your numbers from last time on this device are back" with Start fresh. Holdings read from a CAS
+  statement are never saved (the reader says the statement is not kept); typed rows are, and My holdings
+  says so. First version failed silently: the keys were declared below the restore (TDZ, swallowed by
+  the try), found in the browser and fixed. Was "Not done" since 9c.
+- Rent or buy opens at 25% down (RBI's limit above Rs 75 lakh), so the default no longer shows the
+  minimum-down note. README: a section on the Lab's Indian money tabs, crypto and the resume.
+- Checked in a real browser: a six-section report; reload restores rent-or-buy price, age, a typed
+  Bitcoin row and L.given with the note; a statement read is not saved; Start fresh clears it.
+- Tests: 325/325 engine; smokes 02-25 pass (smoke-25 grows report and resume checks).
