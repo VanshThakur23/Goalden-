@@ -2408,7 +2408,9 @@ function renderDrawdownChartOption(chartId, rows, c){
   const prematureDepletion = depletedYear!==null && depletedYear<n;
   const startVal=Math.max(rows[0].openBal, 0);
   const endVal=rows[n-1].closeBal;
-  const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal));
+  // A pot planned to run to zero ends a few rupees above it from rounding ("Ends at ₹2"): under 0.1% of the start is zero.
+  const endsAtZero = endVal <= startVal * 0.001;
+  const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endsAtZero?'Ends at zero':'Ends at '+fmt(endVal));
   const endLabelColor = prematureDepletion ? '#9C4A2C' : '#1F8A70';
   // Text needs the AA-contrast versions; the marker dot wears the chart colour.
   const endLabelText_color = prematureDepletion ? '#9C4A2C' : '#256F55';
@@ -2422,7 +2424,8 @@ function renderDrawdownChartOption(chartId, rows, c){
         data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
         // Anchored inward at the chart's edges: centred on a point in the
         // last column, "Ends at ₹…" / "Reaches zero" ran off the right side.
-        label:{show:true, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endLabelText_color, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:12}},
+        // A pot that lasts has its end label in the top-right corner instead (it crossed the falling line here).
+        label:{show:prematureDepletion, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endLabelText_color, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:12}},
       z:2 },
   ];
   if(shockPoints.length) series.push({ name:'Shock year', type:'scatter', data:shockPoints, symbolSize:8, itemStyle:{color:'#B8740F'}, z:3,
@@ -2437,7 +2440,8 @@ function renderDrawdownChartOption(chartId, rows, c){
       const p=params.find(pp=>pp.seriesName==='Balance')||params[0];
       return `${p.axisValueLabel}<br/>Balance: ${fmt(p.value)}`;
     }},
-    graphic:[{type:'text', left:4, top:4, style:{text:'Starts at '+fmt(startVal), fill:'rgba(20,40,63,.6)', fontSize:12, fontFamily:"'Spline Sans Mono',monospace"}}],
+    graphic:[{type:'text', left:4, top:4, style:{text:'Starts at '+fmt(startVal), fill:'rgba(20,40,63,.6)', fontSize:12, fontFamily:"'Spline Sans Mono',monospace"}}]
+      .concat(prematureDepletion ? [] : [{type:'text', right:4, top:4, style:{text:endLabelText, fill:endLabelText_color, fontWeight:600, fontSize:12, fontFamily:"'Spline Sans Mono',monospace"}}]),
     series,
   });
 }

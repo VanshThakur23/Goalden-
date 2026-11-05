@@ -1411,7 +1411,9 @@ function renderPotChartOption(chartId, rows, c){
   const prematureDepletion = depletedYear !== null && depletedYear < n;
   const startVal = rows[0].openBal;
   const endVal = rows[n-1].closeBal;
-  const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endVal<=0?'Reaches zero as planned':'Ends at '+fmt(endVal));
+  // A pot planned to run to zero ends a few rupees above it from rounding ("Ends at ₹2"): under 0.1% of the start is zero.
+  const endsAtZero = endVal <= Math.max(0, startVal) * 0.001;
+  const endLabelText = prematureDepletion ? `Runs out, yr ${depletedYear}` : (endsAtZero?'Ends at zero':'Ends at '+fmt(endVal));
   const endLabelColor = prematureDepletion ? '#9C4A2C' : '#1F8A70';
   const endTextColor = prematureDepletion ? CHART_TEXT.bad : CHART_TEXT.good; // AA text tokens; the dot wears the chart colour
   initChart(chartId, {
@@ -1424,12 +1426,15 @@ function renderPotChartOption(chartId, rows, c){
       const p=params[0];
       return `${p.axisValueLabel}<br/>Balance: ${fmt(p.value)}`;
     }},
-    graphic:[{type:'text', left:2, top:2, style:{text:'Starts at '+fmt(startVal), fill:CHART_TEXT.muted, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace"}}],
+    // The end label sits in the top-right corner, opposite "Starts at": on the dot it crossed the falling line.
+    // A pot that runs out early keeps its label on the dot, where it ran out.
+    graphic:[{type:'text', left:2, top:2, style:{text:'Starts at '+fmt(startVal), fill:CHART_TEXT.muted, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace"}}]
+      .concat(prematureDepletion ? [] : [{type:'text', right:2, top:2, style:{text:endLabelText, fill:endTextColor, fontWeight:600, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace"}}]),
     series:[
       { type:'line', data:rows.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#1F8A70', width:1.4},
         areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(31,138,112,.5)'},{offset:1,color:'rgba(31,138,112,.05)'}]}},
         markPoint:{symbol:'circle', symbolSize:7, data:[{coord: prematureDepletion?[depletedYear-1,0]:[n-1,endVal], itemStyle:{color:endLabelColor}}],
-          label:{show:true, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endTextColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:10.5}} },
+          label:{show:prematureDepletion, formatter:()=>endLabelText, position:'top', align:(()=>{ const x=prematureDepletion?depletedYear-1:n-1; return x>n*0.7?'right':(x<n*0.3?'left':'center'); })(), color:endTextColor, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace", fontSize:10.5}} },
     ],
   });
 }

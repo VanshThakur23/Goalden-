@@ -4834,3 +4834,14 @@ standing over the founder's shoulder.
   "Not done" since group 3); the bar chart's year labels no longer collide, the end amount and the flat
   label fit, and "overtakes, yr N" is shortened.
 - Tests: 325/325 engine; smokes 02-25 pass (smoke-25 grows two checks).
+
+## 2026-11-05 - Claude Code - Spending-down chart label (all three planning pages)
+- Phone check of the non-Lab result screens (Quick Calculate, The Full Plan) at 390px: nothing scrolls
+  sideways or is clipped. The 24px offset seen in the browser pane was the hidden pane not running
+  animations; a headless Chrome shot settles at transform none.
+- Found on The Full Plan: the spending-down chart said "Ends at Rs 2". A pot planned to run to zero ends
+  a few rupees above it from rounding. Under 0.1% of the starting pot now counts as zero ("Ends at zero"),
+  and that end label moved to the chart's top-right corner, opposite "Starts at", because on the dot it
+  crossed the falling line. A pot that runs out early keeps "Runs out, yr N" on the dot. Same change in
+  goalden.html, goalden-door2.html and goalden-lab.html (checked: the three functions were the same shape).
+- Tests: 325/325 engine; smokes 02-25 pass.
