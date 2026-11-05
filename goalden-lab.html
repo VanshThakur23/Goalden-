@@ -310,7 +310,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stat-row.pairs{grid-template-columns:repeat(2,minmax(0,1fr))}
 /* A month's rupees to the last digit (₹74,426) is too wide for half a phone: the Rent or buy pair stacks there. */
 @media(max-width:440px){.stat-row.pairs.rb-month{grid-template-columns:1fr}}
-.stmt-table tr.rb-yours td{font-weight:700;color:var(--paper)}
+.lab-table tr.rb-yours td{font-weight:700;color:var(--paper)}
 .slab-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .slab-chips .tglbtn{flex:0 0 auto;border:1px solid rgba(37,87,199,.35);border-radius:3px;padding:8px 10px;min-height:36px}
 /* Retirement Income: the three buckets as one strip in time order. The keys sit in a grid below it, not under their own
@@ -449,8 +449,12 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .stmt-status{margin-top:8px;font-size:12px;line-height:1.5;color:var(--paper)}.stmt-status.is-error{color:#9C4A2C}.stmt-note{margin-top:4px;color:var(--dim)}
 /* The results column is a 1fr grid track, which would otherwise widen to the table's longest unbreakable row. */
 .grid>.output{min-width:0}
-.stmt-table-wrap{overflow-x:auto;max-width:100%}.stmt-table{width:100%;min-width:100%;border-collapse:collapse;font-size:12px}.stmt-table th,.stmt-table td{text-align:left;padding:6px 8px 6px 0;border-bottom:1px solid rgba(20,40,63,.1);vertical-align:top}
-.stmt-table th{font-weight:600;color:var(--dim)}.stmt-table td:not(:first-child),.stmt-table th:not(:first-child){text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* My holdings, risk, Rent or buy and report tables. Not .stmt-table: Read the Company styles that class further down
+   (a sticky 230px first column, at least 480px wide on a phone), which made these scroll sideways on a phone. */
+.lab-table-wrap{overflow-x:auto;max-width:100%}.lab-table{width:100%;min-width:100%;border-collapse:collapse;font-size:12px}.lab-table th,.lab-table td{text-align:left;padding:6px 8px 6px 0;border-bottom:1px solid rgba(20,40,63,.1);vertical-align:top}
+.lab-table th{font-weight:600;color:var(--dim)}.lab-table td:not(:first-child),.lab-table th:not(:first-child){text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.lab-table td:not(:first-child).lab-wrap{white-space:normal}
+.lab-table th:not(:first-child){white-space:normal;min-width:64px}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:#1E4FBE;text-decoration:underline;cursor:pointer}
 .lab-resume{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:850;background:#fff;color:#14283F;border:1px solid rgba(20,40,63,.18);border-left:4px solid #2557C7;border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 10px 30px rgba(20,40,63,.18);max-width:calc(100vw - 32px)}
 .stmt-sold{font-size:10px;color:var(--dim);border:1px solid rgba(20,40,63,.2);border-radius:3px;padding:0 4px}
@@ -2500,6 +2504,7 @@ function renderTwinFatesChartOption(chartId, rowsA, rowsB){
   // starting smaller, which two converging curves otherwise hide.
   let gapIdx=0, gap=0;
   A.forEach((r,i)=>{ const g=r.closeBal-(B[i]?B[i].closeBal:0); if(g>gap){ gap=g; gapIdx=i; } });
+  const domTF=document.getElementById(chartId), narrowTF=!!domTF && domTF.clientWidth<420;
   initChart(chartId, {
     grid:{left:4,right:4,top:10,bottom:22,containLabel:false},
     xAxis:{type:'category', data:A.map((r,i)=>i+1), boundaryGap:false,
@@ -2514,7 +2519,9 @@ function renderTwinFatesChartOption(chartId, rowsA, rowsB){
       { name:'Flat SIP', type:'line', data:A.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#B8740F', width:2, type:[8,4]},
         markLine:{silent:true, symbol:['none','none'], lineStyle:{color:'rgba(20,40,63,.3)', type:'dashed'}, data:[{yAxis:0}]},
         markPoint:(n && gap>0)?{symbol:'circle', symbolSize:6, itemStyle:{color:'#B8740F'}, silent:true,
-          data:[{coord:[gapIdx, A[gapIdx].closeBal]}], label:valueTag(`Year ${gapIdx+1}: step-up pot ${c.compact(gap)} behind`, CHART_TEXT.ink, gapIdx>n*0.6?'left':'top')}:undefined, z:2 },
+          // The label opens away from the nearer edge (right of an early point, left of a late one) and is shorter on a
+          // narrow chart, so it is never cut off at either side.
+          data:[{coord:[gapIdx, A[gapIdx].closeBal]}], label:valueTag(narrowTF ? `yr ${gapIdx+1}: ${c.compact(gap)} behind` : `Year ${gapIdx+1}: step-up pot ${c.compact(gap)} behind`, CHART_TEXT.ink, gapIdx>n*0.6?'left':gapIdx<n*0.4?'right':'top')}:undefined, z:2 },
       { name:'Step-up SIP', type:'line', data:B.map(r=>r.closeBal), showSymbol:false, lineStyle:{color:'#1F8A70', width:2}, z:2,
         markPoint:n?{symbol:'circle', symbolSize:7, itemStyle:{color:'#256F55'}, silent:true,
           data:[{coord:[n-1, B[n-1].closeBal]}], label:valueTag('Both reach '+c.compact(B[n-1].closeBal), CHART_TEXT.good)}:undefined },
@@ -2525,19 +2532,22 @@ function renderTwinFatesChartOption(chartId, rowsA, rowsB){
 function renderStepPathChart(chartId, yearlySip, flatSip){
   const c=cfg(), n=yearlySip.length;
   const cross=yearlySip.findIndex(v=>v>flatSip);
+  // On a phone the year labels collided ("Yr 4Yr 7...") and the last bar's amount ran off the right edge: fewer,
+  // shorter labels there, and room on the right for the end amount.
+  const dom=document.getElementById(chartId), narrow=!!dom && dom.clientWidth<420;
   initChart(chartId, {
-    grid:{left:8,right:12,top:26,bottom:22,containLabel:true},
-    xAxis:{type:'category', data:yearlySip.map((_,i)=>'Yr '+(i+1)), axisTick:{show:false}, axisLabel:{color:CHART_TEXT.muted, interval:Math.max(0,Math.floor(n/8)-1)}},
+    grid:{left:8,right:narrow?30:12,top:26,bottom:22,containLabel:true},
+    xAxis:{type:'category', data:yearlySip.map((_,i)=>(narrow?'':'Yr ')+(i+1)), axisTick:{show:false}, axisLabel:{color:CHART_TEXT.muted, hideOverlap:true, interval:narrow ? Math.max(0,Math.ceil(n/5)-1) : Math.max(0,Math.floor(n/8)-1)}},
     yAxis:{type:'value', axisLabel:{formatter:v=>c.compact(v), color:CHART_TEXT.muted}, splitLine:{lineStyle:{color:'rgba(20,40,63,.06)'}}},
     tooltip:{trigger:'axis', confine:true, formatter:ps=>ps[0].axisValue+'<br/>'+ps.map(p=>p.marker+p.seriesName+': '+c.fmt(Math.round(p.value))+'/mo').join('<br/>')},
     series:[
       { name:'Step-up SIP', type:'bar', data:yearlySip.map(v=>Math.round(v)), barMaxWidth:18,
         itemStyle:{color:p=>p.dataIndex>=cross && cross>=0 ? '#B8740F' : '#1F8A70', borderRadius:[2,2,0,0]},
         markPoint:{silent:true, symbolSize:1, data:[{coord:[0,Math.round(yearlySip[0])]},{coord:[n-1,Math.round(yearlySip[n-1])]}],
-          label:{show:true, position:'top', formatter:p=>c.fmt(p.data.coord[1]), color:CHART_TEXT.ink, fontSize:10.5, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace"}} },
+          label:{show:true, position:'top', formatter:p=>narrow?c.compact(p.data.coord[1]):c.fmt(p.data.coord[1]), color:CHART_TEXT.ink, fontSize:10.5, fontWeight:600, fontFamily:"'Spline Sans Mono',monospace"}} },
       { name:'Flat SIP', type:'line', data:yearlySip.map(()=>Math.round(flatSip)), showSymbol:false, lineStyle:{color:'#14283F', width:1.5, type:'dashed'},
-        endLabel:{show:true, formatter:()=>'Flat '+c.fmt(Math.round(flatSip)), color:CHART_TEXT.ink, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace", offset:[-110,-12]},
-        markLine: cross>=0 ? {silent:true, symbol:'none', lineStyle:{color:'#14283F', type:'dotted'}, label:{formatter:'overtakes flat in year '+(cross+1), color:CHART_TEXT.ink, fontSize:10.5, position:'end', align:cross>n*0.6?'right':'left'}, data:[{xAxis:cross}]} : undefined },
+        endLabel:{show:true, formatter:()=>'Flat '+(narrow?c.compact(Math.round(flatSip)):c.fmt(Math.round(flatSip))), color:CHART_TEXT.ink, fontSize:10.5, fontFamily:"'Spline Sans Mono',monospace", offset:[narrow?-80:-110,-12], backgroundColor:'rgba(255,255,255,.85)', padding:[1,3]},
+        markLine: cross>=0 ? {silent:true, symbol:'none', lineStyle:{color:'#14283F', type:'dotted'}, label:{formatter:(narrow?'overtakes, yr ':'overtakes flat in year ')+(cross+1), color:CHART_TEXT.ink, fontSize:10.5, position:'end', align:cross>n*(narrow?0.4:0.6)?'right':'left'}, data:[{xAxis:cross}]} : undefined },
     ],
   });
 }
@@ -3151,21 +3161,26 @@ function renderIncome(){
   // ---- card 2: SWP vs FD
   const kindWord=s.kind==='swpDebt'?'a debt fund':'an equity fund';
   const swRow=sw.rows[0];
-  let drawCap=`To spend ${money(s.spend)} a month, an SWP from ${kindWord} sells ${money(swRow.gross)} in year 1 and ${money(sw.firstTax)} of it is tax; FD interest at ${s.fdRate}% pays ${money(fd.firstTax)} of tax in year 1.`;
+  // A pot that runs out within the first year has no year-1 tax to compare (the engine stops at that year with no tax
+  // worked out), so the caption says the pot falls short instead of printing a tax of zero.
+  const short1=sw.ranOutYear===1 || fd.ranOutYear===1;
+  let drawCap=short1
+    ? `${c.compact(s.corpus)} does not cover the first year of spending ${money(s.spend)} a month ${sw.ranOutYear===1 && fd.ranOutYear===1 ? 'either way' : sw.ranOutYear===1 ? `as an SWP from ${kindWord}` : 'from FD interest'}, so there is no year-1 tax to compare. Lower the spending, or check the pot.`
+    : `To spend ${money(s.spend)} a month, an SWP from ${kindWord} sells ${money(swRow.gross)} in year 1 and ${money(sw.firstTax)} of it is tax; FD interest at ${s.fdRate}% pays ${money(fd.firstTax)} of tax in year 1.`;
   // An SWP leaves its unsold gains untaxed inside the pot, so its raw balance would read as more than anyone could spend.
   // Both lines and both end figures are therefore what would be LEFT AFTER TAX if everything were sold that year.
-  drawCap+=` Over the whole period the SWP route pays ${c.compact(sw.totalTax)} in tax as it goes${sw.finalExitTax>0?` and would owe ${c.compact(sw.finalExitTax)} more on the gains still in the pot`:''}; the FD route pays ${c.compact(fd.totalTax)} on its interest${R.sell>0?`, plus ${c.compact(R.sell)} to sell the fund first`:''}.`;
-  if(s.kind==='swpDebt') drawCap+=` A debt fund defers tax rather than avoiding it: the gains pile up and are taxed as they are sold.`;
+  if(!short1) drawCap+=` Over the whole period the SWP route pays ${c.compact(sw.totalTax)} in tax as it goes${sw.finalExitTax>0?` and would owe ${c.compact(sw.finalExitTax)} more on the gains still in the pot`:''}; the FD route pays ${c.compact(fd.totalTax)} on its interest${R.sell>0?`, plus ${c.compact(R.sell)} to sell the fund first`:''}.`;
+  if(s.kind==='swpDebt' && !short1) drawCap+=` A debt fund defers tax rather than avoiding it: the gains pile up and are taxed as they are sold.`;
   const keptTxt=(pl,after)=>pl.ranOutYear ? `runs out in year ${pl.ranOutYear}` : `leaves ${c.compact(pl.finalIfSold)}${after?' after tax':''}`;
-  drawCap+=` To see the tax alone, give the fund the FD's ${s.fdRate}% too: the SWP ${keptTxt(R.swSame,true)}, the FD ${keptTxt(fd,false)}.`;
+  if(!short1) drawCap+=` To see the tax alone, give the fund the FD's ${s.fdRate}% too: the SWP ${keptTxt(R.swSame,true)}, the FD ${keptTxt(fd,false)}.`;
   const keptCell=pl=>pl.ranOutYear ? `<span style="color:#9C4A2C">Runs out, yr ${pl.ranOutYear}</span>` : c.compact(pl.finalIfSold);
   const sellNote=R.sell>0 ? `<div class="gr-note">Both lines start at ${c.compact(s.corpus-R.sell)}: the pot less the ${money(R.sell)} of tax that selling the fund today would cost. The FD route pays it up front; the SWP route puts it off, and its line is net of whatever tax would be owed on a sale that year. If the money is already cash, set your own money to 100%.</div>` : '';
   const drawCard=`<div class="card">
       <h4>An SWP or FD interest: what you keep after tax</h4>
       <div class="cap">${drawCap}</div>
       <div class="stat-row pairs">
-        <div class="stat"><div class="stat-label">Tax in year 1, SWP</div><div class="stat-value">${money(sw.firstTax)}</div><div class="stat-sub">only the gain part of what is sold</div></div>
-        <div class="stat"><div class="stat-label">Tax in year 1, FD</div><div class="stat-value">${money(fd.firstTax)}</div><div class="stat-sub">all the interest, at ${R.slabPct}%</div></div>
+        <div class="stat"><div class="stat-label">Tax in year 1, SWP</div><div class="stat-value">${sw.ranOutYear===1?'-':money(sw.firstTax)}</div><div class="stat-sub">${sw.ranOutYear===1?'the pot runs out in year 1':'only the gain part of what is sold'}</div></div>
+        <div class="stat"><div class="stat-label">Tax in year 1, FD</div><div class="stat-value">${fd.ranOutYear===1?'-':money(fd.firstTax)}</div><div class="stat-sub">${fd.ranOutYear===1?'the pot runs out in year 1':'all the interest, at '+R.slabPct+'%'}</div></div>
         <div class="stat"><div class="stat-label">SWP after ${s.years} years, if sold${infoIcon('What would be left after tax if the whole fund pot were sold in the last year. An SWP leaves its gains untaxed until they are sold, so the pot itself reads higher than what you could spend.')}</div><div class="stat-value">${keptCell(sw)}</div>${sw.ranOutYear?'':`<div class="stat-sub">pot ${c.compact(sw.finalBalance)}, less ${c.compact(sw.finalExitTax)} tax on its gains</div>`}</div>
         <div class="stat"><div class="stat-label">FD after ${s.years} years</div><div class="stat-value">${keptCell(fd)}</div>${fd.ranOutYear?'':`<div class="stat-sub">interest already taxed each year</div>`}</div>
       </div>
@@ -3325,7 +3340,7 @@ function incomeAdvisorResults(){
     { kind:'buckets', title:'Three buckets', xAxis:'years of spending (liquid, then debt, then equity)', yAxis:'rupees', note:'sized on the monthly spend, without counting what each bucket earns; the pot is '+(bk.covered?'enough':'NOT enough')+' for '+(bk.liquidYears+bk.debtYears)+' years of spending',
       points:[{ label:'liquid', value:c.compact(bk.liquid)+' (years 1-'+bk.liquidYears+')' }, { label:'debt', value:c.compact(bk.debt) }, { label:'equity', value:c.compact(bk.equity)+' ('+incPct(bk.equityShare)+' of the pot)' }, { label:'first-year draw', value:incPct(R.annual/s.corpus) }] },
     { kind:'comparison', title:'SWP or FD interest, after tax', xAxis:'years (0 to '+s.years+')', yAxis:'balance', note:'both spend '+c.fmt(s.spend)+'/month after tax at the '+R.slabPct+'% slab; both balances are what would be left after tax if everything were sold that year, starting from the pot less the tax to sell the fund today; the FD rate is fixed only until each deposit matures, the fund growth is an assumption',
-      points:[{ label:(s.kind==='swpDebt'?'debt fund':'equity fund')+' SWP, year-1 tax', value:c.fmt(Math.round(sw.firstTax)) }, { label:'FD, year-1 tax', value:c.fmt(Math.round(fd.firstTax)) }, { label:'SWP, kept after tax if sold', value:sw.ranOutYear ? end(sw) : 'ends at '+c.compact(sw.finalIfSold)+' (pot '+c.compact(sw.finalBalance)+', less '+c.compact(sw.finalExitTax)+' tax on its gains)' }, { label:'FD', value:end(fd) }, { label:'tax to sell the fund first', value:c.fmt(Math.round(R.sell)) }] },
+      points:[{ label:(s.kind==='swpDebt'?'debt fund':'equity fund')+' SWP, year-1 tax', value:sw.ranOutYear===1?'runs out in year 1':c.fmt(Math.round(sw.firstTax)) }, { label:'FD, year-1 tax', value:fd.ranOutYear===1?'runs out in year 1':c.fmt(Math.round(fd.firstTax)) }, { label:'SWP, kept after tax if sold', value:sw.ranOutYear ? end(sw) : 'ends at '+c.compact(sw.finalIfSold)+' (pot '+c.compact(sw.finalBalance)+', less '+c.compact(sw.finalExitTax)+' tax on its gains)' }, { label:'FD', value:end(fd) }, { label:'tax to sell the fund first', value:c.fmt(Math.round(R.sell)) }] },
     { kind:'comparison', title:'A crash through buckets and one pot', xAxis:'years (0 to '+s.years+')', yAxis:'balance', note:(R.ep?R.ep.label+' in year '+s.shock.year:'no crash')+'; before tax',
       points:[{ label:'bucket plan', value:end(hit.buckets) }, { label:'single rebalanced pot', value:end(hit.mix) }] },
     { kind:'pension', title:'NPS pension', xAxis:'', yAxis:'', note:'annuity rate is the user\'s assumption, not a quote; the 20% minimum annuity share is for most subscribers, government employees need at least 40%, and small pots have their own rules',
@@ -3612,7 +3627,7 @@ function renderRentBuy(){
   const lead=`After ${s.years} years, buying leaves you <b class="lg-gap">${K(rb.gap)} ${ahead?'ahead of':'behind'}</b> renting and investing the difference, if the price grows ${s.priceGrowth}% a year and the investments ${s.invReturn}%. ${beLine}`;
   deferChartInit(()=>renderRentBuyChart('rb-path-echart', rb, c));
   // A table, not bars: a break-even can be negative or outside the range searched, which a bar from zero cannot show.
-  const stayRows=R.stays.map(x=>`<tr${x.years===s.years?' class="rb-yours"':''}><td>${x.years} years${x.years===s.years?' (yours)':''}</td><td>${x.breakEven!=null ? rbPct(x.breakEven)+' a year' : x.beyond==='below' ? 'buying ahead even at -10% a year' : 'renting ahead even at 30% a year'}</td></tr>`).join('');
+  const stayRows=R.stays.map(x=>`<tr${x.years===s.years?' class="rb-yours"':''}><td>${x.years} years${x.years===s.years?' (yours)':''}</td><td class="lab-wrap">${x.breakEven!=null ? rbPct(x.breakEven)+' a year' : x.beyond==='below' ? 'buying ahead even at -10% a year' : 'renting ahead even at 30% a year'}</td></tr>`).join('');
   const diffTxt=buyOut>fm.rent ? `the renter puts the ${M(buyOut-fm.rent)} difference into investments` : `the buyer puts the ${M(fm.rent-buyOut)} difference into investments`;
   const pathCard=`<div class="card is-primary"><h4>What each leaves you</h4>
       <p class="lg-head">${lead}</p>
@@ -3627,7 +3642,7 @@ function renderRentBuy(){
       <div class="gr-note">The loan is ${K(rb.loan)} over ${s.loanYears} years at ${s.loanRate}%. ${s.regime==='old' ? `Old regime: the tax on up to ${c.fmt(TAX_REGIME_IN.homeLoanInterest)} of interest a year comes back at your ${R.slabPct}% slab and cess, ${K(rb.taxBack)} over the ${s.years} years, and goes to the buyer.` : 'New regime: no tax relief on a home you live in.'} Left out: ${s.regime==='old'?'<b>the HRA exemption a salaried renter usually gets in the old regime</b>, which buying the home you live in ends, so the old-regime result here leans towards buying; ':''}the 80C relief on the principal in the old regime (EPF usually fills 80C already); the renter's security deposit (often 2-10 months' rent), which earns nothing; home insurance; moving costs; and what owning or renting is worth to you beyond money.</div></div>`;
   const stayCard=`<div class="card"><h4>How long you stay changes the line</h4>
       <div class="cap">The yearly price growth buying needs to come out level, for different stays, with everything else as set. Stamp duty is paid once, so a short stay has to make it back quickly.</div>
-      <div class="stmt-table-wrap" id="rb-stays"><table class="stmt-table"><thead><tr><th>If you stay</th><th>Break-even price growth</th></tr></thead><tbody>${stayRows}</tbody></table></div>
+      <div class="lab-table-wrap" id="rb-stays"><table class="lab-table"><thead><tr><th>If you stay</th><th>Break-even price growth</th></tr></thead><tbody>${stayRows}</tbody></table></div>
       <div class="gr-note">Indian city homes have mostly rented for 2-4% of their price a year; at that yield the break-even often sits above typical inflation, and it moves with the return you assume for the investments. Past price growth differs a lot by city and by decade: set the break-even beside your own guess.</div></div>`;
 
   const slabChips=`<div class="cap" style="margin-top:8px" id="rbSlabLbl">Your income-tax slab:</div><div class="slab-chips" role="group" aria-labelledby="rbSlabLbl">${LOAN_SLABS.map(v=>`<button type="button" class="tglbtn${v===R.slabPct?' active':''}" data-rb="slab" data-val="${v}" aria-pressed="${v===R.slabPct}">${v}%</button>`).join('')}</div>`;
@@ -4576,7 +4591,7 @@ function holdRiskHTML(d){
   deferChartInit(()=>renderVsRiskChart('vs-risk-echart', measured));
   return `${head}
     <p class="lg-head" style="font-size:15px">${lead}</p>
-    <div class="stmt-table-wrap"><table class="stmt-table"><thead><tr><th>Fund</th><th>Moved a year, yours / index</th><th>Worst fall, yours / index</th><th>Price grew a year, yours / index${infoIcon('How fast the price itself grew, from the first to the last day the fund was bought or sold on the statement. It is not the XIRR above, which weighs every rupee by how long it was in.')}</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="lab-table-wrap"><table class="lab-table"><thead><tr><th>Fund</th><th>Moved a year, yours / index</th><th>Worst fall, yours / index</th><th>Price grew a year, yours / index${infoIcon('How fast the price itself grew, from the first to the last day the fund was bought or sold on the statement. It is not the XIRR above, which weighs every rupee by how long it was in.')}</th></tr></thead><tbody>${rows}</tbody></table></div>
     <div id="vs-risk-echart" class="echart" style="height:240px;margin-top:10px" aria-label="Each fund's yearly movement against how fast its price grew, joined to the index fund measured on the same days"></div>
     <div class="gr-note">Measured on the days each fund was bought or sold, from the prices printed on your statement, and the index fund on exactly those days, so the two are like for like; both read a little calmer than a day-by-day measure. "Price grew a year" runs from the first to the last of those days, so it differs from the yearly return (XIRR) above. Up and to the left is better: more growth for less movement. ${notTxt}</div>`;
 }
@@ -4745,7 +4760,7 @@ function holdVsIndexHTML(R){
     </div>
     <div id="vs-index-echart" class="echart" style="height:320px" aria-label="What the money put in became in the Nifty 50 index fund, against what your equity funds are worth today"></div>
     ${d.funds.length>1 ? `<div class="section-label" style="margin-top:12px">Fund by fund</div>
-    <div class="stmt-table-wrap"><table class="stmt-table"><thead><tr><th>Fund</th><th>Yours a year</th><th>Index a year</th><th>Against the index</th></tr></thead><tbody>${fundRows}</tbody></table></div>` : ''}
+    <div class="lab-table-wrap"><table class="lab-table"><thead><tr><th>Fund</th><th>Yours a year</th><th>Index a year</th><th>Against the index</th></tr></thead><tbody>${fundRows}</tbody></table></div>` : ''}
     ${holdRiskHTML(d)}
     ${holdLiveButtonHTML()}
     <div class="gr-note">Set against ${advisorAttr(d.spec.full)}, bought and sold on the same days as your equity funds. ${left.length?`Left out: ${advisorAttr(left.join(', '))} (debt, hybrid, gold, international or not named clearly enough to tell; they aim at something else). `:''}${d.eq.incomplete.length?`Also left out, because their history on this statement is incomplete or could not be read reliably: ${advisorAttr(d.eq.incomplete.join(', '))}. `:''}Small- and mid-cap funds are set against the Nifty 50 as well: it is the plain alternative, not their own index. Both sides are before tax and exit loads; the index fund's own costs are in its price. ${v.wentShort?'Your withdrawals at times took more than the index fund held in this comparison. ':''}Past results, not a forecast.</div>
@@ -14165,8 +14180,8 @@ function advisorGetResults() {
     return { ok:true, result:{ tool:'Retirement Income', pot:s.corpus, monthlySpendAfterTax:s.spend, years:s.years, inflationPct:s.inflation, slabPct:R.slabPct,
       firstYearDrawPct:+(R.annual / s.corpus * 100).toFixed(1),
       buckets:{ liquid:Math.round(bk.liquid), debt:Math.round(bk.debt), equity:Math.round(bk.equity), potCoversNearBuckets:bk.covered },
-      swp:{ from:s.kind === 'swpDebt' ? 'debt fund' : 'equity fund', year1Tax:Math.round(R.sw.firstTax), totalTax:Math.round(R.sw.totalTax), potAtEndBeforeSaleTax:end(R.sw), potAtEndAfterTaxIfSold:R.sw.ranOutYear ? end(R.sw) : Math.round(R.sw.finalIfSold) },
-      fd:{ year1Tax:Math.round(R.fd.firstTax), totalTax:Math.round(R.fd.totalTax), potAtEnd:end(R.fd), startsAfterTaxToSellTheFund:Math.round(R.sell) },
+      swp:{ from:s.kind === 'swpDebt' ? 'debt fund' : 'equity fund', year1Tax:R.sw.ranOutYear === 1 ? null : Math.round(R.sw.firstTax), totalTax:Math.round(R.sw.totalTax), potAtEndBeforeSaleTax:end(R.sw), potAtEndAfterTaxIfSold:R.sw.ranOutYear ? end(R.sw) : Math.round(R.sw.finalIfSold) },
+      fd:{ year1Tax:R.fd.ranOutYear === 1 ? null : Math.round(R.fd.firstTax), totalTax:Math.round(R.fd.totalTax), potAtEnd:end(R.fd), startsAfterTaxToSellTheFund:Math.round(R.sell) },
       crash:{ scenario:R.ep ? R.ep.label + ' in year ' + s.shock.year : 'none', bucketPlanAtEnd:end(R.hit.buckets), singleRebalancedPotAtEnd:end(R.hit.mix) },
       nps:{ pot:s.npsPot, pensionPerMonthAfterTax:Math.round(R.nps.monthlyAfter), cashKept:Math.round(R.nps.lumpKept) } }, flags:[] };
   }
@@ -14505,7 +14520,7 @@ function briefingFromSummary(fn){
     if(!(r.charts||[]).filter(Boolean).length) return { ok:false, error:r.note || 'This part needs more input first.' };
     const cap=t=>t.charAt(0).toUpperCase()+t.slice(1);
     return { ok:true, html:(r.charts||[]).filter(Boolean).map(ch=>`<div class="card"><h4>${advisorAttr(ch.title)}</h4>
-      <table class="stmt-table"><tbody>${(ch.points||[]).map(pt=>`<tr><td>${advisorAttr(pt.label)}</td><td>${advisorAttr(String(pt.value))}</td></tr>`).join('')}</tbody></table>
+      <table class="lab-table"><tbody>${(ch.points||[]).map(pt=>`<tr><td>${advisorAttr(pt.label)}</td><td class="lab-wrap">${advisorAttr(String(pt.value))}</td></tr>`).join('')}</tbody></table>
       ${ch.note?`<div class="gr-note">${advisorAttr(cap(ch.note))}.</div>`:''}</div>`).join('') };
   };
 }

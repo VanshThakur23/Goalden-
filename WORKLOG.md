@@ -4821,3 +4821,16 @@ standing over the founder's shoulder.
   The Full Plan"; both routing evals pass.
 - Full eval suite before these fixes: 26/26 passed. Tests: 325/325 engine; smokes 02-25 pass.
 - Known: after a ?tab= link or a hand-off, the first draw saves that fresh state over the earlier save.
+
+## 2026-11-05 - Claude Code - Phone sweep and the last small fixes
+- Swept all 18 Lab tabs at 375px: no page scrolls sideways. Found the Lab's own tables (My holdings,
+  risk, Rent or buy, report sections) sharing `.stmt-table` with Read the Company, whose later rules
+  (a sticky 230px first column, min 480px on a phone) made them scroll sideways inside their cards. They
+  now use `.lab-table`; long values and headings wrap.
+- Retirement Income: when the pot runs out within the first year, the caption said "Rs 0 of it is tax"
+  (the engine stops that year with no tax worked out). It now says the pot does not cover the first
+  year, the year-1 tax tiles show "-", and the advisor gets null with "runs out in year 1".
+- Step-up SIP on a phone: the "behind" label opens away from the nearer edge and is shorter (a known
+  "Not done" since group 3); the bar chart's year labels no longer collide, the end amount and the flat
+  label fit, and "overtakes, yr N" is shortened.
+- Tests: 325/325 engine; smokes 02-25 pass (smoke-25 grows two checks).

@@ -73,5 +73,9 @@ check(/rows typed by hand are remembered in this browser/.test(gl), 'My holdings
 check(/if\(!\(r\.charts\|\|\[\]\)\.filter\(Boolean\)\.length\) return \{ ok:false, error:r\.note/.test(fnBody(gl, 'briefingFromSummary')), 'a tab with nothing to show gives a reason, not an empty report section');
 check(/A situation with several goals, a family or loans still goes to The Full Plan/.test(read('index.html')), 'a full situation still goes to The Full Plan');
 
+// ---- small fixes: the Lab's own tables, and a pot that runs out in year 1
+check(/\.lab-table-wrap\{overflow-x:auto;max-width:100%\}/.test(gl) && (gl.match(/class="stmt-table"/g) || []).length === 1, 'only Read the Company uses .stmt-table; the Lab\'s other tables have their own class');
+check(/const short1=sw\.ranOutYear===1 \|\| fd\.ranOutYear===1;/.test(gl) && /does not cover the first year of spending/.test(gl) && /if\(!short1\) drawCap\+=` To see the tax alone/.test(gl), 'a pot that runs out in year 1 says so instead of showing a tax of zero');
+
 console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');
 process.exit(fail ? 1 : 0);
