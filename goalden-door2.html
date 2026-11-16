@@ -286,6 +286,12 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .plan-total.gap {background:rgba(160,58,34,.2);border:1px solid rgba(160,58,34,.5)}
 .plan-total.neutral{background:var(--card,#fff);border:1px solid rgba(20,40,63,.12)}
 .fit-card p{margin-bottom:6px}
+.alloc-card.track-card{border-left:3px solid var(--gold)}
+.track-p{font-size:13.5px;line-height:1.55;color:rgba(20,40,63,.82);margin:4px 0 12px}
+.track-lbl{display:block;font-size:13px;font-weight:600;color:rgba(20,40,63,.82);margin-bottom:6px}
+.track-in{width:100%;max-width:280px;font:500 16px 'Spline Sans Mono',monospace;padding:10px 12px;border:1px solid rgba(20,40,63,.25);border-radius:8px;background:#fff;color:var(--paper)}
+.track-out{font-size:13.5px;line-height:1.55;color:var(--paper);margin-top:10px}
+.track-out:empty{display:none}
 .fit-goal{border-top:1px solid rgba(20,40,63,.1);padding:12px 0 4px;margin-top:10px}
 .fit-goal-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
 .fit-goal-name{font-family:'Newsreader',serif;font-weight:600;font-size:15.5px;color:var(--paper)}
@@ -1467,6 +1473,126 @@ function bindFitCard(){
   fitUpdate();
 }
 
+/* ---------------------------------------------------------------------
+   SINCE YOU SAVED THIS PLAN
+   A plan file records when it was saved. Loaded a month or more later, the plan screen says where these goals
+   would stand by now if the plan's monthly amounts had gone in and markets had done what the plan assumes, asks
+   what the person actually has, and says ahead or behind. "Bring the plan up to date" moves each goal's date
+   nearer by exactly the months gone (years can be fractional inside; they are rounded only where shown), grows
+   each goal's amount with prices for those months so its target at its date is unchanged, shares today's
+   savings across the goals by what each was expected to hold, and drops goals whose date has passed. Only while
+   the goals and risk mix are as they were loaded: once they change, the saved plan is no longer the yardstick.
+   --------------------------------------------------------------------- */
+let TRACK_TYPED='';   // what was typed in the card, kept across re-renders (advisor actions, Make it fit)
+function trackMonths(){
+  if(!G.planSavedAt) return 0;
+  return Math.floor((Date.now()-G.planSavedAt)/(30.44*864e5));
+}
+function trackKey(){ return JSON.stringify({ goals:G.goals, bucket:G.bucket }); }
+function trackActive(){ return trackMonths()>=1 && G.goals.length>0 && G.planSavedKey===trackKey(); }
+// Reads an amount the way people type it here: "15,00,000", "Rs 15 lakh", "15L", "1.5 cr", "800k", "1.2 million".
+// Anything else (a minus sign, a word it does not know) is null: never a guess that could wipe the savings.
+function trackParseAmount(str){
+  const t=String(str||'').toLowerCase().replace(/rs\.?/g,'').replace(/[₹$,\s]/g,'');
+  const m=t.match(/^(\d+(?:\.\d+)?)(k|thousand|l|lac|lacs|lakh|lakhs|cr|crore|crores|m|mn|million)?$/);
+  if(!m) return null;
+  const mult={ k:1e3, thousand:1e3, l:1e5, lac:1e5, lacs:1e5, lakh:1e5, lakhs:1e5, cr:1e7, crore:1e7, crores:1e7, m:1e6, mn:1e6, million:1e6 }[m[2]]||1;
+  return Math.round(parseFloat(m[1])*mult);
+}
+// Where each goal's pot would be after m months on the plan: its monthly amount paid at the start of each month
+// (as solveSIP assumes) and the savings it started with, at the goal's own rate (a purchase's savings at the debt
+// rate, as calcGoal has it). A goal whose date has passed is marked and left out of the total.
+function trackExpected(plan, m){
+  const d=cfg().d;
+  return plan.goals.map(g=>{
+    const passed=m>=Math.round(g.years*12);
+    const n=Math.min(m, Math.round(g.years*12)), r=effectiveMonthlyRate(g.rate);
+    const sipPart=r>0 ? g.sip*((Math.pow(1+r,n)-1)/r)*(1+r) : g.sip*n;
+    const es=g.existingSavings||0;
+    const esPart=g.type==='generic' ? es*Math.pow(1+d.debt,n/12) : es*Math.pow(1+r,n);
+    return { expected:passed?0:sipPart+esPart, passed };
+  });
+}
+// The goals as they stand today. Dates nearer by exactly m months; amounts grown with prices for those months (the
+// inflation calcGoal uses for each kind) so each target at its date is unchanged; today's savings shared by what
+// each goal was expected to hold; goals whose date has passed dropped.
+function trackUpdatedGoals(have, plan, m){
+  const d=cfg().d, c=cfg(), y=m/12;
+  const exp=trackExpected(plan, m), tot=exp.reduce((a,e)=>a+e.expected,0), live=exp.filter(e=>!e.passed).length;
+  return G.goals.map((g,i)=>{
+    if(exp[i].passed) return null;
+    const x={ ...g };
+    x.years=g.years-y;
+    if(g.type==='retirement'){ x.currentAge=Math.round(g.currentAge+y); x.monthlyExpense=Math.round(g.monthlyExpense*Math.pow(1+d.inflation,y)); }
+    else if(g.type==='education'){ x.annualFee=Math.round(g.annualFee*Math.pow(1+d.eduInflation,y)); }
+    else { x.amount=Math.round(g.amount*Math.pow(1+((c.goalInflation&&c.goalInflation[g.genSub])||d.inflation),y)); }
+    const share=tot>0 ? exp[i].expected/tot : 1/live;
+    x.existingSavings=Math.round(have*share);
+    return x;
+  }).filter(Boolean);
+}
+function trackAgo(m){
+  if(m<=24) return m+(m===1?' month':' months');
+  const yy=Math.floor(m/12), mm=m%12;
+  return yy+' years'+(mm?' and '+mm+(mm===1?' month':' months'):'');
+}
+function trackList(names){ return names.length<2 ? names.join('') : names.slice(0,-1).join(', ')+' and '+names[names.length-1]; }
+function trackCardHTML(plan, c){
+  if(!trackActive()) return '';
+  const m=trackMonths(), exp=trackExpected(plan, m), total=exp.reduce((a,e)=>a+e.expected,0);
+  const when=new Date(G.planSavedAt).toLocaleDateString(G.country==='US'?'en-US':'en-IN',{ day:'numeric', month:'short', year:'numeric' });
+  const passed=plan.goals.filter((g,i)=>exp[i].passed).map(g=>g.label);
+  const liveSip=plan.goals.filter((g,i)=>!exp[i].passed).reduce((a,g)=>a+g.sip,0);
+  const eg=G.country==='US' ? '150,000' : '15,00,000 or 15 lakh';
+  return `<div class="alloc-card track-card" id="trackCard">
+    <div class="section-head">Since you saved this plan</div>
+    <p class="track-p">You saved it on ${when}, ${trackAgo(m)} ago. If the plan&rsquo;s ${c.fmt(liveSip)} a month had gone into ${passed.length?'the goals still ahead':'these goals'} and markets had done what the plan assumes, they would hold about <b>${c.fmt(Math.round(total))}</b> now (the emergency fund not counted).${passed.length?` The ${passed.length>1?'dates':'date'} for ${trackList(passed)} ${passed.length>1?'have':'has'} passed: ${passed.length>1?'they are':'it is'} left out here, and taken off the plan if you bring it up to date.`:''}</p>
+    <label class="track-lbl" for="trackHave">What do your savings for ${passed.length?'the goals still ahead':'these goals'} add up to today?</label>
+    <input class="track-in" id="trackHave" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. ${eg}" value="${String(TRACK_TYPED).replace(/[<>&"]/g,'')}">
+    <div class="track-out" id="trackOut" aria-live="polite"></div>
+    <div class="fit-actions"><button type="button" class="fit-apply" id="trackApply" disabled>Bring the plan up to date</button><button type="button" class="fit-reset" id="trackDismiss">Not now</button></div>
+  </div>`;
+}
+function bindTrackCard(){
+  const inp=document.getElementById('trackHave');
+  if(!inp) return;
+  const c=cfg(), m=trackMonths(), out=document.getElementById('trackOut'), apply=document.getElementById('trackApply');
+  let timer=null;
+  const show=()=>{
+    const have=trackParseAmount(inp.value);
+    apply.disabled=have===null;
+    if(!inp.value.trim()){ out.innerHTML=''; return; }
+    if(have===null){ out.innerHTML='Type an amount like 15,00,000, 15 lakh or 1.5 crore.'; return; }
+    const plan=buildPlan(), exp=trackExpected(plan, m), total=exp.reduce((a,e)=>a+e.expected,0), diff=have-total;
+    const liveGoals=plan.goals.filter((g,i)=>!exp[i].passed);
+    const now=liveGoals.reduce((a,g)=>a+g.sip,0);
+    const upd=trackUpdatedGoals(have, plan, m).map(g=>calcGoal(g));
+    const next=upd.reduce((a,r)=>a+r.sip,0);
+    const steadier=upd.some((r,i)=>r.rate<liveGoals[i].rate-1e-9);
+    out.innerHTML=`Reads as ${c.fmt(have)}. `
+      + (Math.abs(diff)<Math.max(1000,total*0.02) ? `That is about where the plan expected.`
+        : diff>0 ? `That is <b>${c.fmt(Math.round(diff))} ahead</b> of where the plan expected.`
+        : `That is <b>${c.fmt(Math.round(-diff))} behind</b> where the plan expected. After a fall in markets, being behind for a while is normal; the plan assumes a steady rate that real markets rarely keep.`)
+      + ` Brought up to date (each goal&rsquo;s date ${trackAgo(m)} nearer, today&rsquo;s savings shared across the goals), they would need <b>${c.fmt(Math.round(next))}</b> a month from here, against ${c.fmt(Math.round(now))} in the plan you saved.`
+      + (steadier ? ` Goals nearer their date move to a steadier mix, which needs a little more each month.` : '');
+  };
+  inp.addEventListener('input', ()=>{
+    TRACK_TYPED=inp.value;
+    apply.disabled=trackParseAmount(inp.value)===null;
+    clearTimeout(timer); timer=setTimeout(show, 300);   // the result is read out once typing pauses, not per key
+  });
+  if(inp.value) show();
+  const done=()=>{ G.planSavedAt=null; G.planSavedKey=null; TRACK_TYPED=''; };
+  apply.addEventListener('click', ()=>{
+    const have=trackParseAmount(inp.value);
+    if(have===null) return;
+    G.goals=trackUpdatedGoals(have, buildPlan(), m);
+    done(); render();
+    const sc=document.querySelector('.plan-scroll'); if(sc) sc.scrollTop=0;
+  });
+  document.getElementById('trackDismiss').addEventListener('click', ()=>{ done(); render(); });
+}
+
 function buildPlan(){
   const emg=calcEmergency();
   const goals=G.goals.map(g=>({...g,...calcGoal(g)}));
@@ -1798,7 +1924,7 @@ function renderGoalsHub(){
   ${G.goals.map((g,i)=>{
     const calc=calcGoal(g);
     return `<div class="goal-pill done">
-      <div class="gp-left"><div class="gp-label">${g.label}</div><div class="gp-tag">${g.years}yr horizon</div></div>
+      <div class="gp-left"><div class="gp-label">${g.label}</div><div class="gp-tag">${Math.round(g.years)}yr horizon</div></div>
       <div class="gp-right">${c.fmt(calc.sip)}/mo<span class="gp-sip">${c.compact(calc.corpus)} target</span></div>
       <div class="gp-actions">
         <button class="gp-iconbtn" data-edit-goal="${i}" aria-label="Edit this goal">${ICONS.edit}</button>
@@ -2115,7 +2241,7 @@ function renderPlan(){
     const bn=BUCKETS[eid].name;
     const eqPct=Math.round(alloc.eq*100), fullEqPct=Math.round((BUCKETS[G.bucket]||BUCKETS.moderate).eq*100);
     const note=overridden
-      ? `<span class="term" data-def="Your ${b.name} profile allows up to ${fullEqPct}% equity, but a ${g.years}-year horizon can only safely absorb up to ${Math.round(alloc.ceiling*100)}%, on a scale that keeps rising the longer the horizon gets. The debt and hybrid slices absorb the difference, kept in the same ratio your ${b.name} profile already uses between them.">${eqPct}% equity, scaled down from ${b.name} for ${g.years}yrs</span>`
+      ? `<span class="term" data-def="Your ${b.name} profile allows up to ${fullEqPct}% equity, but a ${Math.round(g.years)}-year horizon can only safely absorb up to ${Math.round(alloc.ceiling*100)}%, on a scale that keeps rising the longer the horizon gets. The debt and hybrid slices absorb the difference, kept in the same ratio your ${b.name} profile already uses between them.">${eqPct}% equity, scaled down from ${b.name} for ${g.years}yrs</span>`
       : bn;
     const rec=recommendInstruments(G.country, g.years, eid, g.type);
     const mRate=effectiveMonthlyRate(rate);
@@ -2123,15 +2249,15 @@ function renderPlan(){
     const drawRowsChart = g.type==='retirement' ? drawdownSchedule({openingCorpus:g.corpus, firstWithdrawal:g.expAtRet, inflation:cfg().d.inflation, nominalRate:g.postGoalRate, years:g.drawYrs, due:true}) : null;
     const chartsHtml = g.type==='retirement'
       ? `<div class="gr-chart-row">
-          <div class="gr-chart-card"><div class="gr-chart-cap">Building the pot, ${g.years} yrs</div>${mountainChart(yearlyMountainRows(accRows),i)}</div>
+          <div class="gr-chart-card"><div class="gr-chart-cap">Building the pot, ${Math.round(g.years)} yrs</div>${mountainChart(yearlyMountainRows(accRows),i)}</div>
           <div class="gr-chart-card"><div class="gr-chart-cap">Spending it down, ${g.drawYrs} yrs from ${g.retireAge}</div>${potChart(drawRowsChart,c,i)}</div>
         </div>`
-      : `<div class="gr-chart-card"><div class="gr-chart-cap">How this goal's pot grows over ${g.years} years</div>${mountainChart(yearlyMountainRows(accRows),i)}</div>`;
+      : `<div class="gr-chart-card"><div class="gr-chart-cap">How this goal's pot grows over ${Math.round(g.years)} years</div>${mountainChart(yearlyMountainRows(accRows),i)}</div>`;
     return `<div class="goal-row-wrap">
     <div class="goal-row">
     <div class="gr-left">
       <div class="gr-name">${g.label}</div>
-      <div class="gr-meta">${g.years}yr horizon${fitNote(g)} · <span class="term" data-def="The blended rate from your ${bn} mix, ${(rate*100).toFixed(1)}% per year.">${note}</span>${g.existingSavings>0?` · <span class="term" data-def="Assumed to keep compounding at the same ${(rate*100).toFixed(1)}% rate as the new SIP, growing to ${c.compact(g.existingFV)} by the goal date.">${c.compact(g.existingSavings)} already saved</span>`:''}</div>
+      <div class="gr-meta">${Math.round(g.years)}yr horizon${fitNote(g)} · <span class="term" data-def="The blended rate from your ${bn} mix, ${(rate*100).toFixed(1)}% per year.">${note}</span>${g.existingSavings>0?` · <span class="term" data-def="Assumed to keep compounding at the same ${(rate*100).toFixed(1)}% rate as the new SIP, growing to ${c.compact(g.existingFV)} by the goal date.">${c.compact(g.existingSavings)} already saved</span>`:''}</div>
     </div>
     <div class="gr-right">
       <div class="gr-sip">${c.fmt(sip)}/mo</div>
@@ -2198,6 +2324,7 @@ function renderPlan(){
   ${advisorChipsHTML()}
   <div class="eyebrow" style="padding-top:6px">Your complete plan</div>
   <div class="qtitle" style="margin-bottom:16px">${b.name} investor · ${cfg().name} plan</div>
+  ${trackCardHTML(plan,c)}
 
   ${plan.emg.needed?`
   <div class="section-head">Priority 1 · Emergency fund</div>
@@ -2852,6 +2979,7 @@ function attach(screen){
 
   if(screen==='plan'){
     bindFitCard();
+    bindTrackCard();
     document.getElementById('at')&&document.getElementById('at').addEventListener('click',()=>{
       document.getElementById('ap').classList.toggle('open');
     });
@@ -2912,7 +3040,7 @@ function attach(screen){
       });
     });
     document.getElementById('rb')&&document.getElementById('rb').addEventListener('click',()=>{
-      Object.assign(G,{country:null,capA:[null,null,null,null],tolA:[null,null,null,null,null],bucket:null,capScore:0,tolScore:0,monthlyExpense:null,emergencyStatus:null,emergencyPrioritize:null,monthlyCapacity:null,goals:[],cover:null,addingGoal:false,editingIndex:null,draftType:null,draftA:null,draftB:null,draftC:null,draftSav:0,si:0,emergencyBuild:null});
+      Object.assign(G,{country:null,capA:[null,null,null,null],tolA:[null,null,null,null,null],bucket:null,capScore:0,tolScore:0,monthlyExpense:null,emergencyStatus:null,emergencyPrioritize:null,monthlyCapacity:null,goals:[],cover:null,addingGoal:false,editingIndex:null,draftType:null,draftA:null,draftB:null,draftC:null,draftSav:0,si:0,emergencyBuild:null,planSavedAt:null,planSavedKey:null});
       render();
     });
 
@@ -2923,6 +3051,8 @@ function attach(screen){
         monthlyExpense:G.monthlyExpense, emergencyStatus:G.emergencyStatus,
         monthlyCapacity:G.monthlyCapacity, goals:G.goals, cover:G.cover, emergencyBuild:G.emergencyBuild||null,
       };
+      // A plan saved now is today's yardstick: the card about the older save goes.
+      if(G.planSavedAt){ G.planSavedAt=null; G.planSavedKey=null; const tc=document.getElementById('trackCard'); if(tc) tc.remove(); }
       const blob=new Blob([JSON.stringify(savedState,null,2)],{type:'application/json'});
       const url=URL.createObjectURL(blob);
       const a=document.createElement('a');
@@ -2947,6 +3077,8 @@ function attach(screen){
             monthlyExpense:data.monthlyExpense, emergencyStatus:data.emergencyStatus,
             monthlyCapacity:data.monthlyCapacity, goals:data.goals||[], cover:data.cover&&typeof data.cover==='object'?data.cover:null,
             emergencyBuild:[18,24,30,36].includes(data.emergencyBuild)?data.emergencyBuild:null,
+            // When the file was saved, for "Since you saved this plan" (a date in the past only).
+            planSavedAt:(t=>isFinite(t)&&t<Date.now()?t:null)(Date.parse(data.savedAt)),
             addingGoal:false, editingIndex:null, draftType:null, draftA:null, draftB:null, draftSav:0,
           });
           // renderPlan() reads G.bucket directly rather than recomputing it —
@@ -2954,6 +3086,7 @@ function attach(screen){
           // importing skips straight to the plan screen, so recompute here.
           const scored = scoreBuckets();
           G.bucket = scored.bucket; G.capScore = scored.capScore; G.tolScore = scored.tolScore;
+          G.planSavedKey = G.planSavedAt ? trackKey() : null; TRACK_TYPED = '';
           const f=flow();
           G.si=f.indexOf('plan');
           render();
@@ -2974,7 +3107,7 @@ function attach(screen){
         _goalden:'lab-handoff', _version:1, savedAt:new Date().toISOString(),
         country:G.country, totalSIP:p.totalSIP, capacity:p.cap,
         emergencyStatus:G.emergencyStatus, bucket:G.bucket, monthlyExpense:G.monthlyExpense,
-        goals:p.goals.map(g=>({type:g.type,label:g.label,sip:g.sip,corpus:g.corpus,need:coverGoalNeed(g),years:g.years})),
+        goals:p.goals.map(g=>({type:g.type,label:g.label,sip:g.sip,corpus:g.corpus,need:coverGoalNeed(g),years:Math.max(1,Math.round(g.years))})),
         // Cover goes only if the person filled the protection check: coverState() pads an empty one with zeros, which the
         // Lab would otherwise take as their savings and existing cover.
         tab:tab, cover:G.country==='IN'&&G.cover?coverState():null,
@@ -3070,7 +3203,7 @@ Acting on a user's own situation (this page is built for it): when someone descr
 - tol_0..tol_4 (1-4 each): use any hint they gave — "I panic when markets fall" → 1-2, "I bought more in the crash" → 4. tol_1 is experience: 7+ years 4, 3-7 years 3, under 3 years or a small mutual-fund holding 2, never invested 1. With no hints, answer 3 for the rest, say you assumed a middle comfort level, and offer one question to refine it.
 - goals (at most 3): retirement = currentAge, retireAge, monthlyExpense (today's spending unless they gave a retirement budget). education = annualFee and years (18 − the child's age for an undergraduate degree); take the fee only from the user — if it's missing, build everything else now and ask for it. house = amount (the price they gave; say so, since they may only need a down payment) and years. Anything else (a trip, a wedding, a car) = type generic with a short label, amount and years. existingSavings on a goal only when they said that money is set aside for it; otherwise say their FDs and mutual funds weren't counted against any goal.
 - More than 3 goals: build the 3 they care about most (or the nearest) and name the one that's waiting.
-After building, reply with: the risk profile and a one-line reason from their answers, monthly capacity (with the arithmetic), each goal's monthly SIP, the total against capacity, and the surplus or shortfall. If it's short, name the goal driving it and one change that would narrow the gap (a later date, a smaller amount) — never product names. Quote only SIPs this page calculated: offer to run the change with update_goal and report before → after, rather than estimating a new SIP yourself. When the plan is over budget, the plan screen also has a "Make it fit" panel the user can move themselves: per goal, retire later or spend less after retiring, save ahead for part of a child's fees, push a purchase back or aim for less, and build the emergency fund over up to 36 months, with the new total live and nothing changed until they press "Use these in my plan". Point them to it when they would rather try the levers than ask. A share chosen there stays with the goal when it is edited; update_goal can also set changes:{spendShare} (0.6-1, retirement) or {feeShare} (0.4-1, education), and get_results shows them with the emergency fund's build period.
+After building, reply with: the risk profile and a one-line reason from their answers, monthly capacity (with the arithmetic), each goal's monthly SIP, the total against capacity, and the surplus or shortfall. If it's short, name the goal driving it and one change that would narrow the gap (a later date, a smaller amount) — never product names. Quote only SIPs this page calculated: offer to run the change with update_goal and report before → after, rather than estimating a new SIP yourself. When the plan is over budget, the plan screen also has a "Make it fit" panel the user can move themselves: per goal, retire later or spend less after retiring, save ahead for part of a child's fees, push a purchase back or aim for less, and build the emergency fund over up to 36 months, with the new total live and nothing changed until they press "Use these in my plan". Point them to it when they would rather try the levers than ask. A share chosen there stays with the goal when it is edited; update_goal can also set changes:{spendShare} (0.6-1, retirement) or {feeShare} (0.4-1, education), and get_results shows them with the emergency fund's build period. A plan file loaded a month or more after it was saved shows a "Since you saved this plan" card on the plan screen: it says where the goals would stand by now on the plan, asks what the user has today, says ahead or behind, and "Bring the plan up to date" moves the dates nearer, counts today's savings and drops goals whose date has passed. Point them to it when they ask whether they are on track.
 
 Editing the plan: add_goal, update_goal and remove_goal change one goal and return the plan totals before and after. Use them for "drop the flat", "retire at 58 instead", "add a 4 lakh trip in 2 years" — and when the plan already has 3 goals, remove one before adding. build_goal_plan with goals replaces the whole goal list, so keep it for a full rebuild. Changes to capacity or the risk answers go through set_value, then get_results. After any change, say what moved and by how much.
 

@@ -4923,3 +4923,23 @@ standing over the founder's shoulder.
 - Advisor evals: 25/26 on the full run; the one failure ("lab rent or buy runs the tab with the user's numbers",
   reply missing "break-even") was flaky (1 of 2 on a re-run). The Lab's rent-or-buy rule now tells the model
   to name the break-even in plain words; 3/3 after that.
+
+## 2026-11-16 - Claude Code - Step 5: "Since you saved this plan" (am I on track?)
+- Real index history was already in both planning pages (the "Is 12% realistic?" check from rolling returns),
+  so step 5 is the on-track check. A plan file loaded a month or more after it was saved shows a card on the
+  plan screen: where the goals would stand by now on the plan (each goal's monthly amount, paid at the start of
+  each month, and its starting savings, at its own rate), what the person has today (one total), ahead or
+  behind, and the monthly need from here. "Bring the plan up to date" moves each date nearer by exactly the
+  months gone (fractional years inside, rounded wherever shown), grows each amount with prices for those months
+  so each target at its date is unchanged, shares today's savings by what each goal was expected to hold, and
+  drops goals whose date has passed. Shown only while the goals and risk mix are as loaded (G.planSavedKey);
+  saving the plan again, Start over, "Not now" or applying it clears it. The advisor knows the card.
+- Amounts are read as typed here ("15,00,000", "15 lakh", "15L", "1.5 cr", "800k", "1.2 million") and echoed
+  back; a minus sign or an unknown word is refused, never guessed.
+- Opus review: three MUST-FIX (lakh/crore text read as single rupees and wiped the savings; whole-year date moves
+  put the new monthly figure out by up to 25%; passed goals still counted and kept) and five SHOULD-FIX (retiring
+  past the planned age, the yardstick moving after edits, the glide path unexplained, export not clearing it,
+  typed text lost on re-render) all fixed, with the wording, 16px input, debounced read-out and placeholder NITs.
+- smoke-26 now runs the card's functions for real in the eval runner's sandbox: amount parsing, zero drift for
+  someone exactly on track at 5-18 months, unchanged targets, a passed goal dropped, the card's gate.
+- Tests: 325/325 engine; smokes 02-26 pass.
