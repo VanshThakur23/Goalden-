@@ -4943,3 +4943,20 @@ standing over the founder's shoulder.
 - smoke-26 now runs the card's functions for real in the eval runner's sandbox: amount parsing, zero drift for
   someone exactly on track at 5-18 months, unchanged targets, a passed goal dropped, the card's gate.
 - Tests: 325/325 engine; smokes 02-26 pass.
+
+## 2026-11-16 - Claude Code - The landing advisor opens one Lab tool; Quick Calculate's bar in the column
+- index.html: open_door takes an optional tab with door:lab (ADVISOR_LAB_TABS, the Lab's 18 tab ids; an unknown
+  tab, or a tab with another door, is refused and nothing opens). The knowledge tells the model to pass it, so
+  "should I rent or buy?" lands on Rent or buy, not the Lab home, and with the ?tab= restore the person's own
+  saved Lab numbers come back. The advisor can also point at the question tiles (highlight "questions").
+  Checked end to end in headless Chrome against the live model: the landing question opened
+  goalden-lab.html?tab=rentbuy with 90 lakh, 22,000 and 12 years filled and the break-even (8.32%) reported.
+- The Lab's rent-or-buy rule: with no price-growth guess from the person, the 5% is "the tab's default
+  assumption", never "your guess" (the live run had said "your own 5% growth guess").
+- goalden.html: the bottom summary bar keeps its full-width background, its contents in the 800px column.
+- agent-evals: runner gains anyReplyIncludes (any reply in the conversation) and exports runScenario. The Lab
+  rent-or-buy scenario uses it: a "do it all" turn often ends with a saved report whose closing message need not
+  repeat the break-even it already gave. 3/3 after; the landing scenario now also expects tab:"rentbuy" (2/2).
+- smoke-27.js: runs index.html in the sandbox; the advisor's Lab tools equal the Lab's tabs, open_door's tab
+  checks, the highlight target, and the bar.
+- Tests: 325/325 engine; smokes 02-27 pass.

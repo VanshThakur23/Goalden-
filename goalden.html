@@ -413,6 +413,9 @@ body.lc-on #advisorFab{bottom:calc(var(--lc-h,48px) + 14px)}
    separated from it. They are white with a hairline border now; selected and hover states keep their tints
    (their two-class selectors outrank these). */
 .country-card,.goal-card,.gen-card,.risk-card,.chart-card{background:var(--card);box-shadow:0 1px 2px rgba(20,40,63,.05)}
+/* The bottom summary bar (results) keeps its full-width background, with its contents in the same 800px column
+   as the page above (--col-gut, which also leaves out the docked advisor). */
+.lc-bar,.lc-body{padding-left:max(20px,var(--col-gut));padding-right:max(20px,var(--col-gut))}
 </style>
 </head>
 <body>

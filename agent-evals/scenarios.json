@@ -590,7 +590,7 @@
         "rentbuy.rent": 30000,
         "rentbuy.years": 10
       },
-      "replyIncludes": "break-even"
+      "anyReplyIncludes": "break-even"
     }
   },
   {
@@ -605,6 +605,7 @@
       "toolCallArgs": {
         "open_door": {
           "door": "lab",
+          "tab": "rentbuy",
           "auto_continue": true
         }
       },

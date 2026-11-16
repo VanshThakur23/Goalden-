@@ -337,6 +337,11 @@ function checkScenario(sc, out) {
   if (expect.replyIncludes) {
     assert((out.lastReply || '').toLowerCase().includes(expect.replyIncludes.toLowerCase()), 'reply should include "' + expect.replyIncludes + '"');
   }
+  // Any reply in the conversation, not only the last: a "do it all" turn often ends with a second step (a saved
+  // report) whose closing message need not repeat a figure the person was already given.
+  if (expect.anyReplyIncludes) {
+    assert((out.replies || []).join('\n').toLowerCase().includes(expect.anyReplyIncludes.toLowerCase()), 'a reply should include "' + expect.anyReplyIncludes + '"');
+  }
   if (expect.toolArgs) {
     // { toolName: { argKey: expectedValue } } — at least one call of that
     // tool must carry every listed argument value (e.g. open_door's
@@ -492,4 +497,4 @@ if (require.main === module) {
   main().catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { loadPage, computeFigure, checkScenario, advisorGuardrail, INTERNAL_TOOLS, BASE };
+module.exports = { loadPage, computeFigure, checkScenario, advisorGuardrail, runScenario, INTERNAL_TOOLS, BASE };
