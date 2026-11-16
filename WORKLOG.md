@@ -4975,3 +4975,17 @@ standing over the founder's shoulder.
   height or YOUR MIX is on top of it (YOUR MIX then goes below). On a phone-width chart the split line and the
   dots' percentages are dropped, the lower dot's name goes under it, and BEST BALANCE is right-aligned.
 - Tests: 325/325 engine; smokes 02-27 pass.
+
+## 2026-11-16 - Claude Code - Click-through of both planning pages; the dead "Cost of waiting" card
+- Clicked through every screen of The Full Plan (country to plan, adding a retirement goal) on the live site at
+  390px and 1366px: all 14 screens, no page scrolls sideways, nothing spills over the edge, no script errors, a
+  plan at the end. Same for Quick Calculate's retirement, education and purchase goals.
+- Found: Quick Calculate's fourth goal card, "Cost of waiting", led to two screens (delay_corpus, delay_years)
+  that never had a renderer (not since the first upload), so pressing Continue showed a blank page. Every result
+  already ends with the cost of waiting 3 or 5 years (delayCard), and the advisor already refuses a standalone
+  delay plan, so the card went: the goal screen says each answer includes what waiting would cost, Continue only
+  enables for a real goal, an old saved 'delay' state lands on the goal screen, the advisor's field enum and
+  knowledge drop it, and the landing advisor's summary says the same. Three cards: the last spans the row.
+- smoke-27 now checks that every screen Quick Calculate's flow() can reach has a renderer (fails on the old file
+  with "missing: delay_corpus, delay_years").
+- Tests: 325/325 engine; smokes 02-27 pass.

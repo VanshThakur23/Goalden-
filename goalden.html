@@ -82,6 +82,7 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
 
 /* goal grid */
 .goal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.goal-grid .goal-card:last-child:nth-child(odd){grid-column:1 / -1}
 .goal-card{background:rgba(20,40,63,.06);border:1.5px solid rgba(20,40,63,.14);border-radius:4px 16px 4px 16px;padding:20px 14px;text-align:center;cursor:pointer;transition:all .18s}
 .goal-card:active{transform:scale(.97)}
 .goal-card.selected{background:rgba(37,87,199,.16);border-color:var(--gold)}
@@ -642,8 +643,11 @@ const GOALS = [
   { id:'retirement', icon:ICONS.retirement, name:'Retirement', tag:'Stop working someday' },
   { id:'education',  icon:ICONS.education, name:'Education', tag:"A child's college fund" },
   { id:'generic',    icon:ICONS.house, name:'A big purchase', tag:'House, car, wedding' },
-  { id:'delay',      icon:ICONS.clock, name:'Cost of waiting', tag:'See what a delay costs' },
 ];
+// There was a fourth card, "Cost of waiting". Its two screens (delay_corpus, delay_years) never had a renderer, so
+// picking it and pressing Continue showed a blank screen. Every result already ends with what waiting 3 or 5
+// years would cost (delayCard), and the advisor already treats a delay as part of a real goal, so the card went.
+// A saved state or link that still says 'delay' lands back on the goal screen (flow()) with Continue off.
 
 const GEN_TYPES = [
   { id:'house',   icon:ICONS.house, label:'House', rateKey:'house' },
@@ -684,7 +688,6 @@ function flow() {
   if (S.goalType === 'retirement') f = ['country','goal','age','expense','risk','results'];
   else if (S.goalType === 'education')  f = ['country','goal','edu_fee','edu_years','risk','results'];
   else if (S.goalType === 'generic')    f = ['country','goal','gen_type','gen_amount','gen_years','risk','results'];
-  else if (S.goalType === 'delay')      f = ['country','goal','delay_corpus','delay_years','results'];
   else return ['country','goal'];
   // "The Case" is an optional deeper screen reached from results, not a
   // forced step -- someone who just wants their number never has to see
@@ -1375,14 +1378,14 @@ function sCountry() {
 function sGoal() {
   return '<div class="q-eyebrow">What are you planning for?</div>' +
     '<div class="q-title">Pick a goal to find your number</div>' +
-    '<div class="q-sub">Each goal has its own set of questions. Just a few things, and you will have your answer.</div>' +
+    '<div class="q-sub">Each goal has its own set of questions. Just a few things, and you will have your answer, with what waiting a few years would cost.</div>' +
     '<div class="q-body"><div class="goal-grid">' +
     GOALS.map(g =>
       '<div class="goal-card'+(S.goalType===g.id?' selected':'')+'" data-goal="'+g.id+'">' +
       '<span class="goal-icon">'+g.icon+'</span><div class="goal-name">'+g.name+'</div><div class="goal-tag">'+g.tag+'</div></div>'
     ).join('') +
     '</div></div>' +
-    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(S.goalType?'':' disabled')+'>Continue</button></div>';
+    '<div class="cta-zone"><button class="cta" id="nextBtn"'+(GOALS.some(g=>g.id===S.goalType)?'':' disabled')+'>Continue</button></div>';
 }
 
 function sAge() {
@@ -3032,7 +3035,7 @@ function attach(screen) {
       render();
     }));
     nb && nb.addEventListener('click', () => {
-      if (S.goalType === 'delay') { S.si++; render(); } else go(1);
+      if (GOALS.some(g=>g.id===S.goalType)) go(1);
     });
   }
 
@@ -3280,7 +3283,7 @@ window.addEventListener('popstate', () => {
    ===================================================================== */
 const ADVISOR_FIELDS = [
   { name:'country', type:'string', enum:['IN','US'], desc:'Country/currency: IN for India ₹, US for United States $.' },
-  { name:'goalType', type:'string', enum:['retirement','education','generic','delay'], desc:'The goal to plan: retirement, education (child college), generic (house/car/wedding/travel), or delay (cost of waiting).' },
+  { name:'goalType', type:'string', enum:['retirement','education','generic'], desc:'The goal to plan: retirement, education (child college), generic (house/car/wedding/travel), or delay (cost of waiting).' },
   { name:'age', type:'integer', min:16, max:75, desc:'Current age in years (16-75).' },
   { name:'retireAge', type:'integer', min:35, max:85, desc:'Retirement age in years (above current age, 35-85).' },
   { name:'monthlyExpense', type:'integer', min:0, max:100000000, desc:'Typical monthly spending, in the chosen currency.' },
@@ -3308,7 +3311,7 @@ Goal types:
 - retirement: monthly expenses today, current age, retirement age.
 - education: annual college fee today, years until it starts, course duration.
 - generic (house/car/wedding/travel): amount today and years until needed.
-- delay ("cost of waiting"): shows how postponing a goal raises the required monthly saving.
+- The cost of waiting is not a goal of its own: every result ends with what starting 3 or 5 years later would cost a month.
 
 Risk options and their asset splits (equity/debt/hybrid): cautious 25/60/15, balanced 50/35/15, growth 75/15/10.
 
