@@ -8168,14 +8168,24 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
   // key markers so they can't collide.
   const rv=p=>`${(p.ret*100).toFixed(1)}% · ${(p.vol*100).toFixed(1)}% risk`;
   const [labA,labB]=assetPoints.map(a=>a.label);
-  const tanSplit = (typeof tangencyPoint.w==='number' && labA && labB) ? `\n{s|${Math.round(tangencyPoint.w*100)}% ${labA} / ${100-Math.round(tangencyPoint.w*100)}% ${labB}}` : '';
+  // On a phone-width chart the split line (also in the sentence below the chart) and each dot's percentage are
+  // dropped, and the lower dot's name goes underneath it: at 390px they printed across each other and the YOUR MIX ring.
+  const narrow = typeof window!=='undefined' && window.innerWidth<560;
+  const lowestRet = Math.min(...assetPoints.map(a=>a.ret));
+  const tanSplit = (!narrow && typeof tangencyPoint.w==='number' && labA && labB) ? `\n{s|${Math.round(tangencyPoint.w*100)}% ${labA} / ${100-Math.round(tangencyPoint.w*100)}% ${labB}}` : '';
   const tanLeft = tangencyPoint.vol<=currentPoint.vol;
   // Placement: SAFEST is the left-most point of the curve, so its label
   // always goes left. BEST BALANCE goes on the side away from YOUR MIX.
   // YOUR MIX goes right -- or below when BEST BALANCE's label is also on
   // the right at nearly the same height.
   const retSpan=(Math.max(...rets, currentPoint.ret, tangencyPoint.ret)-Math.min(...rets, cal[0]?cal[0].ret:0))||0.01;
-  const yourPos = (!tanLeft && Math.abs(tangencyPoint.ret-currentPoint.ret)<retSpan*0.18) ? 'bottom' : 'right';
+  // BEST BALANCE's label is three lines and wide (it names the split). When an instrument's dot sits on its side at
+  // nearly the same height, or YOUR MIX is right on top of it, it goes above the point instead: on the Nifty 50 vs
+  // Gold pair it used to print across the gold fund's own label. YOUR MIX then goes below.
+  const volSpan=Math.max(...vols, ...assetPoints.map(a=>a.vol), 0.01);
+  const crowded=side=>assetPoints.some(ap=>{ const dx=ap.vol-tangencyPoint.vol; return Math.abs(ap.ret-tangencyPoint.ret)<retSpan*0.22 && (side==='right' ? dx>0 : dx<0) && Math.abs(dx)<volSpan*0.5; });
+  const tanPos = (crowded(tanLeft?'left':'right') || near(tangencyPoint,currentPoint)) ? 'top' : (tanLeft?'left':'right');
+  const yourPos = tanPos==='top' ? 'bottom' : (!tanLeft && Math.abs(tangencyPoint.ret-currentPoint.ret)<retSpan*0.18) ? 'bottom' : 'right';
   // SAFEST is the curve's left-most tip, so its label goes further left,
   // into empty space; a semi-transparent box keeps any line underneath visible.
   const boxed={backgroundColor:'rgba(255,255,255,.6)', padding:[3,5], borderRadius:3, fontFamily:"'Spline Sans Mono',monospace"};
@@ -8222,16 +8232,16 @@ function liveFrontierChartOption(frontier, assetPoints, currentPoint, cal, tange
       { name:'Risk-free', type:'scatter', data:[[rfPoint.vol,rfPoint.ret]], symbolSize:8,
         itemStyle:{color:'#14283F', borderColor:'#14283F', borderWidth:1}, z:4,
         label:{show:true, formatter:`RISK-FREE ${(rfPoint.ret*100).toFixed(1)}%`, position:'right', distance:8, color:'#56698A', fontWeight:700, fontSize:10, fontFamily:"'Spline Sans Mono',monospace"} },
-      { name:'Assets', type:'scatter', data:assetPoints.map(p=>[p.vol,p.ret]), symbolSize:10,
+      { name:'Assets', type:'scatter', data:assetPoints.map(p=>narrow && assetPoints.length>1 && p.ret===lowestRet ? { value:[p.vol,p.ret], label:{ position:'bottom' } } : [p.vol,p.ret]), symbolSize:10,
         itemStyle:{color:'#1F8A70', borderColor:'#14283F', borderWidth:1},
         // Points built without a showLabel flag (e.g. the Test Real
         // Investments chart, which reuses this same option builder but
         // never applies the Portfolio tab's decluttering) always label --
         // showLabel is only ever explicitly set to false, never omitted-as-false.
-        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? `${ap.label} ${(ap.ret*100).toFixed(1)}%` : ''; }, position:'top', color:'#56698A', fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{hideOverlap:true}, z:3 },
+        label:{show:true, formatter:p=>{ const ap=assetPoints[p.dataIndex]; return ap && ap.showLabel!==false ? (narrow ? ap.label : `${ap.label} ${(ap.ret*100).toFixed(1)}%`) : ''; }, position:'top', color:'#56698A', fontSize:10, fontFamily:"'Spline Sans Mono',monospace"}, labelLayout:{hideOverlap:true}, z:3 },
       { name:'Tangency', type:'scatter', data:[[tangencyPoint.vol,tangencyPoint.ret]], symbolSize:11,
         itemStyle:{color:'#14283F', borderColor:'#2557C7', borderWidth:2}, z:4,
-        label:Object.assign({show:true, position:tanLeft?'left':'right', distance:10, formatter:`{t|BEST BALANCE}\n{v|${rv(tangencyPoint)}}${tanSplit}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:11}, v:{color:'#14283F', fontSize:11, padding:[2,0,0,0]}, s:{color:'#56698A', fontSize:10, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
+        label:Object.assign({show:true, position:tanPos, distance:10, align:(narrow && tanPos==='top') ? 'right' : undefined, formatter:`{t|BEST BALANCE}\n{v|${rv(tangencyPoint)}}${tanSplit}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:11}, v:{color:'#14283F', fontSize:11, padding:[2,0,0,0]}, s:{color:'#56698A', fontSize:10, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} },
       ...(showSafest ? [{ name:'Safest', type:'scatter', data:[[minVarPoint.vol,minVarPoint.ret]], symbolSize:10,
         symbol:'diamond', itemStyle:{color:'#8A4FBF', borderColor:'#14283F', borderWidth:1.5}, z:4,
         label:Object.assign({show:true, position:'left', distance:10, formatter:`{t|SAFEST}\n{v|${rv(minVarPoint)}}`, rich:{t:{color:'#14283F', fontWeight:700, fontSize:11}, v:{color:'#14283F', fontSize:11, padding:[2,0,0,0]}}}, boxed), labelLayout:{moveOverlap:'shiftY'} }] : []),
@@ -8506,9 +8516,13 @@ function liveTwoAssetTakeawayHTML(a, b, c12, currentVol, currentRet, currentShar
     ${explainDropdown('Show the full breakdown', detail)}
   </div>`;
 }
+// For display only: the item with its symbol swapped for its short name. A fund's symbol is its scheme code, so the
+// chart title, point labels, tables and sentences read "120716 / 119132" for the Nifty 50 vs Gold starter pair.
+// Sums, keys and the helper calls keep the real items; only what is printed uses these.
+function liveDisplayItem(it){ return { ...it, symbol:liveShortName(it) }; }
 function liveTwoAssetHTML(items, rfPct){
   const rf=rfPct/100;
-  const [a,b]=items;
+  const [a,b]=items.map(liveDisplayItem);
   const [sa,sb]=liveWindowStats(items).stats;
   const {corr}=computeCovarianceMatrix([sa,sb]);
   const c12=corr[0][1];
@@ -8563,14 +8577,15 @@ function liveMultiAssetHTML(computed, rfPct){
   const rf=rfPct/100;
   const {items, vols, corr, cloud, frontier}=computed;
   const returns=computed.returns;
-  const assetPoints=items.map((it,i)=>({vol:vols[i], ret:returns[i], label:it.symbol, fullLabel:L.live.data[it.key].label}));
+  const shown=items.map(liveDisplayItem);   // names, not scheme codes, wherever the mix is printed
+  const assetPoints=items.map((it,i)=>({vol:vols[i], ret:returns[i], label:shown[i].symbol, fullLabel:L.live.data[it.key].label}));
   let weights=L.live.selectedWeights;
   if(!weights || weights.length!==items.length) weights=items.map(()=>1/items.length);
   const currentPoint={vol:Math.sqrt(portfolioVariance(weights,vols,corr)), ret:portfolioReturn(weights,returns)};
   const currentSharpe=currentPoint.vol>0?(currentPoint.ret-rf)/currentPoint.vol:0;
   const compoundedApprox = currentPoint.ret - (currentPoint.vol*currentPoint.vol)/2;
   const pct=v=>(v*100).toFixed(1)+'%';
-  const weightLabel = items.map((it,i)=>`<b style="color:var(--paper)">${(weights[i]*100).toFixed(0)}% ${it.symbol}</b>`).join(' / ');
+  const weightLabel = shown.map((it,i)=>`<b style="color:var(--paper)">${(weights[i]*100).toFixed(0)}% ${it.symbol}</b>`).join(' / ');
   const cfgC = cfg();
   const illustrateAmt = cfgC.code==='IN' ? 100000 : 1000;
   const illustrateYrs = 10;
@@ -8578,7 +8593,7 @@ function liveMultiAssetHTML(computed, rfPct){
   const moneyLine = `<div class="gr-note" style="margin-top:10px">Put <b style="color:var(--paper)">${cfgC.compact(illustrateAmt)}</b> into your current mix &ndash; ${weightLabel} &ndash; and leave it for ${illustrateYrs} years: at this mix's compounded rate of <b style="color:var(--gold)">${(compoundedApprox*100).toFixed(1)}%</b>/yr, it would grow to roughly <b style="color:var(--paper)">${cfgC.compact(illustrateFv)}</b>. That uses the compounded figure, not the higher expected-return figure above, because that's closer to what an account statement would actually show.</div>`;
   const lowPt = frontier[0];
   const hiPt = frontier.reduce((best,p)=> (!best || p.ret>best.ret) ? p : best, null);
-  const rangeLine = (lowPt && hiPt && hiPt.vol > lowPt.vol + 0.0005 && hiPt.ret > lowPt.ret + 0.0005) ? `<div class="gr-note" style="margin-top:10px">Moving up the efficient part of this frontier, from the lowest-risk mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(lowPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(lowPt.ret)} for ${pct(lowPt.vol)} risk &ndash; up to the highest-return mix on it &ndash; <b style="color:var(--paper)">${items.map((it,i)=>`${(hiPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(hiPt.ret)} for ${pct(hiPt.vol)} risk &ndash; both return and risk magnify together. Taking more risk on this line always buys more expected return; there's no way to get one without the other.</div>` : '';
+  const rangeLine = (lowPt && hiPt && hiPt.vol > lowPt.vol + 0.0005 && hiPt.ret > lowPt.ret + 0.0005) ? `<div class="gr-note" style="margin-top:10px">Moving up the efficient part of this frontier, from the lowest-risk mix on it &ndash; <b style="color:var(--paper)">${shown.map((it,i)=>`${(lowPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(lowPt.ret)} for ${pct(lowPt.vol)} risk &ndash; up to the highest-return mix on it &ndash; <b style="color:var(--paper)">${shown.map((it,i)=>`${(hiPt.w[i]*100).toFixed(0)}% ${it.symbol}`).join(' / ')}</b>, earning ${pct(hiPt.ret)} for ${pct(hiPt.vol)} risk &ndash; both return and risk magnify together. Taking more risk on this line always buys more expected return; there's no way to get one without the other.</div>` : '';
   return `${liveWindowNoteHTML(items)}${liveNudgesHTML(items, vols, corr, weights)}<div class="stat-row four">
     <div class="stat"><div class="stat-label">Instruments</div><div class="stat-value">${items.length}</div></div>
     <div class="stat"><div class="stat-label">Selected mix return</div><div class="stat-value">${(currentPoint.ret*100).toFixed(1)}%</div></div>
@@ -8587,7 +8602,7 @@ function liveMultiAssetHTML(computed, rfPct){
   </div>
   <div class="card is-primary">
     <h4>Efficient frontier${infoIcon('The faint dots are 3,000 random weight combinations (seeded, so they repeat identically), to show the range of mixes you could hold. The blue line is solved exactly: for each risk level it is the long-only mix with the highest possible return, the same method Build a Portfolio uses.')}</h4>
-    <div class="cap">Annualised from real daily prices over the shared window: ${items.map(it=>it.symbol).join(', ')}. Higher up is more return, further right is more risk &ndash; the blue line is the best you could have done at each risk level, and the ringed marker labelled YOUR MIX is where this exact mix actually sits.</div>
+    <div class="cap">Annualised from real daily prices over the shared window: ${shown.map(it=>it.symbol).join(', ')}. Higher up is more return, further right is more risk &ndash; the blue line is the best you could have done at each risk level, and the ringed marker labelled YOUR MIX is where this exact mix actually sits.</div>
     ${frontierChart(cloud, frontier, assetPoints, currentPoint, 'live-multi-frontier-echart', onLiveMultiFrontierPick, rf)}
     <div class="gr-note" style="margin-top:10px">${frontierTakeawayHTML(currentPoint, currentSharpe, frontier, onLiveMultiFrontierPick, items.some(liveIsCrypto))}</div>
     ${items.some(liveIsCrypto) ? '' : moneyLine}
@@ -8595,7 +8610,7 @@ function liveMultiAssetHTML(computed, rfPct){
   </div>
   <div class="card">
     <h4>Notable combinations${infoIcon('Every distinct risk level the simulation found, best-return mix at each — click any row (or any point on the chart) to adopt that weight split.')}</h4>
-    ${collapsibleSection('', 'Show the table', liveMultiCombinationsTable(frontier, items, rf, currentPoint.vol))}
+    ${collapsibleSection('', 'Show the table', liveMultiCombinationsTable(frontier, shown, rf, currentPoint.vol))}
   </div>`;
 }
 

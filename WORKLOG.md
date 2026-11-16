@@ -4960,3 +4960,18 @@ standing over the founder's shoulder.
 - smoke-27.js: runs index.html in the sandbox; the advisor's Lab tools equal the Lab's tabs, open_door's tab
   checks, the highlight target, and the bar.
 - Tests: 325/325 engine; smokes 02-27 pass.
+
+## 2026-11-16 - Claude Code - Pre-demo pass on the live site; fund names on the frontier
+- Live sweep (goalden.vanshsingh23.workers.dev), all 18 Lab tools at 390px and 1366px: no page scrolls
+  sideways, nothing spills past the edge outside a scrolling box, no script errors. Test Real Investments' starter
+  pairs (Nifty 50 vs Gold, Reliance vs TCS, Nifty 50 vs S&P 500) load real prices; My holdings' made-up
+  statement reads and draws you-against-the-index.
+- Found: with the Nifty 50 vs Gold pair (two mutual funds) the two-fund panel printed scheme codes everywhere -
+  chart title "120716 / 119132", point labels, the weight line, tables, sentences - because a fund's symbol is
+  its scheme code. liveDisplayItem() gives the display a copy whose symbol is liveShortName(); the sums, keys
+  and helper calls keep the real items. Same for the many-fund panel's labels, caption and tables.
+- The frontier chart's BEST BALANCE label went right whenever it sat a hair right of YOUR MIX, across the gold
+  fund's own label. It now goes above the point when an instrument's dot is on that side at nearly the same
+  height or YOUR MIX is on top of it (YOUR MIX then goes below). On a phone-width chart the split line and the
+  dots' percentages are dropped, the lower dot's name goes under it, and BEST BALANCE is right-aligned.
+- Tests: 325/325 engine; smokes 02-27 pass.
