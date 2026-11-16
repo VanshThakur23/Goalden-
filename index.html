@@ -24,16 +24,27 @@ h1,h2,h3{font-family:'Newsreader',serif;line-height:1.2}
 .mono{font-family:'Spline Sans Mono',monospace}
 @media(prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 
-.hero{padding:60px 24px 44px;max-width:720px;margin:0 auto;text-align:center;animation:riseIn .5s ease-out both}
+.hero{padding:60px 24px 44px;max-width:720px;margin:0 auto;text-align:center;animation:riseIn .5s ease-out backwards}
 .hero .kicker{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-bottom:18px}
 .hero h1{font-size:clamp(34px,6vw,52px);font-weight:600;line-height:1.08;margin-bottom:16px;letter-spacing:-.015em}
 .hero p{font-size:16px;color:rgba(20,40,63,.74);line-height:1.6;max-width:52ch;margin:0 auto}
-.hero-visual{max-width:520px;margin:32px auto 0;transition:transform .2s ease-out;will-change:transform}
+.hero-visual{max-width:400px;margin:22px auto 0;transition:transform .2s ease-out;will-change:transform}
 .hero-visual svg{width:100%;height:auto;display:block}
 
 main{max-width:1080px;margin:0 auto;padding:0 24px 60px}
-.doors{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
-@media(max-width:860px){.doors{grid-template-columns:1fr}}
+.doors{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+@media(max-width:960px){.doors{grid-template-columns:1fr}}
+.sec-head{font-family:'Newsreader',serif;font-size:22px;font-weight:600;color:var(--paper);margin:8px 0 14px}
+.asks + .sec-head{margin-top:48px}
+.asks{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+/* Nine tiles: three across or one, never two (two left one alone on the last row). */
+@media(max-width:700px){.asks{grid-template-columns:1fr}}
+.ask{display:flex;flex-direction:column;justify-content:space-between;gap:10px;background:var(--card);border:1px solid rgba(20,40,63,.12);border-radius:14px;padding:16px 18px;text-decoration:none;color:inherit;box-shadow:0 1px 2px rgba(20,40,63,.05);transition:border-color .15s ease,transform .15s ease,box-shadow .15s ease;animation:riseIn .5s ease-out backwards}
+.ask:hover{border-color:rgba(37,87,199,.45);transform:translateY(-2px);box-shadow:0 10px 22px -12px rgba(20,40,63,.22)}
+.ask:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.ask-q{font-size:15.5px;font-weight:600;line-height:1.35;color:var(--paper)}
+.ask-where{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim)}
+.ask-where svg{width:13px;height:13px;flex-shrink:0;margin-left:auto;color:var(--gold)}
 
 @keyframes riseIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
@@ -42,7 +53,8 @@ main{max-width:1080px;margin:0 auto;padding:0 24px 60px}
   border-radius:3px 24px 24px 24px;padding:28px 26px;display:flex;flex-direction:column;
   text-decoration:none;color:inherit;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;
   position:relative;overflow:hidden;box-shadow:0 1px 2px rgba(20,40,63,.05);
-  animation:riseIn .5s ease-out both;will-change:transform;
+  /* backwards, not both: a fill that holds transform after the animation overrides :hover and the tilt. */
+  animation:riseIn .5s ease-out backwards;will-change:transform;
 }
 /* Cursor-follow glare: a soft highlight that tracks the pointer inside
    the card, the usual companion to a tilt effect -- --mx/--my are set by
@@ -62,7 +74,7 @@ main{max-width:1080px;margin:0 auto;padding:0 24px 60px}
 .door-icon{width:60px;height:60px;color:#fff;margin-bottom:18px;background:linear-gradient(155deg,#2557C7,#1B3F97);border-radius:50% 50% 50% 4px;display:flex;align-items:center;justify-content:center;padding:14px;box-shadow:0 8px 18px rgba(37,87,199,.28);transition:transform .2s ease-out}
 .door:hover .door-icon{transform:scale(1.06) rotate(-2deg)}
 .door-icon svg{width:100%;height:100%}
-.door h2{font-size:23px;font-weight:600;margin-bottom:6px}
+.door h3{font-size:23px;font-weight:600;margin-bottom:6px}
 .door .tagline{font-family:'Newsreader',serif;font-style:italic;font-size:14.5px;color:rgba(20,40,63,.74);margin-bottom:16px}
 .door .desc{font-size:13.5px;color:rgba(20,40,63,.74);line-height:1.6;margin-bottom:18px;flex:1}
 .door .meta{display:flex;justify-content:space-between;align-items:center;padding-top:16px;border-top:1px solid rgba(20,40,63,.08)}
@@ -71,21 +83,14 @@ main{max-width:1080px;margin:0 auto;padding:0 24px 60px}
 .door:hover .cta{gap:8px}
 .door .cta svg{width:13px;height:13px}
 
-.door-2{border-radius:3px 24px 24px 24px}
+.door-1{border-radius:3px 24px 24px 24px}
+.door-2{border-radius:24px 24px 24px 3px}
 .door-3{border-radius:24px 3px 24px 24px}
-.door-3{border-color:rgba(37,87,199,.3);box-shadow:0 4px 20px -8px rgba(37,87,199,.25)}
-.door-badge{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--gold);border-radius:20px;padding:3px 10px;position:absolute;top:22px;right:22px}
 
 .for-whom{list-style:none;margin-top:2px}
 .for-whom li{font-size:12px;color:rgba(20,40,63,.74);padding-left:14px;position:relative;margin-bottom:4px}
 .for-whom li::before{content:'';position:absolute;left:0;top:7px;width:4px;height:4px;border-radius:50%;background:var(--gold)}
 
-.not-sure{max-width:720px;margin:52px auto 0;background:rgba(37,87,199,.05);border:1px solid rgba(37,87,199,.2);border-radius:3px 20px 20px 20px;padding:24px 28px;animation:riseIn .5s ease-out .26s both}
-.not-sure h3{font-size:16px;margin-bottom:10px}
-.not-sure p{font-size:13.5px;color:rgba(20,40,63,.74);line-height:1.6}
-.not-sure b{color:var(--paper)}
-.not-sure a{color:var(--gold);font-weight:600;text-underline-offset:3px}
-.not-sure a:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:2px}
 
 /* Room below the footer so the advisor button (advisor.js, fixed in the corner) can be scrolled clear of the last line on a phone. */
 @media(max-width:968px){body{padding-bottom:76px}}
@@ -102,7 +107,7 @@ footer{text-align:center;padding:30px 24px;font-family:'Spline Sans Mono',monosp
 <div class="hero">
   <div class="kicker">Goalden</div>
   <h1>Every goal has a number.<br>Find yours.</h1>
-  <p>Two ways in, depending on how much you already know and how deep you want to go. Pick the one that fits. You can always move to a deeper one later.</p>
+  <p>Start from the question you actually have, or pick how deep you want to go. Every page uses the same maths, so nothing you enter is wasted if you move deeper later.</p>
   <div class="hero-visual">
     <svg viewBox="0 0 400 140" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -121,46 +126,67 @@ footer{text-align:center;padding:30px 24px;font-family:'Spline Sans Mono',monosp
 </div>
 
 <main>
+  <!-- Questions first: most people arrive with one question, not a level. Each opens the page or Lab tool that
+       answers it (a ?tab= link opens that tool directly). The three levels follow for anyone who would rather pick. -->
+  <h2 class="sec-head">Start from your question</h2>
+  <div class="asks">
+    <a class="ask" href="goalden.html"><span class="ask-q">How much should I put away each month?</span><span class="ask-where">Quick Calculate &middot; about 2 minutes<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a>
+    <a class="ask" href="goalden-door2.html"><span class="ask-q">I have several goals. What fits my income?</span><span class="ask-where">The Full Plan &middot; 10&ndash;15 minutes<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a>
+    <a class="ask" href="goalden-lab.html?tab=retirement"><span class="ask-q">Will my retirement money last?</span><span class="ask-where">The Lab &middot; Retirement Lab<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a>
+    <a class="ask" href="goalden-lab.html?tab=holdings"><span class="ask-q">How do my funds compare with an index fund?</span><span class="ask-where">The Lab &middot; My holdings, from your CAS statement (India)<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a>
+    <a class="ask" href="goalden-lab.html?tab=rentbuy"><span class="ask-q">Should I rent or buy a home?</span><span class="ask-where">The Lab &middot; Rent or buy (India)<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a>
+    <a class="ask" href="goalden-lab.html?tab=loans"><span class="ask-q">Prepay my home loan, or invest the money?</span><span class="ask-where">The Lab &middot; Loans (India)<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a>
+    <a class="ask" href="goalden-lab.html?tab=taxregime"><span class="ask-q">Old or new income-tax regime?</span><span class="ask-where">The Lab &middot; Tax regime (India)<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a>
+    <a class="ask" href="goalden-lab.html?tab=cover"><span class="ask-q">How much life and health cover do I need?</span><span class="ask-where">The Lab &middot; Cover (India)<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a>
+    <a class="ask" href="goalden-lab.html?tab=livefrontier"><span class="ask-q">How would real stocks or funds have done together?</span><span class="ask-where">The Lab &middot; Test Real Investments<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></a>
+  </div>
+
+  <h2 class="sec-head">Or pick how deep to go</h2>
   <div class="doors">
+
+    <a class="door door-1" href="goalden.html">
+      <div class="door-level">Level 1 &middot; Quick</div>
+      <div class="door-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 18.5h8"/></svg></div>
+      <h3>Quick Calculate</h3>
+      <div class="tagline">"Just give me the number."</div>
+      <div class="desc">A few questions about one goal (retirement, a child&rsquo;s education or a purchase), and you get the monthly amount to put away, what it grows to, and what waiting a few years costs.</div>
+      <ul class="for-whom">
+        <li>First time planning anything</li>
+        <li>One goal, and you want the answer fast</li>
+      </ul>
+      <div class="meta"><span class="time">About 2 minutes</span><span class="cta">Get my number<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></div>
+    </a>
 
     <a class="door door-2" href="goalden-door2.html">
       <div class="door-level">Level 2 &middot; Guided</div>
       <div class="door-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
-      <h2>The Full Plan</h2>
+      <h3>The Full Plan</h3>
       <div class="tagline">"Tell me what actually fits me."</div>
-      <div class="desc">A real risk-profiling questionnaire, the kind used in wealth management, scores your capacity and comfort with risk, then names the actual fund categories that suit your profile and each goal's timeline, with plain-English reasons for what's included and what's deliberately left out.</div>
+      <div class="desc">A risk-profiling questionnaire, the kind used in wealth management, then every goal planned together against what you can save, with the fund categories that suit each goal&rsquo;s timeline and a plain reason for each.</div>
       <ul class="for-whom">
-        <li>Want to understand your own risk profile</li>
-        <li>Juggling more than one goal at once</li>
-        <li>Want to know which funds and why, not just a percentage</li>
+        <li>More than one goal at once</li>
+        <li>Want to know which funds and why</li>
       </ul>
       <div class="meta"><span class="time">10&ndash;15 minutes</span><span class="cta">Get guided<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></div>
     </a>
 
     <a class="door door-3" href="goalden-lab.html">
-      <span class="door-badge">Start here</span>
       <div class="door-level">Level 3 &middot; The Lab</div>
       <div class="door-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6L4 20a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L15 8V2"/><path d="M9 2h6"/><path d="M8.5 14h7"/></svg></div>
-      <h2>The Lab</h2>
+      <h3>The Lab</h3>
       <div class="tagline">"Let me see everything and drive."</div>
-      <div class="desc">Every assumption on a slider you can also type into. The complete instrument breakdown, all 42 categories from a verified wealth-management reference, not a simplified summary. Build a real portfolio across 24 named fund categories and see the risk-return trade-off on an interactive efficient frontier. Historical crash stress-testing, Monte Carlo simulation, joint-corpus planning for multiple children, and a printable output for advisor use. Already invest? Read your CAS statement in My holdings and see your own funds against a Nifty 50 index fund.</div>
+      <div class="desc">Eighteen tools with every assumption on a slider: real stock and fund history, crash stress tests, Monte Carlo, loans, rent or buy, tax regime and cover. Already invest? Read your CAS statement in My holdings and see your own funds against an index fund.</div>
       <ul class="for-whom">
-        <li>Already comfortable with financial terms</li>
+        <li>Comfortable with financial terms</li>
         <li>Want to change any number and see the effect</li>
-        <li>Advisors, students, or the simply curious</li>
       </ul>
       <div class="meta"><span class="time">As long as you like</span><span class="cta">Open the Lab<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></span></div>
     </a>
 
   </div>
-
-  <div class="not-sure">
-    <h3>Not sure which one?</h3>
-    <p>Start with <b>The Lab</b> &mdash; it opens straight to Test Real Investments, and every door uses the same underlying math, so nothing you enter there is wasted if you move between them. <b>The Full Plan</b> is there when you want a guided, risk-profiled walkthrough instead. Just want one number? <a href="goalden.html">Quick Calculate</a> asks five questions and gives you the monthly amount in about two minutes.</p>
-  </div>
 </main>
 
-<footer>GOALDEN &middot; one engine, two doors &middot; built for India and the United States</footer>
+<footer>GOALDEN &middot; one engine, three levels &middot; built for India and the United States</footer>
 
 <script>
 'use strict';

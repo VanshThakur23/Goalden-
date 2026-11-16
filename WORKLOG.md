@@ -4873,3 +4873,28 @@ standing over the founder's shoulder.
 - The Full Plan totals: "Total needed/month" no longer shares the red of "Shortfall"; only the last row carries
   the plan's status colour.
 - Tests: 325/325 engine; smokes 02-25 pass.
+
+## 2026-11-16 - Claude Code - Step 3: landing page and Lab home around questions, plus review fixes
+- Landing page (index.html): "Start from your question" - nine question tiles, each opening the page or Lab tool
+  that answers it (Lab ones via goalden-lab.html?tab=<id>) - then "Or pick how deep to go" with three levels.
+  Quick Calculate is a real door again. The "Start here" badge on the Lab and the "Not sure which one?" box are
+  gone (the questions do that job). Door titles are h3 under the section h2s. Footer says three levels.
+- Lab home and sidebar: the 15 further tools are grouped (LAB_TOOL_GROUPS / labToolGroups): Your money today,
+  Saving and retiring, Markets and research. A tool missing from the lists still shows under "More tools". The
+  sidebar shows the group names on a desktop (not on the phone strip or the collapsed rail) and scrolls the
+  current tool into view down the rail.
+- Lab resume: a ?tab= link now brings the person's saved numbers back (with Start fresh); only a hand-off
+  starts fresh, and a tab link wins over a hand-off left behind. Before, a tab link started from the defaults
+  and its first save overwrote what they had - with the landing tiles it would have happened all the time.
+- Opus review fixes (today's three batches):
+  - MUST: with the advisor docked (body padding-right 400px from 900px) the desktop column shrank to 400px;
+    the gutters now leave the docked panel out.
+  - The Lab's money-in / money-out tiles kept their tints (the white surface skips them); print drops shadows.
+  - Landing: entrance animations filled "both", which pinned transform and silently disabled the hover lift
+    and the card tilt; now "backwards".
+  - The white surface now also covers Quick Calculate's goal, purchase and risk cards and the Full Plan's
+    goal-type tiles, so answer cards look the same on every screen.
+  - Copy: "How do my funds compare with an index fund?" (the tool never rates a fund), "A few questions".
+- Not done (noted by the review): the landing advisor's open_door cannot open one Lab tool yet; Quick
+  Calculate's bottom summary bar sits outside the 800px column on desktop.
+- Tests: 325/325 engine; smokes 02-25 pass (smoke-25's resume check updated).

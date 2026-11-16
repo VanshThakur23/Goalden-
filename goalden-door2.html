@@ -63,6 +63,9 @@ h1,h2,h3{line-height:1.25}
 .screen{--gut:max(22px,var(--col-gut));padding-left:var(--gut);padding-right:var(--gut)}
 .qbody,.plan-scroll,.case-wrap{margin-left:calc(-1 * var(--gut));margin-right:calc(-1 * var(--gut));padding-left:var(--gut);padding-right:var(--gut)}
 .topbar,.progress-track{padding-left:max(20px,var(--col-gut));padding-right:max(20px,var(--col-gut))}
+/* With the advisor docked (advisor.js: body padding-right 400px from 900px up) the page is 400px narrower than
+   100vw, so the gutters are worked out without it; sized to the full window they left a 400px column. */
+@media(min-width:900px){body.advisor-docked{--col-gut:calc((100vw - 400px - var(--col)) / 2)}}
 /* The advisor button (advisor.js: 58px, 18px from the corner) overlaps the column below about 968px: Continue
    stops short of it, and each scroll area can scroll its last line clear of it. */
 @media(max-width:968px){
@@ -377,7 +380,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 /* Surface pass (2026-11-16). Cards and answer buttons were a 4-6% grey on a blue-grey page, so they barely
    separated from it. They are white with a hairline border now; selected and hover states keep their tints
    (their two-class selectors outrank these). */
-.opt,.ccrd,.goal-row,.gap-card,.gr-chart-card,.alloc-card{background:var(--card);box-shadow:0 1px 2px rgba(20,40,63,.05)}
+.opt,.ccrd,.mg,.goal-row,.gap-card,.gr-chart-card,.alloc-card{background:var(--card);box-shadow:0 1px 2px rgba(20,40,63,.05)}
 .goal-row{border:1px solid rgba(20,40,63,.1)}
 </style>
 </head>

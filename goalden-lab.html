@@ -167,6 +167,11 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
 .tc-cta svg{width:12px;height:12px}
 .lab-home-secondary-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(37,87,199,.95);margin-bottom:10px}
 .lab-home-secondary{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.lab-home-secondary + .lab-home-secondary-label{margin-top:24px}
+/* Group names in the sidebar list; the phone's sideways strip and the collapsed rail have no room for them. */
+.tab-group-label{font-family:'Spline Sans Mono',monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin:12px 2px 3px}
+.tabbar.nav-collapsed .tab-group-label{display:none}
+@media(max-width:860px){.tab-group-label{display:none}}
 /* A wrapping flex row left "Plan Health" orphaned on its own line; an
    auto-fill grid keeps the chips in aligned columns at every width. The
    one-line blurb (.ltc-blurb) used to live only in title=, i.e. hover-only,
@@ -1328,7 +1333,8 @@ button.stmt-market-fact:hover .stmt-market-value{color:var(--gold)}
 /* Surface pass (2026-11-16). Cards and answer buttons were a 4-6% grey on a blue-grey page, so they barely
    separated from it. They are white with a hairline border now; selected and hover states keep their tints
    (their two-class selectors outrank these). */
-.lab-tool-card,.lab-tool-chip,.card,.stat{background:var(--card,#fff);box-shadow:0 1px 2px rgba(20,40,63,.05)}
+.lab-tool-card,.lab-tool-chip,.card,.stat:not(.fc-money-in):not(.fc-money-out){background:var(--card,#fff);box-shadow:0 1px 2px rgba(20,40,63,.05)}
+@media print{.card,.stat{box-shadow:none}}
 </style>
 </head>
 <body>
@@ -8838,6 +8844,22 @@ const TABS=[
   {id:'review', short:'Once a year: every tool you filled in, checked in order, as a dated to-do list.', label:'Yearly review', icon:ICON_REVIEW,
     blurb:'One pass over every tool you have filled in, in a fixed order: savings, debt, cover, tax regime, holdings, tax-free gains and retirement. It ends in a to-do list dated this month, before 31 March, when you file, and next year.'},
 ];
+// The tools beyond the three main ones, grouped by what a person arrives with. Fifteen in one unsorted grid
+// (and eighteen in one sidebar list) gave no way to find the one you came for. Used by the home page and the
+// sidebar. A tool missing from these lists still shows, under "More tools", so a new tab cannot vanish.
+const LAB_TOOL_GROUPS=[
+  { label:'Your money today', ids:['holdings','loans','rentbuy','taxregime','cover'] },
+  { label:'Saving and retiring', ids:['stepup','swp','income','mc','joint','health','review'] },
+  { label:'Markets and research', ids:['statements','instruments','fx'] },
+];
+function labToolGroups(){
+  const secondary=TABS.filter(t=>!t.primary);
+  const groups=LAB_TOOL_GROUPS.map(g=>({ label:g.label, tabs:g.ids.map(id=>secondary.find(t=>t.id===id)).filter(Boolean) }));
+  const placed=new Set(LAB_TOOL_GROUPS.flatMap(g=>g.ids));
+  const rest=secondary.filter(t=>!placed.has(t.id));
+  if(rest.length) groups.push({ label:'More tools', tabs:rest });
+  return groups.filter(g=>g.tabs.length);
+}
 function renderHome(){
   const primary=TABS.filter(t=>t.primary), secondary=TABS.filter(t=>!t.primary);
   return `<div class="lab-home">
@@ -8853,13 +8875,13 @@ function renderHome(){
         <div class="tc-cta">Open<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></div>
       </button>`).join('')}
     </div>
-    <div class="lab-home-secondary-label">More tools</div>
+    ${labToolGroups().map(g=>`<div class="lab-home-secondary-label">${g.label}</div>
     <div class="lab-home-secondary">
-      ${secondary.map(t=>`<button class="lab-tool-chip" data-tab-switch="${t.id}" title="${t.blurb||''}">
+      ${g.tabs.map(t=>`<button class="lab-tool-chip" data-tab-switch="${t.id}" title="${t.blurb||''}">
         <span class="ltc-icon">${t.icon||''}</span>
         <span class="ltc-text"><span class="ltc-label">${t.label}</span><span class="ltc-blurb">${t.short||t.blurb||''}</span></span>
       </button>`).join('')}
-    </div>
+    </div>`).join('')}
   </div>`;
 }
 
@@ -8887,8 +8909,11 @@ function renderTabs(){
         <button class="slim-back" data-tab-switch="home">&larr; All tools</button>
         <span class="slim-current">${current.label||''}</span>
       </div>
-      <div class="tabs tabs-slim">${TABS.map(t=>
-        `<button class="tab${L.tab===t.id?' active':''}${t.primary?' tab-primary':''}" data-tab-switch="${t.id}" title="${t.blurb||''}">${t.icon||''}${t.label}</button>`).join('')}</div>`;
+      <div class="tabs tabs-slim">${(()=>{
+        const btn=t=>`<button class="tab${L.tab===t.id?' active':''}${t.primary?' tab-primary':''}" data-tab-switch="${t.id}" title="${t.blurb||''}">${t.icon||''}${t.label}</button>`;
+        return TABS.filter(t=>t.primary).map(btn).join('')
+          + labToolGroups().map(g=>`<div class="tab-group-label">${g.label}</div>${g.tabs.map(btn).join('')}`).join('');
+      })()}</div>`;
       // Nav buttons live inside #tabbarInner, only rebuilt on an actual nav
       // change -- so it's safe to bind listeners here rather than relying
       // on attach()'s broader, every-render rebind (see attach()'s own
@@ -8899,6 +8924,12 @@ function renderTabs(){
       // horizontally only, so the page itself doesn't jump.
       const strip=inner.querySelector('.tabs-slim'), act=strip&&strip.querySelector('.tab.active');
       if(strip && act && strip.scrollWidth>strip.clientWidth) strip.scrollLeft=Math.max(0, act.offsetLeft-strip.offsetLeft-(strip.clientWidth-act.clientWidth)/2);
+      // On a desktop the tool list (with its group names) can be taller than the window: bring the current tool
+      // into view down the rail too, moving the rail only, not the page.
+      if(act && bar.scrollHeight>bar.clientHeight){
+        const br=bar.getBoundingClientRect(), ar=act.getBoundingClientRect();
+        if(ar.bottom>br.bottom || ar.top<br.top) bar.scrollTop+=ar.top-br.top-(bar.clientHeight-ar.height)/2;
+      }
       inner.querySelectorAll('[data-tab-switch]').forEach(el=>el.addEventListener('click',()=>{
         L.tab=el.dataset.tabSwitch;
         try{ localStorage.setItem('goaldenLabLastTab', L.tab); }catch(e){}
@@ -12941,8 +12972,13 @@ function labMergeSaved(dst, src, def){
   });
 }
 function restoreLabInputs(){
-  // A plan handed over from another page, or a link to one tab, starts from that and the defaults, not from last time.
-  try{ if(localStorage.getItem('goaldenLabHandoff') || tabFromQuery()) return false; }catch(e){}
+  // A plan handed over from another page starts from that and the defaults, not from last time. A link to one tab
+  // (the landing page's questions, the Full Plan's tax-regime link) is an ordinary way in, not a hand-off: the
+  // person's own numbers from last time come back, with the Start fresh notice, and the linked tab opens. It used
+  // to start fresh too, and its first draw then saved the defaults over what they had.
+  // A tab link wins over a hand-off left behind (an "Open in the Lab" whose page load was stopped): the queryTab
+  // branch below drops that hand-off unread, so skipping the restore for it would lose both.
+  try{ if(localStorage.getItem('goaldenLabHandoff') && !tabFromQuery()) return false; }catch(e){}
   let o=null;
   try{ o=JSON.parse(localStorage.getItem(LAB_INPUTS_KEY)||'null'); }catch(e){ return false; }
   if(!o || o.v!==2 || !o.vals || typeof o.vals!=='object') return false;
