@@ -398,6 +398,18 @@ body.lc-on #advisorFab{bottom:calc(var(--lc-h,48px) + 14px)}
 /* One line per value on a phone, so the number of lines never changes as the pointer moves (a line wrapping in or out would shift the chart under a finger). */
 @media(max-width:520px){.scrub-readout{flex-direction:column;flex-wrap:nowrap}.scrub-readout span{white-space:nowrap}}
 .echart[tabindex]:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
+/* Type pass (2026-11-16). The monospace face stays on numbers, tickers and the small capitalised section
+   labels. Buttons, links, menus, toggles, field labels and captions use the body face: with mono on all of
+   them the page read like a terminal, and its 10-11px capitalised labels were the hardest text to read. */
+.chip,.edit-chip,.assump-toggle,.adv-toggle,.restart-row button,.sum-btn,.jump-bar button,.case-back-row button,
+.lc-risk button,.inline-error,.optional-label{font-family:'Figtree',system-ui,sans-serif;letter-spacing:0}
+.assump-toggle,.restart-row button,.case-back-row button{font-size:13.5px}
+.edit-chip,.sum-btn,.jump-bar button{font-size:12.5px}
+.adv-toggle,.optional-label{font-size:12px}
+/* Surface pass (2026-11-16). Cards and answer buttons were a 4-6% grey on a blue-grey page, so they barely
+   separated from it. They are white with a hairline border now; selected and hover states keep their tints
+   (their two-class selectors outrank these). */
+.country-card,.chart-card{background:var(--card);box-shadow:0 1px 2px rgba(20,40,63,.05)}
 </style>
 </head>
 <body>

@@ -281,6 +281,7 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .plan-total.ok {background:rgba(61,122,79,.2);border:1px solid rgba(61,122,79,.5)}
 .plan-total.warn{background:rgba(169,139,69,.18);border:1px solid rgba(169,139,69,.55)}
 .plan-total.gap {background:rgba(160,58,34,.2);border:1px solid rgba(160,58,34,.5)}
+.plan-total.neutral{background:var(--card,#fff);border:1px solid rgba(20,40,63,.12)}
 .pt-label{font-size:14px;color:var(--paper)}
 .pt-value{font-family:'Newsreader',serif;font-size:17px;font-weight:600;color:var(--paper)}
 .gap-card{background:rgba(20,40,63,.05);border:1px solid rgba(37,87,199,.3);border-left:3px solid var(--gold);border-radius:11px;padding:14px;margin:12px 0}
@@ -365,6 +366,19 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .alloc-return-label{font-family:'Spline Sans Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:.04em;margin-bottom:3px}
 .alloc-return-value{font-family:'Newsreader',serif;font-size:19px;font-weight:600;color:var(--paper)}
 
+/* Type pass (2026-11-16). The monospace face stays on numbers, tickers and the small capitalised section
+   labels. Buttons, links, menus, toggles, field labels and captions use the body face: with mono on all of
+   them the page read like a terminal, and its 10-11px capitalised labels were the hardest text to read. */
+.chip,.inst-toggle,.assump-toggle,.adv-toggle,.restart-row button,.case-back-row button,.fblock label,
+.gr-left .gr-meta,.gr-chart-cap,.mg-note{font-family:'Figtree',system-ui,sans-serif;letter-spacing:0}
+.inst-toggle,.assump-toggle,.restart-row button,.case-back-row button{font-size:13.5px}
+.fblock label{font-size:12.5px;font-weight:600;text-transform:none;color:rgba(20,40,63,.82)}
+.gr-left .gr-meta,.gr-chart-cap,.mg-note,.adv-toggle{font-size:12px}
+/* Surface pass (2026-11-16). Cards and answer buttons were a 4-6% grey on a blue-grey page, so they barely
+   separated from it. They are white with a hairline border now; selected and hover states keep their tints
+   (their two-class selectors outrank these). */
+.opt,.ccrd,.goal-row,.gap-card,.gr-chart-card,.alloc-card{background:var(--card);box-shadow:0 1px 2px rgba(20,40,63,.05)}
+.goal-row{border:1px solid rgba(20,40,63,.1)}
 </style>
 </head>
 <body>
@@ -2029,11 +2043,12 @@ function renderPlan(){
 
   <hr class="plan-divider">
 
-  <div class="plan-total ${plan.status}">
+  <!-- Only the last row carries the plan's status colour: the total and the capacity are facts, not news. -->
+  <div class="plan-total neutral">
     <span class="pt-label">Total needed/month</span>
     <span class="pt-value">${c.fmt(plan.totalSIP)}</span>
   </div>
-  <div class="plan-total" style="background:rgba(20,40,63,.05);border:1px solid rgba(20,40,63,.12)">
+  <div class="plan-total neutral">
     <span class="pt-label">Your savings capacity</span>
     <span class="pt-value">${c.fmt(plan.cap)}</span>
   </div>

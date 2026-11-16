@@ -4862,3 +4862,14 @@ standing over the founder's shoulder.
 - Lab home: three main tools in a four-column grid left an empty quarter; now three across, one on a phone.
   (The one sharp corner per card on the landing page and Lab home is the design, not a bug.)
 - Tests: 325/325 engine; smokes 02-25 pass.
+
+## 2026-11-16 - Claude Code - Step 2 (part 1): type and surface pass
+- Type: the monospace face now stays on numbers, tickers and the small capitalised section labels. Buttons,
+  links, menus, toggles, field labels and captions use Figtree. The Lab's field labels were 11px capitals in
+  mono; they are 12.5px sentence case now, with the value beside each still in mono. Done as one appended
+  block at the end of each page's main stylesheet ("Type pass"), not rule by rule, so it is easy to find.
+- Surfaces: cards and answer buttons were a 4-6% grey on the blue-grey page; they are white with a hairline
+  border now ("Surface pass" block). Selected and hover states keep their tints (two-class selectors).
+- The Full Plan totals: "Total needed/month" no longer shares the red of "Shortfall"; only the last row carries
+  the plan's status colour.
+- Tests: 325/325 engine; smokes 02-25 pass.
