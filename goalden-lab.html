@@ -144,10 +144,9 @@ body.header-collapsed .header-collapse-btn{transform:rotate(180deg)}
 .lab-home-head{margin-bottom:24px}
 .lab-home-head h2{font-size:27px;margin-bottom:7px}
 .lab-home-head .cap{font-size:13px;color:rgba(20,40,63,.74)}
-.lab-home-primary{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:32px}
-/* Four primary tools since Read the Company joined -- repeat(3) left it
-   orphaned alone on a second row. 2x2 on mid widths, 1 column on phones. */
-@media(max-width:1180px){.lab-home-primary{grid-template-columns:repeat(2,1fr)}}
+.lab-home-primary{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px}
+/* Three primary tools (Read the Company moved back to More tools): four columns left an empty quarter, and two
+   columns on mid widths left one card alone on a second row. Three across, then one column on phones. */
 @media(max-width:860px){.lab-home-primary{grid-template-columns:1fr}}
 .lab-tool-card{background:rgba(20,40,63,.04);border:1px solid rgba(20,40,63,.14);border-radius:3px 22px 22px 22px;padding:24px 22px;text-align:left;cursor:pointer;color:inherit;font-family:'Figtree',sans-serif;display:flex;flex-direction:column;transition:all .2s;position:relative;overflow:hidden;will-change:transform}
 .lab-tool-card:hover{background:rgba(20,40,63,.07);border-color:rgba(37,87,199,.5);transform:translateY(-2px)}

@@ -47,6 +47,21 @@ body{background:var(--bg);color:var(--paper);font-family:'Figtree',system-ui,san
    box and got silently clipped by overflow:hidden with no scrollbar. This
    was never actually applied here before, only in Door 2. */
 .screen.active{opacity:1;transform:translateX(0);pointer-events:auto;position:relative;height:100%;min-height:0}
+/* Desktop column. On a wide window every answer button, the Continue bar and each line of text ran the full
+   width (about 1,300px), and a chart capped at 760px sat off-centre in a card twice its size. The screen is
+   padded in to a centred column instead. Each scroll area takes that padding back with negative margins and
+   pads its own content, so its scrollbar stays at the window's edge, not in the middle of the page. The top
+   bar and progress follow the same column. On a phone it all works out to the old 20-24px. */
+:root{--col:800px;--col-gut:calc((100vw - var(--col)) / 2)}
+.screen{--gut:max(24px,var(--col-gut));padding-left:var(--gut);padding-right:var(--gut)}
+.q-body,.result-scroll,.case-wrap{margin-left:calc(-1 * var(--gut));margin-right:calc(-1 * var(--gut));padding-left:var(--gut);padding-right:var(--gut)}
+.topbar,.progress{padding-left:max(20px,var(--col-gut));padding-right:max(20px,var(--col-gut))}
+/* The advisor button (advisor.js: 58px, 18px from the corner) overlaps the column below about 968px: Continue
+   stops short of it, and each scroll area can scroll its last line clear of it. */
+@media(max-width:968px){
+  .screen .cta-zone{padding-right:62px}
+  .screen .result-scroll,.screen .case-wrap{padding-bottom:84px}
+}
 
 .q-eyebrow{font-family:'Spline Sans Mono',monospace;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
 .q-title{font-family:'Newsreader',serif;font-weight:600;font-size:clamp(22px,7vw,30px);line-height:1.18;color:var(--paper);margin-bottom:8px}

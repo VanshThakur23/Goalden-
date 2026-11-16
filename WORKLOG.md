@@ -4845,3 +4845,20 @@ standing over the founder's shoulder.
   crossed the falling line. A pot that runs out early keeps "Runs out, yr N" on the dot. Same change in
   goalden.html, goalden-door2.html and goalden-lab.html (checked: the three functions were the same shape).
 - Tests: 325/325 engine; smokes 02-25 pass.
+
+## 2026-11-16 - Claude Code - Whole-app review, then step 1: desktop column and small fixes
+- Review of the whole app (desktop and phone) given to the user; the agreed order is: 1 desktop layout and
+  small bugs, 2 one colour/type pass, 3 landing page and Lab home around questions, 4 a "make it fit" panel
+  for a shortfall, 5 real fund history in Levels 1-2 and an on-track tracker.
+- Quick Calculate and The Full Plan: on a wide window everything ran the full width (~1,300px answer buttons,
+  Continue bar and text lines). The screen is now padded to a centred 800px column; each scroll area takes the
+  padding back with negative margins and pads its own content, so its scrollbar stays at the window edge. The
+  top bar and progress follow the column. On a phone this works out to the old 20-24px.
+- This also fixes the House goal's chart leaving a quarter of its card blank (the chart is capped at 760px).
+- Below 968px the advisor button overlaps the column: Continue stops short of it, and the result and case
+  screens can scroll their last line clear. The landing page gets room below the footer for the same reason.
+- The Full Plan: the batched question screens repeated the section name under the progress label; they now say
+  "Questions 1-2 of 4". The plan title says "India plan", not "IN plan".
+- Lab home: three main tools in a four-column grid left an empty quarter; now three across, one on a phone.
+  (The one sharp corner per card on the landing page and Lab home is the design, not a bug.)
+- Tests: 325/325 engine; smokes 02-25 pass.
