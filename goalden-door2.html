@@ -285,6 +285,23 @@ input[type=range]:focus-visible::-moz-range-thumb{outline:2px solid var(--gold);
 .plan-total.warn{background:rgba(169,139,69,.18);border:1px solid rgba(169,139,69,.55)}
 .plan-total.gap {background:rgba(160,58,34,.2);border:1px solid rgba(160,58,34,.5)}
 .plan-total.neutral{background:var(--card,#fff);border:1px solid rgba(20,40,63,.12)}
+.fit-card p{margin-bottom:6px}
+.fit-goal{border-top:1px solid rgba(20,40,63,.1);padding:12px 0 4px;margin-top:10px}
+.fit-goal-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
+.fit-goal-name{font-family:'Newsreader',serif;font-weight:600;font-size:15.5px;color:var(--paper)}
+.fit-sip{font-family:'Spline Sans Mono',monospace;font-size:12.5px;color:var(--dim);white-space:nowrap}
+.fit-sip b{color:var(--gold)}
+.fit-field{margin:4px 0 8px}
+.fit-field label{display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:600;color:rgba(20,40,63,.82)}
+.fit-field label b{font-weight:500;color:var(--gold);text-align:right}
+.fit-field input[type=range]{width:100%;height:22px}
+.fit-total{border-top:1px solid rgba(20,40,63,.12);margin-top:10px;padding-top:12px;font-size:14.5px;line-height:1.5;color:var(--paper)}
+.fit-step{font-size:12.5px;color:rgba(20,40,63,.74);margin-top:6px;line-height:1.5}
+.fit-step:empty{display:none}
+.fit-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.fit-apply{background:var(--gold);color:#fff;border:none;border-radius:9px;padding:11px 18px;font:600 14px 'Figtree',sans-serif;cursor:pointer}
+.fit-apply:disabled{opacity:.45;cursor:default}
+.fit-reset{background:none;border:1px solid rgba(20,40,63,.2);border-radius:9px;padding:11px 16px;font:500 14px 'Figtree',sans-serif;color:var(--paper);cursor:pointer}
 .pt-label{font-size:14px;color:var(--paper)}
 .pt-value{font-family:'Newsreader',serif;font-size:17px;font-weight:600;color:var(--paper)}
 .gap-card{background:rgba(20,40,63,.05);border:1px solid rgba(37,87,199,.3);border-left:3px solid var(--gold);border-radius:11px;padding:14px;margin:12px 0}
@@ -1259,7 +1276,8 @@ function calcGoal(goal){
   let extra={alloc};
   const mRate=effectiveMonthlyRate(rate);
   if(goal.type==='retirement'){
-    const expAtRet=inflateExpense(goal.monthlyExpense*12,[{rate:d.inflation,years:goal.years}],0.75);
+    // spendShare (from "Make it fit", default 1): plan to spend this share of the usual 75% after retiring.
+    const expAtRet=inflateExpense(goal.monthlyExpense*12,[{rate:d.inflation,years:goal.years}],0.75)*(goal.spendShare||1);
     const drawYrs=Math.max(5,d.lifeExp-goal.retireAge);
     const postGoalRate=goal.postGoalAlloc?blendedRateFromAlloc(goal.postGoalAlloc):d.postRet;
     corpus=corpusRequired(realRate(postGoalRate,d.inflation),drawYrs,expAtRet,true);
@@ -1270,7 +1288,8 @@ function calcGoal(goal){
     sip=solveSIP(mRate,goal.years*12,gapCorpus,true);
     extra={...extra,expAtRet,drawYrs,existingFV,gapCorpus,postGoalRate};
   } else if(goal.type==='education'){
-    const fee1=inflateExpense(goal.annualFee,[{rate:d.eduInflation,years:goal.years}]);
+    // feeShare (from "Make it fit", default 1): save ahead for this share of the fees; the rest comes from elsewhere.
+    const fee1=inflateExpense(goal.annualFee,[{rate:d.eduInflation,years:goal.years}])*(goal.feeShare||1);
     const postGoalRate=goal.postGoalAlloc?blendedRateFromAlloc(goal.postGoalAlloc):d.debt;
     corpus=corpusRequired(realRate(postGoalRate,d.eduInflation),goal.duration||4,fee1,true);
     const existingFV=(goal.existingSavings||0)*Math.pow(1+mRate,goal.years*12);
@@ -1287,14 +1306,165 @@ function calcGoal(goal){
   return{corpus:Math.round(corpus),sip:Math.round(sip),eid,overridden,rate,...extra};
 }
 
-function calcEmergency(){
+function calcEmergency(buildOverride){
   if(G.emergencyStatus==='full')return{needed:false,sip:0,amount:0,declined:false};
   if(G.emergencyPrioritize===false)return{needed:false,sip:0,amount:0,declined:true};
   const mo=G.monthlyExpense||0;
   const months=G.emergencyStatus==='partial'?3:6;
   const amount=mo*months;
-  const sip=Math.round(solveSIP(effectiveMonthlyRate(cfg().d.debt),12,amount,true));
-  return{needed:true,sip,amount,months,declined:false};
+  // Built over 12 months unless "Make it fit" spread it out (G.emergencyBuild).
+  const build=buildOverride||G.emergencyBuild||12;
+  const sip=Math.round(solveSIP(effectiveMonthlyRate(cfg().d.debt),build,amount,true));
+  return{needed:true,sip,amount,months,build,declined:false};
+}
+
+/* ---------------------------------------------------------------------
+   MAKE IT FIT
+   When the goals need more a month than the person can save, each goal gets the lever that really moves it:
+   retire later or spend less after retiring; save ahead for part of a child's fees; push a purchase back or aim
+   for less. The emergency fund can be built more slowly. The total updates as the sliders move, every figure from
+   calcGoal (the same sums as the plan), and nothing in the plan changes until "Use these". It replaced one fixed
+   tip (push the first goal out 3 years) that closed a few percent of a large gap at best.
+   --------------------------------------------------------------------- */
+const FIT_SLIDERS = {
+  retirement: [
+    // Retiring later stops 5 years short of the planning age (cfg().d.lifeExp), as the edit screen does.
+    { k:'later', label:'Retire at', min:0, max:g=>Math.max(0, Math.min(8, cfg().d.lifeExp-5-g.retireAge)), step:1, fmt:(v,g)=>'age '+(g.retireAge+v)+(v?' ('+v+(v===1?' year':' years')+' later)':'') },
+    // The share itself, not a change to it: moving it twice never compounds below the 60% floor.
+    { k:'spend', label:'Spend after retiring', min:60, max:100, step:5, fmt:v=>v===100?'as planned':v+'% of what you planned' },
+  ],
+  education: [
+    { k:'share', label:'Save ahead for', min:40, max:100, step:5, fmt:v=>v===100?'all of the fees':v+'% of the fees' },
+  ],
+  generic: [
+    { k:'later', label:'Push it back by', min:0, max:10, step:1, fmt:v=>v===0?'not at all':v+(v===1?' year':' years') },
+    { k:'share', label:'Aim for', min:50, max:100, step:5, fmt:v=>v===100?'the full amount':v+'% of the amount' },
+  ],
+};
+const FIT_EMG = { min:12, max:36, step:6 };
+let FIT = null; // { goals:[{later,spend,share}], emg } -- the sliders' positions, reset whenever the goals change
+function fitKind(g){ return g.type==='retirement'||g.type==='education' ? g.type : 'generic'; }
+function fitFresh(){
+  // Sliders open where the plan stands: a share set earlier shows as itself (spend and fee), a purchase at 100%
+  // of its (already changed) amount, no extra years.
+  const goals=G.goals.map(g=>({ later:0, spend:Math.round((g.spendShare||1)*100), share:g.type==='education' ? Math.round((g.feeShare||1)*100) : 100 }));
+  return { key:JSON.stringify(G.goals)+'|'+(G.emergencyBuild||12), goals, init:JSON.stringify(goals), emg:G.emergencyBuild||12 };
+}
+function fitState(){
+  const key=JSON.stringify(G.goals)+'|'+(G.emergencyBuild||12);
+  if(!FIT || FIT.key!==key) FIT=fitFresh();
+  return FIT;
+}
+// The goal as it would be with these slider positions (a copy: G is untouched until "Use these").
+function fitGoal(g, f){
+  const x={ ...g };
+  if(g.type==='retirement'){
+    x.retireAge=g.retireAge+f.later; x.years=g.years+f.later;
+    if(f.spend<100) x.spendShare=f.spend/100; else delete x.spendShare;
+  } else if(g.type==='education'){
+    if(f.share<100) x.feeShare=f.share/100; else delete x.feeShare;
+  } else {
+    x.years=g.years+f.later; x.amount=Math.round(g.amount*f.share/100);
+  }
+  return x;
+}
+// A share set in "Make it fit" stays with the goal through an edit, as long as it is the same type of goal.
+function carryFitShares(goal, prev){
+  if(!prev || prev.type!==goal.type) return;
+  if(goal.type==='retirement' && prev.spendShare && prev.spendShare<1) goal.spendShare=prev.spendShare;
+  if(goal.type==='education' && prev.feeShare && prev.feeShare<1) goal.feeShare=prev.feeShare;
+}
+function fitNote(g){
+  if(g.spendShare && g.spendShare<1) return ' · spending '+Math.round(g.spendShare*100)+'% of plan after retiring';
+  if(g.feeShare && g.feeShare<1) return ' · saving ahead for '+Math.round(g.feeShare*100)+'% of the fees';
+  return '';
+}
+function fitChanged(F){ return F.emg!==(G.emergencyBuild||12) || JSON.stringify(F.goals)!==F.init; }
+// Anything "Make it fit" left in force, so the panel stays on screen to undo it even once the plan fits.
+function fitInForce(){ return (G.emergencyBuild||12)!==12 || G.goals.some(g=>(g.spendShare&&g.spendShare<1)||(g.feeShare&&g.feeShare<1)); }
+function fitCardHTML(plan, c){
+  const F=fitState();
+  const slider=(id, s, v, g)=>{
+    const max=typeof s.max==='function' ? s.max(g) : s.max;
+    if(max<=s.min) return '';   // nothing to move (e.g. already retiring at the latest age the plan allows)
+    return `<div class="fit-field"><label for="${id}">${s.label} <b id="${id}-v" aria-hidden="true"></b></label>
+      <input type="range" id="${id}" min="${s.min}" max="${max}" step="${s.step}" value="${v}"></div>`;
+  };
+  const goals=G.goals.map((g,i)=>`<div class="fit-goal">
+      <div class="fit-goal-head"><span class="fit-goal-name">${g.label}</span><span class="fit-sip" id="fit-sip-${i}"></span></div>
+      ${FIT_SLIDERS[fitKind(g)].map(s=>slider(`fit-${i}-${s.k}`, s, F.goals[i][s.k], g)).join('')}
+    </div>`).join('');
+  const emg=plan.emg.needed ? `<div class="fit-goal">
+      <div class="fit-goal-head"><span class="fit-goal-name">Emergency fund</span><span class="fit-sip" id="fit-sip-emg"></span></div>
+      ${slider('fit-emg', { label:'Build it over', ...FIT_EMG }, F.emg)}
+    </div>` : '';
+  return `<div class="gap-card fit-card" id="fitCard">
+    <h4>Make it fit ${c.fmt(plan.cap)} a month</h4>
+    <p>Move these and watch the total. Retirement and a child&rsquo;s education usually cannot move far; a purchase often can. Nothing in your plan changes until you press <b>Use these</b>.</p>
+    ${goals}${emg}
+    <div class="fit-total" id="fitTotal" aria-live="polite"></div>
+    <div class="fit-step" id="fitStep"></div>
+    <div class="fit-actions"><button type="button" class="fit-apply" id="fitApply">Use these in my plan</button><button type="button" class="fit-reset" id="fitReset">Reset</button></div>
+  </div>`;
+}
+// Works the figures out from the sliders and writes them into the panel, without redrawing the plan.
+function fitUpdate(){
+  const card=document.getElementById('fitCard');
+  if(!card) return;
+  const F=fitState(), c=cfg(), cap=G.monthlyCapacity||0;
+  const put=(id, html)=>{ const el=document.getElementById(id); if(el) el.innerHTML=html; };
+  const change=(a, b)=>Math.round(a)===Math.round(b) ? `${c.fmt(a)}/mo` : `${c.fmt(a)} &rarr; <b>${c.fmt(b)}</b>/mo`;
+  let total=0, stepStart=0;
+  G.goals.forEach((g,i)=>{
+    FIT_SLIDERS[fitKind(g)].forEach(s=>put(`fit-${i}-${s.k}-v`, s.fmt(F.goals[i][s.k], g)));
+    const before=calcGoal(g), x=fitGoal(g, F.goals[i]), after=calcGoal(x);
+    total+=after.sip;
+    const o=stepUpOffer(after.sip, x.years, after.rate);
+    stepStart+=o ? o.start : after.sip;
+    put('fit-sip-'+i, change(before.sip, after.sip));
+  });
+  const e0=calcEmergency(), e=calcEmergency(F.emg);
+  if(e.needed){
+    put('fit-emg-v', F.emg+' months');
+    put('fit-sip-emg', change(e0.sip, e.sip));
+    total+=e.sip; stepStart+=e.sip;
+  }
+  const diff=cap-total;
+  put('fitTotal', `Your goals would need <b>${c.fmt(total)}</b> a month against the ${c.fmt(cap)} you can save: `
+    + (diff>=0 ? `<b>it fits</b>, with ${c.fmt(diff)} to spare.` : `still <b>${c.fmt(-diff)}</b> a month short.`));
+  put('fitStep', stepStart < total-1
+    ? `Or start at ${c.fmt(Math.round(stepStart))} a month in all, raising what goes to the goals 10% every year (the emergency fund stays flat)${stepStart<=cap?', which fits what you can save today':''}. That only works if your pay rises at least that fast.`
+    : '');
+  const apply=document.getElementById('fitApply');
+  if(apply) apply.disabled=!fitChanged(F);
+}
+function bindFitCard(){
+  const card=document.getElementById('fitCard');
+  if(!card) return;
+  const F=fitState();
+  G.goals.forEach((g,i)=>FIT_SLIDERS[fitKind(g)].forEach(s=>{
+    const el=document.getElementById(`fit-${i}-${s.k}`);
+    if(el) el.addEventListener('input', ()=>{ F.goals[i][s.k]=+el.value; fitUpdate(); });
+  }));
+  const emg=document.getElementById('fit-emg');
+  if(emg) emg.addEventListener('input', ()=>{ F.emg=+emg.value; fitUpdate(); });
+  // render() only keeps .qbody's scroll; the plan scrolls in .plan-scroll, so without this Apply and Reset
+  // jumped to the top of a long plan. Focus goes to the panel's new total, or to the plan totals if it has gone.
+  const rerender=()=>{
+    const sc=document.querySelector('.plan-scroll'), top=sc ? sc.scrollTop : 0;
+    FIT=null; render();
+    const sc2=document.querySelector('.plan-scroll'); if(sc2) sc2.scrollTop=top;
+    // The new total, not the Apply button: it is disabled again right after an Apply, and a disabled button takes no focus.
+    const f=document.getElementById('fitTotal') || document.querySelector('.plan-total');
+    if(f){ if(!f.hasAttribute('tabindex') && f.tagName!=='BUTTON') f.setAttribute('tabindex','-1'); try{ f.focus({ preventScroll:true }); }catch(e){} }
+  };
+  document.getElementById('fitApply').addEventListener('click', ()=>{
+    G.goals=G.goals.map((g,i)=>fitGoal(g, F.goals[i]));
+    G.emergencyBuild=F.emg===12 ? null : F.emg;
+    rerender();
+  });
+  document.getElementById('fitReset').addEventListener('click', rerender);
+  fitUpdate();
 }
 
 function buildPlan(){
@@ -1605,7 +1775,7 @@ function renderEmergencyChoice(){
   <div class="qtitle">Want to prioritize closing that gap?</div>
   <div class="qsub">You have room to build up to ${gapMonths} of expenses in a safety net before other goals. Entirely your call — some people would rather tackle this first, others prefer to invest toward goals now and build the safety net alongside.</div>
   <div class="qbody">
-  <div class="opt${pr===true?' sel':''}" data-emgpri="yes"><div class="opt-main">Yes, make it the first priority</div><div class="opt-tag">Added to your plan as a 12-month build-up, ahead of other goals</div></div>
+  <div class="opt${pr===true?' sel':''}" data-emgpri="yes"><div class="opt-main">Yes, make it the first priority</div><div class="opt-tag">Added to your plan as a ${G.emergencyBuild||12}-month build-up, ahead of other goals</div></div>
   <div class="opt${pr===false?' sel':''}" data-emgpri="no"><div class="opt-main">Not right now</div><div class="opt-tag">Skip it for this plan. You can always add it later</div></div>
   </div>
   <div class="cta-zone"><button class="cta" id="nb"${pr!==null?'':' disabled'}>Continue</button></div>`;
@@ -1621,7 +1791,7 @@ function renderGoalsHub(){
   <div class="goal-hub">
   ${emg.needed?`
     <div class="goal-pill done">
-      <div class="gp-left"><div class="gp-label">Emergency Fund</div><div class="gp-tag">First priority · build over 12 months</div></div>
+      <div class="gp-left"><div class="gp-label">Emergency Fund</div><div class="gp-tag">First priority · build over ${emg.build} months</div></div>
       <div class="gp-right">${c.fmt(emg.sip)}/mo<span class="gp-sip">${c.compact(emg.amount)} target</span></div>
     </div>`:'' }
   ${emg.declined?`<div class="gr-note" style="margin-bottom:4px">You chose to skip the emergency fund for now. It won't be part of this plan — add it any time by revisiting this section.</div>`:''}
@@ -1882,7 +2052,12 @@ function coverState(){
 // A retirement goal pays for the earner's own retirement, which does not happen if they are not here, so it is left out.
 // What a goal still needs is its target less what is already set aside for it. Retirement and education carry that as
 // gapCorpus (their corpus is the full target); a general goal's corpus is already net of its savings.
-function coverGoalNeed(g){ return g.gapCorpus!==undefined ? g.gapCorpus : g.corpus; }
+function coverGoalNeed(g){
+  // A fee share set in "Make it fit" is money expected from the earner's own income later, which is exactly what
+  // cover replaces, so cover is sized on the whole fee.
+  if(g.type==='education' && g.feeShare && g.feeShare<1){ const full=calcGoal({ ...g, feeShare:1 }); return full.gapCorpus!==undefined ? full.gapCorpus : full.corpus; }
+  return g.gapCorpus!==undefined ? g.gapCorpus : g.corpus;
+}
 function coverGoalPots(plan){
   return plan.goals.filter(g=>g.type!=='retirement' && coverGoalNeed(g)>0).map(g=>({label:g.label, corpus:coverGoalNeed(g), years:g.years}));
 }
@@ -1956,7 +2131,7 @@ function renderPlan(){
     <div class="goal-row">
     <div class="gr-left">
       <div class="gr-name">${g.label}</div>
-      <div class="gr-meta">${g.years}yr horizon · <span class="term" data-def="The blended rate from your ${bn} mix, ${(rate*100).toFixed(1)}% per year.">${note}</span>${g.existingSavings>0?` · <span class="term" data-def="Assumed to keep compounding at the same ${(rate*100).toFixed(1)}% rate as the new SIP, growing to ${c.compact(g.existingFV)} by the goal date.">${c.compact(g.existingSavings)} already saved</span>`:''}</div>
+      <div class="gr-meta">${g.years}yr horizon${fitNote(g)} · <span class="term" data-def="The blended rate from your ${bn} mix, ${(rate*100).toFixed(1)}% per year.">${note}</span>${g.existingSavings>0?` · <span class="term" data-def="Assumed to keep compounding at the same ${(rate*100).toFixed(1)}% rate as the new SIP, growing to ${c.compact(g.existingFV)} by the goal date.">${c.compact(g.existingSavings)} already saved</span>`:''}</div>
     </div>
     <div class="gr-right">
       <div class="gr-sip">${c.fmt(sip)}/mo</div>
@@ -2006,25 +2181,15 @@ function renderPlan(){
     <div class="gr-note" style="margin-top:10px">This is your full profile's own mix. Goals with a shorter horizon than your profile can safely support are scaled down individually above, not by changing this baseline.</div>
   </div>`;
 
-  // Gap suggestions
-  let gapCard='';
-  if(plan.status==='gap'){
-    const extYrs=plan.goals[0]?plan.goals[0].years+3:0;
-    const mRate=effectiveMonthlyRate(bucketRate(G.bucket));
-    const extSip=plan.goals[0]?solveSIP(mRate,extYrs*12,plan.goals[0].corpus,true):0;
-    const saving=Math.round(plan.goals[0]?plan.goals[0].sip-extSip:0);
-    gapCard=`<div class="gap-card">
-    <h4>One way to close the gap</h4>
-    <p>Extending your first goal's <span class="term" data-def="How long before you need the money.">horizon</span> by 3 years would reduce that goal's monthly SIP by roughly ${c.fmt(saving)}. Review each goal. Flexible goals like travel can be pushed out; retirement and education usually cannot.</p>
-    </div>`;
-  }
+  // Over budget: the "Make it fit" panel (see fitCardHTML) instead of one fixed tip.
+  const gapCard=(plan.status!=='ok' || fitInForce()) && (G.goals.length || plan.emg.needed) ? fitCardHTML(plan,c) : '';
 
   const assumpLines=[
     `<b>Equity return:</b> ${(cfg().d.equity*100).toFixed(0)}% · <b>Debt:</b> ${(cfg().d.debt*100).toFixed(0)}% · <b>Hybrid:</b> ${(cfg().d.hybrid*100).toFixed(0)}%`,
     `<b>Your blended rate (${b.name}):</b> ${(bucketRate(G.bucket)*100).toFixed(2)}% per year`,
     `<b>General inflation:</b> ${(cfg().d.inflation*100).toFixed(0)}% · <b>Education inflation:</b> ${(cfg().d.eduInflation*100).toFixed(0)}%`,
     `<b>Horizon scaling:</b> your equity ceiling rises smoothly with each goal's own horizon (roughly 5% at 0yrs, 20% by 2yrs, 35% by 4yrs, 50% by 7yrs, 70% by 12yrs, reaching your full profile's ceiling by 18yrs), never above what your stated risk profile itself allows, only below it for shorter goals.`,
-    `<b>Retirement drawdown:</b> 75% of inflated expenses, lasting to age ${cfg().d.lifeExp}.`,
+    `<b>Retirement drawdown:</b> 75% of inflated expenses${G.goals.some(g=>g.spendShare&&g.spendShare<1)?' (less where you chose to spend less after retiring)':''}, lasting to age ${cfg().d.lifeExp}.`,
     ...(plan.goals.some(g=>g.existingSavings>0)?[`<b>Existing savings:</b> assumed to stay invested at the same blended rate as each goal's new SIP.`]:[]),
     `<b>None of these are guarantees.</b> These are planning assumptions. Verify with a licensed financial adviser before acting.`
   ].join('<br>');
@@ -2037,7 +2202,7 @@ function renderPlan(){
   ${plan.emg.needed?`
   <div class="section-head">Priority 1 · Emergency fund</div>
   <div class="goal-row">
-    <div class="gr-left"><div class="gr-name">Emergency Fund</div><div class="gr-meta">Build over 12 months · ${plan.emg.months} months of expenses</div></div>
+    <div class="gr-left"><div class="gr-name">Emergency Fund</div><div class="gr-meta">Build over ${plan.emg.build} months · ${plan.emg.months} months of expenses</div></div>
     <div class="gr-right"><div class="gr-sip">${c.fmt(plan.emg.sip)}/mo</div><div class="gr-corpus">${c.compact(plan.emg.amount)} target</div></div>
   </div>`:''}
 
@@ -2669,6 +2834,7 @@ function attach(screen){
       // a type change, where the old override would no longer make sense.
       const prevGoal = G.editingIndex!==null ? G.goals[G.editingIndex] : null;
       goal.postGoalAlloc = (prevGoal && prevGoal.type===goal.type) ? (prevGoal.postGoalAlloc||null) : null;
+      carryFitShares(goal, prevGoal);
       if(G.editingIndex!==null){ G.goals[G.editingIndex]=goal; }
       else { G.goals.push(goal); }
       G.addingGoal=false;G.editingIndex=null;G.draftType=null;G.draftA=null;G.draftB=null;
@@ -2685,6 +2851,7 @@ function attach(screen){
   }
 
   if(screen==='plan'){
+    bindFitCard();
     document.getElementById('at')&&document.getElementById('at').addEventListener('click',()=>{
       document.getElementById('ap').classList.toggle('open');
     });
@@ -2745,7 +2912,7 @@ function attach(screen){
       });
     });
     document.getElementById('rb')&&document.getElementById('rb').addEventListener('click',()=>{
-      Object.assign(G,{country:null,capA:[null,null,null,null],tolA:[null,null,null,null,null],bucket:null,capScore:0,tolScore:0,monthlyExpense:null,emergencyStatus:null,emergencyPrioritize:null,monthlyCapacity:null,goals:[],cover:null,addingGoal:false,editingIndex:null,draftType:null,draftA:null,draftB:null,draftC:null,draftSav:0,si:0});
+      Object.assign(G,{country:null,capA:[null,null,null,null],tolA:[null,null,null,null,null],bucket:null,capScore:0,tolScore:0,monthlyExpense:null,emergencyStatus:null,emergencyPrioritize:null,monthlyCapacity:null,goals:[],cover:null,addingGoal:false,editingIndex:null,draftType:null,draftA:null,draftB:null,draftC:null,draftSav:0,si:0,emergencyBuild:null});
       render();
     });
 
@@ -2754,7 +2921,7 @@ function attach(screen){
         _goalden:'plan-export', _version:1, savedAt:new Date().toISOString(),
         country:G.country, capA:G.capA, tolA:G.tolA,
         monthlyExpense:G.monthlyExpense, emergencyStatus:G.emergencyStatus,
-        monthlyCapacity:G.monthlyCapacity, goals:G.goals, cover:G.cover,
+        monthlyCapacity:G.monthlyCapacity, goals:G.goals, cover:G.cover, emergencyBuild:G.emergencyBuild||null,
       };
       const blob=new Blob([JSON.stringify(savedState,null,2)],{type:'application/json'});
       const url=URL.createObjectURL(blob);
@@ -2779,6 +2946,7 @@ function attach(screen){
             country:data.country, capA:data.capA, tolA:data.tolA,
             monthlyExpense:data.monthlyExpense, emergencyStatus:data.emergencyStatus,
             monthlyCapacity:data.monthlyCapacity, goals:data.goals||[], cover:data.cover&&typeof data.cover==='object'?data.cover:null,
+            emergencyBuild:[18,24,30,36].includes(data.emergencyBuild)?data.emergencyBuild:null,
             addingGoal:false, editingIndex:null, draftType:null, draftA:null, draftB:null, draftSav:0,
           });
           // renderPlan() reads G.bucket directly rather than recomputing it —
@@ -2902,7 +3070,7 @@ Acting on a user's own situation (this page is built for it): when someone descr
 - tol_0..tol_4 (1-4 each): use any hint they gave — "I panic when markets fall" → 1-2, "I bought more in the crash" → 4. tol_1 is experience: 7+ years 4, 3-7 years 3, under 3 years or a small mutual-fund holding 2, never invested 1. With no hints, answer 3 for the rest, say you assumed a middle comfort level, and offer one question to refine it.
 - goals (at most 3): retirement = currentAge, retireAge, monthlyExpense (today's spending unless they gave a retirement budget). education = annualFee and years (18 − the child's age for an undergraduate degree); take the fee only from the user — if it's missing, build everything else now and ask for it. house = amount (the price they gave; say so, since they may only need a down payment) and years. Anything else (a trip, a wedding, a car) = type generic with a short label, amount and years. existingSavings on a goal only when they said that money is set aside for it; otherwise say their FDs and mutual funds weren't counted against any goal.
 - More than 3 goals: build the 3 they care about most (or the nearest) and name the one that's waiting.
-After building, reply with: the risk profile and a one-line reason from their answers, monthly capacity (with the arithmetic), each goal's monthly SIP, the total against capacity, and the surplus or shortfall. If it's short, name the goal driving it and one change that would narrow the gap (a later date, a smaller amount) — never product names. Quote only SIPs this page calculated: offer to run the change with update_goal and report before → after, rather than estimating a new SIP yourself.
+After building, reply with: the risk profile and a one-line reason from their answers, monthly capacity (with the arithmetic), each goal's monthly SIP, the total against capacity, and the surplus or shortfall. If it's short, name the goal driving it and one change that would narrow the gap (a later date, a smaller amount) — never product names. Quote only SIPs this page calculated: offer to run the change with update_goal and report before → after, rather than estimating a new SIP yourself. When the plan is over budget, the plan screen also has a "Make it fit" panel the user can move themselves: per goal, retire later or spend less after retiring, save ahead for part of a child's fees, push a purchase back or aim for less, and build the emergency fund over up to 36 months, with the new total live and nothing changed until they press "Use these in my plan". Point them to it when they would rather try the levers than ask. A share chosen there stays with the goal when it is edited; update_goal can also set changes:{spendShare} (0.6-1, retirement) or {feeShare} (0.4-1, education), and get_results shows them with the emergency fund's build period.
 
 Editing the plan: add_goal, update_goal and remove_goal change one goal and return the plan totals before and after. Use them for "drop the flat", "retire at 58 instead", "add a 4 lakh trip in 2 years" — and when the plan already has 3 goals, remove one before adding. build_goal_plan with goals replaces the whole goal list, so keep it for a full rebuild. Changes to capacity or the risk answers go through set_value, then get_results. After any change, say what moved and by how much.
 
@@ -2969,7 +3137,12 @@ const ADVISOR_MAX_GOALS = 3;
 const ADVISOR_GOAL_ALIASES = { flat:'house', apartment:'house', home:'house', property:'house', college:'education', university:'education', school:'education', pension:'retirement', retire:'retirement' };
 function advisorGoalKind(g) { return g.type === 'generic' ? (g.genSub === 'house' ? 'house' : 'generic') : g.type; }
 function advisorGoalList() {
-  return G.goals.map(function (g, i) { return { index:i, type:advisorGoalKind(g), label:g.label, years:g.years }; });
+  return G.goals.map(function (g, i) {
+    const o = { index:i, type:advisorGoalKind(g), label:g.label, years:g.years };
+    if (g.spendShare && g.spendShare < 1) o.spendShare = g.spendShare;   // set in Make it fit: spend this share after retiring
+    if (g.feeShare && g.feeShare < 1) o.feeShare = g.feeShare;           // save ahead for this share of the fees
+    return o;
+  });
 }
 function advisorPlanTotals() {
   if (!G.country) return null;
@@ -2977,6 +3150,7 @@ function advisorPlanTotals() {
   return {
     goals: plan.goals.map(function (g, i) { return { index:i, label:g.label, years:g.years, monthlySIP:g.sip, corpus:g.corpus }; }),
     emergencyMonthlySIP: plan.emg.needed ? plan.emg.sip : 0,
+    emergencyBuildMonths: plan.emg.needed ? plan.emg.build : null,
     totalMonthlySIP: plan.totalSIP, monthlyCapacity: plan.cap, shortfallOrSurplus: plan.diff, status: plan.status,
   };
 }
@@ -3012,6 +3186,11 @@ function advisorMakeGoal(args, prev) {
     return { ok:false, error:'Unknown goal type "'+advisorCleanLabel(type)+'". Valid: retirement, education, house, generic.' };
   }
   if (prev && prev.type === goal.type) goal.postGoalAlloc = prev.postGoalAlloc || null;
+  carryFitShares(goal, prev);
+  // The advisor can set the shares too (update_goal changes:{spendShare} / {feeShare}, 0.6-1 and 0.4-1).
+  const shareArg = function (k, lo) { const v = parseFloat(args[k]); return isFinite(v) ? Math.min(1, Math.max(lo, v)) : null; };
+  if (goal.type === 'retirement' && shareArg('spendShare', 0.6) != null) { const v = shareArg('spendShare', 0.6); if (v < 1) goal.spendShare = v; else delete goal.spendShare; }
+  if (goal.type === 'education' && shareArg('feeShare', 0.4) != null) { const v = shareArg('feeShare', 0.4); if (v < 1) goal.feeShare = v; else delete goal.feeShare; }
   return { ok:true, goal:goal };
 }
 function advisorShowPlan() {
@@ -3054,7 +3233,7 @@ function advisorUpdateGoal(args) {
   const prev = G.goals[found.index];
   const changes = (args.changes && typeof args.changes === 'object') ? args.changes : {};
   if (changes.type && String(changes.type).toLowerCase() !== advisorGoalKind(prev)) return { ok:false, error:'update_goal can\'t change a goal\'s type. Remove it and add the new goal instead.', goals:advisorGoalList() };
-  const merged = { type:advisorGoalKind(prev), label:prev.label, retireAge:prev.retireAge, monthlyExpense:prev.monthlyExpense, currentAge:prev.currentAge, annualFee:prev.annualFee, duration:prev.duration, amount:prev.amount, years:prev.years, existingSavings:prev.existingSavings };
+  const merged = { type:advisorGoalKind(prev), label:prev.label, retireAge:prev.retireAge, monthlyExpense:prev.monthlyExpense, currentAge:prev.currentAge, annualFee:prev.annualFee, duration:prev.duration, amount:prev.amount, years:prev.years, existingSavings:prev.existingSavings , spendShare:prev.spendShare, feeShare:prev.feeShare };
   const ignored = [];
   Object.keys(changes).forEach(function (k) {
     if (k === 'type') return;
@@ -3124,8 +3303,10 @@ function advisorGetResults() {
   return { ok:true, result:{
     riskBucket: G.bucket ? BUCKETS[G.bucket].name : 'not yet determined',
     monthlyCapacity: plan.cap,
-    emergencyFund: plan.emg.needed ? { amount:plan.emg.amount, monthlySIP:plan.emg.sip } : (plan.emg.declined ? 'declined' : 'already funded'),
-    goals: plan.goals.map(g => ({ label:g.label, corpus:g.corpus, monthlySIP:g.sip })),
+    emergencyFund: plan.emg.needed ? { amount:plan.emg.amount, monthlySIP:plan.emg.sip, buildMonths:plan.emg.build } : (plan.emg.declined ? 'declined' : 'already funded'),
+    goals: plan.goals.map(g => Object.assign({ label:g.label, corpus:g.corpus, monthlySIP:g.sip },
+      g.spendShare && g.spendShare < 1 ? { spendShareAfterRetiring:g.spendShare } : {},
+      g.feeShare && g.feeShare < 1 ? { feeShareSavedAhead:g.feeShare } : {})),
     totalMonthlySIP: plan.totalSIP,
     shortfallOrSurplus: plan.diff,
     status: plan.status,
@@ -3328,6 +3509,9 @@ function executeAdvisorTool(name, args) {
       setFields.push(k);
     }
     if (newGoals) {
+      // A full rebuild is a new plan: nothing chosen in "Make it fit" for the old one carries over.
+      newGoals.forEach(function (g) { delete g.spendShare; delete g.feeShare; });
+      G.emergencyBuild = null;
       G.goals = newGoals;
       setFields.push('goals');
     } else if (goals != null && !Array.isArray(goals)) {

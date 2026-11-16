@@ -4898,3 +4898,28 @@ standing over the founder's shoulder.
 - Not done (noted by the review): the landing advisor's open_door cannot open one Lab tool yet; Quick
   Calculate's bottom summary bar sits outside the 800px column on desktop.
 - Tests: 325/325 engine; smokes 02-25 pass (smoke-25's resume check updated).
+
+## 2026-11-16 - Claude Code - Step 4: "Make it fit" in The Full Plan
+- When the goals need more a month than the person can save (status warn or gap), the plan shows a "Make it
+  fit" panel instead of the one fixed tip ("push the first goal out 3 years", worth a few percent of a large
+  gap). Per goal: retire later (up to 8 years, never within 5 years of the planning age) or spend less after
+  retiring (60-100%); save ahead for part of a child's fees (40-100%); push a purchase back (up to 10 years)
+  or aim for less (50-100%). The emergency fund can be built over 12-36 months. Every figure comes from
+  calcGoal on a copy of the goal; the total updates live; nothing in the plan changes until "Use these in my
+  plan". Checked: the previewed total equals buildPlan()'s total after applying, to the rupee.
+- New optional goal fields: spendShare (retirement) and feeShare (education), default 1, multiplying the
+  spending after retiring and the fee in calcGoal; G.emergencyBuild (null = 12 months). They are set directly
+  (moving a slider twice never compounds below its floor), carried through goal edits on the screens and
+  through update_goal (which can also set them), shown in the goal's row and in get_results /
+  advisorGoalList / advisorPlanTotals, reset by Start over and by a full build_goal_plan, and saved and loaded
+  with a plan file. The panel stays while any of them is in force, so it can always be undone.
+- Life cover sizes an education goal on the whole fee: the part not saved ahead usually comes from the
+  earner's own income later, which is what cover replaces.
+- Opus review: four MUST-FIX (shares dropped on edit; build period missing from start over / save / load;
+  no way back once it fits; the hub still said 12 months) and six SHOULD-FIX, all fixed; NITs on the step-up
+  wording, label value repetition (now aria-hidden) and untouched goals gaining share fields also fixed.
+- smoke-26.js covers the panel and today's UI passes; smoke-21's cover check loosened for the new rule.
+- Tests: 325/325 engine; smokes 02-26 pass.
+- Advisor evals: 25/26 on the full run; the one failure ("lab rent or buy runs the tab with the user's numbers",
+  reply missing "break-even") was flaky (1 of 2 on a re-run). The Lab's rent-or-buy rule now tells the model
+  to name the break-even in plain words; 3/3 after that.
